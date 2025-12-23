@@ -1,18 +1,33 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.users = exports.userRoleEnum = void 0;
-const pg_core_1 = require("drizzle-orm/pg-core");
-exports.userRoleEnum = ["admin", "teacher", "parent", "student"];
-exports.users = (0, pg_core_1.pgTable)("users", {
-    id: (0, pg_core_1.uuid)("id").primaryKey().defaultRandom(),
-    email: (0, pg_core_1.text)("email").notNull().unique(),
-    passwordHash: (0, pg_core_1.text)("password_hash").notNull(),
-    name: (0, pg_core_1.text)("name").notNull(),
-    role: (0, pg_core_1.text)("role", { enum: exports.userRoleEnum }).notNull().default("student"),
-    createdAt: (0, pg_core_1.timestamp)("created_at", { withTimezone: true })
+import { pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { schools } from "./schools.js";
+import { units } from "./units.js";
+export const userRoleEnum = [
+    "diretora",
+    "gerente",
+    "supervisora",
+    "coordenadora",
+    "professora",
+    "auxiliar_sala",
+    "auxiliar_administrativo",
+];
+export const users = pgTable("users", {
+    id: uuid("id").primaryKey().defaultRandom(),
+    email: text("email").notNull().unique(),
+    passwordHash: text("password_hash").notNull(),
+    name: text("name").notNull(),
+    role: text("role", { enum: userRoleEnum })
+        .notNull()
+        .default("auxiliar_administrativo"),
+    schoolId: uuid("school_id")
+        .notNull()
+        .references(() => schools.id, { onDelete: "cascade" }),
+    unitId: uuid("unit_id")
+        .notNull()
+        .references(() => units.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
         .notNull()
         .defaultNow(),
-    updatedAt: (0, pg_core_1.timestamp)("updated_at", { withTimezone: true })
+    updatedAt: timestamp("updated_at", { withTimezone: true })
         .notNull()
         .defaultNow(),
 });

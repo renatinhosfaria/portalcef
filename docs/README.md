@@ -6,7 +6,7 @@
 ![Node](https://img.shields.io/badge/node-%3E%3D22.0.0-green.svg)
 ![License](https://img.shields.io/badge/license-UNLICENSED-red.svg)
 
-**Portal Digital Escolar com Painel Administrativo**
+**Portal Digital Escolar**
 
 [Início Rápido](#-início-rápido) •
 [Documentação](#-documentação) •
@@ -21,15 +21,16 @@
 
 O **Portal Digital Colégio Essência Feliz** é uma plataforma web completa para gestão escolar, composta por:
 
-- **Portal Público (Web)**: Interface para pais, alunos e visitantes
-- **Painel Administrativo (Admin)**: Gestão completa para diretoria e funcionários
+- **Portal Público (Home)**: Interface para pais, alunos e visitantes
+- **Login**: Autenticação e sessões
+- **Usuários**: Módulo de usuários
+- **Escolas**: Módulo administrativo de escolas e unidades
 - **API Backend**: Serviços RESTful seguros e escaláveis
 
 ### ✨ Principais Funcionalidades
 
 - 🔐 Sistema de autenticação seguro com sessões Redis
 - 👥 Controle de acesso baseado em roles (RBAC)
-- 📊 Dashboard administrativo completo
 - 🎨 Design system modular com shadcn/ui
 - 🚀 Deploy automatizado com Docker e CI/CD
 
@@ -69,26 +70,28 @@ pnpm dev
 
 ### URLs de Desenvolvimento
 
-| Serviço | URL |
-|---------|-----|
-| Portal Web | http://localhost:3000 |
-| Painel Admin | http://localhost:3001 |
-| API | http://localhost:3002 |
+| Serviço        | URL                   |
+| -------------- | --------------------- |
+| Home           | http://localhost:3000 |
+| Login          | http://localhost:3003 |
+| Usuários       | http://localhost:3004 |
+| Escolas        | http://localhost:3005 |
+| API            | http://localhost:3001 |
 | Drizzle Studio | http://localhost:4983 |
 
 ---
 
 ## 📚 Documentação
 
-| Documento | Descrição |
-|-----------|-----------|
-| [API.md](./API.md) | Documentação completa da API REST |
+| Documento                            | Descrição                                  |
+| ------------------------------------ | ------------------------------------------ |
+| [API.md](./API.md)                   | Documentação completa da API REST          |
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | Arquitetura do sistema e decisões técnicas |
-| [CHANGELOG.md](./CHANGELOG.md) | Histórico de mudanças e versões |
-| [CONTRIBUTING.md](./CONTRIBUTING.md) | Guia para contribuidores |
-| [DATABASE.md](./DATABASE.md) | Schema do banco de dados e migrações |
-| [DEPLOYMENT.md](./DEPLOYMENT.md) | Guia de deploy e infraestrutura |
-| [SECURITY.md](./SECURITY.md) | Políticas e práticas de segurança |
+| [CHANGELOG.md](./CHANGELOG.md)       | Histórico de mudanças e versões            |
+| [CONTRIBUTING.md](./CONTRIBUTING.md) | Guia para contribuidores                   |
+| [DATABASE.md](./DATABASE.md)         | Schema do banco de dados e migrações       |
+| [DEPLOYMENT.md](./DEPLOYMENT.md)     | Guia de deploy e infraestrutura            |
+| [SECURITY.md](./SECURITY.md)         | Políticas e práticas de segurança          |
 
 ---
 
@@ -97,8 +100,10 @@ pnpm dev
 ```
 .
 ├── apps/
-│   ├── web/                 # Portal Público (Next.js)
-│   └── admin/               # Painel Administrativo (Next.js)
+│   ├── home/                # Portal Público (Next.js)
+│   ├── login/               # App de login (Next.js)
+│   ├── escolas/             # Módulo de escolas (Next.js)
+│   └── usuarios/            # Módulo de usuários (Next.js)
 ├── services/
 │   └── api/                 # Backend Principal (NestJS)
 ├── packages/
@@ -145,16 +150,16 @@ pnpm clean        # Limpa builds e node_modules
 
 ## 🛠 Stack Tecnológica
 
-| Categoria | Tecnologia |
-|-----------|------------|
-| **Monorepo** | Turborepo + pnpm |
-| **Backend** | NestJS + Fastify |
-| **Frontend** | Next.js 14 (App Router) |
-| **Database** | PostgreSQL 16 + Drizzle ORM |
-| **Cache/Sessions** | Redis 7 |
-| **Styling** | Tailwind CSS + shadcn/ui |
-| **Deploy** | Docker + Traefik |
-| **CI/CD** | GitHub Actions |
+| Categoria          | Tecnologia                  |
+| ------------------ | --------------------------- |
+| **Monorepo**       | Turborepo + pnpm            |
+| **Backend**        | NestJS + Fastify            |
+| **Frontend**       | Next.js 14 (App Router)     |
+| **Database**       | PostgreSQL 16 + Drizzle ORM |
+| **Cache/Sessions** | Redis 7                     |
+| **Styling**        | Tailwind CSS + shadcn/ui    |
+| **Deploy**         | Docker + Traefik            |
+| **CI/CD**          | GitHub Actions              |
 
 ---
 

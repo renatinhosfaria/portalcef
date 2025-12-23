@@ -5,30 +5,40 @@ import {
 } from "@nestjs/platform-fastify";
 import fastifyCookie, { FastifyCookieOptions } from "@fastify/cookie";
 import { closeDb } from "@essencia/db";
+import type { FastifyPluginCallback } from "fastify";
 
 import { AppModule } from "./app.module";
+import { ApiExceptionFilter } from "./common/filters/api-exception.filter";
 
 async function bootstrap() {
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
-    new FastifyAdapter({ logger: true })
+    new FastifyAdapter({ logger: true }),
   );
 
+  app.useGlobalFilters(new ApiExceptionFilter());
+
   // Register Fastify cookie plugin
-  await app.register(fastifyCookie as any, {
+  const cookieOptions: FastifyCookieOptions = {
     secret: process.env.COOKIE_SECRET ?? "dev-secret-change-in-production",
-  } as FastifyCookieOptions);
+  };
+
+  await app.register(
+    fastifyCookie as FastifyPluginCallback<FastifyCookieOptions>,
+    cookieOptions,
+  );
 
   // Enable CORS for the frontend apps
   app.enableCors({
     origin: [
-      "http://localhost:3000", // web
-      "http://localhost:3002", // admin
+      "http://localhost:3000", // home
+      "http://localhost:3003", // login
+      "http://localhost:3004", // usuarios
     ],
     credentials: true, // Allow cookies
   });
 
-  const port = process.env.API_PORT ?? 3001;
+  const port = process.env.API_PORT ?? process.env.PORT ?? 3001;
   const host = process.env.API_HOST ?? "0.0.0.0";
 
   await app.listen(port, host);

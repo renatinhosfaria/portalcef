@@ -7,6 +7,9 @@
   "exports": {
     ".": "./tailwind.config.ts"
   },
+  "scripts": {
+    "format": "prettier --write \"**/*.{ts,tsx,md,json}\""
+  },
   "devDependencies": {
     "tailwindcss": "^3.4.17",
     "typescript": "^5.7.2"

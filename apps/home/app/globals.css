@@ -1,0 +1,68 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 210 40% 98%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    
+    /* Brand Green #A3D154 */
+    --primary: 84 59% 57%; 
+    --primary-foreground: 144.9 80.4% 10%;
+    
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    
+    /* Brand Orange #FB923C as accent */
+    --accent: 25 95% 61%; 
+    --accent-foreground: 222.2 47.4% 11.2%;
+    
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 84 59% 57%;
+    --radius: 1rem;
+  }
+
+  /* Custom Premium Gradients */
+  .bg-premium-gradient {
+    @apply bg-gradient-to-br from-white via-stone-50 to-stone-100;
+  }
+}
+
+@layer utilities {
+  .glass-panel {
+    @apply bg-white/70 backdrop-blur-xl border border-white/20 shadow-xl;
+  }
+  
+  .glass-card {
+    @apply bg-white/60 backdrop-blur-md border border-white/50 shadow-sm hover:shadow-md transition-all duration-300;
+  }
+
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground font-sans;
+    background-image: 
+      radial-gradient(at 0% 0%, hsla(84, 59%, 57%, 0.15) 0, transparent 50%), 
+      radial-gradient(at 100% 0%, hsla(25, 95%, 61%, 0.1) 0, transparent 50%), 
+      radial-gradient(at 50% 100%, hsla(220, 10%, 90%, 0.5) 0, transparent 50%);
+  }
+}

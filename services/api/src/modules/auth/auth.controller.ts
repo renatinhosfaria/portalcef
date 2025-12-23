@@ -20,14 +20,14 @@ const COOKIE_NAME = "cef_session";
 export class AuthController {
   constructor(
     private authService: AuthService,
-    private configService: ConfigService
+    private configService: ConfigService,
   ) {}
 
   @Post("login")
   @HttpCode(HttpStatus.OK)
   async login(
     @Body() body: unknown,
-    @Res({ passthrough: true }) res: FastifyReply
+    @Res({ passthrough: true }) res: FastifyReply,
   ) {
     // Validate input
     const result = loginSchema.safeParse(body);

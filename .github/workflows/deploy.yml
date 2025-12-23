@@ -66,9 +66,6 @@ jobs:
           - name: web
             context: .
             dockerfile: apps/web/Dockerfile
-          - name: admin
-            context: .
-            dockerfile: apps/admin/Dockerfile
           - name: api
             context: .
             dockerfile: services/api/Dockerfile

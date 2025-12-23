@@ -33,13 +33,13 @@ pnpm dev
 
 ## 🌿 Branches
 
-| Branch | Uso |
-|--------|-----|
-| `main` | Produção |
-| `develop` | Desenvolvimento |
+| Branch      | Uso                 |
+| ----------- | ------------------- |
+| `main`      | Produção            |
+| `develop`   | Desenvolvimento     |
 | `feature/*` | Nova funcionalidade |
-| `fix/*` | Correção de bug |
-| `hotfix/*` | Correção urgente |
+| `fix/*`     | Correção de bug     |
+| `hotfix/*`  | Correção urgente    |
 
 ---
 
@@ -57,15 +57,15 @@ docs(readme): update installation
 
 ### Types
 
-| Type | Descrição |
-|------|-----------|
-| `feat` | Nova funcionalidade |
-| `fix` | Correção de bug |
-| `docs` | Documentação |
-| `style` | Formatação |
-| `refactor` | Refatoração |
-| `test` | Testes |
-| `chore` | Manutenção |
+| Type       | Descrição           |
+| ---------- | ------------------- |
+| `feat`     | Nova funcionalidade |
+| `fix`      | Correção de bug     |
+| `docs`     | Documentação        |
+| `style`    | Formatação          |
+| `refactor` | Refatoração         |
+| `test`     | Testes              |
+| `chore`    | Manutenção          |
 
 ---
 
@@ -82,14 +82,17 @@ docs(readme): update installation
 
 ```markdown
 ## Descrição
+
 Breve descrição das mudanças
 
 ## Tipo
+
 - [ ] Feature
 - [ ] Fix
 - [ ] Docs
 
 ## Testes
+
 Descreva os testes realizados
 ```
 
@@ -108,13 +111,19 @@ pnpm typecheck      # TypeScript
 ## 📁 Estrutura
 
 ```
-apps/          # Next.js apps (web, admin)
-services/      # NestJS API
-packages/      # Shared code
-  ├── ui/      # Components
-  ├── db/      # Database
-  ├── shared/  # Types, utils
-  └── config/  # ESLint, TS
+apps/                  # Next.js apps
+  ├── home/            # Portal público (3000)
+  ├── login/           # Autenticação (3003)
+  ├── escolas/         # Gestão de escolas (3005)
+  └── usuarios/        # Gestão de usuários (3004)
+services/              # Backend
+  └── api/             # NestJS API (3001)
+packages/              # Código compartilhado
+  ├── ui/              # Design System (shadcn/ui)
+  ├── db/              # Drizzle ORM
+  ├── shared/          # Tipos, Schemas, Fetchers
+  ├── config/          # ESLint, TSConfig
+  └── tailwind-config/ # Preset Tailwind
 ```
 
 ---

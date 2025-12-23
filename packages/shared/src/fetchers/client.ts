@@ -13,7 +13,7 @@ export class FetchError extends Error {
   constructor(
     public status: number,
     public code: string,
-    message: string
+    message: string,
   ) {
     super(message);
     this.name = "FetchError";
@@ -22,9 +22,21 @@ export class FetchError extends Error {
 
 const API_BASE_URL = "/api";
 
+// Login URL - in production behind reverse proxy, use /login
+// In development, each app runs on different port, so use full URL
+const getLoginUrl = () => {
+  if (typeof window === "undefined") return "/login";
+  // Development: redirect to login app on port 3003
+  if (window.location.hostname === "localhost") {
+    return "http://localhost:3003";
+  }
+  // Production: same domain, different path
+  return "/login";
+};
+
 export async function clientFetch<T>(
   endpoint: string,
-  options: FetcherOptions = {}
+  options: FetcherOptions = {},
 ): Promise<T> {
   const { body, headers: customHeaders, ...restOptions } = options;
 
@@ -51,7 +63,7 @@ export async function clientFetch<T>(
     // Clear any client-side cache (TanStack Query should handle this)
     // Redirect to login page
     if (typeof window !== "undefined") {
-      window.location.href = "/login";
+      window.location.href = getLoginUrl();
     }
     throw new FetchError(401, "UNAUTHORIZED", "Sessão expirada");
   }
@@ -67,7 +79,7 @@ export async function clientFetch<T>(
     throw new FetchError(
       response.status,
       data.error?.code ?? "UNKNOWN_ERROR",
-      data.error?.message ?? "Erro desconhecido"
+      data.error?.message ?? "Erro desconhecido",
     );
   }
 

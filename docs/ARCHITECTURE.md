@@ -21,16 +21,17 @@ O sistema segue uma arquitetura de **Monorepo Modular** utilizando Turborepo, co
                     │                       │
          ┌──────────┴──────────┐           │
          ▼                     ▼           ▼
-┌─────────────────┐   ┌─────────────────┐  ┌─────────────────┐
-│   Web (Next.js) │   │ Admin (Next.js) │  │  API (NestJS)   │
-│    Port 3000    │   │    Port 3001    │  │   Port 3002     │
-└────────┬────────┘   └────────┬────────┘  └────────┬────────┘
-         │                     │                    │
-         └─────────────────────┼────────────────────┘
-                               │
-                      Route Handler Proxy
-                               │
-                               ▼
+┌──────────────────────────────────────────┐  ┌─────────────────┐
+│              Apps (Next.js)              │  │  API (NestJS)   │
+│ Home:3000 | Login:3003 | Usuarios:3004   │  │   Port 3001     │
+│ Escolas:3005                             │  └────────┬────────┘
+└──────────┬───────────────────────────────┘           │
+           │                                           │
+           └───────────────────────────────┬───────────┘
+                                           │
+                                  Route Handler Proxy
+                                           │
+                                           ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                    NestJS API (Backend)                          │
 │                   Fastify + TypeScript                           │
@@ -74,26 +75,28 @@ Tipos TypeScript compartilhados via `packages/shared` garantem consistência ent
 
 ### `/apps` - Aplicações
 
-| Package | Descrição | Porta |
-|---------|-----------|-------|
-| `web` | Portal público Next.js | 3000 |
-| `admin` | Painel administrativo Next.js | 3001 |
+| Package    | Descrição                  | Porta |
+| ---------- | -------------------------- | ----- |
+| `home`     | Portal público Next.js     | 3000  |
+| `login`    | App de login Next.js       | 3003  |
+| `escolas`  | Módulo de escolas Next.js  | 3005  |
+| `usuarios` | Módulo de usuários Next.js | 3004  |
 
 ### `/services` - Serviços Backend
 
-| Package | Descrição | Porta |
-|---------|-----------|-------|
-| `api` | API REST NestJS + Fastify | 3002 |
+| Package | Descrição                 | Porta |
+| ------- | ------------------------- | ----- |
+| `api`   | API REST NestJS + Fastify | 3001  |
 
 ### `/packages` - Bibliotecas Compartilhadas
 
-| Package | Descrição |
-|---------|-----------|
-| `@essencia/ui` | Design System (shadcn/ui + Tailwind) |
-| `@essencia/db` | Drizzle ORM, Schemas, Migrações |
-| `@essencia/shared` | Tipos, Zod Schemas, Fetchers |
-| `@essencia/config` | ESLint, TSConfig, Env Validation |
-| `@essencia/tailwind-config` | Preset Tailwind compartilhado |
+| Package                     | Descrição                            |
+| --------------------------- | ------------------------------------ |
+| `@essencia/ui`              | Design System (shadcn/ui + Tailwind) |
+| `@essencia/db`              | Drizzle ORM, Schemas, Migrações      |
+| `@essencia/shared`          | Tipos, Zod Schemas, Fetchers         |
+| `@essencia/config`          | ESLint, TSConfig, Env Validation     |
+| `@essencia/tailwind-config` | Preset Tailwind compartilhado        |
 
 ---
 
@@ -151,13 +154,13 @@ Tipos TypeScript compartilhados via `packages/shared` garantem consistência ent
 
 ### Especificações
 
-| Configuração | Valor |
-|--------------|-------|
-| **Mecanismo** | Sliding Window Session |
-| **Storage** | Redis |
-| **TTL** | 24 horas |
+| Configuração  | Valor                          |
+| ------------- | ------------------------------ |
+| **Mecanismo** | Sliding Window Session         |
+| **Storage**   | Redis                          |
+| **TTL**       | 24 horas                       |
 | **Threshold** | 25% (renova se < 6h restantes) |
-| **Cookie** | `cef_session` |
+| **Cookie**    | `cef_session`                  |
 
 ### Atributos do Cookie
 
@@ -170,10 +173,10 @@ Path: /             # Disponível em todas as rotas
 
 ### Semântica de Respostas
 
-| Código | Significado | Ação no Cliente |
-|--------|-------------|-----------------|
-| `401` | Não autenticado | Redirect → Login |
-| `403` | Sem permissão | Mostrar "Acesso Negado" |
+| Código | Significado     | Ação no Cliente         |
+| ------ | --------------- | ----------------------- |
+| `401`  | Não autenticado | Redirect → Login        |
+| `403`  | Sem permissão   | Mostrar "Acesso Negado" |
 
 ---
 
@@ -184,12 +187,12 @@ Path: /             # Disponível em todas as rotas
 **Primary**: Route Handler Proxy no Next.js
 
 ```typescript
-// apps/web/app/api/[...path]/route.ts
+// apps/home/app/api/[...path]/route.ts
 export async function GET(request: NextRequest) {
   const response = await fetch(`${API_URL}/${path}`, {
     headers: {
-      'x-request-id': request.headers.get('x-request-id'),
-      cookie: request.headers.get('cookie'),
+      "x-request-id": request.headers.get("x-request-id"),
+      cookie: request.headers.get("cookie"),
     },
   });
   return response;
@@ -197,6 +200,7 @@ export async function GET(request: NextRequest) {
 ```
 
 **Vantagens**:
+
 - Controle total sobre headers
 - Observabilidade de cookies em logs
 - Forwarding de `x-request-id`
@@ -214,12 +218,12 @@ export async function GET(request: NextRequest) {
 ```typescript
 export const clientFetcher = async (url: string) => {
   const response = await fetch(url, {
-    credentials: 'include', // Envia cookies
+    credentials: "include", // Envia cookies
   });
 
   if (response.status === 401) {
     queryClient.clear();
-    window.location.href = '/login';
+    window.location.href = "/login";
   }
 
   return response.json();
@@ -231,7 +235,7 @@ export const clientFetcher = async (url: string) => {
 ```typescript
 export const serverFetcher = async (url: string) => {
   const response = await fetch(url, {
-    cache: 'no-store', // Dados privados
+    cache: "no-store", // Dados privados
   });
 
   if (response.status === 401) {
@@ -250,9 +254,86 @@ export const serverFetcher = async (url: string) => {
 
 - **Modular Architecture**: Um módulo por domínio
 - **Dependency Injection**: IoC container nativo
-- **Guards**: AuthGuard, RolesGuard
+- **Guards**: AuthGuard, RolesGuard, TenantGuard
 - **Decorators**: @Public, @Roles, @CurrentUser
 - **DTOs**: Validação com class-validator
+
+---
+
+## 🏢 Arquitetura Multi-Tenant
+
+O sistema implementa isolamento de dados por escola e unidade.
+
+### Hierarquia de Entidades
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         ESCOLA                                   │
+│               (Ex: Colégio Espaço Feliz)                        │
+│                                                                  │
+│    ┌─────────────────┐   ┌─────────────────┐   ┌────────────┐   │
+│    │   Unidade A     │   │   Unidade B     │   │ Unidade C  │   │
+│    │ (Santa Mônica)  │   │   (Centro)      │   │  (Norte)   │   │
+│    └────────┬────────┘   └────────┬────────┘   └─────┬──────┘   │
+│             │                     │                   │          │
+│        ┌────┴────┐          ┌────┴────┐         ┌────┴────┐     │
+│        │ Usuários│          │ Usuários│         │ Usuários│     │
+│        └─────────┘          └─────────┘         └─────────┘     │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Fluxo de Autorização Multi-Tenant
+
+```
+Request → AuthGuard → RolesGuard → TenantGuard → Controller
+              │            │             │
+              ▼            ▼             ▼
+      Valida sessão   Verifica role  Verifica tenant
+      (Redis)         hierarquia     scope (escola/unidade)
+              │            │             │
+              ▼            ▼             ▼
+      Extrai:         Permite se     Master: global
+      - userId        role >= min    Diretora Geral: escola
+      - schoolId      required       Outros: unidade
+      - unitId
+      - role
+```
+
+### Pipeline de Guards
+
+| Guard         | Responsabilidade                           | Falha |
+| ------------- | ------------------------------------------ | ----- |
+| `AuthGuard`   | Valida sessão e extrai tenant context      | 401   |
+| `RolesGuard`  | Verifica se role tem permissão mínima      | 403   |
+| `TenantGuard` | Garante acesso apenas a recursos do tenant | 403   |
+
+### Escopo de Acesso por Role
+
+| Role                       | Escopo  | Acesso                      |
+| -------------------------- | ------- | --------------------------- |
+| `master`                   | Global  | Todas as escolas            |
+| `diretora_geral`           | Escola  | Todas as unidades da escola |
+| `gerente_unidade`          | Unidade | Apenas sua unidade          |
+| `gerente_financeiro`       | Unidade | Apenas sua unidade          |
+| `coordenadora_geral`       | Unidade | Apenas sua unidade          |
+| `coordenadora_infantil`    | Unidade | Apenas sua unidade          |
+| `coordenadora_fundamental` | Unidade | Apenas sua unidade          |
+| `analista_pedagogico`      | Unidade | Apenas sua unidade          |
+| `professora`               | Unidade | Apenas sua unidade          |
+| `auxiliar_administrativo`  | Unidade | Apenas sua unidade          |
+| `auxiliar_sala`            | Unidade | Apenas sua unidade          |
+
+### Dados da Sessão
+
+```typescript
+interface SessionData {
+  userId: string;
+  role: UserRole;
+  schoolId: string; // Tenant - Escola
+  unitId: string; // Tenant - Unidade
+  createdAt: number;
+}
+```
 
 ### Frontend (Next.js)
 
@@ -313,11 +394,11 @@ src/
 
 ### Caching Strategy
 
-| Camada | Estratégia |
-|--------|------------|
-| **CDN** | Assets estáticos |
-| **Redis** | Sessions, cache de queries |
-| **Next.js** | ISR para páginas públicas |
+| Camada      | Estratégia                 |
+| ----------- | -------------------------- |
+| **CDN**     | Assets estáticos           |
+| **Redis**   | Sessions, cache de queries |
+| **Next.js** | ISR para páginas públicas  |
 
 ### Build Optimization
 

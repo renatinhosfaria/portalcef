@@ -13,7 +13,9 @@ let connection: postgres.Sql | null = null;
 
 function getConnection(): postgres.Sql {
   if (!connection) {
-    const connectionString = process.env.DATABASE_URL;
+    const connectionString =
+      process.env.DATABASE_URL ||
+      "postgres://postgres:postgres@localhost:5432/essencia";
 
     if (!connectionString) {
       throw new Error("DATABASE_URL environment variable is not set");

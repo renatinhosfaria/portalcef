@@ -6,15 +6,15 @@ Guia completo de deploy do Portal Digital Colégio Essência Feliz.
 
 ## 🏗 Infraestrutura
 
-| Componente | Tecnologia |
-|------------|------------|
-| **Host** | Contabo VPS |
-| **OS** | Ubuntu 24.04 LTS |
-| **Orquestrador** | Docker Compose |
-| **Reverse Proxy** | Traefik v3 |
-| **SSL** | Let's Encrypt |
-| **Registry** | GitHub Container Registry |
-| **CI/CD** | GitHub Actions |
+| Componente        | Tecnologia                |
+| ----------------- | ------------------------- |
+| **Host**          | Contabo VPS               |
+| **OS**            | Ubuntu 24.04 LTS          |
+| **Orquestrador**  | Docker Compose            |
+| **Reverse Proxy** | Traefik v3                |
+| **SSL**           | Let's Encrypt             |
+| **Registry**      | GitHub Container Registry |
+| **CI/CD**         | GitHub Actions            |
 
 ---
 
@@ -74,7 +74,7 @@ Push → GitHub Actions → Build → GHCR → Deploy → VPS
 ### Workflow (`.github/workflows/deploy.yml`)
 
 1. **Test**: Lint, Typecheck, Unit Tests
-2. **Build**: Docker images para web, admin, api
+2. **Build**: Docker images para web e api
 3. **Push**: Tags para GHCR
 4. **Deploy**: SSH + docker compose pull + up
 
@@ -92,31 +92,35 @@ cd /opt/essencia
 
 ```
 Internet → Traefik (80/443) → Containers
-                ├── web:3000     (/)
-                ├── admin:3001   (/admin)
-                └── api:3002     (interno)
+                ├── home:3000      (/)
+                ├── login:3003     (/login)
+                ├── usuarios:3004  (/usuarios)
+                ├── escolas:3005   (/escolas)
+                └── api:3002       (interno)
 ```
 
 ### Portas Expostas
 
-| Porta | Serviço |
-|-------|---------|
-| 80 | HTTP (redirect) |
-| 443 | HTTPS |
-| 22 | SSH |
+| Porta | Serviço         |
+| ----- | --------------- |
+| 80    | HTTP (redirect) |
+| 443   | HTTPS           |
+| 22    | SSH             |
 
 ---
 
 ## 🐳 Docker Services
 
-| Container | Imagem | Porta Interna |
-|-----------|--------|---------------|
-| traefik | traefik:v3.2 | 80, 443 |
-| web | ghcr.io/.../web | 3000 |
-| admin | ghcr.io/.../admin | 3001 |
-| api | ghcr.io/.../api | 3002 |
-| postgres | postgres:16-alpine | 5432 |
-| redis | redis:7-alpine | 6379 |
+| Container | Imagem               | Porta Interna |
+| --------- | -------------------- | ------------- |
+| traefik   | traefik:v3.2         | 80, 443       |
+| home      | ghcr.io/.../home     | 3000          |
+| login     | ghcr.io/.../login    | 3003          |
+| usuarios  | ghcr.io/.../usuarios | 3004          |
+| escolas   | ghcr.io/.../escolas  | 3005          |
+| api       | ghcr.io/.../api      | 3002          |
+| postgres  | postgres:16-alpine   | 5432          |
+| redis     | redis:7-alpine       | 6379          |
 
 ---
 
@@ -233,9 +237,9 @@ docker compose exec postgres psql -U essencia -d essencia_db
 
 ## 📚 Scripts Disponíveis
 
-| Script | Descrição |
-|--------|-----------|
-| `setup-vps.sh` | Setup inicial do servidor |
-| `deploy.sh` | Deploy/update da aplicação |
-| `health-check.sh` | Verificação de saúde |
-| `migrate.sh` | Executar migrações |
+| Script            | Descrição                  |
+| ----------------- | -------------------------- |
+| `setup-vps.sh`    | Setup inicial do servidor  |
+| `deploy.sh`       | Deploy/update da aplicação |
+| `health-check.sh` | Verificação de saúde       |
+| `migrate.sh`      | Executar migrações         |

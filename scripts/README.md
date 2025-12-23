@@ -4,12 +4,12 @@ Scripts para configuração e deploy do Portal Digital no VPS Contabo.
 
 ## Scripts Disponíveis
 
-| Script | Descrição |
-|--------|-----------|
-| `setup-vps.sh` | Configuração inicial completa do VPS |
-| `deploy.sh` | Deploy/atualização manual |
-| `migrate.sh` | Execução de migrações de banco |
-| `health-check.sh` | Verificação de saúde dos serviços |
+| Script            | Descrição                            |
+| ----------------- | ------------------------------------ |
+| `setup-vps.sh`    | Configuração inicial completa do VPS |
+| `deploy.sh`       | Deploy/atualização manual            |
+| `migrate.sh`      | Execução de migrações de banco       |
+| `health-check.sh` | Verificação de saúde dos serviços    |
 
 ## Uso
 

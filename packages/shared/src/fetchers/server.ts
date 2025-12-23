@@ -14,7 +14,7 @@ export class ServerFetchError extends Error {
   constructor(
     public status: number,
     public code: string,
-    message: string
+    message: string,
   ) {
     super(message);
     this.name = "ServerFetchError";
@@ -28,7 +28,7 @@ const API_INTERNAL_URL =
 
 export async function serverFetch<T>(
   endpoint: string,
-  options: ServerFetcherOptions = {}
+  options: ServerFetcherOptions = {},
 ): Promise<T> {
   const { body, headers: customHeaders, cookies, ...restOptions } = options;
 
@@ -72,7 +72,7 @@ export async function serverFetch<T>(
     throw new ServerFetchError(
       response.status,
       data.error?.code ?? "UNKNOWN_ERROR",
-      data.error?.message ?? "Erro desconhecido"
+      data.error?.message ?? "Erro desconhecido",
     );
   }
 
@@ -93,7 +93,7 @@ export const serverApi = {
   patch: <T>(
     endpoint: string,
     body?: unknown,
-    options?: ServerFetcherOptions
+    options?: ServerFetcherOptions,
   ) => serverFetch<T>(endpoint, { ...options, method: "PATCH", body }),
 
   delete: <T>(endpoint: string, options?: ServerFetcherOptions) =>

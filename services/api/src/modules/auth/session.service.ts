@@ -1,11 +1,13 @@
 import { Injectable, OnModuleDestroy } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import Redis from "ioredis";
 import { createHash, randomBytes } from "crypto";
+import Redis from "ioredis";
 
 export interface SessionData {
   userId: string;
   role: string;
+  schoolId: string | null;
+  unitId: string | null;
   createdAt: number;
 }
 
@@ -34,20 +36,27 @@ export class SessionService implements OnModuleDestroy {
   }
 
   /**
-   * Create a new session for a user
+   * Create a new session for a user with tenant context
    */
-  async createSession(userId: string, role: string): Promise<string> {
+  async createSession(
+    userId: string,
+    role: string,
+    schoolId: string | null,
+    unitId: string | null,
+  ): Promise<string> {
     const token = randomBytes(32).toString("hex");
     const sessionData: SessionData = {
       userId,
       role,
+      schoolId,
+      unitId,
       createdAt: Date.now(),
     };
 
     await this.redis.setex(
       this.getSessionKey(token),
       this.ttlSeconds,
-      JSON.stringify(sessionData)
+      JSON.stringify(sessionData),
     );
 
     // Also store user -> session mapping for global logout
@@ -116,7 +125,10 @@ export class SessionService implements OnModuleDestroy {
    * Log session renewal with safe hash (observability)
    */
   private logSessionRenewal(token: string): void {
-    const safeHash = createHash("sha256").update(token).digest("hex").slice(0, 10);
+    const safeHash = createHash("sha256")
+      .update(token)
+      .digest("hex")
+      .slice(0, 10);
     console.log(`Session renewed: ${safeHash}`);
   }
 }

@@ -42,14 +42,6 @@ else
     echo -e "${RED}✗ Web is not responding${NC}"
 fi
 
-# Check Admin
-echo -e "${BLUE}[Admin Panel]${NC}"
-if curl -s http://localhost:3001 > /dev/null 2>&1; then
-    echo -e "${GREEN}✓ Admin is healthy${NC}"
-else
-    echo -e "${RED}✗ Admin is not responding${NC}"
-fi
-
 # Check PostgreSQL
 echo -e "${BLUE}[PostgreSQL]${NC}"
 if docker exec essencia-postgres pg_isready -U essencia > /dev/null 2>&1; then

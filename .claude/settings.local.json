@@ -17,7 +17,15 @@
       "Bash(npm install)",
       "Bash(pnpm install:*)",
       "Bash(pnpm list:*)",
-      "Bash(pnpm dev)"
+      "Bash(pnpm dev)",
+      "Bash(dir /b \"c:\\\\Users\\\\Renato\\\\Desktop\\\\VSCODE\\\\Essencia\")",
+      "Bash(cat:*)",
+      "Bash(pnpm format:*)",
+      "Bash(pnpm typecheck:*)",
+      "Bash(pnpm lint:*)",
+      "Bash(pnpm build)",
+      "Bash(dir:*)",
+      "Bash(DATABASE_URL=\"postgresql://essencia:essencia_dev@localhost:5432/essencia_db\" pnpm db:seed:*)"
     ]
   }
 }

@@ -7,7 +7,7 @@ import { AuthenticatedRequest } from "../guards/auth.guard";
  * @example
  * @Get('profile')
  * @UseGuards(AuthGuard)
- * getProfile(@CurrentUser() user: { userId: string; role: string }) {
+ * getProfile(@CurrentUser() user: { userId: string; role: string; schoolId: string; unitId: string }) {
  *   return user;
  * }
  */
@@ -15,5 +15,5 @@ export const CurrentUser = createParamDecorator(
   (data: unknown, ctx: ExecutionContext) => {
     const request = ctx.switchToHttp().getRequest<AuthenticatedRequest>();
     return request.user;
-  }
+  },
 );

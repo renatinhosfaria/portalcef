@@ -25,6 +25,11 @@ const config: Config = {
           900: "#14532d",
           950: "#052e16",
         },
+        essencia: {
+          green: "#A3D154",
+          orange: "#FB923C",
+          gray: "#9FA1A4",
+        },
         // Semantic colors using CSS variables (for shadcn/ui)
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",

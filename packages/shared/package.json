@@ -5,20 +5,57 @@
   "description": "Shared types, schemas, and fetchers",
   "type": "module",
   "exports": {
-    "./types": "./src/types/index.ts",
-    "./schemas": "./src/schemas/index.ts",
-    "./fetchers/client": "./src/fetchers/client.ts",
-    "./fetchers/server": "./src/fetchers/server.ts"
+    "./types": {
+      "types": "./dist/types/index.d.ts",
+      "import": "./dist/types/index.js",
+      "require": "./dist/types/index.js",
+      "default": "./dist/types/index.js"
+    },
+    "./schemas": {
+      "types": "./dist/schemas/index.d.ts",
+      "import": "./dist/schemas/index.js",
+      "require": "./dist/schemas/index.js",
+      "default": "./dist/schemas/index.js"
+    },
+    "./fetchers/client": {
+      "types": "./dist/fetchers/client.d.ts",
+      "import": "./dist/fetchers/client.js",
+      "require": "./dist/fetchers/client.js",
+      "default": "./dist/fetchers/client.js"
+    },
+    "./fetchers/server": {
+      "types": "./dist/fetchers/server.d.ts",
+      "import": "./dist/fetchers/server.js",
+      "require": "./dist/fetchers/server.js",
+      "default": "./dist/fetchers/server.js"
+    },
+    "./providers/tenant": {
+      "types": "./dist/providers/tenant.d.ts",
+      "import": "./dist/providers/tenant.js",
+      "require": "./dist/providers/tenant.js",
+      "default": "./dist/providers/tenant.js"
+    }
   },
   "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "clean": "rimraf dist",
     "lint": "eslint src/",
+    "format": "prettier --write \"**/*.{ts,tsx,md,json}\"",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "next": "15.1.0",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3",
     "zod": "^3.24.1"
   },
   "devDependencies": {
     "@essencia/config": "workspace:*",
+    "@types/react": "^19.0.2",
+    "@types/react-dom": "^19.0.2",
+    "@typescript-eslint/eslint-plugin": "^8.18.1",
+    "@typescript-eslint/parser": "^8.18.1",
+    "eslint": "^8.57.1",
     "typescript": "^5.7.2"
   }
 }

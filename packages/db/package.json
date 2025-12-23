@@ -5,17 +5,36 @@
   "description": "Database schemas, migrations, and connection factory",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts",
-    "./schema": "./src/schema/index.ts",
-    "./client": "./src/client.ts"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./schema": {
+      "types": "./dist/schema/index.d.ts",
+      "import": "./dist/schema/index.js",
+      "require": "./dist/schema/index.js",
+      "default": "./dist/schema/index.js"
+    },
+    "./client": {
+      "types": "./dist/client.d.ts",
+      "import": "./dist/client.js",
+      "require": "./dist/client.js",
+      "default": "./dist/client.js"
+    }
   },
   "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "clean": "rimraf dist",
     "generate": "drizzle-kit generate",
     "migrate": "drizzle-kit migrate",
     "push": "drizzle-kit push",
     "studio": "drizzle-kit studio",
     "lint": "eslint src/",
-    "typecheck": "tsc --noEmit"
+    "format": "prettier --write \"**/*.{ts,tsx,md,json}\"",
+    "typecheck": "tsc --noEmit",
+    "reset": "tsx src/reset.ts"
   },
   "dependencies": {
     "drizzle-orm": "^0.38.2",
@@ -23,8 +42,15 @@
   },
   "devDependencies": {
     "@essencia/config": "workspace:*",
+    "@types/bcrypt": "^5.0.2",
     "@types/node": "^22.10.2",
+    "@typescript-eslint/eslint-plugin": "^8.18.1",
+    "@typescript-eslint/parser": "^8.18.1",
+    "bcrypt": "^5.1.1",
+    "dotenv": "^17.2.3",
     "drizzle-kit": "^0.30.1",
+    "eslint": "^8.57.1",
+    "tsx": "^4.21.0",
     "typescript": "^5.7.2"
   }
 }

@@ -1,11 +1,11 @@
 import {
-    CanActivate,
-    ExecutionContext,
-    Injectable,
-    UnauthorizedException,
+  CanActivate,
+  ExecutionContext,
+  Injectable,
+  UnauthorizedException,
 } from "@nestjs/common";
-import { FastifyRequest } from "fastify";
 import "@fastify/cookie";
+import { FastifyRequest } from "fastify";
 
 import { SessionService } from "../../modules/auth/session.service";
 
@@ -15,6 +15,8 @@ export interface AuthenticatedRequest extends FastifyRequest {
   user: {
     userId: string;
     role: string;
+    schoolId: string | null;
+    unitId: string | null;
   };
 }
 
@@ -27,19 +29,21 @@ export class AuthGuard implements CanActivate {
     const token = request.cookies?.[COOKIE_NAME];
 
     if (!token) {
-      throw new UnauthorizedException("Não autenticado");
+      throw new UnauthorizedException("Nao autenticado");
     }
 
     const session = await this.sessionService.getSession(token);
 
     if (!session) {
-      throw new UnauthorizedException("Sessão expirada");
+      throw new UnauthorizedException("Sessao expirada");
     }
 
-    // Attach user info to request
+    // Attach user info to request with tenant context
     (request as AuthenticatedRequest).user = {
       userId: session.userId,
       role: session.role,
+      schoolId: session.schoolId,
+      unitId: session.unitId,
     };
 
     return true;

@@ -1,40 +1,41 @@
 # API Documentation
 
-Documentação completa da API REST do Portal Digital Colégio Essência Feliz.
+Documentacao completa da API REST do Portal Digital Colegio Espaco Feliz.
 
 ---
 
-## 📌 Informações Gerais
+## Informacoes Gerais
 
 ### Base URL
 
-| Ambiente | URL |
-|----------|-----|
-| **Desenvolvimento** | `http://localhost:3002` |
-| **Produção** | `https://api.essencia.edu.br` |
+| Ambiente            | URL                           |
+| ------------------- | ----------------------------- |
+| **Desenvolvimento** | `http://localhost:3001`       |
+| **Producao**        | `https://api.essencia.edu.br` |
 
 ### Formato de Respostas
 
-Todas as respostas são em **JSON** com a seguinte estrutura:
+Todas as respostas sao em **JSON** com a seguinte estrutura:
 
 ```json
 // Sucesso
 {
-  "data": { ... },
-  "meta": {
-    "timestamp": "2024-12-18T12:00:00.000Z"
-  }
+  "success": true,
+  "data": { ... }
 }
 
 // Erro
 {
-  "statusCode": 400,
-  "message": "Descrição do erro",
-  "error": "Bad Request"
+  "success": false,
+  "error": {
+    "code": "ERROR_CODE",
+    "message": "Descricao do erro",
+    "details": { ... }
+  }
 }
 ```
 
-### Headers Padrão
+### Headers Padrao
 
 ```http
 Content-Type: application/json
@@ -43,42 +44,46 @@ Accept: application/json
 
 ---
 
-## 🔐 Autenticação
+## Autenticacao
 
-A API utiliza autenticação baseada em **cookies de sessão**.
+A API utiliza autenticacao baseada em **cookies de sessao**.
 
-### Cookie de Sessão
+### Cookie de Sessao
 
-| Atributo | Valor |
-|----------|-------|
-| **Nome** | `cef_session` |
-| **HttpOnly** | `true` |
-| **Secure** | `true` (produção) |
-| **SameSite** | `Lax` |
-| **Path** | `/` |
-| **Max-Age** | 86400 (24 horas) |
+| Atributo     | Valor             |
+| ------------ | ----------------- |
+| **Nome**     | `cef_session`     |
+| **HttpOnly** | `true`            |
+| **Secure**   | `true` (producao) |
+| **SameSite** | `Lax`             |
+| **Path**     | `/`               |
+| **Max-Age**  | 86400 (24 horas)  |
 
-### Códigos de Resposta de Auth
+### Dados da Sessao
 
-| Código | Significado | Ação Recomendada |
-|--------|-------------|------------------|
-| `401 Unauthorized` | Sessão inválida/expirada | Redirecionar para login |
-| `403 Forbidden` | Sem permissão para recurso | Exibir mensagem de erro |
+A sessao armazena o contexto do tenant:
+
+```typescript
+interface SessionData {
+  userId: string;
+  role: string;
+  schoolId: string;
+  unitId: string;
+  createdAt: number;
+}
+```
 
 ---
 
-## 🔑 Endpoints de Autenticação
+## Endpoints de Autenticacao
 
 ### POST `/auth/login`
 
-Autentica um usuário e cria uma sessão.
+Autentica um usuario e cria uma sessao.
 
 **Request:**
 
-```http
-POST /auth/login
-Content-Type: application/json
-
+```json
 {
   "email": "usuario@essencia.edu.br",
   "password": "senha123"
@@ -89,402 +94,355 @@ Content-Type: application/json
 
 ```json
 {
+  "success": true,
   "data": {
     "user": {
       "id": "uuid",
       "email": "usuario@essencia.edu.br",
-      "name": "Nome do Usuário",
-      "role": "ADMIN"
+      "name": "Nome do Usuario",
+      "role": "diretora_geral",
+      "schoolId": "uuid",
+      "unitId": null
     }
   }
 }
 ```
-
-**Headers de Resposta:**
-
-```http
-Set-Cookie: cef_session=abc123...; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=86400
-```
-
-**Erros:**
-
-| Código | Descrição |
-|--------|-----------|
-| `400` | Campos obrigatórios ausentes |
-| `401` | Credenciais inválidas |
-
----
 
 ### POST `/auth/logout`
 
-Encerra a sessão do usuário.
-
-**Request:**
-
-```http
-POST /auth/logout
-Cookie: cef_session=abc123...
-```
-
-**Response (200 OK):**
-
-```json
-{
-  "data": {
-    "message": "Logout realizado com sucesso"
-  }
-}
-```
-
-**Headers de Resposta:**
-
-```http
-Set-Cookie: cef_session=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0
-```
-
----
+Encerra a sessao do usuario.
 
 ### GET `/auth/me`
 
-Retorna informações do usuário autenticado.
-
-**Request:**
-
-```http
-GET /auth/me
-Cookie: cef_session=abc123...
-```
-
-**Response (200 OK):**
-
-```json
-{
-  "data": {
-    "user": {
-      "id": "uuid",
-      "email": "usuario@essencia.edu.br",
-      "name": "Nome do Usuário",
-      "role": "ADMIN",
-      "createdAt": "2024-01-01T00:00:00.000Z"
-    }
-  }
-}
-```
+Retorna informacoes do usuario autenticado.
 
 ---
 
-## 👥 Endpoints de Usuários
+## Endpoints de Escolas
 
-> ⚠️ **Requer autenticação** e role `ADMIN`
+> Requer autenticacao e role `master`
+
+### GET `/schools`
+
+Lista escolas (apenas master).
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "uuid",
+      "name": "Colegio Espaco Feliz",
+      "code": "colegio-espaco-feliz",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    }
+  ]
+}
+```
+
+### GET `/schools/:id`
+
+Retorna uma escola especifica (apenas master).
+
+### POST `/schools`
+
+Cria uma nova escola.
+
+**Request:**
+
+```json
+{
+  "name": "Colegio Espaco Feliz",
+  "code": "colegio-espaco-feliz"
+}
+```
+
+### PUT `/schools/:id`
+
+Atualiza uma escola.
+
+### DELETE `/schools/:id`
+
+Remove uma escola.
+
+---
+
+## Endpoints de Unidades
+
+> Requer autenticacao. Leitura exige role `coordenadora_geral` ou superior. Escrita exige role `diretora_geral` ou superior.
+
+### GET `/schools/:schoolId/units`
+
+Lista unidades da escola.
+
+- **master**: ve todas as unidades de qualquer escola
+- **diretora_geral**: ve todas as unidades da escola
+- **gerente_unidade**, **gerente_financeiro**, **coordenadora_geral**: ve apenas sua unidade
+- **outros roles**: sem acesso
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "uuid",
+      "schoolId": "uuid",
+      "name": "Unidade Santa Monica",
+      "code": "santa-monica",
+      "address": "Rua das Flores, 123",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    }
+  ]
+}
+```
+
+### GET `/schools/:schoolId/units/:id`
+
+Retorna uma unidade especifica.
+
+### POST `/schools/:schoolId/units`
+
+Cria uma nova unidade (apenas diretora_geral ou master).
+
+**Request:**
+
+```json
+{
+  "name": "Unidade Santa Monica",
+  "code": "santa-monica",
+  "address": "Rua das Flores, 123"
+}
+```
+
+### PUT `/schools/:schoolId/units/:id`
+
+Atualiza uma unidade (apenas diretora_geral ou master).
+
+### DELETE `/schools/:schoolId/units/:id`
+
+Remove uma unidade (apenas diretora_geral ou master).
+
+---
+
+## Endpoints de Usuarios
+
+> Requer autenticacao com isolamento por tenant
 
 ### GET `/users`
 
-Lista todos os usuários com paginação.
+Lista usuarios filtrados pelo tenant do usuario autenticado.
 
-**Query Parameters:**
+- **master**: ve todos usuarios (todas as escolas)
+- **diretora_geral**: ve todos usuarios da escola
+- **gerente_unidade**, **gerente_financeiro**: ve apenas usuarios da sua unidade
+- **outros roles**: sem acesso
 
-| Parâmetro | Tipo | Default | Descrição |
-|-----------|------|---------|-----------|
-| `page` | number | 1 | Página atual |
-| `limit` | number | 10 | Itens por página |
-| `search` | string | - | Busca por nome/email |
-| `role` | string | - | Filtrar por role |
-
-**Request:**
-
-```http
-GET /users?page=1&limit=10&role=TEACHER
-Cookie: cef_session=abc123...
-```
-
-**Response (200 OK):**
+**Response:**
 
 ```json
 {
-  "data": {
-    "users": [
-      {
-        "id": "uuid",
-        "email": "professor@essencia.edu.br",
-        "name": "Professor Exemplo",
-        "role": "TEACHER",
-        "createdAt": "2024-01-01T00:00:00.000Z"
-      }
-    ],
-    "pagination": {
-      "page": 1,
-      "limit": 10,
-      "total": 50,
-      "totalPages": 5
+  "success": true,
+  "data": [
+    {
+      "id": "uuid",
+      "email": "usuario@essencia.edu.br",
+      "name": "Nome do Usuario",
+      "role": "professora",
+      "schoolId": "uuid",
+      "unitId": "uuid",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
     }
-  }
+  ]
 }
 ```
-
----
 
 ### GET `/users/:id`
 
-Retorna um usuário específico.
-
-**Request:**
-
-```http
-GET /users/123e4567-e89b-12d3-a456-426614174000
-Cookie: cef_session=abc123...
-```
-
-**Response (200 OK):**
-
-```json
-{
-  "data": {
-    "user": {
-      "id": "123e4567-e89b-12d3-a456-426614174000",
-      "email": "usuario@essencia.edu.br",
-      "name": "Nome Completo",
-      "role": "ADMIN",
-      "createdAt": "2024-01-01T00:00:00.000Z",
-      "updatedAt": "2024-06-01T00:00:00.000Z"
-    }
-  }
-}
-```
-
----
+Retorna um usuario especifico (respeitando isolamento de tenant).
 
 ### POST `/users`
 
-Cria um novo usuário.
+Cria um novo usuario (requer role `gerente_financeiro` ou superior).
 
 **Request:**
 
-```http
-POST /users
-Cookie: cef_session=abc123...
-Content-Type: application/json
-
+```json
 {
   "email": "novo@essencia.edu.br",
-  "name": "Novo Usuário",
+  "name": "Novo Usuario",
   "password": "senhaForte123!",
-  "role": "TEACHER"
+  "role": "professora",
+  "schoolId": "uuid",
+  "unitId": "uuid"
 }
 ```
 
-**Response (201 Created):**
+**Restricoes:**
 
-```json
-{
-  "data": {
-    "user": {
-      "id": "uuid",
-      "email": "novo@essencia.edu.br",
-      "name": "Novo Usuário",
-      "role": "TEACHER",
-      "createdAt": "2024-12-18T00:00:00.000Z"
-    }
-  }
-}
-```
+- `diretora_geral`: pode criar usuarios em qualquer unidade da escola
+- `gerente_unidade` e `gerente_financeiro`: podem criar usuarios apenas na sua unidade
 
-**Validações:**
+### PUT `/users/:id`
 
-| Campo | Regra |
-|-------|-------|
-| `email` | Email válido e único |
-| `name` | 2-100 caracteres |
-| `password` | Mínimo 8 caracteres |
-| `role` | ADMIN, DIRECTOR, TEACHER, PARENT, STUDENT |
-
----
-
-### PATCH `/users/:id`
-
-Atualiza um usuário existente.
+Atualiza um usuario (requer role `gerente_financeiro` ou superior).
 
 **Request:**
 
-```http
-PATCH /users/123e4567-e89b-12d3-a456-426614174000
-Cookie: cef_session=abc123...
-Content-Type: application/json
-
-{
-  "name": "Nome Atualizado"
-}
-```
-
-**Response (200 OK):**
-
 ```json
 {
-  "data": {
-    "user": {
-      "id": "123e4567-e89b-12d3-a456-426614174000",
-      "email": "usuario@essencia.edu.br",
-      "name": "Nome Atualizado",
-      "role": "ADMIN",
-      "updatedAt": "2024-12-18T00:00:00.000Z"
-    }
-  }
+  "name": "Nome Atualizado",
+  "role": "coordenadora_geral",
+  "unitId": "uuid"
 }
 ```
 
----
+**Restricoes:**
+
+- Apenas `diretora_geral` ou `master` pode transferir usuarios entre unidades (`unitId`)
 
 ### DELETE `/users/:id`
 
-Remove um usuário (soft delete).
+Remove um usuario (requer role `gerente_financeiro` ou superior).
 
-**Request:**
+**Restricoes:**
 
-```http
-DELETE /users/123e4567-e89b-12d3-a456-426614174000
-Cookie: cef_session=abc123...
-```
-
-**Response (204 No Content)**
+- Nao pode deletar a si mesmo
+- Respeita isolamento de tenant
 
 ---
 
-## 🩺 Health Check
+## Roles e Permissoes
+
+### Hierarquia de Roles
+
+| Role                       | Nivel | Escopo  | Descricao                        |
+| -------------------------- | ----- | ------- | -------------------------------- |
+| `master`                   | 0     | Global  | Acesso total a todas as escolas  |
+| `diretora_geral`           | 1     | Escola  | Acesso total a todas as unidades |
+| `gerente_unidade`          | 2     | Unidade | Gestao completa da unidade       |
+| `gerente_financeiro`       | 3     | Unidade | Gestao financeira                |
+| `coordenadora_geral`       | 4     | Unidade | Coordenacao academica            |
+| `coordenadora_infantil`    | 5     | Unidade | Coordenacao infantil             |
+| `coordenadora_fundamental` | 6     | Unidade | Coordenacao fundamental          |
+| `analista_pedagogico`      | 7     | Unidade | Supervisao pedagogica            |
+| `professora`               | 8     | Unidade | Acesso a turmas e alunos         |
+| `auxiliar_administrativo`  | 9     | Unidade | Suporte administrativo           |
+| `auxiliar_sala`            | 10    | Unidade | Suporte em sala de aula          |
+
+### Matriz de Permissoes
+
+| Recurso        | master | diretora_geral | gerente_unidade | gerente_financeiro | coordenadora_geral | coordenadora_infantil | coordenadora_fundamental | analista_pedagogico | professora | auxiliar_administrativo | auxiliar_sala |
+| -------------- | ------ | -------------- | --------------- | ------------------ | ------------------ | --------------------- | ------------------------ | ------------------- | ---------- | ----------------------- | ------------- |
+| Schools (CRUD) | Total  | -              | -               | -                  | -                  | -                     | -                        | -                   | -          | -                       | -             |
+| Units (CRUD)   | Total  | Total          | -               | -                  | -                  | -                     | -                        | -                   | -          | -                       | -             |
+| Units (Read)   | Total  | Total          | Propria         | Propria            | Propria            | -                     | -                        | -                   | -          | -                       | -             |
+| Users (CRUD)   | Total  | Total          | Propria         | Propria            | -                  | -                     | -                        | -                   | -          | -                       | -             |
+| Users (Read)   | Total  | Total          | Propria         | Propria            | -                  | -                     | -                        | -                   | -          | -                       | -             |
+
+---
+
+## Multi-Tenant
+
+### Fluxo de Autenticacao
+
+```
+Request → AuthGuard → RolesGuard → TenantGuard → Controller
+                 │
+                 ▼
+       Valida sessao no Redis
+       Extrai: userId, role, schoolId, unitId
+                 │
+                 ▼
+       TenantGuard verifica:
+       - se role == master, permite tudo
+       - schoolId do recurso == schoolId do usuario
+       - unitId do recurso == unitId do usuario (se nao for diretora_geral)
+```
+
+### Isolamento de Dados
+
+- Todas as queries sao automaticamente filtradas pelo tenant do usuario
+- `master`: ve dados de todas as escolas
+- `diretora_geral`: ve dados de toda a escola
+- Outros roles: veem apenas dados da sua unidade
+
+---
+
+## Health Check
 
 ### GET `/health`
 
-Verifica o status da API e suas dependências.
-
-**Request:**
-
-```http
-GET /health
-```
+Verifica o status da API.
 
 **Response (200 OK):**
 
 ```json
 {
-  "status": "ok",
-  "info": {
-    "database": { "status": "up" },
-    "redis": { "status": "up" }
-  },
-  "details": {
-    "database": { "status": "up" },
-    "redis": { "status": "up" }
-  }
+  "status": "ok"
 }
 ```
 
 ---
 
-## 🎭 Roles e Permissões
+## Codigos de Erro
 
-### Hierarquia de Roles
-
-| Role | Nível | Descrição |
-|------|-------|-----------|
-| `ADMIN` | 1 | Acesso total ao sistema |
-| `DIRECTOR` | 2 | Gestão pedagógica e administrativa |
-| `TEACHER` | 3 | Acesso a turmas e alunos |
-| `PARENT` | 4 | Acesso aos dados dos filhos |
-| `STUDENT` | 5 | Acesso restrito (portal) |
-
-### Matriz de Permissões
-
-| Recurso | ADMIN | DIRECTOR | TEACHER | PARENT | STUDENT |
-|---------|-------|----------|---------|--------|---------|
-| Users (CRUD) | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Users (Read) | ✅ | ✅ | ⚠️ | ❌ | ❌ |
-| Dashboard | ✅ | ✅ | ✅ | ❌ | ❌ |
-| Portal | ✅ | ✅ | ✅ | ✅ | ✅ |
-
-> ⚠️ = Acesso parcial (apenas recursos relacionados)
+| Codigo | Tipo         | Descricao                      |
+| ------ | ------------ | ------------------------------ |
+| `400`  | Bad Request  | Dados de entrada invalidos     |
+| `401`  | Unauthorized | Autenticacao necessaria        |
+| `403`  | Forbidden    | Sem permissao                  |
+| `404`  | Not Found    | Recurso nao encontrado         |
+| `409`  | Conflict     | Conflito (ex: email duplicado) |
 
 ---
 
-## 📝 Exemplos com cURL
+## Exemplos com cURL
 
 ### Login
 
 ```bash
-curl -X POST http://localhost:3002/auth/login \
+curl -X POST http://localhost:3001/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"admin@essencia.edu.br","password":"admin123"}' \
+  -d '{"email":"diretora_geral@essencia.edu.br","password":"senha123"}' \
   -c cookies.txt
 ```
 
-### Requisição Autenticada
+### Listar Usuarios
 
 ```bash
-curl -X GET http://localhost:3002/users \
+curl -X GET http://localhost:3001/users \
   -H "Accept: application/json" \
   -b cookies.txt
 ```
 
-### Logout
+### Criar Usuario
 
 ```bash
-curl -X POST http://localhost:3002/auth/logout \
+curl -X POST http://localhost:3001/users \
+  -H "Content-Type: application/json" \
   -b cookies.txt \
-  -c cookies.txt
+  -d '{
+    "email": "professora@essencia.edu.br",
+    "password": "senha123",
+    "name": "Maria Silva",
+    "role": "professora",
+    "schoolId": "uuid-da-escola",
+    "unitId": "uuid-da-unidade"
+  }'
 ```
 
 ---
 
-## ⚠️ Códigos de Erro
+## Suporte
 
-| Código | Tipo | Descrição |
-|--------|------|-----------|
-| `400` | Bad Request | Dados de entrada inválidos |
-| `401` | Unauthorized | Autenticação necessária |
-| `403` | Forbidden | Sem permissão |
-| `404` | Not Found | Recurso não encontrado |
-| `409` | Conflict | Conflito (ex: email duplicado) |
-| `422` | Unprocessable Entity | Validação falhou |
-| `500` | Internal Server Error | Erro interno |
-
----
-
-## 🔄 Rate Limiting
-
-| Endpoint | Limite |
-|----------|--------|
-| `/auth/login` | 5 req/min por IP |
-| `/auth/*` | 30 req/min por IP |
-| `/*` | 100 req/min por usuário |
-
----
-
-## 📚 SDKs e Integrações
-
-### TypeScript/JavaScript
-
-```typescript
-import { createClient } from '@essencia/shared/client';
-
-const api = createClient({
-  baseUrl: 'http://localhost:3002',
-});
-
-// Login
-const { user } = await api.auth.login({
-  email: 'user@essencia.edu.br',
-  password: 'password',
-});
-
-// Listar usuários
-const { users, pagination } = await api.users.list({
-  page: 1,
-  limit: 10,
-});
-```
-
----
-
-## 📞 Suporte
-
-Para dúvidas sobre a API, entre em contato:
+Para duvidas sobre a API, entre em contato:
 
 - **Email**: suporte@essencia.edu.br
-- **Documentação**: [docs/](../)
+- **Documentacao**: [docs/](../)

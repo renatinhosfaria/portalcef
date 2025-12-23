@@ -1,8 +1,6 @@
-import * as bcrypt from "bcrypt";
 import { getDb } from "@essencia/db";
-import { users } from "@essencia/db/schema";
 import { Injectable, UnauthorizedException } from "@nestjs/common";
-import { eq } from "drizzle-orm";
+import * as bcrypt from "bcrypt";
 
 import { SessionService, type SessionData } from "./session.service";
 
@@ -13,6 +11,8 @@ interface LoginResult {
     email: string;
     name: string;
     role: string;
+    schoolId: string | null;
+    unitId: string | null;
   };
 }
 
@@ -24,21 +24,26 @@ export class AuthService {
     const db = getDb();
 
     const user = await db.query.users.findFirst({
-      where: eq(users.email, email),
+      where: (fields, { eq }) => eq(fields.email, email),
     });
 
     if (!user) {
-      throw new UnauthorizedException("Credenciais inválidas");
+      throw new UnauthorizedException("Credenciais invalidas");
     }
 
     // Verify password with bcrypt
     const isValidPassword = await bcrypt.compare(password, user.passwordHash);
     if (!isValidPassword) {
-      throw new UnauthorizedException("Credenciais inválidas");
+      throw new UnauthorizedException("Credenciais invalidas");
     }
 
-    // Create session
-    const token = await this.sessionService.createSession(user.id, user.role);
+    // Create session with tenant context
+    const token = await this.sessionService.createSession(
+      user.id,
+      user.role,
+      user.schoolId,
+      user.unitId,
+    );
 
     return {
       token,
@@ -47,6 +52,8 @@ export class AuthService {
         email: user.email,
         name: user.name,
         role: user.role,
+        schoolId: user.schoolId,
+        unitId: user.unitId,
       },
     };
   }
@@ -63,7 +70,7 @@ export class AuthService {
     const session = await this.sessionService.getSession(token);
 
     if (!session) {
-      throw new UnauthorizedException("Sessão expirada");
+      throw new UnauthorizedException("Sessao expirada");
     }
 
     return session;
@@ -74,17 +81,19 @@ export class AuthService {
     const db = getDb();
 
     const user = await db.query.users.findFirst({
-      where: eq(users.id, session.userId),
+      where: (fields, { eq }) => eq(fields.id, session.userId),
       columns: {
         id: true,
         email: true,
         name: true,
         role: true,
+        schoolId: true,
+        unitId: true,
       },
     });
 
     if (!user) {
-      throw new UnauthorizedException("Usuário não encontrado");
+      throw new UnauthorizedException("Usuario nao encontrado");
     }
 
     return user;
