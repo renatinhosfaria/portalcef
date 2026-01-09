@@ -9,20 +9,10 @@ import { Reflector } from "@nestjs/core";
 import { ROLES_KEY } from "../decorators/roles.decorator";
 import { AuthenticatedRequest } from "./auth.guard";
 
+import { ROLE_HIERARCHY } from "@essencia/shared/roles";
+
 // Role hierarchy: lower number = higher permission level
-const ROLE_HIERARCHY: Record<string, number> = {
-  master: 0,
-  diretora_geral: 1,
-  gerente_unidade: 2,
-  gerente_financeiro: 3,
-  coordenadora_geral: 4,
-  coordenadora_infantil: 5,
-  coordenadora_fundamental: 6,
-  analista_pedagogico: 7,
-  professora: 8,
-  auxiliar_administrativo: 9,
-  auxiliar_sala: 10,
-};
+// Imported from shared package
 
 @Injectable()
 export class RolesGuard implements CanActivate {

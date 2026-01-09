@@ -12,6 +12,7 @@ import {
   UnitList,
   type UnitListItem,
 } from "../../../components/units/unit-list";
+import { UnitStagesForm } from "../../../components/units/unit-stages-form";
 
 interface SchoolDetails {
   id: string;
@@ -37,6 +38,10 @@ export default function Page() {
 
   const [isDirectorFormOpen, setIsDirectorFormOpen] = useState(false);
   const [targetUnit, setTargetUnit] = useState<UnitListItem | null>(null);
+
+  const [isStagesFormOpen, setIsStagesFormOpen] = useState(false);
+  const [targetUnitForStages, setTargetUnitForStages] =
+    useState<UnitListItem | null>(null);
 
   const [school, setSchool] = useState<SchoolDetails | null>(null);
   const [isSchoolLoading, setIsSchoolLoading] = useState(true);
@@ -95,18 +100,18 @@ export default function Page() {
         }>
       >(`/schools/${schoolId}/units`);
 
-      let directorByUnit = new Map<string, string>();
-      let fallbackDirector: string | null = null;
+      let managerByUnit = new Map<string, string>();
+      let directorGeneral: string | null = null;
 
       try {
         const users = await api.get<DirectorSummary[]>("/users");
         const schoolUsers = users.filter((user) => user.schoolId === schoolId);
-        directorByUnit = new Map(
+        managerByUnit = new Map(
           schoolUsers
             .filter((user) => user.role === "gerente_unidade" && user.unitId)
             .map((user) => [user.unitId as string, user.name]),
         );
-        fallbackDirector =
+        directorGeneral =
           schoolUsers.find(
             (user) => user.role === "diretora_geral" && !user.unitId,
           )?.name ?? null;
@@ -119,8 +124,8 @@ export default function Page() {
         name: unit.name,
         code: unit.code,
         address: unit.address ?? "",
-        director:
-          directorByUnit.get(unit.id) ?? fallbackDirector ?? "Aguardando",
+        directorGeneral,
+        unitManager: managerByUnit.get(unit.id) ?? null,
         students: 0,
       }));
 
@@ -162,6 +167,16 @@ export default function Page() {
   const handleCloseDirectorForm = () => {
     setIsDirectorFormOpen(false);
     setTargetUnit(null);
+  };
+
+  const handleManageStages = (unit: UnitListItem) => {
+    setTargetUnitForStages(unit);
+    setIsStagesFormOpen(true);
+  };
+
+  const handleCloseStagesForm = () => {
+    setIsStagesFormOpen(false);
+    setTargetUnitForStages(null);
   };
 
   const schoolName = school?.name ?? "Escola";
@@ -209,6 +224,7 @@ export default function Page() {
         onCreateClick={handleCreateUnit}
         onEditClick={handleEditUnit}
         onAddDirectorClick={handleAddDirector}
+        onManageStagesClick={handleManageStages}
         units={units}
         isLoading={isUnitsLoading}
         error={unitsError}
@@ -227,6 +243,13 @@ export default function Page() {
         onClose={handleCloseDirectorForm}
         unit={targetUnit}
         schoolId={schoolId}
+        onSaved={loadUnits}
+      />
+
+      <UnitStagesForm
+        isOpen={isStagesFormOpen}
+        onClose={handleCloseStagesForm}
+        unit={targetUnitForStages}
         onSaved={loadUnits}
       />
     </div>

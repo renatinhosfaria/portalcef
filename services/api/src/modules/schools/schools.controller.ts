@@ -1,4 +1,8 @@
 import {
+  createSchoolSchema,
+  updateSchoolSchema,
+} from "@essencia/shared/schemas";
+import {
   Body,
   Controller,
   Delete,
@@ -10,10 +14,6 @@ import {
   Put,
   UseGuards,
 } from "@nestjs/common";
-import {
-  createSchoolSchema,
-  updateSchoolSchema,
-} from "@essencia/shared/schemas";
 
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { Roles } from "../../common/decorators/roles.decorator";
@@ -29,7 +29,7 @@ export class SchoolsController {
   @Get()
   @Roles("master")
   async findAll(
-    @CurrentUser() currentUser: { role: string; schoolId: string | null },
+    @CurrentUser() _currentUser: { role: string; schoolId: string | null },
   ) {
     const schools = await this.schoolsService.findAll();
     return {
@@ -39,11 +39,22 @@ export class SchoolsController {
   }
 
   @Get(":id")
-  @Roles("master")
+  @Roles("gerente_financeiro")
   async findById(
     @Param("id") id: string,
     @CurrentUser() currentUser: { role: string; schoolId: string | null },
   ) {
+    // Diretora geral só pode ver sua própria escola
+    if (currentUser.role !== "master" && currentUser.schoolId !== id) {
+      return {
+        success: false,
+        error: {
+          code: "FORBIDDEN",
+          message: "Acesso negado a esta escola",
+        },
+      };
+    }
+
     const school = await this.schoolsService.findById(id);
     return {
       success: true,

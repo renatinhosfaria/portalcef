@@ -5,15 +5,36 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1766244089476,
-      "tag": "0000_clammy_tony_stark",
+      "when": 1766971375509,
+      "tag": "0000_init_turmas",
       "breakpoints": true
     },
     {
       "idx": 1,
       "version": "7",
-      "when": 1766341554685,
-      "tag": "0001_tidy_thor",
+      "when": 1767026492690,
+      "tag": "0002_lively_centennial",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1767116250522,
+      "tag": "0003_early_the_phantom",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1736292000000,
+      "tag": "0004_seed_education_stages",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1767840970369,
+      "tag": "0004_flippant_bastion",
       "breakpoints": true
     }
   ]

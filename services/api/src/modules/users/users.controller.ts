@@ -1,3 +1,5 @@
+import { createUserSchema, updateUserSchema } from "@essencia/shared/schemas";
+import { stageRequiredRoles } from "@essencia/shared/types";
 import {
   Body,
   Controller,
@@ -10,22 +12,27 @@ import {
   Put,
   UseGuards,
 } from "@nestjs/common";
-import { createUserSchema, updateUserSchema } from "@essencia/shared/schemas";
 
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { Roles } from "../../common/decorators/roles.decorator";
 import { AuthGuard } from "../../common/guards/auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
 import { TenantGuard } from "../../common/guards/tenant.guard";
+import { SchoolsService } from "../schools/schools.service";
+import { UnitsService } from "../units/units.service";
 import { UsersService } from "./users.service";
 
 @Controller("users")
 @UseGuards(AuthGuard, RolesGuard, TenantGuard)
 export class UsersController {
-  constructor(private usersService: UsersService) {}
+  constructor(
+    private usersService: UsersService,
+    private schoolsService: SchoolsService,
+    private unitsService: UnitsService,
+  ) {}
 
   @Get()
-  @Roles("gerente_financeiro")
+  @Roles("diretora_geral", "gerente_unidade", "gerente_financeiro")
   async findAll(
     @CurrentUser()
     currentUser: {
@@ -33,17 +40,43 @@ export class UsersController {
       role: string;
       schoolId: string;
       unitId: string;
+      stageId: string | null;
     },
   ) {
     const users = await this.usersService.findAllByTenant(currentUser);
+
+    // Batch fetch schools and units to resolve names
+    const schoolIds = Array.from(
+      new Set(users.map((u) => u.schoolId).filter(Boolean)),
+    ) as string[];
+    const unitIds = Array.from(
+      new Set(users.map((u) => u.unitId).filter(Boolean)),
+    ) as string[];
+
+    const schools = schoolIds.length
+      ? await this.schoolsService.findByIds(schoolIds)
+      : [];
+    const units = unitIds.length
+      ? await this.unitsService.findByIds(unitIds)
+      : [];
+
+    const schoolMap = Object.fromEntries(schools.map((s) => [s.id, s.name]));
+    const unitMap = Object.fromEntries(units.map((u) => [u.id, u.name]));
+
+    const data = users.map((u) => ({
+      ...u,
+      schoolName: u.schoolId ? (schoolMap[u.schoolId] ?? null) : null,
+      unitName: u.unitId ? (unitMap[u.unitId] ?? null) : null,
+    }));
+
     return {
       success: true,
-      data: users,
+      data,
     };
   }
 
   @Get(":id")
-  @Roles("gerente_financeiro")
+  @Roles("diretora_geral", "gerente_unidade", "gerente_financeiro")
   async findById(
     @Param("id") id: string,
     @CurrentUser()
@@ -52,6 +85,7 @@ export class UsersController {
       role: string;
       schoolId: string;
       unitId: string;
+      stageId: string | null;
     },
   ) {
     const user = await this.usersService.findById(id);
@@ -74,16 +108,42 @@ export class UsersController {
           error: { code: "FORBIDDEN", message: "Acesso negado" },
         };
       }
+      // Stage-scoped roles can only see users in their stage
+      if (
+        stageRequiredRoles.includes(
+          currentUser.role as (typeof stageRequiredRoles)[number],
+        ) &&
+        user.stageId !== currentUser.stageId
+      ) {
+        return {
+          success: false,
+          error: { code: "FORBIDDEN", message: "Acesso negado" },
+        };
+      }
+    }
+
+    // Enrich with school/unit names
+    let schoolName: string | null = null;
+    let unitName: string | null = null;
+    if (user) {
+      if (user.schoolId) {
+        const s = await this.schoolsService.findById(user.schoolId);
+        schoolName = s?.name ?? null;
+      }
+      if (user.unitId) {
+        const u = await this.unitsService.findById(user.unitId);
+        unitName = u?.name ?? null;
+      }
     }
 
     return {
       success: true,
-      data: user,
+      data: { ...user, schoolName, unitName },
     };
   }
 
   @Post()
-  @Roles("gerente_financeiro")
+  @Roles("diretora_geral", "gerente_unidade", "gerente_financeiro")
   async create(
     @Body() body: unknown,
     @CurrentUser()
@@ -92,6 +152,7 @@ export class UsersController {
       role: string;
       schoolId: string;
       unitId: string;
+      stageId: string | null;
     },
   ) {
     const result = createUserSchema.safeParse(body);
@@ -135,6 +196,22 @@ export class UsersController {
       };
     }
 
+    // Stage-scoped roles can only create users in their stage
+    if (
+      stageRequiredRoles.includes(
+        currentUser.role as (typeof stageRequiredRoles)[number],
+      ) &&
+      result.data.stageId !== currentUser.stageId
+    ) {
+      return {
+        success: false,
+        error: {
+          code: "FORBIDDEN",
+          message: "Acesso negado - etapa diferente",
+        },
+      };
+    }
+
     const user = await this.usersService.create(result.data);
     return {
       success: true,
@@ -143,7 +220,7 @@ export class UsersController {
   }
 
   @Put(":id")
-  @Roles("gerente_financeiro")
+  @Roles("diretora_geral", "gerente_unidade", "gerente_financeiro")
   async update(
     @Param("id") id: string,
     @Body() body: unknown,
@@ -153,6 +230,7 @@ export class UsersController {
       role: string;
       schoolId: string;
       unitId: string;
+      stageId: string | null;
     },
   ) {
     // Verify user exists and belongs to user's scope
@@ -179,6 +257,19 @@ export class UsersController {
       currentUser.role !== "master" &&
       currentUser.role !== "diretora_geral" &&
       existingUser.unitId !== currentUser.unitId
+    ) {
+      return {
+        success: false,
+        error: { code: "FORBIDDEN", message: "Acesso negado" },
+      };
+    }
+
+    // Stage-scoped roles can only update users in their stage
+    if (
+      stageRequiredRoles.includes(
+        currentUser.role as (typeof stageRequiredRoles)[number],
+      ) &&
+      existingUser.stageId !== currentUser.stageId
     ) {
       return {
         success: false,
@@ -214,6 +305,23 @@ export class UsersController {
       };
     }
 
+    // Stage-scoped roles cannot change stageId
+    if (
+      stageRequiredRoles.includes(
+        currentUser.role as (typeof stageRequiredRoles)[number],
+      ) &&
+      result.data.stageId
+    ) {
+      return {
+        success: false,
+        error: {
+          code: "FORBIDDEN",
+          message:
+            "Apenas diretora geral ou master pode transferir usuarios entre etapas",
+        },
+      };
+    }
+
     const user = await this.usersService.update(id, result.data);
     return {
       success: true,
@@ -222,7 +330,7 @@ export class UsersController {
   }
 
   @Delete(":id")
-  @Roles("gerente_financeiro")
+  @Roles("diretora_geral", "gerente_unidade", "gerente_financeiro")
   @HttpCode(HttpStatus.OK)
   async delete(
     @Param("id") id: string,
@@ -232,6 +340,7 @@ export class UsersController {
       role: string;
       schoolId: string;
       unitId: string;
+      stageId: string | null;
     },
   ) {
     // Verify user exists and belongs to user's scope
@@ -258,6 +367,19 @@ export class UsersController {
       currentUser.role !== "master" &&
       currentUser.role !== "diretora_geral" &&
       existingUser.unitId !== currentUser.unitId
+    ) {
+      return {
+        success: false,
+        error: { code: "FORBIDDEN", message: "Acesso negado" },
+      };
+    }
+
+    // Stage-scoped roles can only delete users in their stage
+    if (
+      stageRequiredRoles.includes(
+        currentUser.role as (typeof stageRequiredRoles)[number],
+      ) &&
+      existingUser.stageId !== currentUser.stageId
     ) {
       return {
         success: false,

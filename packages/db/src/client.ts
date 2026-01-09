@@ -13,12 +13,12 @@ let connection: postgres.Sql | null = null;
 
 function getConnection(): postgres.Sql {
   if (!connection) {
-    const connectionString =
-      process.env.DATABASE_URL ||
-      "postgres://postgres:postgres@localhost:5432/essencia";
+    const connectionString = process.env.DATABASE_URL;
 
     if (!connectionString) {
-      throw new Error("DATABASE_URL environment variable is not set");
+      throw new Error(
+        "DATABASE_URL environment variable is not set. Set it in the environment or add an `.env.local` file to the app (example: DATABASE_URL=postgresql://user:pass@host:5432/db)",
+      );
     }
 
     connection = postgres(connectionString, {

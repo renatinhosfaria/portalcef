@@ -3,7 +3,7 @@
   "version": "0.0.1",
   "private": true,
   "description": "Database schemas, migrations, and connection factory",
-  "type": "module",
+  "type": "commonjs",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -34,11 +34,14 @@
     "lint": "eslint src/",
     "format": "prettier --write \"**/*.{ts,tsx,md,json}\"",
     "typecheck": "tsc --noEmit",
-    "reset": "tsx src/reset.ts"
+    "reset": "tsx src/reset.ts",
+    "update-master-password": "tsx src/update-master-password.ts"
   },
   "dependencies": {
     "drizzle-orm": "^0.38.2",
-    "postgres": "^3.4.5"
+    "drizzle-zod": "^0.8.3",
+    "postgres": "^3.4.5",
+    "zod": "^3.24.1"
   },
   "devDependencies": {
     "@essencia/config": "workspace:*",

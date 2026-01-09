@@ -26,6 +26,7 @@ interface LoginResponse {
       role: string;
       schoolId: string;
       unitId: string;
+      stageId: string | null;
     };
   };
   error?: {
@@ -60,8 +61,10 @@ export default function LoginPage() {
       if (data.success && data.data) {
         // Store tenant context in localStorage for quick access
         const tenantData = {
+          userId: data.data.user.id,
           schoolId: data.data.user.schoolId,
           unitId: data.data.user.unitId,
+          stageId: data.data.user.stageId,
           role: data.data.user.role,
           name: data.data.user.name,
           email: data.data.user.email,
@@ -72,7 +75,7 @@ export default function LoginPage() {
 
         // Redirect to Home with Payload
         const payload = encodeURIComponent(JSON.stringify(tenantData));
-        router.push(`http://localhost:3006?data=${payload}`);
+        router.push(`http://localhost:3000?data=${payload}`);
       } else {
         setError(data.error?.message || "Erro ao fazer login");
       }
@@ -259,7 +262,7 @@ export default function LoginPage() {
 
           <div className="pt-10 mt-auto text-center">
             <p className="text-xs text-slate-400 font-medium">
-              © 2024 Colégio Essência Feliz. Portal Administrativo v2.0
+              © 2026 Colégio Essência Feliz. Portal Administrativo v2.0
             </p>
           </div>
         </div>

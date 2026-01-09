@@ -1,6 +1,6 @@
-import { getDb, sql } from "@essencia/db";
+import { and, asc, eq, getDb, sql } from "@essencia/db";
 import {
-  users,
+  users as usersTable,
   type NewUser,
   type User,
   type UserRole,
@@ -11,12 +11,15 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import * as bcrypt from "bcrypt";
+import { ROLE_HIERARCHY } from "@essencia/shared/roles";
+import { stageRequiredRoles } from "@essencia/shared/types";
 
 interface CurrentUser {
   userId: string;
   role: string;
   schoolId: string | null;
   unitId: string | null;
+  stageId: string | null;
 }
 
 @Injectable()
@@ -39,48 +42,63 @@ export class UsersService {
       role: true,
       schoolId: true,
       unitId: true,
+      stageId: true,
       createdAt: true,
       updatedAt: true,
     } as const;
 
+    // Get current user's hierarchy level
+    const currentUserLevel = ROLE_HIERARCHY[currentUser.role] ?? 999;
+
+    let users: Omit<User, "passwordHash">[] = [];
+
     // Master sees all users (global access)
     if (currentUser.role === "master") {
-      return db.query.users.findMany({
+      users = await db.query.users.findMany({
         columns,
-        orderBy: (users, { asc }) => [asc(users.name)],
+        orderBy: [asc(usersTable.name)],
       });
     }
-
     // Diretora geral sees all users in their school
-    if (currentUser.role === "diretora_geral" && currentUser.schoolId) {
-      return db.query.users.findMany({
-        where: (fields, { eq }) => eq(fields.schoolId, currentUser.schoolId!),
+    else if (currentUser.role === "diretora_geral" && currentUser.schoolId) {
+      users = await db.query.users.findMany({
+        where: eq(usersTable.schoolId, currentUser.schoolId!),
         columns,
-        orderBy: (users, { asc }) => [asc(users.name)],
+        orderBy: [asc(usersTable.name)],
       });
     }
-
     // Other roles see only users in their unit
-    if (currentUser.schoolId && currentUser.unitId) {
-      return db.query.users.findMany({
-        where: (fields, { and, eq }) =>
-          and(
-            eq(fields.schoolId, currentUser.schoolId!),
-            eq(fields.unitId, currentUser.unitId!),
-          ),
+    else if (currentUser.schoolId && currentUser.unitId) {
+      users = await db.query.users.findMany({
+        where: and(
+          eq(usersTable.schoolId, currentUser.schoolId!),
+          eq(usersTable.unitId, currentUser.unitId!),
+        ),
         columns,
-        orderBy: (users, { asc }) => [asc(users.name)],
+        orderBy: [asc(usersTable.name)],
       });
     }
 
-    // Fallback: return empty array if no valid scope
-    return [];
+    // Stage-scoped roles only see users in their stage
+    if (
+      stageRequiredRoles.includes(
+        currentUser.role as (typeof stageRequiredRoles)[number],
+      )
+    ) {
+      users = users.filter((u) => u.stageId === currentUser.stageId);
+    }
+
+    // Filter by hierarchy: only show users with equal or lower permissions (higher number)
+    return users.filter((u) => {
+      const userLevel = ROLE_HIERARCHY[u.role] ?? 999;
+      return userLevel >= currentUserLevel;
+    });
   }
 
   async findById(id: string): Promise<Omit<User, "passwordHash"> | null> {
     const db = getDb();
     const user = await db.query.users.findFirst({
-      where: (fields, { eq }) => eq(fields.id, id),
+      where: eq(usersTable.id, id),
       columns: {
         id: true,
         email: true,
@@ -88,6 +106,7 @@ export class UsersService {
         role: true,
         schoolId: true,
         unitId: true,
+        stageId: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -102,12 +121,13 @@ export class UsersService {
     role: UserRole;
     schoolId: string | null;
     unitId: string | null;
+    stageId: string | null;
   }): Promise<Omit<User, "passwordHash">> {
     const db = getDb();
 
     // Check if email already exists
     const existing = await db.query.users.findFirst({
-      where: (fields, { eq }) => eq(fields.email, data.email),
+      where: eq(usersTable.email, data.email),
     });
 
     if (existing) {
@@ -124,17 +144,19 @@ export class UsersService {
       role: data.role,
       schoolId: data.schoolId,
       unitId: data.unitId,
+      stageId: data.stageId,
     };
 
-    const [created] = await db.insert(users).values(newUser).returning({
-      id: users.id,
-      email: users.email,
-      name: users.name,
-      role: users.role,
-      schoolId: users.schoolId,
-      unitId: users.unitId,
-      createdAt: users.createdAt,
-      updatedAt: users.updatedAt,
+    const [created] = await db.insert(usersTable).values(newUser).returning({
+      id: usersTable.id,
+      email: usersTable.email,
+      name: usersTable.name,
+      role: usersTable.role,
+      schoolId: usersTable.schoolId,
+      unitId: usersTable.unitId,
+      stageId: usersTable.stageId,
+      createdAt: usersTable.createdAt,
+      updatedAt: usersTable.updatedAt,
     });
 
     return created;
@@ -148,6 +170,7 @@ export class UsersService {
       role: UserRole;
       schoolId: string | null;
       unitId: string | null;
+      stageId: string | null;
     }>,
   ): Promise<Omit<User, "passwordHash">> {
     const db = getDb();
@@ -158,18 +181,19 @@ export class UsersService {
     }
 
     const [updated] = await db
-      .update(users)
+      .update(usersTable)
       .set({ ...data, updatedAt: new Date() })
-      .where(sql`${users.id} = ${id}`)
+      .where(sql`${usersTable.id} = ${id}`)
       .returning({
-        id: users.id,
-        email: users.email,
-        name: users.name,
-        role: users.role,
-        schoolId: users.schoolId,
-        unitId: users.unitId,
-        createdAt: users.createdAt,
-        updatedAt: users.updatedAt,
+        id: usersTable.id,
+        email: usersTable.email,
+        name: usersTable.name,
+        role: usersTable.role,
+        schoolId: usersTable.schoolId,
+        unitId: usersTable.unitId,
+        stageId: usersTable.stageId,
+        createdAt: usersTable.createdAt,
+        updatedAt: usersTable.updatedAt,
       });
 
     return updated;
@@ -183,6 +207,6 @@ export class UsersService {
       throw new NotFoundException("Usuario nao encontrado");
     }
 
-    await db.delete(users).where(sql`${users.id} = ${id}`);
+    await db.delete(usersTable).where(sql`${usersTable.id} = ${id}`);
   }
 }

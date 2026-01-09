@@ -1,4 +1,5 @@
-import { getDb } from "@essencia/db";
+import { eq, getDb } from "@essencia/db";
+import { users } from "@essencia/db/schema";
 import { Injectable, UnauthorizedException } from "@nestjs/common";
 import * as bcrypt from "bcrypt";
 
@@ -13,6 +14,7 @@ interface LoginResult {
     role: string;
     schoolId: string | null;
     unitId: string | null;
+    stageId: string | null;
   };
 }
 
@@ -24,7 +26,7 @@ export class AuthService {
     const db = getDb();
 
     const user = await db.query.users.findFirst({
-      where: (fields, { eq }) => eq(fields.email, email),
+      where: eq(users.email, email),
     });
 
     if (!user) {
@@ -43,6 +45,7 @@ export class AuthService {
       user.role,
       user.schoolId,
       user.unitId,
+      user.stageId,
     );
 
     return {
@@ -54,6 +57,7 @@ export class AuthService {
         role: user.role,
         schoolId: user.schoolId,
         unitId: user.unitId,
+        stageId: user.stageId,
       },
     };
   }
@@ -81,7 +85,7 @@ export class AuthService {
     const db = getDb();
 
     const user = await db.query.users.findFirst({
-      where: (fields, { eq }) => eq(fields.id, session.userId),
+      where: eq(users.id, session.userId),
       columns: {
         id: true,
         email: true,
@@ -89,6 +93,7 @@ export class AuthService {
         role: true,
         schoolId: true,
         unitId: true,
+        stageId: true,
       },
     });
 

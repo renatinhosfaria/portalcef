@@ -18,6 +18,7 @@ import {
 } from "@essencia/ui/components/table";
 import {
   AlertCircle,
+  BookOpen,
   MapPin,
   MoreHorizontal,
   Pencil,
@@ -31,7 +32,8 @@ export interface UnitListItem {
   name: string;
   code: string;
   address: string;
-  director: string;
+  directorGeneral: string | null;
+  unitManager: string | null;
   students: number;
 }
 
@@ -42,6 +44,7 @@ interface UnitListProps {
   onCreateClick: () => void;
   onEditClick: (unit: UnitListItem) => void;
   onAddDirectorClick: (unit: UnitListItem) => void;
+  onManageStagesClick?: (unit: UnitListItem) => void;
 }
 
 export function UnitList({
@@ -51,8 +54,33 @@ export function UnitList({
   onCreateClick,
   onEditClick,
   onAddDirectorClick,
+  onManageStagesClick,
 }: UnitListProps) {
   const unitsCount = isLoading ? "..." : units.length;
+  const renderPerson = (name: string | null) => {
+    const displayName = name?.trim();
+    if (!displayName) {
+      return (
+        <Badge
+          variant="outline"
+          className="text-amber-600 border-amber-200 bg-amber-50"
+        >
+          Pendente
+        </Badge>
+      );
+    }
+
+    return (
+      <div className="flex items-center gap-2">
+        <div className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-[10px] font-bold text-slate-600">
+          {displayName.charAt(0)}
+        </div>
+        <span className="text-sm font-medium text-slate-700">
+          {displayName}
+        </span>
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-6">
@@ -91,6 +119,7 @@ export function UnitList({
               <TableHead>Código</TableHead>
               <TableHead>Endereço</TableHead>
               <TableHead>Diretora Geral</TableHead>
+              <TableHead>Gerente da Unidade</TableHead>
               <TableHead className="w-[50px]"></TableHead>
             </TableRow>
           </TableHeader>
@@ -98,7 +127,7 @@ export function UnitList({
             {isLoading ? (
               <TableRow>
                 <TableCell
-                  colSpan={5}
+                  colSpan={6}
                   className="pl-6 py-8 text-center text-sm text-slate-500"
                 >
                   Carregando unidades...
@@ -107,7 +136,7 @@ export function UnitList({
             ) : units.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={5}
+                  colSpan={6}
                   className="pl-6 py-8 text-center text-sm text-slate-500"
                 >
                   Nenhuma unidade encontrada.
@@ -131,25 +160,8 @@ export function UnitList({
                       {unit.address || "Endereço não informado"}
                     </div>
                   </TableCell>
-                  <TableCell>
-                    {unit.director === "Aguardando" ? (
-                      <Badge
-                        variant="outline"
-                        className="text-amber-600 border-amber-200 bg-amber-50"
-                      >
-                        Pendente
-                      </Badge>
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-[10px] font-bold text-slate-600">
-                          {unit.director.charAt(0)}
-                        </div>
-                        <span className="text-sm font-medium text-slate-700">
-                          {unit.director}
-                        </span>
-                      </div>
-                    )}
-                  </TableCell>
+                  <TableCell>{renderPerson(unit.directorGeneral)}</TableCell>
+                  <TableCell>{renderPerson(unit.unitManager)}</TableCell>
                   <TableCell>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
@@ -170,7 +182,7 @@ export function UnitList({
                           onClick={() => onAddDirectorClick(unit)}
                         >
                           <UserPlus className="w-4 h-4 text-slate-500" />
-                          Definir Diretora
+                          Definir Gerente da Unidade
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           className="gap-2 cursor-pointer"
@@ -179,6 +191,15 @@ export function UnitList({
                           <Pencil className="w-4 h-4 text-slate-500" />
                           Editar Unidade
                         </DropdownMenuItem>
+                        {onManageStagesClick && (
+                          <DropdownMenuItem
+                            className="gap-2 cursor-pointer"
+                            onClick={() => onManageStagesClick(unit)}
+                          >
+                            <BookOpen className="w-4 h-4 text-slate-500" />
+                            Gerenciar Etapas
+                          </DropdownMenuItem>
+                        )}
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </TableCell>

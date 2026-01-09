@@ -1,19 +1,26 @@
-// eslint-disable-next-line no-restricted-imports
-import { eq, getDb, schema } from "@essencia/db";
+import { serverApi } from "@essencia/shared/fetchers/server";
+import { cookies } from "next/headers";
 
 import { OverviewGrid } from "../components/overview/overview-grid";
 
 export const dynamic = "force-dynamic";
 
-export default async function Page() {
-  const db = getDb();
+interface MasterOverviewStats {
+  schoolsCount: number;
+  unitsCount: number;
+  directorsCount: number;
+  studentsCount: number;
+}
 
-  const schools = await db.select().from(schema.schools);
-  const units = await db.select().from(schema.units);
-  const directors = await db
-    .select()
-    .from(schema.users)
-    .where(eq(schema.users.role, "diretora_geral"));
+export default async function Page() {
+  const cookieStore = cookies();
+  const cookieHeader = cookieStore.toString();
+
+  // Fetch stats from API (governed data access)
+  const stats = await serverApi.get<MasterOverviewStats>(
+    "/stats/master-overview",
+    { cookies: cookieHeader },
+  );
 
   return (
     <div className="space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -28,10 +35,10 @@ export default async function Page() {
       </div>
 
       <OverviewGrid
-        schoolsCount={schools.length}
-        unitsCount={units.length}
-        directorsCount={directors.length}
-        studentsCount={0}
+        schoolsCount={stats.schoolsCount}
+        unitsCount={stats.unitsCount}
+        directorsCount={stats.directorsCount}
+        studentsCount={stats.studentsCount}
       />
 
       <div className="p-8 rounded-3xl bg-gradient-to-br from-slate-900 to-slate-800 text-white shadow-xl shadow-slate-900/10">

@@ -54,7 +54,17 @@ export async function serverFetch<T>(
   }
 
   const url = `${API_INTERNAL_URL}${endpoint}`;
-  const response = await fetch(url, config);
+  let response: Response;
+  try {
+    response = await fetch(url, config);
+  } catch {
+    // Network or connection error (e.g., API not running)
+    throw new ServerFetchError(
+      503,
+      "SERVICE_UNAVAILABLE",
+      `Failed to reach API at ${API_INTERNAL_URL}`,
+    );
+  }
 
   // Handle 401 - Throw for the page/layout to handle with redirect
   if (response.status === 401) {
@@ -66,13 +76,22 @@ export async function serverFetch<T>(
     throw new ServerFetchError(403, "FORBIDDEN", "Acesso negado");
   }
 
-  const data = (await response.json()) as ApiResponse<T>;
+  let data: ApiResponse<T> | null = null;
+  try {
+    data = (await response.json()) as ApiResponse<T>;
+  } catch {
+    throw new ServerFetchError(
+      response.status || 500,
+      "INVALID_RESPONSE",
+      "Invalid or empty response from API",
+    );
+  }
 
   if (!response.ok || !data.success) {
     throw new ServerFetchError(
       response.status,
-      data.error?.code ?? "UNKNOWN_ERROR",
-      data.error?.message ?? "Erro desconhecido",
+      data?.error?.code ?? "UNKNOWN_ERROR",
+      data?.error?.message ?? "Erro desconhecido",
     );
   }
 

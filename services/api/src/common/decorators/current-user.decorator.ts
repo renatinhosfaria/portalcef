@@ -7,7 +7,7 @@ import { AuthenticatedRequest } from "../guards/auth.guard";
  * @example
  * @Get('profile')
  * @UseGuards(AuthGuard)
- * getProfile(@CurrentUser() user: { userId: string; role: string; schoolId: string; unitId: string }) {
+ * getProfile(@CurrentUser() user: { userId: string; role: string; schoolId: string; unitId: string; stageId: string | null }) {
  *   return user;
  * }
  */

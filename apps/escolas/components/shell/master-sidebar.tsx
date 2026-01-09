@@ -14,7 +14,7 @@ export function MasterSidebar() {
           <div className="absolute inset-0 bg-white/10 rounded-xl animate-pulse" />
         </div>
         <span className="hidden lg:block text-2xl font-bold tracking-tight text-slate-900">
-          Master
+          Portal CEF
         </span>
       </div>
 

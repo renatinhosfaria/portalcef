@@ -13,7 +13,7 @@ import {
   getUserSegment,
   isCoordenacao,
   isProfessor,
-  SCHOOL_SEGMENT_PREFIXES,
+  SCHOOL_STAGE_PREFIXES,
 } from "./permissions";
 
 export interface UserContext {
@@ -34,12 +34,24 @@ export function canAccessPlanning(
   if (isCoordenacao(user.role)) {
     const segment = getUserSegment(user.role);
 
-    if (segment === "INFANTIL") {
-      return planning.turmaId.startsWith(SCHOOL_SEGMENT_PREFIXES.INFANTIL);
+    if (segment === "BERCARIO") {
+      return planning.turmaId.startsWith(SCHOOL_STAGE_PREFIXES.BERCARIO);
     }
 
-    if (segment === "FUNDAMENTAL") {
-      return planning.turmaId.startsWith(SCHOOL_SEGMENT_PREFIXES.FUNDAMENTAL);
+    if (segment === "INFANTIL") {
+      return planning.turmaId.startsWith(SCHOOL_STAGE_PREFIXES.INFANTIL);
+    }
+
+    if (segment === "FUNDAMENTAL_I") {
+      return planning.turmaId.startsWith(SCHOOL_STAGE_PREFIXES.FUNDAMENTAL_I);
+    }
+
+    if (segment === "FUNDAMENTAL_II") {
+      return planning.turmaId.startsWith(SCHOOL_STAGE_PREFIXES.FUNDAMENTAL_II);
+    }
+
+    if (segment === "MEDIO") {
+      return planning.turmaId.startsWith(SCHOOL_STAGE_PREFIXES.MEDIO);
     }
   }
 
@@ -59,11 +71,20 @@ export function getPlanningsWhereClause(user: UserContext) {
 
   if (isCoordenacao(user.role)) {
     const segment = getUserSegment(user.role);
-    if (segment === "INFANTIL") {
-      return { turmaId: { startsWith: SCHOOL_SEGMENT_PREFIXES.INFANTIL } };
+    if (segment === "BERCARIO") {
+      return { turmaId: { startsWith: SCHOOL_STAGE_PREFIXES.BERCARIO } };
     }
-    if (segment === "FUNDAMENTAL") {
-      return { turmaId: { startsWith: SCHOOL_SEGMENT_PREFIXES.FUNDAMENTAL } };
+    if (segment === "INFANTIL") {
+      return { turmaId: { startsWith: SCHOOL_STAGE_PREFIXES.INFANTIL } };
+    }
+    if (segment === "FUNDAMENTAL_I") {
+      return { turmaId: { startsWith: SCHOOL_STAGE_PREFIXES.FUNDAMENTAL_I } };
+    }
+    if (segment === "FUNDAMENTAL_II") {
+      return { turmaId: { startsWith: SCHOOL_STAGE_PREFIXES.FUNDAMENTAL_II } };
+    }
+    if (segment === "MEDIO") {
+      return { turmaId: { startsWith: SCHOOL_STAGE_PREFIXES.MEDIO } };
     }
   }
 
@@ -72,16 +93,26 @@ export function getPlanningsWhereClause(user: UserContext) {
 }
 
 /**
- * Extrai o segmento de um turmaId
+ * Extrai a etapa de um turmaId
  *
  * @param turmaId - ID da turma (ex: "INF-2A-2024")
- * @returns Segmento ou null se formato inválido
+ * @returns Etapa ou null se formato inválido
  */
 export function extractSegmentFromTurmaId(
   turmaId: string,
-): "INFANTIL" | "FUNDAMENTAL" | null {
-  if (turmaId.startsWith(SCHOOL_SEGMENT_PREFIXES.INFANTIL)) return "INFANTIL";
-  if (turmaId.startsWith(SCHOOL_SEGMENT_PREFIXES.FUNDAMENTAL))
-    return "FUNDAMENTAL";
+):
+  | "BERCARIO"
+  | "INFANTIL"
+  | "FUNDAMENTAL_I"
+  | "FUNDAMENTAL_II"
+  | "MEDIO"
+  | null {
+  if (turmaId.startsWith(SCHOOL_STAGE_PREFIXES.BERCARIO)) return "BERCARIO";
+  if (turmaId.startsWith(SCHOOL_STAGE_PREFIXES.INFANTIL)) return "INFANTIL";
+  if (turmaId.startsWith(SCHOOL_STAGE_PREFIXES.FUNDAMENTAL_I))
+    return "FUNDAMENTAL_I";
+  if (turmaId.startsWith(SCHOOL_STAGE_PREFIXES.FUNDAMENTAL_II))
+    return "FUNDAMENTAL_II";
+  if (turmaId.startsWith(SCHOOL_STAGE_PREFIXES.MEDIO)) return "MEDIO";
   return null;
 }

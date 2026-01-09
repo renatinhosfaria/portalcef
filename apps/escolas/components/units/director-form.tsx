@@ -83,6 +83,7 @@ export function DirectorForm({
         role: roleToUse as UserRole,
         schoolId: schoolId,
         unitId: unit.id,
+        stageId: null,
       };
 
       const result = createUserSchema.safeParse(payload);

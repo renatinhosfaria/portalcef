@@ -20,7 +20,20 @@
     "format": "prettier --write \"**/*.{ts,tsx,md,json}\"",
     "db:generate": "pnpm --filter @essencia/db generate",
     "db:migrate": "pnpm --filter @essencia/db migrate",
-    "db:studio": "pnpm --filter @essencia/db studio"
+    "db:studio": "pnpm --filter @essencia/db studio",
+    "update-master-password": "pnpm --filter @essencia/db update-master-password",
+    "docker:rebuild": "docker compose -f docker-compose.dev.yml build --no-cache dev",
+    "docker:up": "docker compose -f docker-compose.dev.yml up -d",
+    "docker:up:build": "docker compose -f docker-compose.dev.yml up -d --build --force-recreate dev",
+    "docker:down": "docker compose -f docker-compose.dev.yml down",
+    "docker:logs": "docker compose -f docker-compose.dev.yml logs -f dev",
+    "docker:shell": "docker compose -f docker-compose.dev.yml exec dev sh",
+    "docker:format": "docker compose -f docker-compose.dev.yml exec dev pnpm turbo format",
+    "docker:lint": "docker compose -f docker-compose.dev.yml exec dev pnpm turbo lint",
+    "docker:typecheck": "docker compose -f docker-compose.dev.yml exec dev pnpm turbo typecheck",
+    "docker:app:build": "docker compose -f docker-compose.dev.yml exec dev pnpm turbo build",
+    "docker:test": "docker compose -f docker-compose.dev.yml exec dev pnpm turbo test",
+    "docker:quality": "docker compose -f docker-compose.dev.yml exec dev sh -lc \"pnpm turbo format && pnpm turbo lint && pnpm turbo typecheck && pnpm turbo build && pnpm turbo test\""
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

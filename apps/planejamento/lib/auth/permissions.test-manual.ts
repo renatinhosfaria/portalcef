@@ -32,8 +32,8 @@ assert(
   "Coord Infantil -> INFANTIL",
 );
 assert(
-  getUserSegment("coordenadora_fundamental") === "FUNDAMENTAL",
-  "Coord Fundamental -> FUNDAMENTAL",
+  getUserSegment("coordenadora_fundamental_i") === "FUNDAMENTAL_I",
+  "Coord Fundamental I -> FUNDAMENTAL_I",
 );
 assert(getUserSegment("professora") === "ALL", "Professora -> ALL (default)");
 assert(getUserSegment("diretora_geral") === "ALL", "Diretora -> ALL");
@@ -41,7 +41,10 @@ assert(getUserSegment("diretora_geral") === "ALL", "Diretora -> ALL");
 // 2. Teste getSegmentPrefix
 console.log("\n2. Testando getSegmentPrefix:");
 assert(getSegmentPrefix("INFANTIL") === "INF-%", "INFANTIL -> INF-%");
-assert(getSegmentPrefix("FUNDAMENTAL") === "FUND-%", "FUNDAMENTAL -> FUND-%");
+assert(
+  getSegmentPrefix("FUNDAMENTAL_I") === "FUND-I-%",
+  "FUNDAMENTAL_I -> FUND-I-%",
+);
 assert(getSegmentPrefix("ALL") === null, "ALL -> null");
 
 // 3. Teste canAccessPlanejamento

@@ -7,7 +7,7 @@
  * @module lib/auth/permissions
  */
 
-import type { UserRole } from "@essencia/shared/types";
+import type { EducationStageCode, UserRole } from "@essencia/shared/types";
 
 // ============================================================================
 // Role Groups
@@ -16,23 +16,38 @@ import type { UserRole } from "@essencia/shared/types";
 /**
  * Roles que acessam apenas seus próprios planejamentos
  */
-export const PROFESSOR_ROLES: readonly UserRole[] = ["professora"] as const;
-
-/**
- * Roles de coordenação com visão por segmento educacional
- */
-export const COORDENACAO_ROLES: readonly UserRole[] = [
-  "coordenadora_infantil",
-  "coordenadora_fundamental",
+export const PROFESSOR_ROLES: readonly UserRole[] = [
+  "professora",
+  "auxiliar_sala",
 ] as const;
 
 /**
- * Roles com visão global de todos os segmentos
+ * Roles de coordenação com visão por etapa educacional
+ */
+export const COORDENACAO_ROLES: readonly UserRole[] = [
+  "coordenadora_bercario",
+  "coordenadora_infantil",
+  "coordenadora_fundamental_i",
+  "coordenadora_fundamental_ii",
+  "coordenadora_medio",
+] as const;
+
+/**
+ * Roles com visão global de todas as etapas
  */
 export const DIRECAO_ROLES: readonly UserRole[] = [
   "master",
   "diretora_geral",
   "coordenadora_geral",
+] as const;
+
+/**
+ * Roles do setor administrativo com acesso total ao planejamento da unidade
+ * Podem visualizar todas as etapas e aprovar/rejeitar planejamentos
+ */
+export const GESTAO_ROLES: readonly UserRole[] = [
+  "gerente_unidade",
+  "gerente_financeiro",
 ] as const;
 
 /**
@@ -42,22 +57,26 @@ export const PLANEJAMENTO_ALLOWED_ROLES: readonly UserRole[] = [
   ...PROFESSOR_ROLES,
   ...COORDENACAO_ROLES,
   ...DIRECAO_ROLES,
+  ...GESTAO_ROLES,
   "analista_pedagogico",
 ] as const;
 
 // ============================================================================
-// Segment Types
+// Stage Types
 // ============================================================================
 
-export type EducationalSegment = "INFANTIL" | "FUNDAMENTAL" | "ALL";
+export type EducationalStage = EducationStageCode | "ALL";
 
 // ============================================================================
 // Constants
 // ============================================================================
 
-export const SCHOOL_SEGMENT_PREFIXES = {
+export const SCHOOL_STAGE_PREFIXES = {
+  BERCARIO: "BERC-",
   INFANTIL: "INF-",
-  FUNDAMENTAL: "FUND-",
+  FUNDAMENTAL_I: "FUND-I-",
+  FUNDAMENTAL_II: "FUND-II-",
+  MEDIO: "MED-",
 } as const;
 
 // ============================================================================
@@ -86,6 +105,13 @@ export function isDirecao(role: UserRole): boolean {
 }
 
 /**
+ * Verifica se o role é de gestão administrativa (gerentes com acesso total à unidade)
+ */
+export function isGestao(role: UserRole): boolean {
+  return GESTAO_ROLES.includes(role);
+}
+
+/**
  * Verifica se o role pode acessar o módulo de planejamento
  */
 export function canAccessPlanejamento(role: UserRole): boolean {
@@ -97,38 +123,53 @@ export function canAccessPlanejamento(role: UserRole): boolean {
 // ============================================================================
 
 /**
- * Determina o segmento educacional que o usuário pode acessar
+ * Determina a etapa educacional que o usuário pode acessar
  *
+ * - coordenadora_bercario → BERCARIO (turmas BERC-*)
  * - coordenadora_infantil → INFANTIL (turmas INF-*)
- * - coordenadora_fundamental → FUNDAMENTAL (turmas FUND-*)
+ * - coordenadora_fundamental_i → FUNDAMENTAL_I (turmas FUND-I-*)
+ * - coordenadora_fundamental_ii → FUNDAMENTAL_II (turmas FUND-II-*)
+ * - coordenadora_medio → MEDIO (turmas MED-*)
  * - Todos os outros roles com permissão → ALL
  *
  * @param role - Role do usuário
- * @returns Segmento educacional ou ALL para acesso total
+ * @returns Etapa educacional ou ALL para acesso total
  */
-export function getUserSegment(role: UserRole): EducationalSegment {
+export function getUserSegment(role: UserRole): EducationalStage {
   switch (role) {
+    case "coordenadora_bercario":
+      return "BERCARIO";
     case "coordenadora_infantil":
       return "INFANTIL";
-    case "coordenadora_fundamental":
-      return "FUNDAMENTAL";
+    case "coordenadora_fundamental_i":
+      return "FUNDAMENTAL_I";
+    case "coordenadora_fundamental_ii":
+      return "FUNDAMENTAL_II";
+    case "coordenadora_medio":
+      return "MEDIO";
     default:
       return "ALL";
   }
 }
 
 /**
- * Retorna o prefixo de turmaId para filtrar por segmento
+ * Retorna o prefixo de turmaId para filtrar por etapa
  *
- * @param segment - Segmento educacional
+ * @param segment - Etapa educacional
  * @returns Prefixo SQL LIKE ou null para sem filtro
  */
-export function getSegmentPrefix(segment: EducationalSegment): string | null {
+export function getSegmentPrefix(segment: EducationalStage): string | null {
   switch (segment) {
+    case "BERCARIO":
+      return `${SCHOOL_STAGE_PREFIXES.BERCARIO}%`;
     case "INFANTIL":
-      return `${SCHOOL_SEGMENT_PREFIXES.INFANTIL}%`;
-    case "FUNDAMENTAL":
-      return `${SCHOOL_SEGMENT_PREFIXES.FUNDAMENTAL}%`;
+      return `${SCHOOL_STAGE_PREFIXES.INFANTIL}%`;
+    case "FUNDAMENTAL_I":
+      return `${SCHOOL_STAGE_PREFIXES.FUNDAMENTAL_I}%`;
+    case "FUNDAMENTAL_II":
+      return `${SCHOOL_STAGE_PREFIXES.FUNDAMENTAL_II}%`;
+    case "MEDIO":
+      return `${SCHOOL_STAGE_PREFIXES.MEDIO}%`;
     case "ALL":
       return null;
   }
@@ -167,9 +208,10 @@ export function canEditPlanning(
 
 /**
  * Verifica se o usuário pode aprovar/rejeitar planejamentos
+ * Inclui coordenação, direção e gestão administrativa
  */
 export function canApprove(role: UserRole): boolean {
-  return isCoordenacao(role) || isDirecao(role);
+  return isCoordenacao(role) || isDirecao(role) || isGestao(role);
 }
 
 /**

@@ -1,7 +1,5 @@
 "use client";
 
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
 import {
   Form,
   FormControl,
@@ -11,48 +9,51 @@ import {
   FormMessage,
 } from "@essencia/ui/components/form";
 import { Textarea } from "@essencia/ui/components/textarea";
-import { objetivosStepSchema, type ObjetivosStepData } from "../../schemas";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
+import { useSpellCheck } from "../../hooks";
+import { objetivosStepSchema } from "../../schemas";
 
-export interface ObjetivosStepFormProps {
-  defaultValues?: Partial<ObjetivosStepData>;
-  onSubmit: (data: ObjetivosStepData) => void;
-}
+export function ObjetivosStepForm({ defaultValues, onSubmit }: any) {
+  const { correctText } = useSpellCheck();
 
-/**
- * Formulário Passo 2: Objetivos de Aprendizagem
- * Textarea com placeholder pedagógico orientativo
- *
- * AC2: Exibe Textarea com label, placeholder pedagógico, validação min 20 chars
- */
-export function ObjetivosStepForm({
-  defaultValues,
-  onSubmit,
-}: ObjetivosStepFormProps) {
-  const form = useForm<ObjetivosStepData>({
+  const form = useForm({
     resolver: zodResolver(objetivosStepSchema),
-    mode: "onBlur", // Validação apenas ao sair do campo
-    defaultValues: defaultValues || {
-      objetivos: "",
-    },
+    defaultValues: defaultValues || { objetivos: "" },
   });
 
+  const handleBlur = (fieldName: string) => {
+    const currentValue = form.getValues(fieldName as "objetivos");
+    if (currentValue) {
+      const correctedValue = correctText(currentValue);
+      if (correctedValue !== currentValue) {
+        form.setValue(fieldName as "objetivos", correctedValue);
+      }
+    }
+  };
+
   return (
-    // @ts-expect-error - react-hook-form version conflict between packages
     <Form {...form}>
-      <form id="wizard-step-form" onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-        <FormField<ObjetivosStepData>
-          control={form.control as any}
+      <form
+        id="wizard-step-form"
+        onSubmit={form.handleSubmit(onSubmit)}
+        className="space-y-4"
+      >
+        <FormField
+          control={form.control}
           name="objetivos"
-          render={({ field }: { field: any }) => (
+          render={({ field }) => (
             <FormItem>
-              <FormLabel>Objetivos da Quinzena</FormLabel>
+              <FormLabel>Qual o Objetivo de aprendizagem?</FormLabel>
               <FormControl>
                 <Textarea
-                  placeholder="Descreva os objetivos de aprendizagem. Use verbos de ação (Ex: Compreender, Identificar, Desenvolver...)"
-                  className="min-h-[120px]"
-                  autoResize
-                  aria-describedby="objetivos-error"
+                  className="min-h-[150px]"
+                  placeholder="Descreva os objetivos..."
                   {...field}
+                  onBlur={(e) => {
+                    field.onBlur();
+                    handleBlur("objetivos");
+                  }}
                 />
               </FormControl>
               <FormMessage />

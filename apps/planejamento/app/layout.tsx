@@ -1,7 +1,7 @@
 import { Shell } from "@essencia/components/shell/shell";
 import { TenantProvider } from "@essencia/shared/providers/tenant";
+import { Toaster } from "@essencia/ui/components/toaster";
 import "@essencia/ui/globals.css";
-
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 
@@ -33,6 +33,7 @@ export default function RootLayout({
             {children}
             <MobileNav />
           </Shell>
+          <Toaster position="bottom-right" />
         </TenantProvider>
       </body>
     </html>

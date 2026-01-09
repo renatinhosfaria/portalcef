@@ -7,6 +7,8 @@ interface TenantContextType {
   schoolId: string | null;
   unitId: string | null;
   role: string;
+  name?: string | null;
+  email?: string | null;
   isLoaded: boolean;
 }
 
@@ -18,6 +20,8 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
     schoolId: null,
     unitId: null,
     role: "",
+    name: null,
+    email: null,
     isLoaded: false,
   });
 

@@ -17,6 +17,7 @@ export interface AuthenticatedRequest extends FastifyRequest {
     role: string;
     schoolId: string | null;
     unitId: string | null;
+    stageId: string | null;
   };
 }
 
@@ -44,6 +45,7 @@ export class AuthGuard implements CanActivate {
       role: session.role,
       schoolId: session.schoolId,
       unitId: session.unitId,
+      stageId: session.stageId ?? null,
     };
 
     return true;

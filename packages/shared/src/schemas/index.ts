@@ -7,8 +7,11 @@ export const userRoleSchema = z.enum([
   "gerente_unidade",
   "gerente_financeiro",
   "coordenadora_geral",
+  "coordenadora_bercario",
   "coordenadora_infantil",
-  "coordenadora_fundamental",
+  "coordenadora_fundamental_i",
+  "coordenadora_fundamental_ii",
+  "coordenadora_medio",
   "analista_pedagogico",
   "professora",
   "auxiliar_administrativo",
@@ -20,13 +23,42 @@ const unitRequiredRoles = [
   "gerente_unidade",
   "gerente_financeiro",
   "coordenadora_geral",
+  "coordenadora_bercario",
   "coordenadora_infantil",
-  "coordenadora_fundamental",
+  "coordenadora_fundamental_i",
+  "coordenadora_fundamental_ii",
+  "coordenadora_medio",
   "analista_pedagogico",
   "professora",
   "auxiliar_administrativo",
   "auxiliar_sala",
 ] as const;
+
+// Roles that require a stage
+const stageRequiredRoles = [
+  "coordenadora_bercario",
+  "coordenadora_infantil",
+  "coordenadora_fundamental_i",
+  "coordenadora_fundamental_ii",
+  "coordenadora_medio",
+  "professora",
+  "auxiliar_sala",
+] as const;
+
+// Education stage schema
+export const educationStageSchema = z.object({
+  id: z.string().uuid(),
+  code: z.enum([
+    "BERCARIO",
+    "INFANTIL",
+    "FUNDAMENTAL_I",
+    "FUNDAMENTAL_II",
+    "MEDIO",
+  ]),
+  name: z.string().min(2).max(200),
+  createdAt: z.coerce.date(),
+  updatedAt: z.coerce.date(),
+});
 
 // School schemas
 export const schoolSchema = z.object({
@@ -92,6 +124,7 @@ export const userSchema = z.object({
   role: userRoleSchema,
   schoolId: z.string().uuid().nullable(),
   unitId: z.string().uuid().nullable(),
+  stageId: z.string().uuid().nullable(),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
 });
@@ -110,6 +143,7 @@ const baseUserDataSchema = z.object({
   role: userRoleSchema,
   schoolId: z.string().uuid("Escola invalida").nullable(),
   unitId: z.string().uuid("Unidade invalida").nullable(),
+  stageId: z.string().uuid("Etapa invalida").nullable(),
 });
 
 // Validation function for role/scope consistency
@@ -118,17 +152,29 @@ const validateRoleScope = (
 ): boolean => {
   // master: both null
   if (data.role === "master") {
-    return data.schoolId === null && data.unitId === null;
+    return (
+      data.schoolId === null && data.unitId === null && data.stageId === null
+    );
   }
-  // diretora_geral: schoolId required, unitId null
+  // diretora_geral: schoolId required, unitId optional (can be null or set)
   if (data.role === "diretora_geral") {
-    return data.schoolId !== null && data.unitId === null;
+    return data.schoolId !== null && data.stageId === null;
   }
   // unit-scoped roles: both required
   if (
     unitRequiredRoles.includes(data.role as (typeof unitRequiredRoles)[number])
   ) {
-    return data.schoolId !== null && data.unitId !== null;
+    const hasUnitScope = data.schoolId !== null && data.unitId !== null;
+    if (!hasUnitScope) return false;
+
+    const isStageRequired = stageRequiredRoles.includes(
+      data.role as (typeof stageRequiredRoles)[number],
+    );
+    if (isStageRequired) {
+      return data.stageId !== null;
+    }
+
+    return data.stageId === null;
   }
   return true;
 };
@@ -147,6 +193,7 @@ export const updateUserSchema = z.object({
   role: userRoleSchema.optional(),
   schoolId: z.string().uuid("Escola invalida").nullable().optional(),
   unitId: z.string().uuid("Unidade invalida").nullable().optional(),
+  stageId: z.string().uuid("Etapa invalida").nullable().optional(),
 });
 
 // Pagination schemas
@@ -164,8 +211,65 @@ export type Unit = z.infer<typeof unitSchema>;
 export type CreateUnitInput = z.infer<typeof createUnitSchema>;
 export type UpdateUnitInput = z.infer<typeof updateUnitSchema>;
 export type User = z.infer<typeof userSchema>;
+export type EducationStage = z.infer<typeof educationStageSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type CreateUserInput = z.infer<typeof createUserSchema>;
 export type UpdateUserInput = z.infer<typeof updateUserSchema>;
 export type PaginationInput = z.infer<typeof paginationSchema>;
+
+// Calendar schemas
+export {
+  calendarEventTypeSchema,
+  calendarEventSchema,
+  createCalendarEventSchema,
+  updateCalendarEventSchema,
+  queryCalendarEventsSchema,
+} from "./calendar";
+export type {
+  CalendarEventType,
+  CalendarEvent,
+  CreateCalendarEventInput,
+  UpdateCalendarEventInput,
+  QueryCalendarEventsInput,
+} from "./calendar";
+
+// Turmas schemas
+export { createTurmaSchema, updateTurmaSchema } from "./turmas";
+export type { CreateTurmaInput, UpdateTurmaInput } from "./turmas";
+
+// Plannings schemas
+export {
+  planningStatusSchema,
+  reviewStatusSchema,
+  saveDraftSchema,
+  submitPlanningSchema,
+  approvePlanningSchema,
+  requestChangesSchema,
+  dashboardQuerySchema,
+  planningSchema,
+  planningContentSchema,
+  planningReviewSchema,
+  planningWithContentSchema,
+  planningWithReviewsSchema,
+  planningFullSchema,
+  turmaSchema,
+  quinzenaSchema,
+} from "./plannings";
+export type {
+  PlanningStatus,
+  ReviewStatus,
+  SaveDraftInput,
+  SubmitPlanningInput,
+  ApprovePlanningInput,
+  RequestChangesInput,
+  DashboardQueryInput,
+  Planning,
+  PlanningContent,
+  PlanningReview,
+  PlanningWithContent,
+  PlanningWithReviews,
+  PlanningFull,
+  Turma,
+  Quinzena,
+} from "./plannings";

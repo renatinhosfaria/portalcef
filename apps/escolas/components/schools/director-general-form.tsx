@@ -166,6 +166,7 @@ export function DirectorGeneralForm({
           role: DIRECTOR_ROLE,
           schoolId,
           unitId: null,
+          stageId: null,
         };
         const result = createUserSchema.safeParse(createPayload);
         if (!result.success) {

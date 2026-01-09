@@ -1,0 +1,22 @@
+<svg width="100" height="100" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background Circle -->
+  <circle cx="50" cy="50" r="48" fill="#10B77F" />
+  
+  <!-- Book Icon -->
+  <path d="M25 30C25 27.2386 27.2386 25 30 25H45V75H30C27.2386 75 25 72.7614 25 70V30Z" fill="white" opacity="0.9"/>
+  <path d="M55 25H70C72.7614 25 75 27.2386 75 30V70C75 72.7614 72.7614 75 70 75H55V25Z" fill="white" opacity="0.9"/>
+  
+  <!-- Center Spine -->
+  <rect x="45" y="25" width="10" height="50" fill="white"/>
+  
+  <!-- Open Book Lines -->
+  <path d="M30 35H40" stroke="#10B77F" stroke-width="2" stroke-linecap="round"/>
+  <path d="M30 42H40" stroke="#10B77F" stroke-width="2" stroke-linecap="round"/>
+  <path d="M30 49H40" stroke="#10B77F" stroke-width="2" stroke-linecap="round"/>
+  <path d="M60 35H70" stroke="#10B77F" stroke-width="2" stroke-linecap="round"/>
+  <path d="M60 42H70" stroke="#10B77F" stroke-width="2" stroke-linecap="round"/>
+  <path d="M60 49H70" stroke="#10B77F" stroke-width="2" stroke-linecap="round"/>
+  
+  <!-- E Letter (Essência) -->
+  <text x="50" y="68" font-family="Inter, Arial, sans-serif" font-size="16" font-weight="bold" fill="#10B77F" text-anchor="middle">E</text>
+</svg>

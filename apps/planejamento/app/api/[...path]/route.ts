@@ -3,6 +3,7 @@
  *
  * Encaminha todas as requisições de /api/* para o backend (API_URL)
  * Preserva cookies (sessão), headers e parâmetros.
+ * Suporta JSON e multipart/form-data (upload de arquivos).
  *
  * @route /api/[...path]
  */
@@ -28,10 +29,18 @@ async function proxyRequest(
   const url = `${API_URL}${path}${request.nextUrl.search}`;
 
   try {
+    // Verificar se é upload de arquivo (multipart/form-data)
+    const contentType = request.headers.get("content-type") || "";
+    const isMultipart = contentType.includes("multipart/form-data");
+
     // Preparar headers
-    const headers: HeadersInit = {
-      "Content-Type": "application/json",
-    };
+    const headers: HeadersInit = {};
+
+    // Para JSON, definir Content-Type explicitamente
+    // Para multipart, deixar o fetch definir automaticamente com boundary
+    if (!isMultipart) {
+      headers["Content-Type"] = "application/json";
+    }
 
     // Forwarding de autenticação (cookies)
     const cookie = request.headers.get("cookie");
@@ -54,11 +63,21 @@ async function proxyRequest(
 
     // Processar body para métodos que suportam payload
     if (["POST", "PUT", "PATCH"].includes(method)) {
-      try {
-        const body = await request.json();
-        fetchOptions.body = JSON.stringify(body);
-      } catch {
-        // Body vazio ou inválido (ignorar)
+      if (isMultipart) {
+        // Para multipart/form-data, passar o Content-Type original com boundary
+        // e o body como stream para preservar os dados do arquivo
+        headers["Content-Type"] = contentType;
+        fetchOptions.body = request.body;
+        // @ts-expect-error - duplex é necessário para streaming body no Node.js
+        fetchOptions.duplex = "half";
+      } else {
+        // Para JSON, parsear e stringificar
+        try {
+          const body = await request.json();
+          fetchOptions.body = JSON.stringify(body);
+        } catch {
+          // Body vazio ou inválido (ignorar)
+        }
       }
     }
 

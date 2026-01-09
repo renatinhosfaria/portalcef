@@ -3,37 +3,67 @@
   "version": "0.0.1",
   "private": true,
   "description": "Shared types, schemas, and fetchers",
-  "type": "module",
+  "type": "commonjs",
   "exports": {
     "./types": {
       "types": "./dist/types/index.d.ts",
-      "import": "./dist/types/index.js",
+      "import": "./src/types/index.ts",
       "require": "./dist/types/index.js",
       "default": "./dist/types/index.js"
     },
     "./schemas": {
       "types": "./dist/schemas/index.d.ts",
-      "import": "./dist/schemas/index.js",
+      "import": "./src/schemas/index.ts",
       "require": "./dist/schemas/index.js",
       "default": "./dist/schemas/index.js"
     },
     "./fetchers/client": {
       "types": "./dist/fetchers/client.d.ts",
-      "import": "./dist/fetchers/client.js",
+      "import": "./src/fetchers/client.ts",
       "require": "./dist/fetchers/client.js",
       "default": "./dist/fetchers/client.js"
     },
     "./fetchers/server": {
       "types": "./dist/fetchers/server.d.ts",
-      "import": "./dist/fetchers/server.js",
+      "import": "./src/fetchers/server.ts",
       "require": "./dist/fetchers/server.js",
       "default": "./dist/fetchers/server.js"
     },
     "./providers/tenant": {
       "types": "./dist/providers/tenant.d.ts",
-      "import": "./dist/providers/tenant.js",
+      "import": "./src/providers/tenant.tsx",
       "require": "./dist/providers/tenant.js",
       "default": "./dist/providers/tenant.js"
+    },
+    "./roles": {
+      "types": "./dist/roles.d.ts",
+      "import": "./src/roles.ts",
+      "require": "./dist/roles.js",
+      "default": "./dist/roles.js"
+    },
+    "./role-groups": {
+      "types": "./dist/role-groups.d.ts",
+      "import": "./src/role-groups.ts",
+      "require": "./dist/role-groups.js",
+      "default": "./dist/role-groups.js"
+    },
+    "./schemas/calendar": {
+      "types": "./dist/schemas/calendar.d.ts",
+      "import": "./src/schemas/calendar.ts",
+      "require": "./dist/schemas/calendar.js",
+      "default": "./dist/schemas/calendar.js"
+    },
+    "./types/calendar": {
+      "types": "./dist/types/calendar.d.ts",
+      "import": "./src/types/calendar.ts",
+      "require": "./dist/types/calendar.js",
+      "default": "./dist/types/calendar.js"
+    },
+    "./config/quinzenas": {
+      "types": "./dist/config/quinzenas-2026.d.ts",
+      "import": "./src/config/quinzenas-2026.ts",
+      "require": "./dist/config/quinzenas-2026.js",
+      "default": "./dist/config/quinzenas-2026.js"
     }
   },
   "scripts": {
@@ -45,8 +75,8 @@
   },
   "dependencies": {
     "next": "15.1.0",
-    "react": "^19.2.3",
-    "react-dom": "^19.2.3",
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
     "zod": "^3.24.1"
   },
   "devDependencies": {

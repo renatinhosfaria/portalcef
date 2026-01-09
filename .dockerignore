@@ -1,0 +1,68 @@
+# =============================================================================
+# Docker Build Context Exclusions
+# Portal Essencia Feliz
+# =============================================================================
+
+# Dependencies (installed in container)
+node_modules
+.pnpm-store
+
+# Build outputs
+dist
+.next
+.turbo
+*.tsbuildinfo
+
+# Environment files
+.env
+.env.local
+.env.*.local
+.env.docker
+
+# Git (reduces build context significantly)
+.git
+.gitignore
+.gitattributes
+
+# IDE and local configs
+.vscode
+.idea
+.claude
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Testing
+coverage
+
+# Docker
+.docker
+docker-compose.override.yml
+
+# Documentation (not needed in container)
+BMAD/
+docs/
+
+# Test files (excluded for smaller builds)
+**/*.test.ts
+**/*.spec.ts
+**/*.test.tsx
+**/*.spec.tsx
+**/__tests__/
+**/__mocks__/
+vitest.config.ts
+vitest.setup.ts
+
+# Misc
+*.pem
+*.key
+LICENSE
+CHANGELOG.md
+CONTRIBUTING.md

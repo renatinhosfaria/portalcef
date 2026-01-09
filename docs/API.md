@@ -1,6 +1,6 @@
 # API Documentation
 
-Documentacao completa da API REST do Portal Digital Colegio Espaco Feliz.
+Documentacao completa da API REST do Portal Digital Colegio Essencia Feliz.
 
 ---
 
@@ -8,23 +8,27 @@ Documentacao completa da API REST do Portal Digital Colegio Espaco Feliz.
 
 ### Base URL
 
-| Ambiente            | URL                           |
-| ------------------- | ----------------------------- |
-| **Desenvolvimento** | `http://localhost:3001`       |
-| **Producao**        | `https://api.essencia.edu.br` |
+| Ambiente        | URL                           |
+| --------------- | ----------------------------- |
+| Desenvolvimento | `http://localhost:3001`       |
+| Producao        | `https://api.essencia.edu.br` |
 
 ### Formato de Respostas
 
-Todas as respostas sao em **JSON** com a seguinte estrutura:
+Todas as respostas sao em JSON com estrutura padronizada:
+
+**Sucesso:**
 
 ```json
-// Sucesso
 {
   "success": true,
   "data": { ... }
 }
+```
 
-// Erro
+**Erro:**
+
+```json
 {
   "success": false,
   "error": {
@@ -42,44 +46,80 @@ Content-Type: application/json
 Accept: application/json
 ```
 
+### Codigos de Resposta
+
+| Codigo | Significado       | Quando                |
+| ------ | ----------------- | --------------------- |
+| 200    | OK                | Operacao bem sucedida |
+| 201    | Created           | Recurso criado        |
+| 400    | Bad Request       | Validacao falhou      |
+| 401    | Unauthorized      | Nao autenticado       |
+| 403    | Forbidden         | Sem permissao         |
+| 404    | Not Found         | Recurso nao existe    |
+| 429    | Too Many Requests | Rate limit excedido   |
+
 ---
 
 ## Autenticacao
 
-A API utiliza autenticacao baseada em **cookies de sessao**.
+A API utiliza autenticacao baseada em cookies de sessao com Redis.
 
 ### Cookie de Sessao
 
-| Atributo     | Valor             |
-| ------------ | ----------------- |
-| **Nome**     | `cef_session`     |
-| **HttpOnly** | `true`            |
-| **Secure**   | `true` (producao) |
-| **SameSite** | `Lax`             |
-| **Path**     | `/`               |
-| **Max-Age**  | 86400 (24 horas)  |
+| Atributo | Valor             |
+| -------- | ----------------- |
+| Nome     | `cef_session`     |
+| HttpOnly | `true`            |
+| Secure   | `true` (producao) |
+| SameSite | `Lax`             |
+| Path     | `/`               |
+| Max-Age  | 86400 (24 horas)  |
 
 ### Dados da Sessao
-
-A sessao armazena o contexto do tenant:
 
 ```typescript
 interface SessionData {
   userId: string;
   role: string;
-  schoolId: string;
-  unitId: string;
+  schoolId: string | null;
+  unitId: string | null;
   createdAt: number;
+}
+```
+
+### Sliding Window
+
+A sessao e renovada automaticamente quando o TTL restante e menor que 25% (6 horas para sessao de 24h).
+
+---
+
+## Endpoints
+
+### Health
+
+#### GET `/health`
+
+Verifica status da API.
+
+**Resposta (200):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "status": "ok",
+    "timestamp": "2025-01-01T00:00:00.000Z"
+  }
 }
 ```
 
 ---
 
-## Endpoints de Autenticacao
+### Auth
 
-### POST `/auth/login`
+#### POST `/auth/login`
 
-Autentica um usuario e cria uma sessao.
+Autentica usuario e cria sessao.
 
 **Request:**
 
@@ -90,7 +130,7 @@ Autentica um usuario e cria uma sessao.
 }
 ```
 
-**Response (200 OK):**
+**Resposta (200):**
 
 ```json
 {
@@ -102,31 +142,89 @@ Autentica um usuario e cria uma sessao.
       "name": "Nome do Usuario",
       "role": "diretora_geral",
       "schoolId": "uuid",
-      "unitId": null
+      "unitId": null,
+      "stageId": null
     }
   }
 }
 ```
 
-### POST `/auth/logout`
+**Erros:**
 
-Encerra a sessao do usuario.
-
-### GET `/auth/me`
-
-Retorna informacoes do usuario autenticado.
+- `400`: Dados invalidos
+- `401`: Credenciais incorretas
 
 ---
 
-## Endpoints de Escolas
+#### POST `/auth/logout`
 
-> Requer autenticacao e role `master`
+Encerra sessao do usuario.
 
-### GET `/schools`
+**Resposta (200):**
 
-Lista escolas (apenas master).
+```json
+{
+  "success": true,
+  "data": null
+}
+```
 
-**Response:**
+---
+
+#### GET `/auth/me`
+
+Retorna usuario autenticado.
+
+**Resposta (200):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "user": {
+      "id": "uuid",
+      "email": "usuario@essencia.edu.br",
+      "name": "Nome do Usuario",
+      "role": "diretora_geral",
+      "schoolId": "uuid",
+      "unitId": null,
+      "stageId": null
+    }
+  }
+}
+```
+
+**Erros:**
+
+- `401`: Nao autenticado
+
+---
+
+### Calendar
+
+> Requer autenticacao. Visualizacao: roles de gestao. Edicao: roles de gestao (exceto gerente_financeiro e analista_pedagogico). Exclusao: master, diretora_geral, gerente_unidade, coordenadora_geral.
+
+#### GET `/calendar/events`
+
+Lista eventos do calendario.
+
+**Query Params:**
+
+| Param     | Tipo   | Obrigatorio | Descricao                |
+| --------- | ------ | ----------- | ------------------------ |
+| unitId    | uuid   | Nao         | Filtrar por unidade      |
+| year      | number | Nao         | Filtrar por ano (2020-2100) |
+| month     | number | Nao         | Filtrar por mes (1-12)   |
+| eventType | string | Nao         | Filtrar por tipo de evento |
+
+**Tipos de Evento:**
+
+- `INICIO_SEMESTRE`, `TERMINO_SEMESTRE`
+- `FERIADO`, `RECESSO`, `FERIAS_PROFESSORES`
+- `SABADO_LETIVO`, `SEMANA_PROVAS`, `DIA_LETIVO`
+- `REUNIAO_PEDAGOGICA`, `EVENTO_ESPECIAL`
+
+**Resposta (200):**
 
 ```json
 {
@@ -134,56 +232,331 @@ Lista escolas (apenas master).
   "data": [
     {
       "id": "uuid",
-      "name": "Colegio Espaco Feliz",
-      "code": "colegio-espaco-feliz",
-      "createdAt": "2024-01-01T00:00:00.000Z",
-      "updatedAt": "2024-01-01T00:00:00.000Z"
+      "unitId": "uuid",
+      "title": "Feriado de Carnaval",
+      "description": "Carnaval 2026",
+      "eventType": "FERIADO",
+      "startDate": "2026-02-16",
+      "endDate": "2026-02-17",
+      "isSchoolDay": false,
+      "isRecurringAnnually": true,
+      "createdBy": "uuid",
+      "createdAt": "2026-01-01T00:00:00.000Z",
+      "updatedAt": "2026-01-01T00:00:00.000Z"
     }
   ]
 }
 ```
 
-### GET `/schools/:id`
+---
 
-Retorna uma escola especifica (apenas master).
+#### GET `/calendar/events/:id`
 
-### POST `/schools`
+Busca evento por ID.
 
-Cria uma nova escola.
+**Resposta (200):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid",
+    "unitId": "uuid",
+    "title": "Feriado de Carnaval",
+    "description": "Carnaval 2026",
+    "eventType": "FERIADO",
+    "startDate": "2026-02-16",
+    "endDate": "2026-02-17",
+    "isSchoolDay": false,
+    "isRecurringAnnually": true,
+    "createdBy": "uuid",
+    "createdAt": "2026-01-01T00:00:00.000Z",
+    "updatedAt": "2026-01-01T00:00:00.000Z"
+  }
+}
+```
+
+**Erros:**
+
+- `404`: Evento nao encontrado
+
+---
+
+#### POST `/calendar/events`
+
+Cria novo evento.
 
 **Request:**
 
 ```json
 {
-  "name": "Colegio Espaco Feliz",
-  "code": "colegio-espaco-feliz"
+  "unitId": "uuid",
+  "title": "Feriado de Carnaval",
+  "description": "Carnaval 2026",
+  "eventType": "FERIADO",
+  "startDate": "2026-02-16",
+  "endDate": "2026-02-17",
+  "isSchoolDay": false,
+  "isRecurringAnnually": true
 }
 ```
 
-### PUT `/schools/:id`
+**Resposta (201):**
 
-Atualiza uma escola.
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid",
+    "unitId": "uuid",
+    "title": "Feriado de Carnaval",
+    "eventType": "FERIADO",
+    "startDate": "2026-02-16",
+    "endDate": "2026-02-17",
+    "isSchoolDay": false,
+    "isRecurringAnnually": true,
+    "createdBy": "uuid",
+    "createdAt": "2026-01-01T00:00:00.000Z",
+    "updatedAt": "2026-01-01T00:00:00.000Z"
+  }
+}
+```
 
-### DELETE `/schools/:id`
+**Erros:**
 
-Remove uma escola.
+- `400`: Dados invalidos (VALIDATION_ERROR)
+- `403`: Sem permissao para criar eventos
 
 ---
 
-## Endpoints de Unidades
+#### PUT `/calendar/events/:id`
 
-> Requer autenticacao. Leitura exige role `coordenadora_geral` ou superior. Escrita exige role `diretora_geral` ou superior.
+Atualiza evento existente.
 
-### GET `/schools/:schoolId/units`
+**Request:**
+
+```json
+{
+  "title": "Carnaval 2026",
+  "description": "Feriado de Carnaval",
+  "eventType": "FERIADO",
+  "startDate": "2026-02-16",
+  "endDate": "2026-02-17",
+  "isSchoolDay": false,
+  "isRecurringAnnually": true
+}
+```
+
+**Resposta (200):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid",
+    "title": "Carnaval 2026",
+    "eventType": "FERIADO",
+    "updatedAt": "2026-01-01T00:00:00.000Z"
+  }
+}
+```
+
+**Erros:**
+
+- `400`: Dados invalidos
+- `403`: Sem permissao para editar eventos
+- `404`: Evento nao encontrado
+
+---
+
+#### DELETE `/calendar/events/:id`
+
+Remove evento.
+
+**Resposta (200):**
+
+```json
+{
+  "success": true,
+  "data": null
+}
+```
+
+**Erros:**
+
+- `403`: Sem permissao para deletar eventos
+- `404`: Evento nao encontrado
+
+---
+
+#### GET `/calendar/stats`
+
+Retorna estatisticas do calendario.
+
+**Query Params:**
+
+| Param  | Tipo   | Obrigatorio | Descricao           |
+| ------ | ------ | ----------- | ------------------- |
+| unitId | uuid   | Nao         | Filtrar por unidade |
+| year   | number | Nao         | Ano de referencia   |
+
+**Resposta (200):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "totalSchoolDays": 200,
+    "totalEvents": 45,
+    "byMonth": [
+      { "month": 1, "schoolDays": 0, "events": 0 },
+      { "month": 2, "schoolDays": 17, "events": 3 }
+    ]
+  }
+}
+```
+
+---
+
+### Schools
+
+> Requer autenticacao. Leitura (GET /:id): `gerente_financeiro`+. Demais operacoes: `master`
+
+#### GET `/schools`
+
+Lista todas as escolas.
+
+**Resposta (200):**
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "uuid",
+      "name": "Colegio Essencia Feliz",
+      "code": "essencia-feliz",
+      "createdAt": "2025-01-01T00:00:00.000Z",
+      "updatedAt": "2025-01-01T00:00:00.000Z"
+    }
+  ]
+}
+```
+
+---
+
+#### GET `/schools/:id`
+
+Retorna escola especifica.
+
+**Roles permitidas:**
+
+- `master`: Pode acessar qualquer escola
+- `diretora_geral`: Pode acessar apenas sua propria escola
+- `gerente_financeiro`: Pode acessar apenas sua propria escola
+
+**Parametros:**
+
+- `id`: UUID da escola
+
+**Resposta (200):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid",
+    "name": "Colegio Essencia Feliz",
+    "code": "essencia-feliz",
+    "createdAt": "2025-01-01T00:00:00.000Z",
+    "updatedAt": "2025-01-01T00:00:00.000Z"
+  }
+}
+```
+
+**Erros:**
+
+- `401`: Nao autenticado
+- `403`: Usuario nao tem permissao para acessar esta escola
+- `404`: Escola nao encontrada
+
+---
+
+#### POST `/schools`
+
+Cria nova escola.
+
+**Request:**
+
+```json
+{
+  "name": "Colegio Essencia Feliz",
+  "code": "essencia-feliz"
+}
+```
+
+**Resposta (201):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid",
+    "name": "Colegio Essencia Feliz",
+    "code": "essencia-feliz",
+    "createdAt": "2025-01-01T00:00:00.000Z",
+    "updatedAt": "2025-01-01T00:00:00.000Z"
+  }
+}
+```
+
+---
+
+#### PUT `/schools/:id`
+
+Atualiza escola.
+
+**Request:**
+
+```json
+{
+  "name": "Novo Nome",
+  "code": "novo-codigo"
+}
+```
+
+---
+
+#### DELETE `/schools/:id`
+
+Remove escola.
+
+**Resposta (200):**
+
+```json
+{
+  "success": true,
+  "data": null
+}
+```
+
+---
+
+### Units
+
+> Requer autenticacao. Leitura: `coordenadora_geral`+. Escrita: `diretora_geral`+
+
+#### GET `/schools/:schoolId/units`
 
 Lista unidades da escola.
 
-- **master**: ve todas as unidades de qualquer escola
-- **diretora_geral**: ve todas as unidades da escola
-- **gerente_unidade**, **gerente_financeiro**, **coordenadora_geral**: ve apenas sua unidade
-- **outros roles**: sem acesso
+**Regras de Acesso:**
 
-**Response:**
+- `master`: todas as unidades de qualquer escola
+- `diretora_geral`: todas as unidades da escola
+- `coordenadora_geral`+: apenas sua unidade
+
+**Resposta (200):**
 
 ```json
 {
@@ -195,20 +568,24 @@ Lista unidades da escola.
       "name": "Unidade Santa Monica",
       "code": "santa-monica",
       "address": "Rua das Flores, 123",
-      "createdAt": "2024-01-01T00:00:00.000Z",
-      "updatedAt": "2024-01-01T00:00:00.000Z"
+      "createdAt": "2025-01-01T00:00:00.000Z",
+      "updatedAt": "2025-01-01T00:00:00.000Z"
     }
   ]
 }
 ```
 
-### GET `/schools/:schoolId/units/:id`
+---
 
-Retorna uma unidade especifica.
+#### GET `/schools/:schoolId/units/:id`
 
-### POST `/schools/:schoolId/units`
+Retorna unidade especifica.
 
-Cria uma nova unidade (apenas diretora_geral ou master).
+---
+
+#### POST `/schools/:schoolId/units`
+
+Cria nova unidade.
 
 **Request:**
 
@@ -220,30 +597,417 @@ Cria uma nova unidade (apenas diretora_geral ou master).
 }
 ```
 
-### PUT `/schools/:schoolId/units/:id`
+---
 
-Atualiza uma unidade (apenas diretora_geral ou master).
+#### PUT `/schools/:schoolId/units/:id`
 
-### DELETE `/schools/:schoolId/units/:id`
-
-Remove uma unidade (apenas diretora_geral ou master).
+Atualiza unidade.
 
 ---
 
-## Endpoints de Usuarios
+#### DELETE `/schools/:schoolId/units/:id`
+
+Remove unidade.
+
+---
+
+### Stages (Etapas de Ensino)
+
+> Gerenciamento de etapas educacionais por unidade.
+
+#### GET `/stages`
+
+Lista todas as etapas globais disponiveis (tabela de referencia).
+
+**Autorizacao:** Todos os usuarios autenticados
+
+**Resposta (200):**
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "uuid",
+      "name": "Bercario",
+      "code": "bercario",
+      "createdAt": "2025-01-01T00:00:00.000Z",
+      "updatedAt": "2025-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "uuid",
+      "name": "Educacao Infantil",
+      "code": "infantil",
+      "createdAt": "2025-01-01T00:00:00.000Z",
+      "updatedAt": "2025-01-01T00:00:00.000Z"
+    }
+  ]
+}
+```
+
+---
+
+#### GET `/units/:unitId/stages`
+
+Lista as etapas atribuidas a uma unidade especifica.
+
+**Autorizacao:** Usuarios autenticados com acesso a unidade (TenantGuard)
+
+**Resposta (200):**
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "uuid",
+      "name": "Educacao Infantil",
+      "code": "infantil",
+      "createdAt": "2025-01-01T00:00:00.000Z",
+      "updatedAt": "2025-01-01T00:00:00.000Z"
+    }
+  ]
+}
+```
+
+---
+
+#### POST `/units/:unitId/stages`
+
+Atribui etapas a uma unidade (adiciona as existentes).
+
+**Autorizacao:** Apenas `master`
+
+**Request:**
+
+```json
+{
+  "stageIds": ["uuid-etapa-1", "uuid-etapa-2"]
+}
+```
+
+**Resposta (201):**
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "uuid",
+      "unitId": "uuid",
+      "stageId": "uuid",
+      "isActive": true,
+      "createdAt": "2025-01-01T00:00:00.000Z",
+      "updatedAt": "2025-01-01T00:00:00.000Z"
+    }
+  ]
+}
+```
+
+---
+
+#### PUT `/units/:unitId/stages`
+
+Substitui todas as etapas de uma unidade (remove antigas e adiciona novas).
+
+**Autorizacao:** Apenas `master`
+
+**Request:**
+
+```json
+{
+  "stageIds": ["uuid-etapa-1", "uuid-etapa-3"]
+}
+```
+
+---
+
+#### DELETE `/units/:unitId/stages/:stageId`
+
+Remove uma etapa de uma unidade (soft delete - marca como inativo).
+
+**Autorizacao:** Apenas `master`
+
+**Resposta (200):**
+
+```json
+{
+  "success": true,
+  "data": null
+}
+```
+
+---
+
+### Turmas
+
+> Gerenciamento de turmas por unidade e etapa.
+> Requer autenticacao. Leitura: `gerente_financeiro`+. Escrita: `gerente_unidade`+
+
+#### GET `/turmas`
+
+Lista todas as turmas com filtros opcionais.
+
+**Autorizacao:** `master`, `diretora_geral`, `gerente_unidade`, `gerente_financeiro`
+
+**Query Parameters:**
+
+- `unitId` (opcional): UUID da unidade
+- `stageId` (opcional): UUID da etapa
+- `year` (opcional): Ano letivo
+
+**Resposta (200):**
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "uuid",
+      "unitId": "uuid",
+      "stageId": "uuid",
+      "name": "Infantil 3A",
+      "code": "INF-3A",
+      "year": 2025,
+      "shift": "matutino",
+      "capacity": 30,
+      "isActive": true,
+      "createdAt": "2025-01-01T00:00:00.000Z",
+      "updatedAt": "2025-01-01T00:00:00.000Z"
+    }
+  ]
+}
+```
+
+---
+
+#### GET `/turmas/:id`
+
+Busca turma especifica por ID.
+
+**Autorizacao:** `master`, `diretora_geral`, `gerente_unidade`, `gerente_financeiro`
+
+**Parametros:**
+
+- `id`: UUID da turma
+
+**Resposta (200):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid",
+    "unitId": "uuid",
+    "stageId": "uuid",
+    "name": "Infantil 3A",
+    "code": "INF-3A",
+    "year": 2025,
+    "shift": "matutino",
+    "capacity": 30,
+    "isActive": true,
+    "createdAt": "2025-01-01T00:00:00.000Z",
+    "updatedAt": "2025-01-01T00:00:00.000Z"
+  }
+}
+```
+
+**Erros:**
+
+- `401`: Nao autenticado
+- `404`: Turma nao encontrada
+
+---
+
+#### GET `/units/:unitId/turmas`
+
+Lista turmas de uma unidade especifica.
+
+**Autorizacao:** Usuarios autenticados com acesso a unidade (TenantGuard)
+
+**Query Parameters:**
+
+- `year` (opcional): Filtrar por ano letivo
+
+**Resposta (200):**
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "uuid",
+      "unitId": "uuid",
+      "stageId": "uuid",
+      "name": "Infantil 3A",
+      "code": "INF-3A",
+      "year": 2025,
+      "shift": "matutino",
+      "capacity": 30,
+      "isActive": true,
+      "createdAt": "2025-01-01T00:00:00.000Z",
+      "updatedAt": "2025-01-01T00:00:00.000Z"
+    }
+  ]
+}
+```
+
+---
+
+#### POST `/turmas`
+
+Cria nova turma.
+
+**Autorizacao:** `master`, `diretora_geral`, `gerente_unidade`
+**TenantGuard:** Valida que `unitId` pertence a escola do usuario
+
+**Request:**
+
+```json
+{
+  "unitId": "uuid",
+  "stageId": "uuid",
+  "name": "Infantil 3A",
+  "code": "INF-3A",
+  "year": 2025,
+  "shift": "matutino",
+  "capacity": 30
+}
+```
+
+**Validacao:**
+
+- `unitId`: UUID valido (obrigatorio)
+- `stageId`: UUID valido (obrigatorio) e deve existir em `unit_stages` para a unidade
+- `name`: String de 1-100 caracteres (obrigatorio)
+- `code`: String de 1-50 caracteres (obrigatorio)
+- `year`: Inteiro entre 2020-2100 (obrigatorio)
+- `shift`: Enum `matutino | vespertino | integral` (opcional)
+- `capacity`: Inteiro positivo (opcional)
+
+**Constraint Unico:** Nao permite `code` duplicado para mesma `unitId` + `year`
+
+**Resposta (201):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid",
+    "unitId": "uuid",
+    "stageId": "uuid",
+    "name": "Infantil 3A",
+    "code": "INF-3A",
+    "year": 2025,
+    "shift": "matutino",
+    "capacity": 30,
+    "isActive": true,
+    "createdAt": "2025-01-01T00:00:00.000Z",
+    "updatedAt": "2025-01-01T00:00:00.000Z"
+  }
+}
+```
+
+**Erros:**
+
+- `400`: Validacao falhou
+- `401`: Nao autenticado
+- `403`: Sem permissao ou tentando criar turma em outra unidade
+- `409`: Codigo de turma ja existe para esta unidade/ano
+
+---
+
+#### PUT `/turmas/:id`
+
+Atualiza turma existente.
+
+**Autorizacao:** `master`, `diretora_geral`, `gerente_unidade`
+**TenantGuard:** Valida que turma pertence a escola do usuario
+
+**Request:**
+
+```json
+{
+  "name": "Infantil 3B",
+  "code": "INF-3B",
+  "year": 2025,
+  "shift": "vespertino",
+  "capacity": 25
+}
+```
+
+**Nota:** Nao permite alterar `unitId` ou `stageId` (omitidos do schema de update)
+
+**Resposta (200):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid",
+    "unitId": "uuid",
+    "stageId": "uuid",
+    "name": "Infantil 3B",
+    "code": "INF-3B",
+    "year": 2025,
+    "shift": "vespertino",
+    "capacity": 25,
+    "isActive": true,
+    "createdAt": "2025-01-01T00:00:00.000Z",
+    "updatedAt": "2025-01-01T12:00:00.000Z"
+  }
+}
+```
+
+**Erros:**
+
+- `400`: Validacao falhou
+- `401`: Nao autenticado
+- `403`: Sem permissao
+- `404`: Turma nao encontrada
+
+---
+
+#### DELETE `/turmas/:id`
+
+Desativa turma (soft delete).
+
+**Autorizacao:** `master`, `diretora_geral`
+**TenantGuard:** Valida que turma pertence a escola do usuario
+
+**Resposta (200):**
+
+```json
+{
+  "success": true,
+  "data": null
+}
+```
+
+**Erros:**
+
+- `401`: Nao autenticado
+- `403`: Sem permissao
+- `404`: Turma nao encontrada
+
+---
+
+### Users
 
 > Requer autenticacao com isolamento por tenant
 
-### GET `/users`
+#### GET `/users`
 
-Lista usuarios filtrados pelo tenant do usuario autenticado.
+Lista usuarios filtrados por tenant.
 
-- **master**: ve todos usuarios (todas as escolas)
-- **diretora_geral**: ve todos usuarios da escola
-- **gerente_unidade**, **gerente_financeiro**: ve apenas usuarios da sua unidade
-- **outros roles**: sem acesso
+**Regras de Acesso:**
 
-**Response:**
+- `master`: todos os usuarios
+- `diretora_geral`: usuarios da escola
+- `gerente_unidade`: usuarios da unidade
+- `gerente_financeiro`: usuarios da unidade
+
+**Resposta (200):**
 
 ```json
 {
@@ -256,20 +1020,34 @@ Lista usuarios filtrados pelo tenant do usuario autenticado.
       "role": "professora",
       "schoolId": "uuid",
       "unitId": "uuid",
-      "createdAt": "2024-01-01T00:00:00.000Z",
-      "updatedAt": "2024-01-01T00:00:00.000Z"
+      "stageId": "uuid",
+      "schoolName": "Colegio Essencia Feliz",
+      "unitName": "Unidade Santa Monica",
+      "createdAt": "2025-01-01T00:00:00.000Z",
+      "updatedAt": "2025-01-01T00:00:00.000Z"
     }
   ]
 }
 ```
 
-### GET `/users/:id`
+---
 
-Retorna um usuario especifico (respeitando isolamento de tenant).
+#### GET `/users/:id`
 
-### POST `/users`
+Retorna usuario especifico.
 
-Cria um novo usuario (requer role `gerente_financeiro` ou superior).
+**Regras de Acesso:**
+
+- `master`: qualquer usuario
+- `diretora_geral`: usuarios da escola
+- `gerente_unidade`: usuarios da unidade
+- `gerente_financeiro`: usuarios da unidade
+
+---
+
+#### POST `/users`
+
+Cria novo usuario.
 
 **Request:**
 
@@ -280,18 +1058,23 @@ Cria um novo usuario (requer role `gerente_financeiro` ou superior).
   "password": "senhaForte123!",
   "role": "professora",
   "schoolId": "uuid",
-  "unitId": "uuid"
+  "unitId": "uuid",
+  "stageId": "uuid"
 }
 ```
 
 **Restricoes:**
 
-- `diretora_geral`: pode criar usuarios em qualquer unidade da escola
-- `gerente_unidade` e `gerente_financeiro`: podem criar usuarios apenas na sua unidade
+- `diretora_geral`: pode criar em qualquer unidade da escola
+- `gerente_unidade`: pode criar apenas em sua unidade
+- `gerente_financeiro`: pode criar apenas em sua unidade
+- `stageId` e obrigatorio para roles de etapa (coordenadora_bercario, coordenadora_infantil, coordenadora_fundamental_i, coordenadora_fundamental_ii, coordenadora_medio, professora, auxiliar_sala)
 
-### PUT `/users/:id`
+---
 
-Atualiza um usuario (requer role `gerente_financeiro` ou superior).
+#### PUT `/users/:id`
+
+Atualiza usuario.
 
 **Request:**
 
@@ -299,17 +1082,31 @@ Atualiza um usuario (requer role `gerente_financeiro` ou superior).
 {
   "name": "Nome Atualizado",
   "role": "coordenadora_geral",
-  "unitId": "uuid"
+  "stageId": null
 }
 ```
 
+**Regras de Acesso:**
+
+- `diretora_geral`: pode atualizar usuarios da escola
+- `gerente_unidade`: pode atualizar usuarios da unidade
+- `gerente_financeiro`: pode atualizar usuarios da unidade
+
 **Restricoes:**
 
-- Apenas `diretora_geral` ou `master` pode transferir usuarios entre unidades (`unitId`)
+- Apenas `diretora_geral` ou `master` pode alterar `unitId`
 
-### DELETE `/users/:id`
+---
 
-Remove um usuario (requer role `gerente_financeiro` ou superior).
+#### DELETE `/users/:id`
+
+Remove usuario.
+
+**Regras de Acesso:**
+
+- `diretora_geral`: pode deletar usuarios da escola
+- `gerente_unidade`: pode deletar usuarios da unidade
+- `gerente_financeiro`: pode deletar usuarios da unidade
 
 **Restricoes:**
 
@@ -318,99 +1115,599 @@ Remove um usuario (requer role `gerente_financeiro` ou superior).
 
 ---
 
-## Roles e Permissoes
+### Stages
 
-### Hierarquia de Roles
+> Requer autenticacao
 
-| Role                       | Nivel | Escopo  | Descricao                        |
-| -------------------------- | ----- | ------- | -------------------------------- |
-| `master`                   | 0     | Global  | Acesso total a todas as escolas  |
-| `diretora_geral`           | 1     | Escola  | Acesso total a todas as unidades |
-| `gerente_unidade`          | 2     | Unidade | Gestao completa da unidade       |
-| `gerente_financeiro`       | 3     | Unidade | Gestao financeira                |
-| `coordenadora_geral`       | 4     | Unidade | Coordenacao academica            |
-| `coordenadora_infantil`    | 5     | Unidade | Coordenacao infantil             |
-| `coordenadora_fundamental` | 6     | Unidade | Coordenacao fundamental          |
-| `analista_pedagogico`      | 7     | Unidade | Supervisao pedagogica            |
-| `professora`               | 8     | Unidade | Acesso a turmas e alunos         |
-| `auxiliar_administrativo`  | 9     | Unidade | Suporte administrativo           |
-| `auxiliar_sala`            | 10    | Unidade | Suporte em sala de aula          |
+#### GET `/stages`
 
-### Matriz de Permissoes
+Lista etapas educacionais (education_stages).
 
-| Recurso        | master | diretora_geral | gerente_unidade | gerente_financeiro | coordenadora_geral | coordenadora_infantil | coordenadora_fundamental | analista_pedagogico | professora | auxiliar_administrativo | auxiliar_sala |
-| -------------- | ------ | -------------- | --------------- | ------------------ | ------------------ | --------------------- | ------------------------ | ------------------- | ---------- | ----------------------- | ------------- |
-| Schools (CRUD) | Total  | -              | -               | -                  | -                  | -                     | -                        | -                   | -          | -                       | -             |
-| Units (CRUD)   | Total  | Total          | -               | -                  | -                  | -                     | -                        | -                   | -          | -                       | -             |
-| Units (Read)   | Total  | Total          | Propria         | Propria            | Propria            | -                     | -                        | -                   | -          | -                       | -             |
-| Users (CRUD)   | Total  | Total          | Propria         | Propria            | -                  | -                     | -                        | -                   | -          | -                       | -             |
-| Users (Read)   | Total  | Total          | Propria         | Propria            | -                  | -                     | -                        | -                   | -          | -                       | -             |
-
----
-
-## Multi-Tenant
-
-### Fluxo de Autenticacao
-
-```
-Request → AuthGuard → RolesGuard → TenantGuard → Controller
-                 │
-                 ▼
-       Valida sessao no Redis
-       Extrai: userId, role, schoolId, unitId
-                 │
-                 ▼
-       TenantGuard verifica:
-       - se role == master, permite tudo
-       - schoolId do recurso == schoolId do usuario
-       - unitId do recurso == unitId do usuario (se nao for diretora_geral)
-```
-
-### Isolamento de Dados
-
-- Todas as queries sao automaticamente filtradas pelo tenant do usuario
-- `master`: ve dados de todas as escolas
-- `diretora_geral`: ve dados de toda a escola
-- Outros roles: veem apenas dados da sua unidade
-
----
-
-## Health Check
-
-### GET `/health`
-
-Verifica o status da API.
-
-**Response (200 OK):**
+**Resposta (200):**
 
 ```json
 {
-  "status": "ok"
+  "success": true,
+  "data": [
+    {
+      "id": "uuid",
+      "code": "INFANTIL",
+      "name": "Infantil",
+      "createdAt": "2025-01-01T00:00:00.000Z",
+      "updatedAt": "2025-01-01T00:00:00.000Z"
+    }
+  ]
 }
 ```
 
 ---
 
-## Codigos de Erro
+### Plannings
 
-| Codigo | Tipo         | Descricao                      |
-| ------ | ------------ | ------------------------------ |
-| `400`  | Bad Request  | Dados de entrada invalidos     |
-| `401`  | Unauthorized | Autenticacao necessaria        |
-| `403`  | Forbidden    | Sem permissao                  |
-| `404`  | Not Found    | Recurso nao encontrado         |
-| `409`  | Conflict     | Conflito (ex: email duplicado) |
+> Requer autenticacao
+
+#### POST `/plannings/draft`
+
+Salva rascunho de planejamento (auto-save).
+
+**Request:**
+
+```json
+{
+  "turma": "INF-3A",
+  "quinzena": "2025-Q01",
+  "objetivos": "Desenvolver habilidades de leitura...",
+  "metodologia": "Rodas de conversa, jogos ludicos...",
+  "recursos": "Livros infantis, jogos educativos...",
+  "atividades": "Leitura compartilhada..."
+}
+```
+
+**Resposta (200):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid",
+    "userId": "uuid",
+    "turmaId": "INF-3A",
+    "quinzena": "2025-Q01",
+    "status": "RASCUNHO",
+    "createdAt": "2025-01-01T00:00:00.000Z",
+    "updatedAt": "2025-01-01T00:00:00.000Z"
+  }
+}
+```
 
 ---
 
-## Exemplos com cURL
+#### POST `/plannings/submit`
+
+Submete planejamento para coordenacao.
+
+**Request:**
+
+```json
+{
+  "turma": "INF-3A",
+  "quinzena": "2025-Q01",
+  "objetivos": "Desenvolver habilidades de leitura...",
+  "metodologia": "Rodas de conversa...",
+  "recursos": "Livros infantis..."
+}
+```
+
+**Resposta (200):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid",
+    "status": "PENDENTE",
+    "submittedAt": "2025-01-01T00:00:00.000Z"
+  }
+}
+```
+
+---
+
+#### GET `/plannings/dashboard`
+
+Retorna metricas do dashboard.
+
+**Query Parameters:**
+
+- `stage` (opcional): `BERCARIO`, `INFANTIL`, `FUNDAMENTAL_I`, `FUNDAMENTAL_II`, `MEDIO`
+- `segment` (opcional, legado): alias de `stage`
+
+**Resposta (200):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "teachers": [
+      {
+        "id": "uuid",
+        "name": "Maria Silva",
+        "turma": "INF-3A",
+        "segment": "INFANTIL",
+        "planningId": "uuid",
+        "planningStatus": "PENDENTE",
+        "submittedAt": "2025-01-01T00:00:00.000Z",
+        "updatedAt": "2025-01-01T00:00:00.000Z"
+      }
+    ],
+    "currentQuinzena": "2025-Q01",
+    "deadline": "2025-01-10T23:59:59.000Z"
+  }
+}
+```
+
+---
+
+#### GET `/plannings/segment/:segment`
+
+Lista planejamentos por segmento.
+
+**Parametros:**
+
+- `segment`: `BERCARIO`, `INFANTIL`, `FUNDAMENTAL_I`, `FUNDAMENTAL_II`, `MEDIO` (aceita `FUNDAMENTAL` como alias de `FUNDAMENTAL_I`)
+
+**Resposta (200):**
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "uuid",
+      "professorName": "Maria Silva",
+      "turma": "INF-3A",
+      "quinzena": "2025-Q01",
+      "status": "PENDENTE",
+      "submittedAt": "2025-01-01T00:00:00.000Z"
+    }
+  ]
+}
+```
+
+---
+
+#### GET `/plannings/turmas`
+
+Lista turmas disponiveis para o usuario autenticado.
+
+**Roles permitidas:**
+
+- `professora`
+- `auxiliar_sala`
+
+**Resposta (200):**
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "uuid",
+      "unitId": "uuid",
+      "stageId": "uuid",
+      "professoraId": "uuid",
+      "name": "3A",
+      "code": "INF-3A",
+      "year": 2025,
+      "shift": "matutino",
+      "capacity": 25,
+      "isActive": true,
+      "createdAt": "2025-01-01T00:00:00.000Z",
+      "updatedAt": "2025-01-01T00:00:00.000Z"
+    }
+  ]
+}
+```
+
+**Erros:**
+
+- `401`: Nao autenticado
+- `403`: Role nao permitida
+
+---
+
+#### GET `/plannings/quinzenas`
+
+Lista quinzenas disponiveis (4 proximas a partir da data atual).
+
+**Roles permitidas:**
+
+- `professora`
+- `auxiliar_sala`
+
+**Resposta (200):**
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "2025-Q01",
+      "label": "Quinzena 1 (01/01 - 15/01)",
+      "startDate": "2025-01-01",
+      "endDate": "2025-01-15"
+    },
+    {
+      "id": "2025-Q02",
+      "label": "Quinzena 2 (16/01 - 31/01)",
+      "startDate": "2025-01-16",
+      "endDate": "2025-01-31"
+    }
+  ]
+}
+```
+
+**Erros:**
+
+- `401`: Nao autenticado
+- `403`: Role nao permitida
+
+---
+
+#### GET `/plannings/me/current`
+
+Retorna o planejamento atual da professora logada (quinzena corrente).
+
+**Roles permitidas:**
+
+- `professora`
+- `auxiliar_sala`
+
+**Resposta (200):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid",
+    "userId": "uuid",
+    "turmaId": "INF-3A",
+    "quinzena": "2025-Q01",
+    "status": "PENDENTE",
+    "content": {
+      "objetivos": "...",
+      "metodologia": "...",
+      "recursos": "...",
+      "atividades": "..."
+    },
+    "createdAt": "2025-01-01T00:00:00.000Z",
+    "updatedAt": "2025-01-01T00:00:00.000Z",
+    "submittedAt": "2025-01-01T00:00:00.000Z"
+  }
+}
+```
+
+**Resposta (200 - sem planejamento):**
+
+```json
+{
+  "success": true,
+  "data": null
+}
+```
+
+**Erros:**
+
+- `401`: Nao autenticado
+- `403`: Role nao permitida
+
+---
+
+#### GET `/plannings/me/feedback`
+
+Retorna feedback pendente da professora (se status EM_AJUSTE).
+
+**Roles permitidas:**
+
+- `professora`
+- `auxiliar_sala`
+
+**Resposta (200):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "planningId": "uuid",
+    "reviewerId": "uuid",
+    "reviewerName": "Ana Coordenadora",
+    "status": "EM_AJUSTE",
+    "comentario": "Por favor, detalhe melhor a metodologia.",
+    "createdAt": "2025-01-01T00:00:00.000Z"
+  }
+}
+```
+
+**Resposta (200 - sem feedback):**
+
+```json
+{
+  "success": true,
+  "data": null
+}
+```
+
+**Erros:**
+
+- `401`: Nao autenticado
+- `403`: Role nao permitida
+
+---
+
+#### GET `/plannings/:id`
+
+Retorna detalhes do planejamento.
+
+**Roles permitidas:**
+
+- `master`
+- `diretora_geral`
+- `coordenadora_geral`
+- `coordenadora_*` (todas as coordenadoras de etapa)
+- `analista_pedagogico`
+- `professora` (apenas seus proprios)
+
+**Validacao de acesso:**
+
+- Professora: so pode acessar planejamentos onde `userId === req.user.userId`
+- Coordenacao/Direcao: pode acessar planejamentos da sua unidade/escola
+
+**Resposta (200):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid",
+    "userId": "uuid",
+    "turmaId": "INF-3A",
+    "quinzena": "2025-Q01",
+    "status": "PENDENTE",
+    "reviewCycles": 0,
+    "firstPassYield": null,
+    "content": {
+      "objetivos": "...",
+      "metodologia": "...",
+      "recursos": "...",
+      "atividades": "..."
+    },
+    "reviews": [],
+    "createdAt": "2025-01-01T00:00:00.000Z",
+    "updatedAt": "2025-01-01T00:00:00.000Z",
+    "submittedAt": "2025-01-01T00:00:00.000Z",
+    "approvedAt": null
+  }
+}
+```
+
+---
+
+#### GET `/plannings/:id/reviews`
+
+Retorna historico de reviews de um planejamento.
+
+**Roles permitidas:**
+
+- `master`
+- `diretora_geral`
+- `coordenadora_geral`
+- `coordenadora_*` (todas as coordenadoras de etapa)
+- `analista_pedagogico`
+- `professora` (apenas seus proprios)
+
+**Resposta (200):**
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "uuid",
+      "planningId": "uuid",
+      "reviewerId": "uuid",
+      "reviewerName": "Ana Coordenadora",
+      "status": "EM_AJUSTE",
+      "comentario": "Por favor, detalhe melhor a metodologia.",
+      "createdAt": "2025-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "uuid",
+      "planningId": "uuid",
+      "reviewerId": "uuid",
+      "reviewerName": "Ana Coordenadora",
+      "status": "APROVADO",
+      "comentario": "Aprovado! Excelente trabalho.",
+      "createdAt": "2025-01-02T00:00:00.000Z"
+    }
+  ]
+}
+```
+
+**Erros:**
+
+- `401`: Nao autenticado
+- `403`: Usuario nao tem acesso a este planejamento
+- `404`: Planejamento nao encontrado
+
+---
+
+#### POST `/plannings/:id/approve`
+
+Aprova planejamento.
+
+**Roles permitidas:**
+
+- `master`
+- `diretora_geral`
+- `coordenadora_geral`
+- `coordenadora_*` (todas as coordenadoras de etapa)
+
+**Request:**
+
+```json
+{}
+```
+
+**Nota:** O `reviewerId` vem da sessao (`req.user.userId`), nao do body.
+
+**Resposta (200):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid",
+    "status": "APROVADO",
+    "approvedAt": "2025-01-01T00:00:00.000Z",
+    "firstPassYield": true
+  }
+}
+```
+
+---
+
+#### POST `/plannings/:id/request-changes`
+
+Solicita ajustes no planejamento.
+
+**Roles permitidas:**
+
+- `master`
+- `diretora_geral`
+- `coordenadora_geral`
+- `coordenadora_*` (todas as coordenadoras de etapa)
+
+**Request:**
+
+```json
+{
+  "comment": "Por favor, detalhe melhor a metodologia."
+}
+```
+
+**Nota:** O `reviewerId` vem da sessao (`req.user.userId`), nao do body.
+
+**Validacao:**
+
+- `comment`: minimo 10 caracteres, maximo 2000 caracteres
+
+**Resposta (200):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid",
+    "status": "EM_AJUSTE",
+    "reviewId": "uuid-review"
+  }
+}
+```
+
+---
+
+### Stats
+
+> Rate limited: 5 requests / 15 segundos
+
+#### GET `/stats/dashboard`
+
+Retorna estatisticas gerais.
+
+**Resposta (200):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "activeSessions": 25,
+    "activeUsers": 18,
+    "totalUsers": 150,
+    "totalSchools": 1,
+    "totalUnits": 3
+  }
+}
+```
+
+**Erros:**
+
+- `429`: Too Many Requests
+
+---
+
+## Roles e Permissoes
+
+### Hierarquia
+
+| Role                       | Nivel | Escopo  |
+| -------------------------- | ----- | ------- |
+| `master`                   | 0     | Global  |
+| `diretora_geral`           | 1     | Escola  |
+| `gerente_unidade`          | 2     | Unidade |
+| `gerente_financeiro`       | 3     | Unidade |
+| `coordenadora_geral`       | 4     | Unidade |
+| `coordenadora_bercario`    | 5     | Unidade |
+| `coordenadora_infantil`    | 6     | Unidade |
+| `coordenadora_fundamental_i` | 7   | Unidade |
+| `coordenadora_fundamental_ii` | 8  | Unidade |
+| `coordenadora_medio`       | 9     | Unidade |
+| `analista_pedagogico`      | 10    | Unidade |
+| `professora`               | 11    | Unidade |
+| `auxiliar_administrativo`  | 12    | Unidade |
+| `auxiliar_sala`            | 13    | Unidade |
+
+### Matriz de Permissoes
+
+| Recurso   | master | diretora_geral | gerente\_\*    | coordenadora\_\* | professora     |
+| --------- | ------ | -------------- | -------------- | ---------------- | -------------- |
+| Schools   | CRUD   | -              | -              | -                | -              |
+| Units     | CRUD   | CRUD           | Read           | Read             | -              |
+| Users     | CRUD   | CRUD           | CRUD (unidade) | -                | -              |
+| Plannings | CRUD   | CRUD           | CRUD           | Approve/Read     | CRUD (proprio) |
+| Dashboard | Read   | Read           | Read           | Read (segmento)  | -              |
+
+---
+
+## Multi-Tenant
+
+### Isolamento de Dados
+
+```
+master       → Acesso global (todas as escolas)
+diretora     → Acesso escola (todas as unidades)
+roles de etapa → Acesso unidade + sua etapa
+outros roles → Acesso unidade (apenas sua unidade)
+```
+
+### Guards
+
+```
+Request → AuthGuard → RolesGuard → TenantGuard → Controller
+              │            │             │
+         Valida sessao  Verifica    Valida escopo
+         no Redis       hierarquia   tenant
+```
+
+---
+
+## Exemplos cURL
 
 ### Login
 
 ```bash
 curl -X POST http://localhost:3001/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"diretora_geral@essencia.edu.br","password":"senha123"}' \
+  -d '{"email":"admin@essencia.edu.br","password":"senha123"}' \
   -c cookies.txt
 ```
 
@@ -433,8 +1730,21 @@ curl -X POST http://localhost:3001/users \
     "password": "senha123",
     "name": "Maria Silva",
     "role": "professora",
-    "schoolId": "uuid-da-escola",
-    "unitId": "uuid-da-unidade"
+    "schoolId": "uuid-escola",
+    "unitId": "uuid-unidade"
+  }'
+```
+
+### Salvar Rascunho
+
+```bash
+curl -X POST http://localhost:3001/plannings/draft \
+  -H "Content-Type: application/json" \
+  -b cookies.txt \
+  -d '{
+    "turma": "INF-3A",
+    "quinzena": "2025-Q01",
+    "objetivos": "Desenvolver habilidades..."
   }'
 ```
 
@@ -442,7 +1752,5 @@ curl -X POST http://localhost:3001/users \
 
 ## Suporte
 
-Para duvidas sobre a API, entre em contato:
-
-- **Email**: suporte@essencia.edu.br
+- **Email**: admin@essencia.edu.br
 - **Documentacao**: [docs/](../)

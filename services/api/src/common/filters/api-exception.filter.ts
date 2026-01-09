@@ -83,13 +83,30 @@ export class ApiExceptionFilter implements ExceptionFilter {
       code = statusToErrorCode(status);
     }
 
-    response.status(status).send({
+    const errorBody = {
       success: false,
       error: {
         code,
         message,
         ...(details ? { details } : {}),
       },
-    });
+    };
+
+    // Handle Fastify response - use statusCode property and send method
+    // This is more reliable than chained methods in edge cases
+    if (response && typeof response.send === "function") {
+      response.statusCode = status;
+      response.send(errorBody);
+    } else {
+      // Fallback for raw HTTP response
+      const rawResponse = response as unknown as {
+        statusCode: number;
+        end: (body: string) => void;
+        setHeader: (name: string, value: string) => void;
+      };
+      rawResponse.statusCode = status;
+      rawResponse.setHeader("Content-Type", "application/json");
+      rawResponse.end(JSON.stringify(errorBody));
+    }
   }
 }

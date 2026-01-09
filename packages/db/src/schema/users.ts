@@ -1,5 +1,6 @@
 import { pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 
+import { educationStages } from "./education-stages.js";
 import { schools } from "./schools.js";
 import { units } from "./units.js";
 
@@ -9,8 +10,11 @@ export const userRoleEnum = [
   "gerente_unidade",
   "gerente_financeiro",
   "coordenadora_geral",
+  "coordenadora_bercario",
   "coordenadora_infantil",
-  "coordenadora_fundamental",
+  "coordenadora_fundamental_i",
+  "coordenadora_fundamental_ii",
+  "coordenadora_medio",
   "analista_pedagogico",
   "professora",
   "auxiliar_administrativo",
@@ -30,6 +34,9 @@ export const users = pgTable("users", {
     onDelete: "cascade",
   }),
   unitId: uuid("unit_id").references(() => units.id, { onDelete: "cascade" }),
+  stageId: uuid("stage_id").references(() => educationStages.id, {
+    onDelete: "set null",
+  }),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

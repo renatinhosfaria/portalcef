@@ -8,6 +8,7 @@ export interface SessionData {
   role: string;
   schoolId: string | null;
   unitId: string | null;
+  stageId: string | null;
   createdAt: number;
 }
 
@@ -43,6 +44,7 @@ export class SessionService implements OnModuleDestroy {
     role: string,
     schoolId: string | null,
     unitId: string | null,
+    stageId: string | null,
   ): Promise<string> {
     const token = randomBytes(32).toString("hex");
     const sessionData: SessionData = {
@@ -50,6 +52,7 @@ export class SessionService implements OnModuleDestroy {
       role,
       schoolId,
       unitId,
+      stageId,
       createdAt: Date.now(),
     };
 
@@ -119,6 +122,98 @@ export class SessionService implements OnModuleDestroy {
 
   private getUserSessionsKey(userId: string): string {
     return `user_sessions:${userId}`;
+  }
+
+  /**
+   * Count total active session keys (session:*)
+   */
+  async countActiveSessions(): Promise<number> {
+    let cursor = "0";
+    let total = 0;
+    do {
+      const [nextCursor, keys] = await this.redis.scan(
+        cursor,
+        "MATCH",
+        "session:*",
+        "COUNT",
+        1000,
+      );
+      cursor = nextCursor as string;
+      total += keys.length;
+    } while (cursor !== "0");
+    return total;
+  }
+
+  /**
+   * Count number of users that currently have at least one session (user_sessions:*)
+   */
+  async countActiveUsers(): Promise<number> {
+    let cursor = "0";
+    let usersWithSessions = 0;
+    do {
+      const [nextCursor, keys] = await this.redis.scan(
+        cursor,
+        "MATCH",
+        "user_sessions:*",
+        "COUNT",
+        1000,
+      );
+      cursor = nextCursor as string;
+      if (keys.length > 0) {
+        const pipeline = this.redis.pipeline();
+        keys.forEach((k) => pipeline.scard(k));
+        const results = await pipeline.exec();
+        // results: [ [null, scardValue], ... ] or null
+        if (!results) continue;
+        for (const r of results as [Error | null, number | null][]) {
+          const val = r[1];
+          if (typeof val === "number" && val > 0) usersWithSessions += 1;
+        }
+      }
+    } while (cursor !== "0");
+    return usersWithSessions;
+  }
+
+  /**
+   * Get a JSON value from redis cache
+   */
+  async getCachedJson<T = unknown>(key: string): Promise<T | null> {
+    const data = await this.redis.get(key);
+    if (!data) return null;
+    try {
+      return JSON.parse(data) as T;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Set JSON value in redis cache with TTL seconds
+   */
+  async setCachedJson(
+    key: string,
+    value: unknown,
+    ttlSeconds: number,
+  ): Promise<void> {
+    await this.redis.setex(key, ttlSeconds, JSON.stringify(value));
+  }
+
+  /**
+   * Simple per-key rate limiter using INCR + EXPIRE
+   * returns { allowed, remaining }
+   */
+  async rateLimit(
+    key: string,
+    windowSeconds: number,
+    limit: number,
+  ): Promise<{ allowed: boolean; remaining: number }> {
+    const count = await this.redis.incr(key);
+    if (count === 1) {
+      await this.redis.expire(key, windowSeconds);
+    }
+    const allowed = count <= limit;
+    const remaining = allowed ? Math.max(0, limit - count) : 0;
+    return { allowed, remaining };
   }
 
   /**

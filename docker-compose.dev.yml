@@ -1,0 +1,259 @@
+# =============================================================================
+# Docker Compose for LOCAL DEVELOPMENT
+# Portal Essencia Feliz - Full Stack Development Environment
+# =============================================================================
+# Setup:   cp .env.docker.example .env.docker && edit .env.docker
+# Start:   docker compose -f docker-compose.dev.yml up -d
+# Logs:    docker compose -f docker-compose.dev.yml logs -f
+# Stop:    docker compose -f docker-compose.dev.yml down
+# Rebuild: docker compose -f docker-compose.dev.yml build --no-cache dev
+# =============================================================================
+
+services:
+  # ===========================================================================
+  # Infrastructure Services
+  # ===========================================================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: essencia-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-essencia}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-essencia_dev}
+      POSTGRES_DB: ${POSTGRES_DB:-essencia_db}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-essencia} -d ${POSTGRES_DB:-essencia_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - essencia-dev
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  redis:
+    image: redis:7-alpine
+    container_name: essencia-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - essencia-dev
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  minio:
+    image: minio/minio:latest
+    container_name: essencia-minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    networks:
+      - essencia-dev
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  createbuckets:
+    image: minio/mc
+    depends_on:
+      minio:
+        condition: service_healthy
+    networks:
+      - essencia-dev
+    entrypoint: >
+      /bin/sh -c "
+      /usr/bin/mc config host add myminio http://minio:9000 ${MINIO_ROOT_USER:-minioadmin} ${MINIO_ROOT_PASSWORD:-minioadmin};
+      /usr/bin/mc mb myminio/${MINIO_BUCKET:-essencia-bucket};
+      /usr/bin/mc anonymous set public myminio/${MINIO_BUCKET:-essencia-bucket};
+      exit 0;
+      "
+  # ===========================================================================
+  # Development Container - Runs ALL apps via Turborepo
+  # ===========================================================================
+  dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      target: dev
+      # Enable BuildKit inline cache for faster rebuilds
+      cache_from:
+        - type=registry,ref=essencia-dev:cache
+      args:
+        # Override UID/GID if needed for volume permissions
+        UID: ${DEV_UID:-1001}
+        GID: ${DEV_GID:-1001}
+        # Enable BuildKit cache
+        BUILDKIT_INLINE_CACHE: 1
+    container_name: essencia-dev
+    # Run as root to avoid Windows/WSL volume permission issues (ex: /app/.turbo)
+    user: root
+    ports:
+      - "3001:3001"  # API (NestJS)
+      - "3003:3003"  # Login
+      - "3004:3004"  # Usuarios
+      - "3005:3005"  # Escolas
+      - "3006:3006"  # Home
+      - "3007:3007"  # Planejamento
+    # Load secrets from .env.docker file (optional - uses defaults if not present)
+    env_file:
+      - path: .env.docker
+        required: false
+    environment:
+      NODE_ENV: development
+      # Disable corepack signature verification (workaround for key mismatch issue)
+      COREPACK_ENABLE_STRICT: 0
+      # Signal to apps that we're running in Docker
+      DOCKER_ENV: "true"
+      # Database (uses Docker service name)
+      DATABASE_URL: postgresql://${POSTGRES_USER:-essencia}:${POSTGRES_PASSWORD:-essencia_dev}@postgres:5432/${POSTGRES_DB:-essencia_db}
+      # Redis (uses Docker service name)
+      REDIS_URL: redis://redis:6379
+      # MinIO (uses Docker service name)
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_BUCKET: ${MINIO_BUCKET:-essencia-bucket}
+      # API Configuration
+      API_PORT: 3001
+      API_HOST: 0.0.0.0
+      API_INTERNAL_URL: http://localhost:3001
+      # Next.js public URL
+      NEXT_PUBLIC_API_URL: http://localhost:3001
+      # Session Configuration (from .env.docker or defaults)
+      SESSION_SECRET: ${SESSION_SECRET:-dev-secret-change-in-production}
+      SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-24}
+      SESSION_RENEWAL_THRESHOLD: ${SESSION_RENEWAL_THRESHOLD:-0.25}
+      # Cookie Configuration
+      COOKIE_DOMAIN: ${COOKIE_DOMAIN:-localhost}
+      # Turbo Configuration
+      TURBO_TELEMETRY_DISABLED: 1
+      # Force polling for file watching (Windows/WSL2 compatibility)
+      WATCHPACK_POLLING: "true"
+      WATCHPACK_POLLING_INTERVAL: "1000"
+      CHOKIDAR_USEPOLLING: "true"
+      CHOKIDAR_INTERVAL: "1000"
+      # Suppress noisy deprecation warnings in dev logs (ex: punycode)
+      NODE_OPTIONS: "--no-deprecation"
+    volumes:
+      # =======================================================================
+      # Bind mounts for hot-reload (source code)
+      # Using 'cached' for better read performance on Windows/WSL2
+      # =======================================================================
+      - ./apps:/app/apps:cached
+      - ./packages:/app/packages:cached
+      - ./services:/app/services:cached
+
+      # Configuration files (read-only)
+      # Note: .env is NOT mounted - Docker env vars take precedence
+      - ./turbo.json:/app/turbo.json:ro
+      - ./tsconfig.json:/app/tsconfig.json:ro
+
+      # =======================================================================
+      # Anonymous volumes to preserve node_modules from container
+      # This prevents host node_modules from overwriting container deps
+      # =======================================================================
+      # Root
+      - /app/node_modules
+
+      # Apps
+      - /app/apps/home/node_modules
+      - /app/apps/login/node_modules
+      - /app/apps/usuarios/node_modules
+      - /app/apps/escolas/node_modules
+      - /app/apps/planejamento/node_modules
+
+      # Services
+      - /app/services/api/node_modules
+
+      # Packages
+      - /app/packages/db/node_modules
+      - /app/packages/shared/node_modules
+      - /app/packages/ui/node_modules
+      - /app/packages/components/node_modules
+      - /app/packages/lib/node_modules
+      - /app/packages/config/node_modules
+      - /app/packages/tailwind-config/node_modules
+
+      # =======================================================================
+      # Preserve build caches for faster rebuilds
+      # Note: API dist is NOT cached to avoid EBUSY errors with NestJS
+      # =======================================================================
+      - /app/apps/home/.next
+      - /app/apps/login/.next
+      - /app/apps/usuarios/.next
+      - /app/apps/escolas/.next
+      - /app/apps/planejamento/.next
+      - /app/.turbo
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - essencia-dev
+    # Health check for dev container (checks API endpoint)
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+    # Resource limits (prevent runaway memory usage)
+    deploy:
+      resources:
+        limits:
+          memory: ${DEV_MEMORY_LIMIT:-4G}
+        reservations:
+          memory: ${DEV_MEMORY_RESERVATION:-1G}
+    # Enable interactive terminal
+    tty: true
+    stdin_open: true
+    # Restart policy for development
+    restart: unless-stopped
+    # Logging configuration (prevents unbounded log growth)
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+networks:
+  essencia-dev:
+    driver: bridge
+    name: essencia-dev
+
+volumes:
+  postgres_data:
+    name: essencia-postgres-data
+  redis_data:
+    name: essencia-redis-data
+  minio_data:
+    name: essencia-minio-data

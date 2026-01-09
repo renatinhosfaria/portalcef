@@ -1,4 +1,4 @@
-import { getDb, sql } from "@essencia/db";
+import { asc, eq, getDb, or, sql } from "@essencia/db";
 import { schools, type NewSchool, type School } from "@essencia/db/schema";
 import {
   ConflictException,
@@ -11,22 +11,31 @@ export class SchoolsService {
   async findAll(): Promise<School[]> {
     const db = getDb();
     return db.query.schools.findMany({
-      orderBy: (schools, { asc }) => [asc(schools.name)],
+      orderBy: [asc(schools.name)],
     });
   }
 
   async findById(id: string): Promise<School | null> {
     const db = getDb();
     const school = await db.query.schools.findFirst({
-      where: (fields, { eq }) => eq(fields.id, id),
+      where: eq(schools.id, id),
     });
     return school ?? null;
+  }
+
+  async findByIds(ids: string[]): Promise<School[]> {
+    const db = getDb();
+    if (!ids || ids.length === 0) return [];
+    return db.query.schools.findMany({
+      where: or(...ids.map((id) => eq(schools.id, id))),
+      orderBy: [asc(schools.name)],
+    });
   }
 
   async findByCode(code: string): Promise<School | null> {
     const db = getDb();
     const school = await db.query.schools.findFirst({
-      where: (fields, { eq }) => eq(fields.code, code),
+      where: eq(schools.code, code),
     });
     return school ?? null;
   }

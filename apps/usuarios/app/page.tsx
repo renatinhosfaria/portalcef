@@ -1,13 +1,19 @@
-import { cookies } from "next/headers";
-
+import { UsersPageContent } from "@essencia/components/users-page-content";
+import type { UserSummary } from "@essencia/lib/types";
 import { serverApi } from "@essencia/shared/fetchers/server";
-import type { User } from "@essencia/shared/types";
-
-import { UsersPageContent } from "../components/users-page-content";
-import type { UserSummary } from "../lib/types";
+import type { UserRole } from "@essencia/shared/schemas";
+import { cookies } from "next/headers";
 
 export const dynamic = "force-dynamic";
 
+type ApiUser = {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  schoolName?: string | null;
+  unitName?: string | null;
+};
 export default async function Page() {
   const cookieStore = await cookies();
   const cookieString = cookieStore.toString();
@@ -15,7 +21,7 @@ export default async function Page() {
   let users: UserSummary[] = [];
 
   try {
-    const fetchedUsers = await serverApi.get<User[]>("/users", {
+    const fetchedUsers = await serverApi.get<ApiUser[]>("/users", {
       cookies: cookieString,
     });
 
@@ -24,7 +30,8 @@ export default async function Page() {
       name: user.name,
       email: user.email,
       role: user.role,
-      unit: "Matriz - SP", // Placeholder as unit join is not yet fully implemented in API response
+      school: user.schoolName ?? "N/A",
+      unit: user.unitName ?? "N/A",
       status: "active",
       lastActive: "N/A",
     }));

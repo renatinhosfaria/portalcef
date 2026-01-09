@@ -13,7 +13,13 @@ interface SheetProps {
   className?: string; // Added className prop for flexibility
 }
 
-export function Sheet({ isOpen, onClose, children, title, className }: SheetProps) {
+export function Sheet({
+  isOpen,
+  onClose,
+  children,
+  title,
+  className,
+}: SheetProps) {
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = "hidden";

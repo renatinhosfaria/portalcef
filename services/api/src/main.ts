@@ -1,22 +1,43 @@
+import { closeDb } from "@essencia/db";
+import fastifyCookie, { FastifyCookieOptions } from "@fastify/cookie";
+import fastifyMultipart from "@fastify/multipart";
+import { ValidationPipe } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import {
   FastifyAdapter,
   NestFastifyApplication,
 } from "@nestjs/platform-fastify";
-import fastifyCookie, { FastifyCookieOptions } from "@fastify/cookie";
-import { closeDb } from "@essencia/db";
 import type { FastifyPluginCallback } from "fastify";
 
 import { AppModule } from "./app.module";
 import { ApiExceptionFilter } from "./common/filters/api-exception.filter";
+import { LoggingInterceptor } from "./common/interceptors/logging.interceptor";
 
 async function bootstrap() {
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
-    new FastifyAdapter({ logger: true }),
+    new FastifyAdapter({
+      logger: true,
+      bodyLimit: 50 * 1024 * 1024, // 50MB body limit for file uploads
+    }),
   );
 
   app.useGlobalFilters(new ApiExceptionFilter());
+
+  // Enable global validation pipe
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true, // Remove propriedades não declaradas no DTO
+      forbidNonWhitelisted: true, // Lança erro se propriedades extras forem enviadas
+      transform: true, // Transforma payloads em instâncias de DTO
+      transformOptions: {
+        enableImplicitConversion: true, // Converte tipos automaticamente
+      },
+    }),
+  );
+
+  // Enable global logging interceptor
+  app.useGlobalInterceptors(new LoggingInterceptor());
 
   // Register Fastify cookie plugin
   const cookieOptions: FastifyCookieOptions = {
@@ -28,12 +49,27 @@ async function bootstrap() {
     cookieOptions,
   );
 
+  // Register Fastify multipart plugin
+  await app.register(fastifyMultipart, {
+    limits: {
+      fieldNameSize: 100, // Max field name size in bytes
+      fieldSize: 1000000, // Max field value size in bytes (1MB)
+      fields: 10, // Max number of non-file fields
+      fileSize: 50 * 1024 * 1024, // 50MB max file size
+      files: 5, // Max number of file fields
+      headerPairs: 2000, // Max number of header key=>value pairs
+    },
+  });
+
   // Enable CORS for the frontend apps
   app.enableCors({
     origin: [
       "http://localhost:3000", // home
       "http://localhost:3003", // login
       "http://localhost:3004", // usuarios
+      "http://localhost:3005", // escolas
+      "http://localhost:3006", // turmas
+      "http://localhost:3007", // planejamento
     ],
     credentials: true, // Allow cookies
   });

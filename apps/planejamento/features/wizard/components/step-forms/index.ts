@@ -1,16 +1,12 @@
-/**
- * Step Forms Exports
- * Story 2.2 - Formulário de Conteúdo do Planejamento
- */
-
-export { DadosStepForm } from "./dados-step-form";
-export type { DadosStepFormProps } from "./dados-step-form";
-
-export { ObjetivosStepForm } from "./objetivos-step-form";
-export type { ObjetivosStepFormProps } from "./objetivos-step-form";
-
-export { MetodologiaStepForm } from "./metodologia-step-form";
-export type { MetodologiaStepFormProps } from "./metodologia-step-form";
-
-export { RecursosStepForm } from "./recursos-step-form";
-export type { RecursosStepFormProps } from "./recursos-step-form";
+export * from "./anexos-step-form";
+export * from "./avaliacao-step-form";
+export * from "./conclusao-step-form";
+export * from "./conteudos-step-form";
+export * from "./habilidades-step-form";
+export * from "./materia-step-form";
+export * from "./metodologia-step-form";
+export * from "./objetivos-step-form";
+export * from "./recursos-step-form";
+export * from "./reforco-step-form";
+export * from "./review-step-form";
+export * from "./tema-step-form";

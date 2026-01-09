@@ -1,7 +1,5 @@
 "use client";
 
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
 import {
   Form,
   FormControl,
@@ -11,48 +9,51 @@ import {
   FormMessage,
 } from "@essencia/ui/components/form";
 import { Textarea } from "@essencia/ui/components/textarea";
-import { metodologiaStepSchema, type MetodologiaStepData } from "../../schemas";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
+import { useSpellCheck } from "../../hooks";
+import { metodologiaStepSchema } from "../../schemas";
 
-export interface MetodologiaStepFormProps {
-  defaultValues?: Partial<MetodologiaStepData>;
-  onSubmit: (data: MetodologiaStepData) => void;
-}
+export function MetodologiaStepForm({ defaultValues, onSubmit }: any) {
+  const { correctText } = useSpellCheck();
 
-/**
- * Formulário Passo 3: Metodologia
- * Textarea com placeholder pedagógico orientativo
- *
- * AC3: Exibe Textarea com label, placeholder pedagógico, validação min 30 chars
- */
-export function MetodologiaStepForm({
-  defaultValues,
-  onSubmit,
-}: MetodologiaStepFormProps) {
-  const form = useForm<MetodologiaStepData>({
+  const form = useForm({
     resolver: zodResolver(metodologiaStepSchema),
-    mode: "onBlur", // Validação apenas ao sair do campo
-    defaultValues: defaultValues || {
-      metodologia: "",
-    },
+    defaultValues: defaultValues || { metodologia: "" },
   });
 
+  const handleBlur = (fieldName: string) => {
+    const currentValue = form.getValues(fieldName as "metodologia");
+    if (currentValue) {
+      const correctedValue = correctText(currentValue);
+      if (correctedValue !== currentValue) {
+        form.setValue(fieldName as "metodologia", correctedValue);
+      }
+    }
+  };
+
   return (
-    // @ts-expect-error - react-hook-form version conflict between packages
     <Form {...form}>
-      <form id="wizard-step-form" onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-        <FormField<MetodologiaStepData>
-          control={form.control as any}
+      <form
+        id="wizard-step-form"
+        onSubmit={form.handleSubmit(onSubmit)}
+        className="space-y-4"
+      >
+        <FormField
+          control={form.control}
           name="metodologia"
-          render={({ field }: { field: any }) => (
+          render={({ field }) => (
             <FormItem>
-              <FormLabel>Metodologia</FormLabel>
+              <FormLabel>Quais as Metodologia / estratégias?</FormLabel>
               <FormControl>
                 <Textarea
-                  placeholder="Descreva estratégias e atividades (Ex: Rodas de conversa, jogos lúdicos, experimentos...)"
-                  className="min-h-[120px]"
-                  autoResize
-                  aria-describedby="metodologia-error"
+                  className="min-h-[150px]"
+                  placeholder="Descreva a metodologia..."
                   {...field}
+                  onBlur={(e) => {
+                    field.onBlur();
+                    handleBlur("metodologia");
+                  }}
                 />
               </FormControl>
               <FormMessage />

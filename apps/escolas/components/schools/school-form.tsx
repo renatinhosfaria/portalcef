@@ -8,10 +8,12 @@ import {
   type UserRole,
 } from "@essencia/shared/schemas";
 import { Button } from "@essencia/ui/components/button";
+import { Checkbox } from "@essencia/ui/components/checkbox";
 import { Input } from "@essencia/ui/components/input";
 import { Label } from "@essencia/ui/components/label";
 import {
   AlertCircle,
+  BookOpen,
   Building2,
   Check,
   Hash,
@@ -27,6 +29,12 @@ import { useEffect, useState } from "react";
 import { Sheet } from "../ui/sheet";
 
 import type { SchoolListItem } from "./school-list";
+
+interface EducationStage {
+  id: string;
+  name: string;
+  code: string;
+}
 
 interface SchoolFormProps {
   isOpen: boolean;
@@ -48,6 +56,7 @@ const getInitialFormData = () => ({
     name: "",
     code: "",
     address: "",
+    stageIds: [] as string[],
   },
   director: {
     name: "",
@@ -65,6 +74,8 @@ export function SchoolForm({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [availableStages, setAvailableStages] = useState<EducationStage[]>([]);
+  const [stagesLoading, setStagesLoading] = useState(false);
 
   const [formData, setFormData] = useState(getInitialFormData);
 
@@ -86,6 +97,24 @@ export function SchoolForm({
       setFormData(getInitialFormData());
     }
   }, [isOpen, schoolToEdit]);
+
+  useEffect(() => {
+    async function fetchStages() {
+      if (!isOpen || isEditing) return;
+
+      setStagesLoading(true);
+      try {
+        const response = await api.get<EducationStage[]>("/stages");
+        setAvailableStages(response);
+      } catch (err) {
+        console.error("Erro ao carregar etapas:", err);
+      } finally {
+        setStagesLoading(false);
+      }
+    }
+
+    fetchStages();
+  }, [isOpen, isEditing]);
 
   const handleClose = () => {
     setError(null);
@@ -146,6 +175,7 @@ export function SchoolForm({
         role: DIRECTOR_ROLE,
         schoolId: PLACEHOLDER_SCHOOL_ID,
         unitId: null,
+        stageId: null,
       };
       const directorResult = createUserSchema.safeParse(directorPayload);
 
@@ -160,7 +190,16 @@ export function SchoolForm({
         "/schools",
         schoolResult.data,
       );
-      await api.post(`/schools/${createdSchool.id}/units`, unitResult.data);
+      const createdUnit = await api.post<{ id: string }>(
+        `/schools/${createdSchool.id}/units`,
+        unitResult.data,
+      );
+
+      if (formData.unit.stageIds.length > 0) {
+        await api.post(`/units/${createdUnit.id}/stages`, {
+          stageIds: formData.unit.stageIds,
+        });
+      }
 
       const directorCreatePayload = {
         ...directorResult.data,
@@ -309,6 +348,55 @@ export function SchoolForm({
                     }
                   />
                 </div>
+              </div>
+
+              <div className="space-y-3">
+                <Label className="flex items-center gap-2">
+                  <BookOpen className="w-4 h-4 text-slate-400" />
+                  Etapas de Ensino
+                </Label>
+                <p className="text-xs text-slate-500">
+                  Selecione quais etapas de ensino esta unidade oferecerá.
+                </p>
+                {stagesLoading ? (
+                  <div className="flex items-center gap-2 text-slate-500 text-sm">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Carregando etapas...
+                  </div>
+                ) : availableStages.length === 0 ? (
+                  <p className="text-sm text-slate-500">
+                    Nenhuma etapa disponível.
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-2 gap-3">
+                    {availableStages.map((stage) => (
+                      <label
+                        key={stage.id}
+                        className="flex items-center gap-2 p-3 rounded-lg border border-slate-200 hover:border-slate-300 hover:bg-slate-50 cursor-pointer transition-colors"
+                      >
+                        <Checkbox
+                          checked={formData.unit.stageIds.includes(stage.id)}
+                          onCheckedChange={(checked) => {
+                            setFormData((current) => ({
+                              ...current,
+                              unit: {
+                                ...current.unit,
+                                stageIds: checked
+                                  ? [...current.unit.stageIds, stage.id]
+                                  : current.unit.stageIds.filter(
+                                      (id) => id !== stage.id,
+                                    ),
+                              },
+                            }));
+                          }}
+                        />
+                        <span className="text-sm text-slate-700">
+                          {stage.name}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 

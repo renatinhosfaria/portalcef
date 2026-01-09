@@ -1,7 +1,8 @@
 "use client";
 
 import { cn } from "@essencia/ui/lib/utils";
-import { Check } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight } from "lucide-react";
+import { useMemo } from "react";
 
 export type WizardStepStatus = "pending" | "current" | "completed";
 
@@ -16,60 +17,102 @@ interface WizardStepperProps {
   className?: string;
 }
 
+const VISIBLE_STEPS = 6; // Número de etapas visíveis na janela
+
 export function WizardStepper({ steps, className }: WizardStepperProps) {
+  // Encontrar o índice do passo atual
+  const currentIndex = steps.findIndex((s) => s.status === "current");
+
+  // Fallback step para casos edge (nunca deveria acontecer, mas TypeScript requer)
+  const fallbackStep: WizardStep = {
+    id: "fallback",
+    title: "Etapa",
+    status: "current",
+  };
+
+  const currentStep = steps[currentIndex] ?? steps[0] ?? fallbackStep;
+
+  // Calcular janela de etapas visíveis centrada no passo atual
+  const { visibleSteps, startIndex, hasMore, hasLess } = useMemo(() => {
+    if (steps.length <= VISIBLE_STEPS) {
+      return {
+        visibleSteps: steps,
+        startIndex: 0,
+        hasMore: false,
+        hasLess: false,
+      };
+    }
+
+    // Centralizar no passo atual
+    let start = Math.max(0, currentIndex - Math.floor(VISIBLE_STEPS / 2));
+    const end = Math.min(steps.length, start + VISIBLE_STEPS);
+
+    // Ajustar se estiver no final
+    if (end === steps.length) {
+      start = Math.max(0, end - VISIBLE_STEPS);
+    }
+
+    return {
+      visibleSteps: steps.slice(start, end),
+      startIndex: start,
+      hasMore: end < steps.length,
+      hasLess: start > 0,
+    };
+  }, [steps, currentIndex]);
+
   return (
     <nav
       aria-label="Progresso do formulário"
       className={cn("w-full", className)}
     >
-      {/* Desktop: Horizontal layout */}
+      {/* Desktop: Horizontal layout com janela deslizante */}
       <ol className="hidden sm:flex items-center justify-center gap-2">
-        {steps.map((step, index) => (
-          <li
-            key={step.id}
-            className="flex items-center"
-            aria-current={step.status === "current" ? "step" : undefined}
-          >
-            <StepIndicator step={step} stepNumber={index + 1} />
-            {index < steps.length - 1 && (
-              <div
-                className={cn(
-                  "w-12 lg:w-16 h-0.5 mx-2 transition-colors duration-300",
-                  step.status === "completed"
-                    ? "bg-secondary"
-                    : "bg-muted-foreground/30"
-                )}
-                aria-hidden="true"
-              />
-            )}
+        {/* Indicador de etapas anteriores */}
+        {hasLess && (
+          <li className="flex items-center text-muted-foreground mr-1">
+            <ChevronLeft className="h-5 w-5" />
           </li>
-        ))}
+        )}
+
+        {visibleSteps.map((step, index) => {
+          const actualStepNumber = startIndex + index + 1;
+          return (
+            <li
+              key={step.id}
+              className="flex items-center"
+              aria-current={step.status === "current" ? "step" : undefined}
+            >
+              <StepIndicator step={step} stepNumber={actualStepNumber} />
+              {index < visibleSteps.length - 1 && (
+                <div
+                  className={cn(
+                    "w-8 lg:w-12 h-0.5 mx-1 transition-colors duration-300",
+                    step.status === "completed"
+                      ? "bg-secondary"
+                      : "bg-muted-foreground/30",
+                  )}
+                  aria-hidden="true"
+                />
+              )}
+            </li>
+          );
+        })}
+
+        {/* Indicador de etapas posteriores */}
+        {hasMore && (
+          <li className="flex items-center text-muted-foreground ml-1">
+            <ChevronRight className="h-5 w-5" />
+          </li>
+        )}
       </ol>
 
-      {/* Mobile: Vertical layout */}
-      <ol className="flex sm:hidden flex-col gap-3">
-        {steps.map((step, index) => (
-          <li
-            key={step.id}
-            className="flex items-center gap-3"
-            aria-current={step.status === "current" ? "step" : undefined}
-          >
-            <StepIndicator step={step} stepNumber={index + 1} />
-            <span
-              className={cn(
-                "text-sm font-medium transition-colors duration-300",
-                step.status === "current"
-                  ? "text-primary"
-                  : step.status === "completed"
-                    ? "text-secondary"
-                    : "text-muted-foreground"
-              )}
-            >
-              {step.title}
-            </span>
-          </li>
-        ))}
-      </ol>
+      {/* Mobile: Apenas etapa atual com contador */}
+      <div className="flex sm:hidden flex-col items-center gap-2">
+        <StepIndicator step={currentStep} stepNumber={currentIndex + 1} />
+        <span className="text-sm text-muted-foreground">
+          {currentStep.title}
+        </span>
+      </div>
     </nav>
   );
 }
@@ -92,7 +135,7 @@ function StepIndicator({ step, stepNumber }: StepIndicatorProps) {
           status === "completed" &&
             "border-secondary bg-secondary text-secondary-foreground",
           status === "pending" &&
-            "border-muted-foreground/50 bg-background text-muted-foreground"
+            "border-muted-foreground/50 bg-background text-muted-foreground",
         )}
       >
         {status === "completed" ? (
@@ -109,7 +152,7 @@ function StepIndicator({ step, stepNumber }: StepIndicatorProps) {
             ? "text-primary"
             : status === "completed"
               ? "text-secondary"
-              : "text-muted-foreground"
+              : "text-muted-foreground",
         )}
       >
         {title}

@@ -14,6 +14,7 @@ export class FetchError extends Error {
     public status: number,
     public code: string,
     message: string,
+    public details?: Record<string, unknown>,
   ) {
     super(message);
     this.name = "FetchError";
@@ -40,8 +41,9 @@ export async function clientFetch<T>(
 ): Promise<T> {
   const { body, headers: customHeaders, ...restOptions } = options;
 
+  const isFormData = body instanceof FormData;
   const headers: HeadersInit = {
-    "Content-Type": "application/json",
+    ...(isFormData ? {} : { "Content-Type": "application/json" }),
     ...customHeaders,
   };
 
@@ -52,7 +54,7 @@ export async function clientFetch<T>(
   };
 
   if (body !== undefined) {
-    config.body = JSON.stringify(body);
+    config.body = isFormData ? (body as BodyInit) : JSON.stringify(body);
   }
 
   const url = `${API_BASE_URL}${endpoint}`;
@@ -80,6 +82,7 @@ export async function clientFetch<T>(
       response.status,
       data.error?.code ?? "UNKNOWN_ERROR",
       data.error?.message ?? "Erro desconhecido",
+      data.error?.details,
     );
   }
 
