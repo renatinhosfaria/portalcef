@@ -1,5 +1,7 @@
 "use client";
 
+import { useTenant } from "@essencia/shared/providers/tenant";
+import { Button } from "@essencia/ui/components/button";
 import {
   BookOpen,
   Calendar,
@@ -12,9 +14,6 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-
-import { useTenant } from "@essencia/shared/providers/tenant";
-import { Button } from "@essencia/ui/components/button";
 
 import { AnnouncementBanner } from "../components/announcement-banner";
 import { CalendarWidget } from "../components/calendar-widget";

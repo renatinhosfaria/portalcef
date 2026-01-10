@@ -1,10 +1,33 @@
-import "@testing-library/jest-dom/vitest";
+import * as matchers from "@testing-library/jest-dom/matchers";
 import { cleanup } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { afterEach, vi } from "vitest";
+import { afterEach, expect, vi } from "vitest";
 
 afterEach(() => {
   cleanup();
+});
+
+expect.extend(matchers);
+
+const createStorage = () => {
+  const store = new Map<string, string>();
+  return {
+    getItem: (key: string) => (store.has(key) ? store.get(key)! : null),
+    setItem: (key: string, value: string) => {
+      store.set(key, value);
+    },
+    removeItem: (key: string) => {
+      store.delete(key);
+    },
+    clear: () => {
+      store.clear();
+    },
+  };
+};
+
+Object.defineProperty(globalThis, "localStorage", {
+  value: createStorage(),
+  configurable: true,
 });
 
 vi.mock("@essencia/shared/providers/tenant", () => ({

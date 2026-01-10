@@ -1,8 +1,8 @@
 const { spawn } = require('child_process');
 
-const child = spawn('npx', ['drizzle-kit', 'push'], {
-  stdio: ['pipe', 'inherit', 'inherit'],
-  shell: true
+const command = process.platform === 'win32' ? 'npx.cmd' : 'npx';
+const child = spawn(command, ['drizzle-kit', 'push'], {
+  stdio: ['pipe', 'inherit', 'inherit']
 });
 
 // Aguarda um pouco e envia "Yes"
@@ -12,6 +12,6 @@ setTimeout(() => {
 }, 2000);
 
 child.on('exit', (code) => {
-  console.log(`Processo finalizado com código: ${code}`);
+  console.log(`Processo finalizado com codigo: ${code}`);
   process.exit(code);
 });

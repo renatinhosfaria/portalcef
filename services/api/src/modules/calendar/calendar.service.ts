@@ -3,7 +3,7 @@ import {
   NotFoundException,
   ForbiddenException,
 } from "@nestjs/common";
-import { getDb, calendarEvents, units, eq, and, sql } from "@essencia/db";
+import { getDb, calendarEvents, units, eq, and, asc, sql } from "@essencia/db";
 import type {
   CreateCalendarEventInput,
   UpdateCalendarEventInput,
@@ -87,10 +87,7 @@ export class CalendarService {
 
     const events = await db.query.calendarEvents.findMany({
       where: filters.length > 0 ? and(...filters) : undefined,
-      orderBy: (
-        events: typeof calendarEvents.$inferSelect,
-        { asc }: { asc: (column: any) => any },
-      ) => [asc(events.startDate)],
+      orderBy: [asc(calendarEvents.startDate)],
     });
 
     console.log("[CalendarService] Found events:", events.length);

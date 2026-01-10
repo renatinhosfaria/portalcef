@@ -1,11 +1,13 @@
 import React from "react";
-import "@testing-library/jest-dom/vitest";
+import * as matchers from "@testing-library/jest-dom/matchers";
 import { cleanup } from "@testing-library/react";
-import { afterEach, vi } from "vitest";
+import { afterEach, expect, vi } from "vitest";
 
 afterEach(() => {
   cleanup();
 });
+
+expect.extend(matchers);
 
 globalThis.ResizeObserver = class ResizeObserver {
   observe() {}
