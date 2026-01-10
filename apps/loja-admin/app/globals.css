@@ -1,0 +1,167 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer components {
+  /* Page Headers - seguindo padrão dos outros módulos */
+  .page-header {
+    @apply mb-8;
+  }
+  
+  .page-title {
+    @apply text-3xl font-bold text-slate-800 tracking-tight;
+  }
+  
+  .page-subtitle {
+    @apply text-slate-500 mt-1;
+  }
+
+  /* Stat Cards - adaptado para o estilo verde do portal */
+  .stat-card {
+    @apply bg-white/80 backdrop-blur-sm rounded-2xl p-6 border border-slate-200/60 shadow-sm transition-all duration-200 hover:shadow-md hover:-translate-y-0.5;
+  }
+
+  .stat-card-icon {
+    @apply w-12 h-12 rounded-xl flex items-center justify-center text-xl;
+  }
+
+  .stat-card-value {
+    @apply text-3xl font-bold text-slate-800 leading-tight;
+  }
+
+  .stat-card-label {
+    @apply text-sm font-medium text-slate-500;
+  }
+
+  /* Data Tables - estilo consistente */
+  .data-table {
+    @apply w-full border-collapse bg-white/80 backdrop-blur-sm rounded-2xl overflow-hidden shadow-sm border border-slate-200/60;
+  }
+
+  .data-table thead {
+    @apply bg-slate-50/80;
+  }
+
+  .data-table th {
+    @apply px-6 py-4 text-left font-semibold text-slate-600 text-sm uppercase tracking-wider;
+  }
+
+  .data-table td {
+    @apply px-6 py-4 border-t border-slate-100 text-slate-700;
+  }
+
+  .data-table tbody tr {
+    @apply transition-colors duration-150;
+  }
+
+  .data-table tbody tr:hover {
+    @apply bg-slate-50/50;
+  }
+
+  /* Status Badges - cores do sistema */
+  .badge {
+    @apply inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wide;
+  }
+
+  .badge-success {
+    @apply bg-[#A3D154]/20 text-[#5a7a1f];
+  }
+
+  .badge-warning {
+    @apply bg-amber-100 text-amber-700;
+  }
+
+  .badge-danger {
+    @apply bg-red-100 text-red-700;
+  }
+
+  .badge-info {
+    @apply bg-blue-100 text-blue-700;
+  }
+
+  .badge-neutral {
+    @apply bg-slate-100 text-slate-600;
+  }
+
+  /* Admin Card */
+  .admin-card {
+    @apply bg-white/80 backdrop-blur-sm rounded-2xl border border-slate-200/60 shadow-sm overflow-hidden;
+  }
+
+  .admin-card-header {
+    @apply flex items-center justify-between px-6 py-4 border-b border-slate-100;
+  }
+
+  .admin-card-title {
+    @apply text-lg font-semibold text-slate-800;
+  }
+
+  .admin-card-body {
+    @apply p-6;
+  }
+
+  /* Form elements */
+  .form-label {
+    @apply block text-sm font-medium text-slate-700 mb-2;
+  }
+
+  .form-input {
+    @apply w-full h-11 px-4 rounded-xl border border-slate-200 bg-white focus:border-[#A3D154] focus:ring-2 focus:ring-[#A3D154]/20 outline-none transition-all;
+  }
+
+  .form-select {
+    @apply w-full h-11 px-4 rounded-xl border border-slate-200 bg-white focus:border-[#A3D154] focus:ring-2 focus:ring-[#A3D154]/20 outline-none transition-all appearance-none cursor-pointer;
+  }
+
+  /* Botões Admin */
+  .btn-admin {
+    @apply inline-flex items-center justify-center gap-2 font-medium rounded-xl px-4 py-2.5 transition-all duration-200;
+  }
+
+  .btn-admin-primary {
+    @apply bg-[#A3D154] text-white hover:bg-[#8FBD3F] shadow-sm hover:shadow;
+  }
+
+  .btn-admin-secondary {
+    @apply bg-slate-100 text-slate-700 hover:bg-slate-200;
+  }
+
+  .btn-admin-danger {
+    @apply bg-red-500 text-white hover:bg-red-600;
+  }
+
+  .btn-admin-ghost {
+    @apply text-slate-600 hover:bg-slate-100;
+  }
+
+  .btn-admin-sm {
+    @apply px-3 py-1.5 text-sm;
+  }
+
+  /* Loading spinner */
+  .loading-spinner-admin {
+    @apply w-8 h-8 border-4 border-slate-200 border-t-[#A3D154] rounded-full animate-spin;
+  }
+
+  /* Filter bar */
+  .filter-bar {
+    @apply flex flex-wrap gap-4 p-4 bg-white/60 backdrop-blur-sm rounded-2xl border border-slate-200/60 mb-6;
+  }
+
+  /* Empty state */
+  .empty-state {
+    @apply flex flex-col items-center justify-center py-16 text-center;
+  }
+
+  .empty-state-icon {
+    @apply text-6xl mb-4;
+  }
+
+  .empty-state-title {
+    @apply text-xl font-semibold text-slate-800 mb-2;
+  }
+
+  .empty-state-description {
+    @apply text-slate-500 max-w-md;
+  }
+}

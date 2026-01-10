@@ -36,6 +36,13 @@
       "when": 1767840970369,
       "tag": "0004_flippant_bastion",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1767985681161,
+      "tag": "0005_lazy_cassandra_nova",
+      "breakpoints": true
     }
   ]
 }

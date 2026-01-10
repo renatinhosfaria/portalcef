@@ -3,7 +3,7 @@
 Todas as mudancas notaveis do projeto serao documentadas aqui.
 
 O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
-e o projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
+e o projeto adhere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
 ---
 
@@ -19,7 +19,65 @@ e o projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 - Metricas avancadas de dashboard com graficos
 - Notificacoes em tempo real
 
+### Corrigido
+
+- Loja: endpoint publico de escolas/unidades para o catalogo e payloads de pedidos/interesse alinhados com a API
+
 ### Adicionado
+
+#### Módulo CEF SHOP - FASE 4 Concluída (09/01/2026)
+
+- **Backend - Lista de Interesse** (`services/api/src/modules/shop`)
+  - ShopInterestService com 4 métodos (createInterestRequest, getInterestRequests, markAsContacted, getInterestSummary)
+  - CreateInterestRequestDto e InterestFiltersDto para validação
+  - Endpoint público POST /shop/interest para registro de interesse
+  - Endpoints admin: GET /shop/admin/interest (list), GET /shop/admin/interest/summary (analytics), PATCH /shop/admin/interest/:id/contacted
+  - Validação de variantes por unidade
+  - Paginação com meta response
+  - Busca case-insensitive (customerName, customerPhone, studentName)
+  - Filtro por status (PENDENTE, CONTATADO, TODOS)
+  - Analytics: top 10 variantes mais procuradas (últimos 30 dias), contagem por status
+  - Integração com ShopModule (service registrado)
+  - Export de `ilike` em packages/db/src/index.ts
+  - ~300 linhas de código backend
+
+#### Módulo CEF SHOP - FASE 1 Concluída (09/01/2026)
+
+- **Database & Infrastructure** (`packages/db`)
+  - Schema completo com 9 tabelas shop: products, variants, inventory, ledger, orders, order_items, interest_requests, interest_items, settings
+  - 117 colunas totais com tipos apropriados (UUID, timestamps, enums, constraints)
+  - 38 índices para otimização (25 planejados + 13 adicionais do Drizzle)
+  - 17 foreign keys com cascades/restrições
+  - 5 enums: ProductCategory, OrderStatus, OrderSource, PaymentMethod, MovementType
+  - Isolamento multi-tenant por unit_id validado
+  - Constraint UNIQUE (variant_id, unit_id) para estoque por unidade
+
+- **Migration Customizada** (`packages/db/apply-shop-migration.js`)
+  - Script de 305 linhas com DDL direto (CREATE TABLE IF NOT EXISTS)
+  - Workaround para conflito do Drizzle Kit (0005_lazy_cassandra_nova.sql continha todas as tabelas)
+  - Execução bem-sucedida: 9 tabelas + 17 FKs + 25 índices
+  - Idempotente (pode re-executar sem erros)
+
+- **Seed de Produtos** (`packages/db/seeds/shop-seed.ts`)
+  - 6 produtos de teste: 2 UNIFORME_DIARIO, 2 UNIFORME_EDUCACAO_FISICA, 2 ACESSORIO
+  - 34 variantes (8 tamanhos para uniformes: 2,4,6,8,10,12,14,16; ÚNICO para acessórios)
+  - 34 entradas de estoque (random 5-50 unidades por variante)
+  - 1 configuração de loja (max 3x parcelas, instruções retirada)
+  - SKUs automáticos (padrão: `{PRODUCT}-{SIZE}`)
+  - Script reusável para reset de ambiente dev
+
+- **Testes de Isolamento** (`packages/db/test-shop-isolation.ts`)
+  - Validação de queries filtradas por unit_id
+  - Teste de constraint UNIQUE funcionando
+  - Verificação de 38 índices criados nas tabelas shop
+  - Nenhum vazamento cross-tenant detectado
+  - Script de 186 linhas com testes automatizados
+
+- **Documentação**
+  - MODULO_LOJA.md atualizado com FASE 1 completa
+  - Estatísticas de migration, seed e testes documentadas
+  - Notas técnicas sobre workaround Drizzle Kit
+  - Próxima fase: FASE 2 (Backend API Core) - shop.service.ts + controllers
 
 #### Modulo de Calendario Escolar
 
@@ -172,9 +230,12 @@ e o projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
 ### Corrigido
 
+- Corrige warning de images.domains no app loja-admin e adiciona logo.png no public.
 - Corrige erro 500 no proxy do planejamento ao definir `x-correlation-id` quando o middleware recebe resposta raw.
 - Alinha `GET /plannings/turmas` ao schema de turmas do banco para remover warning de Select sem `key`.
 - Ajusta ordem de imports e remove variáveis não usadas para eliminar warnings de lint.
+- Remove warnings de lint no modulo CEF Shop (API + apps loja/loja-admin/home) com ajustes de imports, hooks e tipagens.
+- Corrige erros de typecheck no modulo CEF Shop e payments (tipagens de Stripe e Drizzle).
 - Evita redirect para /login no app turmas quando unitId e nulo, usando /turmas como fallback.
 - **CRITICO**: Corrige permissoes de TODOS os endpoints de usuarios (GET, POST, PUT, DELETE) - agora `diretora_geral`, `gerente_unidade` e `gerente_financeiro` podem gerenciar usuarios (antes apenas `gerente_financeiro` conseguia)
 - Mostra diretora geral e gerente da unidade separadamente na lista de unidades (app escolas)
@@ -197,6 +258,11 @@ e o projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 - Corrige erros de typecheck no app turmas alinhando dependencias e configuracao TypeScript ao padrao do monorepo
 - Alinha configuracoes de ESLint, PostCSS e Next do app turmas ao padrao dos demais modulos
 - Corrige chamadas do app turmas para evitar /api duplicado no clientFetch e alinhar wrappers de API
+
+- Remove `shell: true` do helper `packages/db/apply-schema.js` para eliminar o warning DEP0190 no Node.
+- Normaliza logs do webhook de pagamentos e do job de expiracao para ASCII, evitando caracteres corrompidos no console.
+- Ajusta setup do Vitest para registrar matchers do Testing Library e estabilizar localStorage nos testes.
+- Move configuracao do ts-jest para o transform e silencia o warning TS151002 sem usar globals.
 
 ---
 

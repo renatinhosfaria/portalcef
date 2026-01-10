@@ -273,3 +273,38 @@ export type {
   Turma,
   Quinzena,
 } from "./plannings";
+
+// Shop schemas (CEF Shop module)
+export {
+  productCategorySchema,
+  orderStatusSchema,
+  orderSourceSchema,
+  paymentMethodSchema,
+  movementTypeSchema,
+  createProductVariantSchema,
+  createProductSchema,
+  updateProductSchema,
+  updateProductVariantSchema,
+  phoneSchema,
+  createOrderItemSchema,
+  createOrderSchema,
+  cancelOrderSchema,
+  markOrderPickedUpSchema,
+  createInterestItemSchema,
+  createInterestRequestSchema,
+  inventoryAdjustmentSchema,
+  updateShopSettingsSchema,
+  productListQuerySchema,
+  orderFilterQuerySchema,
+  interestRequestQuerySchema,
+  checkoutSchema,
+} from "./shop";
+export type {
+  CreateProductInput,
+  UpdateProductInput,
+  CreateOrderInput,
+  CreateInterestRequestInput,
+  InventoryAdjustmentInput,
+  ProductListQuery,
+  OrderFilterQuery,
+} from "./shop";

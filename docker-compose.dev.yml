@@ -121,6 +121,8 @@ services:
       - "3005:3005"  # Escolas
       - "3006:3006"  # Home
       - "3007:3007"  # Planejamento
+      - "3010:3010"  # Loja (Public Storefront)
+      - "3011:3011"  # Loja Admin
     # Load secrets from .env.docker file (optional - uses defaults if not present)
     env_file:
       - path: .env.docker

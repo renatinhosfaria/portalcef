@@ -778,3 +778,36 @@ Drizzle nao suporta rollback automatico. Para reverter:
 - [Drizzle ORM](https://orm.drizzle.team)
 - [PostgreSQL 16](https://www.postgresql.org/docs/16/)
 - [Drizzle Kit](https://orm.drizzle.team/kit-docs)
+
+---
+
+## Módulo Shop (Loja de Uniformes)
+
+### Tabelas do Shop
+
+Ver schema completo em `packages/db/src/schema/shop.ts`
+
+#### Principais Tabelas
+
+1. **shop_products**  Produtos (uniforme diário, ed.física, acessórios)
+2. **shop_product_variants**  Variantes (tamanhos PP-GG, 2-16)
+3. **shop_inventory**  Controle de estoque com reservas atômicas
+4. **shop_inventory_movements**  Ledger de auditoria
+5. **shop_orders**  Pedidos online e presenciais
+6. **shop_order_items**  Itens do pedido
+7. **shop_interest_requests**  Lista de interesse de clientes
+8. **shop_interest_items**  Variantes de interesse
+9. **shop_settings**  Configurações (max parcelas, instruções)
+
+#### Constraints Críticas
+
+- `shop_inventory`: UNIQUE (variant_id, unit_id)  Isolamento multi-tenant
+- `shop_inventory`: CHECK (quantity_available >= 0)  Estoque não negativo
+- `shop_orders`: UNIQUE (order_number)  Código de 6 dígitos único
+
+#### Índices de Performance
+
+- `idx_shop_orders_expires`  Usado pelo job de expiração
+- `idx_shop_inventory_available`  Filtro WHERE quantity_available > 0
+- `idx_shop_orders_unit`  Consultas admin por unidade
+

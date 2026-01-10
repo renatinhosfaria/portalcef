@@ -4,6 +4,8 @@ export * from "./planejamento.js";
 export * from "./role-groups.js";
 export * from "./schools.js";
 export * from "./sessions.js";
+export * from "./shop.js";
+export * from "./shop-relations.js";
 export * from "./turmas.js";
 export * from "./unit-stages.js";
 export * from "./units.js";

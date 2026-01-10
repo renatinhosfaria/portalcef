@@ -9,6 +9,7 @@ import {
   LayoutDashboard,
   LogOut,
   School,
+  ShoppingBag,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -17,7 +18,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { useTenant } from "@essencia/shared/providers/tenant";
 
-type ActivePage = "home" | "usuarios" | "escolas" | "turmas" | "planejamento" | "calendario";
+type ActivePage = "home" | "usuarios" | "escolas" | "turmas" | "planejamento" | "calendario" | "loja-admin";
 
 interface SidebarItemProps {
   icon: LucideIcon;
@@ -75,6 +76,8 @@ export function AppSidebar() {
         setActivePage("planejamento");
       } else if (port === "3002") {
         setActivePage("calendario");
+      } else if (port === "3011") {
+        setActivePage("loja-admin");
       }
     }
   }, []);
@@ -141,6 +144,12 @@ export function AppSidebar() {
           label="Calendário"
           href={`http://localhost:3002?data=${tenantPayload}`}
           active={activePage === "calendario"}
+        />
+        <SidebarItem
+          icon={ShoppingBag}
+          label="Loja"
+          href={`http://localhost:3011?data=${tenantPayload}`}
+          active={activePage === "loja-admin"}
         />
       </nav>
 

@@ -454,3 +454,221 @@ export class ApiExceptionFilter implements ExceptionFilter {
 - [OWASP Top 10](https://owasp.org/www-project-top-ten/)
 - [NestJS Security](https://docs.nestjs.com/security)
 - [Next.js Security](https://nextjs.org/docs/advanced-features/security-headers)
+
+---
+
+## Shop (Loja de Uniformes)
+
+### Endpoints Públicos
+
+Os endpoints públicos da loja (`/shop/*`) não requerem autenticação, mas possuem proteções específicas:
+
+| Endpoint | Proteção | Descrição |
+|----------|----------|-----------|
+| `GET /shop/catalog/:schoolId/:unitId` | Nenhuma | Catálogo público |
+| `POST /shop/orders` | Rate limiting | 5 pedidos/hora por IP |
+| `GET /shop/orders/:orderNumber` | Validação phone | Requer telefone do cliente |
+| `POST /shop/interest` | Nenhuma | Formulário de interesse |
+
+### Endpoints Administrativos
+
+Todos endpoints `/shop/admin/*` usam a cadeia completa de guards:
+
+```typescript
+@Controller('shop/admin')
+@UseGuards(AuthGuard, RolesGuard, TenantGuard)
+export class ShopAdminController {
+  // ...
+}
+```
+
+**Roles com Acesso:**
+- `master`  Acesso global (todas escolas)
+- `diretora_geral`  Todas unidades da escola
+- `gerente_unidade`  Apenas sua unidade
+- `gerente_financeiro`  Apenas sua unidade
+- `auxiliar_administrativo`  Apenas sua unidade
+
+### Multi-Tenant Isolation
+
+#### Regra Crítica de Isolamento
+
+**Estoque é isolado por `(variant_id, unit_id)`**
+
+```typescript
+//  CORRETO: Verifica unitId na sessão
+const unitId = req.user.unitId;
+const inventory = await this.inventoryService.getInventory(variantId, unitId);
+
+//  ERRADO: Aceita unitId do payload
+const unitId = req.body.unitId; // Cliente pode manipular!
+```
+
+#### Validação de Acesso
+
+```typescript
+// Em shop-inventory.service.ts
+async reserveStock(variantId: string, quantity: number, unitId: string) {
+  const inventory = await this.findOne({
+    where: { variant_id: variantId, unit_id: unitId } // Isola por unidade
+  });
+  
+  if (!inventory || inventory.quantity_available < quantity) {
+    throw new BadRequestException('Estoque insuficiente');
+  }
+  
+  // Atualização atômica com lock
+  const updated = await db.update(shopInventory)
+    .set({
+      quantity_available: sql`quantity_available - ${quantity}`,
+      quantity_reserved: sql`quantity_reserved + ${quantity}`
+    })
+    .where(and(
+      eq(shopInventory.variantId, variantId),
+      eq(shopInventory.unitId, unitId),
+      gte(shopInventory.quantityAvailable, quantity) // Race condition protection
+    ))
+    .returning();
+    
+  return updated[0];
+}
+```
+
+### Rate Limiting
+
+#### Criação de Pedidos
+
+Para prevenir abuse:
+
+```typescript
+@Post('orders')
+@Throttle(5, 3600) // 5 pedidos por hora
+async createOrder(@Body() dto: CreateOrderDto) {
+  // ...
+}
+```
+
+**Configuração:**
+- Limite: 5 pedidos
+- Janela: 1 hora (3600 segundos)
+- Identificação: IP do cliente
+- Resposta ao exceder: `429 Too Many Requests`
+
+### Validação de Dados
+
+#### Sanitização de Inputs
+
+Todos endpoints validam inputs com `class-validator`:
+
+```typescript
+export class CreateOrderDto {
+  @IsString()
+  @MinLength(3)
+  customerName: string;
+
+  @IsString()
+  @MinLength(10)
+  @MaxLength(20)
+  customerPhone: string;
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @ArrayMinSize(1)
+  items: OrderItemDto[];
+}
+```
+
+#### Prevenção de SQL Injection
+
+Drizzle ORM usa prepared statements automaticamente:
+
+```typescript
+//  Seguro
+const order = await db.select()
+  .from(shopOrders)
+  .where(eq(shopOrders.orderNumber, orderNumber));
+
+//  Nunca fazer (raw SQL sem sanitização)
+const order = await db.execute(
+  `SELECT * FROM shop_orders WHERE order_number = '${orderNumber}'`
+);
+```
+
+### Auditoria
+
+#### Ledger de Estoque
+
+Todas movimentações são registradas:
+
+```typescript
+await db.insert(shopInventoryMovements).values({
+  variantId,
+  unitId,
+  movementType: 'RESERVA',
+  quantity: -quantity,
+  balanceAfter: inventory.quantity_available - quantity,
+  reason: `Pedido ${orderNumber}`,
+  reference: orderId,
+  userId: userId || null,
+  createdAt: new Date()
+});
+```
+
+**Tipos de Movimentação:**
+- `ENTRADA`  Compra de fornecedor
+- `SAIDA`  Venda/retirada
+- `RESERVA`  Pedido criado
+- `LIBERACAO`  Pedido cancelado/expirado
+- `AJUSTE`  Inventário físico
+
+#### Cancelamento de Pedidos
+
+Apenas admin pode cancelar, com motivo obrigatório:
+
+```typescript
+async cancelOrder(orderId: string, userId: string, reason: string) {
+  // Valida permissão (admin only)
+  // Registra motivo do cancelamento
+  // Libera estoque
+  // Se já pago, inicia refund no Stripe
+  
+  this.logger.warn(`Order ${orderId} cancelled by ${userId}: ${reason}`);
+}
+```
+
+### Stripe Integration
+
+#### Secrets Management
+
+Chaves Stripe **nunca** são commitadas:
+
+```bash
+# .env (não versionado)
+STRIPE_SECRET_KEY=sk_live_xxx
+STRIPE_WEBHOOK_SECRET=whsec_xxx
+```
+
+#### Webhook Signature
+
+Validação obrigatória de webhooks:
+
+```typescript
+@Post('webhook')
+async handleWebhook(@Req() req: Request) {
+  const signature = req.headers['stripe-signature'];
+  
+  try {
+    const event = stripe.webhooks.constructEvent(
+      req.body,
+      signature,
+      process.env.STRIPE_WEBHOOK_SECRET
+    );
+    
+    // Processa evento
+  } catch (err) {
+    this.logger.error('Webhook signature verification failed');
+    throw new BadRequestException('Invalid signature');
+  }
+}
+```
+

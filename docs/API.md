@@ -1700,6 +1700,516 @@ Request → AuthGuard → RolesGuard → TenantGuard → Controller
 
 ---
 
+## Shop (Loja de Uniformes)
+
+### Endpoints Públicos
+
+#### GET `/shop/locations`
+
+Retorna lista de escolas e unidades disponiveis para a loja.
+
+**Autenticacao:** Nao requerida
+
+**Resposta 200:**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "uuid-escola",
+      "name": "Colegio Essencia Feliz",
+      "code": "essencia-feliz",
+      "units": [
+        {
+          "id": "uuid-unidade",
+          "name": "Unidade Santa Monica",
+          "code": "santa-monica"
+        }
+      ]
+    }
+  ]
+}
+```
+
+#### GET `/shop/catalog/:schoolId/:unitId`
+
+Retorna catálogo de produtos com estoque disponível.
+
+**Autenticação:** Não requerida
+
+**Parâmetros de Rota:**
+- `schoolId` (string, UUID) — ID da escola
+- `unitId` (string, UUID) — ID da unidade
+
+**Query Parameters:**
+- `category` (opcional) — Filtro por categoria: `UNIFORME_DIARIO`, `UNIFORME_EDUCACAO_FISICA`, `ACESSORIO`
+- `size` (opcional) — Filtro por tamanho: `PP`, `P`, `M`, `G`, `GG`, `2`, `4`, `6`, etc.
+- `inStock` (opcional, boolean) — Filtrar apenas produtos em estoque
+
+**Resposta 200:**
+```json
+{
+  "success": true,
+  "data": {
+    "products": [
+      {
+        "id": "uuid-produto",
+        "name": "Camisa Polo Essência",
+        "category": "UNIFORME_DIARIO",
+        "description": "Camisa polo manga curta",
+        "imageUrl": "https://minio.../camisa-polo.jpg",
+        "variants": [
+          {
+            "id": "uuid-variante",
+            "size": "M",
+            "price": 8500,
+            "availableQuantity": 25
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+#### POST `/shop/orders`
+
+Cria novo pedido (checkout).
+
+**Autenticação:** Não requerida
+
+**Rate Limiting:** 5 pedidos por hora por IP
+
+**Body:**
+```json
+{
+  "schoolId": "uuid-escola",
+  "unitId": "uuid-unidade",
+  "customerName": "João Silva",
+  "customerPhone": "11987654321",
+  "customerEmail": "joao@email.com",
+  "items": [
+    {
+      "variantId": "uuid-variante",
+      "studentName": "Maria Silva",
+      "quantity": 2
+    }
+  ],
+  "installments": 3
+}
+```
+
+**Resposta 201:**
+```json
+{
+  "success": true,
+  "data": {
+    "orderId": "uuid-pedido",
+    "orderNumber": "ABC123",
+    "total": 17000,
+    "paymentIntentClientSecret": "pi_xxx_secret_yyy",
+    "expiresAt": "2026-01-09T15:30:00Z"
+  }
+}
+```
+
+**Erros:**
+- `400` — Validação falhou (ex: estoque insuficiente)
+- `429` — Limite de pedidos excedido
+
+#### GET `/shop/orders/:orderNumber`
+
+Consulta pedido existente por orderNumber.
+
+**Autenticação:** Não requerida (mas requer phone para validação)
+
+**Query Parameters:**
+- `phone` (required) — Telefone do cliente (validação)
+
+**Resposta 200:**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid",
+    "orderNumber": "ABC123",
+    "customerName": "João Silva",
+    "total": 17000,
+    "status": "PAGO",
+    "createdAt": "2026-01-09T14:00:00Z",
+    "items": [
+      {
+        "variantSize": "M",
+        "productName": "Camisa Polo",
+        "studentName": "Maria Silva",
+        "quantity": 2,
+        "unitPrice": 8500
+      }
+    ]
+  }
+}
+```
+
+**Erros:**
+- `404` — Pedido não encontrado
+- `403` — Telefone não corresponde
+
+#### POST `/shop/interest`
+
+Registra interesse em produtos sem estoque.
+
+**Autenticação:** Não requerida
+
+**Body:**
+```json
+{
+  "schoolId": "uuid-escola",
+  "unitId": "uuid-unidade",
+  "customerName": "João Silva",
+  "customerPhone": "11987654321",
+  "customerEmail": "joao@email.com",
+  "studentName": "Maria Silva",
+  "studentClass": "Infantil 3A",
+  "notes": "Interesse em tamanho G",
+  "items": [
+    {
+      "variantId": "uuid-variante",
+      "quantity": 1
+    }
+  ]
+}
+```
+
+**Resposta 201:**
+```json
+{
+  "success": true,
+  "data": {
+    "requestId": "uuid",
+    "message": "Obrigado! Entraremos em contato assim que os produtos estiverem disponíveis."
+  }
+}
+```
+
+---
+
+### Endpoints Administrativos
+
+Todos os endpoints administrativos requerem autenticação e guards:
+- **AuthGuard** — Verifica sessão válida
+- **RolesGuard** — Valida roles permitidas
+- **TenantGuard** — Isola por schoolId/unitId
+
+**Roles com Acesso:**
+- `master` — Acesso global
+- `diretora_geral` — Todas unidades da escola
+- `gerente_unidade` — Apenas sua unidade
+- `gerente_financeiro` — Apenas sua unidade
+- `auxiliar_administrativo` — Apenas sua unidade
+
+#### GET `/shop/admin/products`
+
+Lista produtos da unidade.
+
+**Query Parameters:**
+- `page` (int, default: 1)
+- `limit` (int, default: 20)
+- `category` (opcional)
+
+**Resposta 200:**
+```json
+{
+  "success": true,
+  "data": [...],
+  "meta": {
+    "pagination": {
+      "page": 1,
+      "limit": 20,
+      "total": 45,
+      "totalPages": 3,
+      "hasNext": true,
+      "hasPrev": false
+    }
+  }
+}
+```
+
+#### POST `/shop/admin/products`
+
+Cria novo produto.
+
+**Body:**
+```json
+{
+  "name": "Camisa Polo",
+  "category": "UNIFORME_DIARIO",
+  "description": "Camisa polo manga curta",
+  "schoolId": "uuid-escola",
+  "unitId": "uuid-unidade",
+  "variants": [
+    { "size": "M", "price": 8500 },
+    { "size": "G", "price": 8500 }
+  ]
+}
+```
+
+**Resposta 201:**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid-produto",
+    "name": "Camisa Polo",
+    "variants": [...]
+  }
+}
+```
+
+#### PATCH `/shop/admin/products/:id`
+
+Atualiza produto existente.
+
+#### DELETE `/shop/admin/products/:id`
+
+Remove produto (soft delete se houver movimentações).
+
+#### POST `/shop/admin/products/:id/image`
+
+Upload de imagem do produto (MinIO).
+
+**Body:** `multipart/form-data`
+- `file` — Arquivo de imagem (max 5MB)
+
+**Resposta 200:**
+```json
+{
+  "success": true,
+  "data": {
+    "imageUrl": "https://minio.essencia.edu.br/shop/produto-123.jpg"
+  }
+}
+```
+
+#### GET `/shop/admin/inventory`
+
+Lista inventário com estoque atual.
+
+**Query Parameters:**
+- `variantId` (opcional) — Filtrar por variante
+
+#### POST `/shop/admin/inventory/entry`
+
+Registra entrada de estoque.
+
+**Body:**
+```json
+{
+  "variantId": "uuid-variante",
+  "quantity": 50,
+  "reason": "Compra fornecedor X",
+  "reference": "NF-12345"
+}
+```
+
+#### POST `/shop/admin/inventory/adjust`
+
+Ajusta estoque manualmente (inventário físico).
+
+**Body:**
+```json
+{
+  "variantId": "uuid-variante",
+  "newQuantity": 45,
+  "reason": "Inventário físico - 5 peças danificadas"
+}
+```
+
+#### GET `/shop/admin/orders`
+
+Lista pedidos da unidade.
+
+**Query Parameters:**
+- `page`, `limit` — Paginação
+- `status` — Filtro: `AGUARDANDO_PAGAMENTO`, `PAGO`, `RETIRADO`, `CANCELADO`, `EXPIRADO`
+- `search` — Busca por orderNumber, customerName, customerPhone
+
+**Resposta 200:**
+```json
+{
+  "success": true,
+  "data": [...],
+  "meta": { "pagination": {...} }
+}
+```
+
+#### PATCH `/shop/admin/orders/:id/pickup`
+
+Marca pedido como RETIRADO.
+
+**Resposta 200:**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid",
+    "status": "RETIRADO",
+    "pickedUpAt": "2026-01-09T16:00:00Z",
+    "pickedUpBy": "uuid-usuario"
+  }
+}
+```
+
+#### PATCH `/shop/admin/orders/:id/cancel`
+
+Cancela pedido (apenas admin).
+
+**Body:**
+```json
+{
+  "reason": "Pedido duplicado"
+}
+```
+
+**Resposta 200:**
+```json
+{
+  "success": true,
+  "data": { "message": "Pedido cancelado com sucesso" }
+}
+```
+
+#### POST `/shop/admin/orders/presential`
+
+Registra venda presencial.
+
+**Body:**
+```json
+{
+  "customerName": "João Silva",
+  "customerPhone": "11987654321",
+  "paymentMethod": "DINHEIRO",
+  "items": [
+    {
+      "variantId": "uuid-variante",
+      "studentName": "Maria Silva",
+      "quantity": 2
+    }
+  ]
+}
+```
+
+**Resposta 201:**
+```json
+{
+  "success": true,
+  "data": {
+    "orderId": "uuid",
+    "orderNumber": "PRE001",
+    "total": 17000
+  }
+}
+```
+
+#### GET `/shop/admin/interest`
+
+Lista requisições de interesse.
+
+**Query Parameters:**
+- `status` — `PENDENTE`, `CONTATADO`, `TODOS`
+- `search` — Busca por nome/telefone
+- `page`, `limit` — Paginação
+
+**Resposta 200:**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "uuid",
+      "customerName": "João Silva",
+      "customerPhone": "11987654321",
+      "studentName": "Maria Silva",
+      "status": "PENDENTE",
+      "createdAt": "2026-01-09T10:00:00Z",
+      "items": [...]
+    }
+  ],
+  "meta": { "pagination": {...} }
+}
+```
+
+#### PATCH `/shop/admin/interest/:id/contacted`
+
+Marca interesse como CONTATADO.
+
+**Resposta 200:**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid",
+    "status": "CONTATADO",
+    "contactedAt": "2026-01-09T16:00:00Z",
+    "contactedBy": "uuid-usuario"
+  }
+}
+```
+
+#### GET `/shop/admin/interest/summary`
+
+Resumo analítico de interesse.
+
+**Resposta 200:**
+```json
+{
+  "success": true,
+  "data": {
+    "topVariants": [
+      {
+        "variantId": "uuid",
+        "productName": "Camisa Polo",
+        "variantSize": "M",
+        "totalQuantity": 25,
+        "requestCount": 12
+      }
+    ],
+    "statusCounts": {
+      "PENDENTE": 8,
+      "CONTATADO": 15
+    }
+  }
+}
+```
+
+#### GET `/shop/admin/settings`
+
+Retorna configurações da loja.
+
+**Resposta 200:**
+```json
+{
+  "success": true,
+  "data": {
+    "maxInstallments": 12,
+    "pickupInstructions": "Retirada na secretaria, de segunda a sexta, das 8h às 17h."
+  }
+}
+```
+
+#### PATCH `/shop/admin/settings`
+
+Atualiza configurações.
+
+**Body:**
+```json
+{
+  "maxInstallments": 6,
+  "pickupInstructions": "Nova instrução..."
+}
+```
+
+---
+
 ## Exemplos cURL
 
 ### Login

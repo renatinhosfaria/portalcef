@@ -261,3 +261,6 @@ export {
 } from "./calendar";
 
 export * from "./turma-extended";
+
+// Shop types (CEF Shop module)
+export * from "./shop";
