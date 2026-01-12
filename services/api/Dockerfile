@@ -38,8 +38,8 @@ COPY package.json pnpm-workspace.yaml turbo.json ./
 # Enable corepack for pnpm
 RUN corepack enable && corepack prepare pnpm@9.15.1 --activate
 
-# Build the app
-RUN pnpm --filter @essencia/api build
+# Build the app using Turbo to ensure dependencies are built
+RUN pnpm turbo build --filter=@essencia/api
 
 # =============================================================================
 # Stage 3: Runner
