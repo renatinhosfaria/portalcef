@@ -45,48 +45,43 @@ export default function DashboardPage() {
     try {
       setLoading(true);
 
-      // TODO: Call real API /api/shop/admin/dashboard
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // TODO: Implementar API /api/shop/admin/dashboard no backend
+      const response = await fetch('/api/shop/admin/dashboard');
+      
+      if (!response.ok) {
+        console.warn('API de dashboard não disponível:', response.status);
+        setStats({
+          pendingPickups: 0,
+          lowStockAlerts: 0,
+          salesToday: { count: 0, total: 0 },
+          salesWeek: { count: 0, total: 0 },
+          pendingInterests: 0,
+        });
+        setRecentOrders([]);
+        return;
+      }
+      
+      const result = await response.json();
 
-      setStats({
-        pendingPickups: 12,
-        lowStockAlerts: 5,
-        salesToday: { count: 8, total: 125000 },
-        salesWeek: { count: 42, total: 685000 },
-        pendingInterests: 15,
+      setStats(result.data.stats || {
+        pendingPickups: 0,
+        lowStockAlerts: 0,
+        salesToday: { count: 0, total: 0 },
+        salesWeek: { count: 0, total: 0 },
+        pendingInterests: 0,
       });
 
-      setRecentOrders([
-        {
-          id: '1',
-          orderNumber: '234567',
-          customerName: 'Maria Silva',
-          studentName: 'João Silva',
-          totalAmount: 13500,
-          status: 'PAGO',
-          createdAt: new Date().toISOString(),
-        },
-        {
-          id: '2',
-          orderNumber: '234566',
-          customerName: 'Carlos Santos',
-          studentName: 'Ana Santos',
-          totalAmount: 9000,
-          status: 'PAGO',
-          createdAt: new Date(Date.now() - 3600000).toISOString(),
-        },
-        {
-          id: '3',
-          orderNumber: '234565',
-          customerName: 'Ana Costa',
-          studentName: 'Pedro Costa',
-          totalAmount: 22500,
-          status: 'RETIRADO',
-          createdAt: new Date(Date.now() - 7200000).toISOString(),
-        },
-      ]);
+      setRecentOrders(result.data.recentOrders || []);
     } catch (err) {
-      console.error('Error loading dashboard:', err);
+      console.warn('Não foi possível carregar dashboard. API ainda não implementada?', err);
+      setStats({
+        pendingPickups: 0,
+        lowStockAlerts: 0,
+        salesToday: { count: 0, total: 0 },
+        salesWeek: { count: 0, total: 0 },
+        pendingInterests: 0,
+      });
+      setRecentOrders([]);
     } finally {
       setLoading(false);
     }

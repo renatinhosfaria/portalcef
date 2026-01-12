@@ -45,14 +45,14 @@ export class PaymentsService {
    */
   async createPaymentIntent(
     amount: number,
-    metadata: {
+    metadata: Partial<{
       orderId: string;
       orderNumber: string;
       schoolId: string;
       unitId: string;
       customerName: string;
       customerPhone: string;
-    },
+    }>,
     installments: number = 1,
   ): Promise<{ clientSecret: string; paymentIntentId: string }> {
     try {
@@ -80,15 +80,10 @@ export class PaymentsService {
         amount,
         currency: "brl",
         payment_method_types: ["card"], // PIX será adicionado em FASE 4 (requer configuração extra)
-        metadata: {
-          orderId: metadata.orderId,
-          orderNumber: metadata.orderNumber,
-          schoolId: metadata.schoolId,
-          unitId: metadata.unitId,
-          customerName: metadata.customerName,
-          customerPhone: metadata.customerPhone,
-        },
-        description: `Pedido ${metadata.orderNumber} - CEF Shop`,
+        metadata: metadata as Stripe.MetadataParam,
+        description: metadata.orderNumber
+          ? `Pedido ${metadata.orderNumber} - CEF Shop`
+          : `Pedido Temporário - CEF Shop`,
         receipt_email: undefined, // TODO: adicionar se customer tiver email
       };
 
@@ -258,6 +253,32 @@ export class PaymentsService {
         errorStack,
       );
       // Nǜo lan��ar exce��ǜo aqui - cancelamento Ǹ best-effort
+    }
+  }
+
+  /**
+   * Atualiza metadata do PaymentIntent
+   */
+  async updatePaymentIntent(
+    paymentIntentId: string,
+    metadata: Stripe.MetadataParam,
+  ): Promise<void> {
+    try {
+      await this.stripe.paymentIntents.update(paymentIntentId, {
+        metadata,
+        description: metadata.orderNumber
+          ? `Pedido ${metadata.orderNumber} - CEF Shop`
+          : undefined,
+      });
+      this.logger.log(
+        `PaymentIntent ${paymentIntentId} atualizado com sucesso`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Erro ao atualizar PaymentIntent ${paymentIntentId}:`,
+        error,
+      );
+      throw error;
     }
   }
 

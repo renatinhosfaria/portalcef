@@ -3,80 +3,80 @@
 @tailwind utilities;
 
 @layer components {
-  /* Page Headers - seguindo padrão dos outros módulos */
+  /* Page Headers */
   .page-header {
     @apply mb-8;
   }
-  
+
   .page-title {
-    @apply text-3xl font-bold text-slate-800 tracking-tight;
+    @apply text-2xl font-semibold text-slate-800 tracking-tight;
   }
-  
+
   .page-subtitle {
     @apply text-slate-500 mt-1;
   }
 
-  /* Stat Cards - adaptado para o estilo verde do portal */
+  /* Stat Cards - Clean Design */
   .stat-card {
-    @apply bg-white/80 backdrop-blur-sm rounded-2xl p-6 border border-slate-200/60 shadow-sm transition-all duration-200 hover:shadow-md hover:-translate-y-0.5;
+    @apply bg-white rounded-lg p-6 border border-slate-200 shadow-sm transition-all duration-150 hover:border-slate-300;
   }
 
   .stat-card-icon {
-    @apply w-12 h-12 rounded-xl flex items-center justify-center text-xl;
+    @apply w-10 h-10 rounded-lg flex items-center justify-center;
   }
 
   .stat-card-value {
-    @apply text-3xl font-bold text-slate-800 leading-tight;
+    @apply text-2xl font-semibold text-slate-800 leading-tight tabular-nums;
   }
 
   .stat-card-label {
     @apply text-sm font-medium text-slate-500;
   }
 
-  /* Data Tables - estilo consistente */
+  /* Data Tables */
   .data-table {
-    @apply w-full border-collapse bg-white/80 backdrop-blur-sm rounded-2xl overflow-hidden shadow-sm border border-slate-200/60;
+    @apply w-full border-collapse bg-white rounded-lg overflow-hidden border border-slate-200;
   }
 
   .data-table thead {
-    @apply bg-slate-50/80;
+    @apply bg-slate-50;
   }
 
   .data-table th {
-    @apply px-6 py-4 text-left font-semibold text-slate-600 text-sm uppercase tracking-wider;
+    @apply px-4 py-3 text-left font-medium text-slate-600 text-xs uppercase tracking-wider;
   }
 
   .data-table td {
-    @apply px-6 py-4 border-t border-slate-100 text-slate-700;
+    @apply px-4 py-3 border-t border-slate-100 text-slate-700 text-sm;
   }
 
   .data-table tbody tr {
-    @apply transition-colors duration-150;
+    @apply transition-colors duration-100;
   }
 
   .data-table tbody tr:hover {
-    @apply bg-slate-50/50;
+    @apply bg-slate-50;
   }
 
-  /* Status Badges - cores do sistema */
+  /* Status Badges */
   .badge {
-    @apply inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wide;
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium;
   }
 
   .badge-success {
-    @apply bg-[#A3D154]/20 text-[#5a7a1f];
+    @apply bg-[#A3D154]/15 text-[#5a7a1f];
   }
 
   .badge-warning {
-    @apply bg-amber-100 text-amber-700;
+    @apply bg-amber-50 text-amber-700;
   }
 
   .badge-danger {
-    @apply bg-red-100 text-red-700;
+    @apply bg-red-50 text-red-700;
   }
 
   .badge-info {
-    @apply bg-blue-100 text-blue-700;
+    @apply bg-blue-50 text-blue-700;
   }
 
   .badge-neutral {
@@ -85,41 +85,48 @@
 
   /* Admin Card */
   .admin-card {
-    @apply bg-white/80 backdrop-blur-sm rounded-2xl border border-slate-200/60 shadow-sm overflow-hidden;
+    @apply bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden;
   }
 
   .admin-card-header {
-    @apply flex items-center justify-between px-6 py-4 border-b border-slate-100;
+    @apply flex items-center justify-between px-4 py-3 border-b border-slate-100;
   }
 
   .admin-card-title {
-    @apply text-lg font-semibold text-slate-800;
+    @apply text-base font-semibold text-slate-800;
   }
 
   .admin-card-body {
-    @apply p-6;
+    @apply p-4;
   }
 
   /* Form elements */
   .form-label {
-    @apply block text-sm font-medium text-slate-700 mb-2;
+    @apply block text-sm font-medium text-slate-700 mb-1.5;
   }
 
   .form-input {
-    @apply w-full h-11 px-4 rounded-xl border border-slate-200 bg-white focus:border-[#A3D154] focus:ring-2 focus:ring-[#A3D154]/20 outline-none transition-all;
+    @apply w-full h-10 px-3 rounded-lg border border-slate-200 bg-white
+    focus:border-[#A3D154] focus:ring-2 focus:ring-[#A3D154]/20 outline-none transition-colors duration-150;
   }
 
   .form-select {
-    @apply w-full h-11 px-4 rounded-xl border border-slate-200 bg-white focus:border-[#A3D154] focus:ring-2 focus:ring-[#A3D154]/20 outline-none transition-all appearance-none cursor-pointer;
+    @apply w-full h-10 px-3 rounded-lg border border-slate-200 bg-white
+    focus:border-[#A3D154] focus:ring-2 focus:ring-[#A3D154]/20 outline-none transition-colors duration-150 appearance-none cursor-pointer;
   }
 
-  /* Botões Admin */
+  .form-textarea {
+    @apply w-full px-3 py-2 rounded-lg border border-slate-200 bg-white
+    focus:border-[#A3D154] focus:ring-2 focus:ring-[#A3D154]/20 outline-none transition-colors duration-150 resize-none;
+  }
+
+  /* Buttons Admin */
   .btn-admin {
-    @apply inline-flex items-center justify-center gap-2 font-medium rounded-xl px-4 py-2.5 transition-all duration-200;
+    @apply inline-flex items-center justify-center gap-2 font-medium rounded-lg px-4 py-2 transition-colors duration-150;
   }
 
   .btn-admin-primary {
-    @apply bg-[#A3D154] text-white hover:bg-[#8FBD3F] shadow-sm hover:shadow;
+    @apply bg-[#A3D154] text-white hover:bg-[#8FBD3F];
   }
 
   .btn-admin-secondary {
@@ -140,28 +147,62 @@
 
   /* Loading spinner */
   .loading-spinner-admin {
-    @apply w-8 h-8 border-4 border-slate-200 border-t-[#A3D154] rounded-full animate-spin;
+    @apply w-6 h-6 border-2 border-slate-200 border-t-[#A3D154] rounded-full animate-spin;
+  }
+
+  .loading-spinner-admin-lg {
+    @apply w-8 h-8 border-3 border-slate-200 border-t-[#A3D154] rounded-full animate-spin;
   }
 
   /* Filter bar */
   .filter-bar {
-    @apply flex flex-wrap gap-4 p-4 bg-white/60 backdrop-blur-sm rounded-2xl border border-slate-200/60 mb-6;
+    @apply flex flex-wrap gap-3 p-3 bg-slate-50 rounded-lg border border-slate-200 mb-4;
   }
 
   /* Empty state */
   .empty-state {
-    @apply flex flex-col items-center justify-center py-16 text-center;
+    @apply flex flex-col items-center justify-center py-12 text-center;
   }
 
   .empty-state-icon {
-    @apply text-6xl mb-4;
+    @apply w-12 h-12 text-slate-300 mb-3;
   }
 
   .empty-state-title {
-    @apply text-xl font-semibold text-slate-800 mb-2;
+    @apply text-lg font-medium text-slate-800 mb-1;
   }
 
   .empty-state-description {
-    @apply text-slate-500 max-w-md;
+    @apply text-sm text-slate-500 max-w-sm;
+  }
+
+  /* Modal Backdrop */
+  .modal-backdrop {
+    @apply fixed inset-0 bg-black/40 transition-opacity duration-200;
+  }
+
+  .modal-content {
+    @apply bg-white rounded-lg shadow-lg border border-slate-200;
+  }
+
+  /* Alert boxes */
+  .alert {
+    @apply flex items-start gap-3 p-3 rounded-lg text-sm;
+  }
+
+  .alert-info {
+    @apply bg-blue-50 text-blue-800 border border-blue-100;
+  }
+
+  .alert-warning {
+    @apply bg-amber-50 text-amber-800 border border-amber-100;
+  }
+
+  .alert-success {
+    @apply bg-[#A3D154]/10 text-[#5a7a1f] border border-[#A3D154]/20;
+  }
+
+  .alert-danger {
+    @apply bg-red-50 text-red-800 border border-red-100;
   }
 }

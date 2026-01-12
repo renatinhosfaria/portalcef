@@ -24,17 +24,17 @@ import { UsersModule } from "./modules/users/users.module";
       isGlobal: true,
       envFilePath: ["../../.env", ".env.local", ".env"],
     }),
-    // Rate Limiting
+    // Rate Limiting - Desabilitado em dev (limites muito altos)
     ThrottlerModule.forRoot([
       {
         name: "default",
         ttl: 60000, // 1 minuto
-        limit: 20, // 20 requisições por minuto (padrão global)
+        limit: 10000, // 10000 requisições por minuto (praticamente desabilitado em dev)
       },
       {
         name: "strict",
         ttl: 3600000, // 1 hora
-        limit: 5, // 5 requisições por hora (para endpoints críticos)
+        limit: 1000, // 1000 requisições por hora (desabilitado em dev)
       },
     ]),
     HealthModule,

@@ -1,6 +1,13 @@
 /**
- * Script para popular o calendário escolar 2026 com os eventos
- * extraídos da imagem do calendário oficial da escola.
+ * ⚠️ SCRIPT DE SEED OPCIONAL - Calendário Escolar 2026
+ * 
+ * Este script popula o banco de dados com os eventos do calendário escolar de 2026.
+ * Extraído da imagem do calendário oficial da escola.
+ * 
+ * ⚠️ ATENÇÃO: Este é um script de dados de exemplo/seed.
+ * Execute apenas se desejar popular o banco com dados de teste/exemplo.
+ * 
+ * Para executar: node packages/db/seed-calendar-2026.js
  * 
  * Legenda de cores:
  * - Azul = Início ou término do semestre

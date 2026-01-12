@@ -9,53 +9,32 @@ Este documento descreve a arquitetura tecnica do Portal Digital Colegio Essencia
 O sistema segue uma arquitetura de **monorepo** com separacao clara entre frontend (Next.js apps), backend (NestJS API) e pacotes compartilhados. A comunicacao entre camadas e feita exclusivamente via HTTP/REST.
 
 ```
-┌──────────────────────────────────────────────────────────────────────┐
-│                         FRONTEND LAYER                               │
-│  ┌─────────┐ ┌─────────┐ ┌──────────┐ ┌─────────┐ ┌────────┐ ┌──────┐ │
-│  │  Home   │ │  Login  │ │ Usuarios │ │ Escolas │ │ Turmas │ │Planej│ │
-│  │ :3000   │ │ :3003   │ │  :3004   │ │  :3005  │ │ :3006  │ │:3007 │ │
-│  └────┬────┘ └────┬────┘ └────┬─────┘ └────┬────┘ └───┬────┘ └──┬───┘ │
-│       │           │           │            │           │          │    │
-│       └───────────┴───────────┴────────────┴───────────┴──────────┘    │
-│                               │                                         │
-│                         HTTP/REST                                       │
-│                               │                                         │
-└───────────────────────────────┼─────────────────────────────────────────┘
-                                │
-┌───────────────────────────────┼──────────────────────────────────┐
-│                         BACKEND LAYER                            │
-│                               │                                  │
-│  ┌────────────────────────────▼─────────────────────────────┐   │
-│  │                    NestJS API :3001                       │   │
-│  │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  │   │
-│  │  │   Auth   │  │  Users   │  │ Schools  │  │Plannings │  │   │
-│  │  │  Module  │  │  Module  │  │  Module  │  │  Module  │  │   │
-│  │  └──────────┘  └──────────┘  └──────────┘  └──────────┘  │   │
-│  │                                                           │   │
-│  │  ┌──────────┐  ┌──────────┐  ┌──────────┐               │   │
-│  │  │  Units   │  │  Stats   │  │  Health  │               │   │
-│  │  │  Module  │  │  Module  │  │  Module  │               │   │
-│  │  └──────────┘  └──────────┘  └──────────┘               │   │
-│  └──────────────────────────────────────────────────────────┘   │
-│                               │                                  │
-└───────────────────────────────┼──────────────────────────────────┘
-                                │
-┌───────────────────────────────┼──────────────────────────────────┐
-│                        DATA LAYER                                │
-│       ┌───────────────────────┴────────────────────────┐        │
-│       │                                                 │        │
-│  ┌────▼─────┐                                   ┌──────▼─────┐  │
-│  │PostgreSQL│                                   │   Redis    │  │
-│  │   :5432  │                                   │   :6379    │  │
-│  │          │                                   │            │  │
-│  │  Tables  │                                   │  Sessions  │  │
-│  │  - users │                                   │  Cache     │  │
-│  │  - schools                                   │  Rate Limit│  │
-│  │  - units │                                   │            │  │
-│  │  - plannings                                 │            │  │
-│  │  - sessions                                  │            │  │
-│  └──────────┘                                   └────────────┘  │
-└─────────────────────────────────────────────────────────────────┘
+Frontend (Next.js)
+  - home :3000
+  - calendario :3002
+  - login :3003
+  - usuarios :3004
+  - escolas :3005
+  - turmas :3006
+  - planejamento :3007
+  - loja :3010
+  - loja-admin :3011
+
+        |
+        |  HTTP/REST
+        v
+
+Backend (NestJS API) :3001
+  - auth, users, schools, units, stages, turmas, plannings
+  - calendar, shop, payments, stats, setup, health, storage
+
+        |
+        v
+
+Data Layer
+  - PostgreSQL :5432
+  - Redis :6379
+  - MinIO (opcional) :9000/9001
 ```
 
 ---
@@ -67,9 +46,9 @@ O sistema segue uma arquitetura de **monorepo** com separacao clara entre fronte
 | Tecnologia     | Versao | Proposito                  |
 | -------------- | ------ | -------------------------- |
 | **Node.js**    | 22+    | Runtime JavaScript         |
-| **TypeScript** | 5.7+   | Tipagem estatica           |
-| **pnpm**       | 9.15+  | Gerenciador de pacotes     |
-| **Turborepo**  | 2.3+   | Build system para monorepo |
+| **TypeScript** | 5.7.2  | Tipagem estatica           |
+| **pnpm**       | 9.15.1 | Gerenciador de pacotes     |
+| **Turborepo**  | 2.3.3  | Build system para monorepo |
 
 ### Frontend
 
@@ -77,21 +56,22 @@ O sistema segue uma arquitetura de **monorepo** com separacao clara entre fronte
 | ------------------- | ------ | ---------------------------- |
 | **Next.js**         | 15.1.0 | Framework React (App Router) |
 | **React**           | 19.0.0 | Biblioteca UI                |
-| **Tailwind CSS**    | 3.4+   | Estilizacao utility-first    |
+| **Tailwind CSS**    | 3.4.17 | Estilizacao utility-first    |
 | **shadcn/ui**       | -      | Componentes UI               |
-| **React Hook Form** | 7.69+  | Gerenciamento de formularios |
-| **Zod**             | 3.24+  | Validacao de schemas         |
-| **Framer Motion**   | 12+    | Animacoes                    |
+| **React Hook Form** | 7.54+  | Gerenciamento de formularios |
+| **Zod**             | 3.23+  | Validacao de schemas         |
+| **Framer Motion**   | 12.23+ | Animacoes                    |
 
 ### Backend
 
 | Tecnologia      | Versao | Proposito         |
 | --------------- | ------ | ----------------- |
-| **NestJS**      | 10.4+  | Framework backend |
-| **Fastify**     | 4.28+  | HTTP server       |
-| **Drizzle ORM** | 0.38+  | ORM type-safe     |
-| **ioredis**     | 5.4+   | Cliente Redis     |
-| **bcrypt**      | 5.1+   | Hashing de senhas |
+| **NestJS**      | 10.4.15 | Framework backend |
+| **Fastify**     | 4.28.1  | HTTP server       |
+| **Drizzle ORM** | 0.38.2  | ORM type-safe     |
+| **ioredis**     | 5.4.2   | Cliente Redis     |
+| **bcrypt**      | 5.1.1   | Hashing de senhas |
+| **Stripe**      | 20.1.2  | Pagamentos (Shop) |
 
 ### Infraestrutura
 
@@ -100,7 +80,8 @@ O sistema segue uma arquitetura de **monorepo** com separacao clara entre fronte
 | **PostgreSQL** | 16     | Banco de dados relacional |
 | **Redis**      | 7      | Cache e sessoes           |
 | **Docker**     | -      | Containerizacao           |
-| **Traefik**    | -      | Reverse proxy (producao)  |
+| **MinIO**      | -      | Storage de arquivos (opcional) |
+| **Traefik**    | -      | Reverse proxy (producao, nao versionado no repo) |
 
 ---
 
@@ -112,73 +93,43 @@ Aplicacoes Next.js independentes, cada uma servindo um modulo especifico do sist
 
 ```
 apps/
-├── home/              # Portal publico (:3000)
-│   ├── app/           # App Router pages
-│   ├── components/    # Componentes locais
-│   └── package.json
-│
-├── login/             # Autenticacao (:3003)
-│   ├── app/
-│   └── package.json
-│
-├── usuarios/          # Gestao de usuarios (:3004)
-│   ├── app/
-│   └── package.json
-│
-├── escolas/           # Gestao de escolas/unidades (:3005)
-│   ├── app/
-│   └── package.json
-│
-├── turmas/            # Gestao de turmas (:3006)
-│   ├── app/
-│   ├── components/
-│   │   ├── turmas-list.tsx
-│   │   ├── turma-card.tsx
-│   │   └── turma-form.tsx
-│   ├── lib/
-│   │   └── api.ts
-│   └── package.json
-│
-├── calendario/        # Calendario escolar (:3002)
-│   ├── app/
-│   │   ├── page.tsx           # Calendario view
-│   │   └── api/[...path]/     # Proxy para API
-│   ├── features/
-│   │   └── calendar/
-│   │       ├── components/    # CalendarView, EventForm, etc
-│   │       └── hooks/         # use-calendar-events, mutations
-│   ├── lib/
-│   │   ├── api.ts
-│   │   └── utils.ts
-│   └── package.json
-│
-└── planejamento/      # Planejamento pedagogico (:3007)
-    ├── app/
-    │   ├── page.tsx           # Dashboard
-    │   ├── api/pdf/           # PDF generation
-    │   └── planejamentos/
-    │       ├── novo/          # Wizard
-    │       └── preview/       # Preview
-    ├── features/              # Feature modules
-    │   ├── wizard/            # Wizard de criacao
-    │   │   ├── components/
-    │   │   │   ├── step-forms/
-    │   │   │   ├── wizard-container.tsx
-    │   │   │   ├── wizard-stepper.tsx
-    │   │   │   └── checklist-gatekeeper.tsx
-    │   │   ├── hooks/
-    │   │   │   ├── use-auto-save.ts
-    │   │   │   └── use-server-auto-save.ts
-    │   │   ├── schemas.ts
-    │   │   ├── constants.ts
-    │   │   └── actions.ts
-    │   ├── dashboard/         # Dashboard metricas
-    │   │   ├── components/
-    │   │   └── utils/
-    │   ├── preview/           # Preview planejamento
-    │   ├── regencia/          # Diario de regencia
-    │   └── pdf-templates/     # Templates PDF
-    └── package.json
++-- home/               # Portal publico (:3000)
+|   +-- app/
+|   +-- components/
+|   +-- package.json
++-- calendario/         # Calendario escolar (:3002)
+|   +-- app/
+|   +-- features/
+|   +-- lib/
+|   +-- package.json
++-- login/              # Autenticacao (:3003)
+|   +-- app/
+|   +-- package.json
++-- usuarios/           # Gestao de usuarios (:3004)
+|   +-- app/
+|   +-- package.json
++-- escolas/            # Gestao de escolas/unidades (:3005)
+|   +-- app/
+|   +-- components/
+|   +-- package.json
++-- turmas/             # Gestao de turmas (:3006)
+|   +-- app/
+|   +-- components/
+|   +-- lib/
+|   +-- package.json
++-- planejamento/       # Planejamento pedagogico (:3007)
+|   +-- app/
+|   +-- features/
+|   +-- package.json
++-- loja/               # Loja publica (:3010)
+|   +-- app/
+|   +-- components/
+|   +-- lib/
+|   +-- package.json
++-- loja-admin/         # Admin da loja (:3011)
+    +-- app/
+    +-- components/
+    +-- package.json
 ```
 
 ### Services (services/)
@@ -187,30 +138,32 @@ Backend API centralizado.
 
 ```
 services/
-└── api/
-    ├── src/
-    │   ├── app.module.ts           # Modulo raiz
-    │   ├── main.ts                 # Bootstrap Fastify
-    │   ├── common/
-    │   │   ├── decorators/
-    │   │   │   ├── roles.decorator.ts
-    │   │   │   └── current-user.decorator.ts
-    │   │   ├── filters/
-    │   │   │   └── api-exception.filter.ts
-    │   │   └── guards/
-    │   │       ├── auth.guard.ts
-    │   │       ├── roles.guard.ts
-    │   │       └── tenant.guard.ts
-    │   └── modules/
-    │       ├── auth/               # Login, logout, sessoes
-    │       ├── calendar/           # Calendario escolar CRUD
-    │       ├── health/             # Health check
-    │       ├── plannings/          # Planejamentos CRUD
-    │       ├── schools/            # Escolas CRUD
-    │       ├── stats/              # Dashboard stats
-    │       ├── units/              # Unidades CRUD
-    │       └── users/              # Usuarios CRUD
-    └── package.json
++-- api/
+    +-- src/
+    |   +-- app.module.ts           # Modulo raiz
+    |   +-- main.ts                 # Bootstrap Fastify
+    |   +-- common/
+    |   |   +-- decorators/
+    |   |   +-- filters/
+    |   |   +-- guards/
+    |   |   +-- interceptors/
+    |   |   +-- middleware/
+    |   |   +-- storage/            # Upload (MinIO)
+    |   +-- modules/
+    |       +-- auth/               # Login, logout, sessoes
+    |       +-- calendar/           # Calendario escolar
+    |       +-- health/             # Health check
+    |       +-- payments/           # Webhooks Stripe
+    |       +-- plannings/          # Planejamentos
+    |       +-- schools/            # Escolas
+    |       +-- setup/              # Bootstrap inicial
+    |       +-- shop/               # CEF Shop
+    |       +-- stages/             # Etapas
+    |       +-- stats/              # Dashboard stats
+    |       +-- turmas/             # Turmas
+    |       +-- units/              # Unidades
+    |       +-- users/              # Usuarios
+    +-- package.json
 ```
 
 ### Packages (packages/)
@@ -219,54 +172,13 @@ Codigo compartilhado entre apps e services.
 
 ```
 packages/
-├── ui/                    # Design System (@essencia/ui)
-│   ├── src/
-│   │   ├── components/    # shadcn/ui components
-│   │   │   ├── button.tsx
-│   │   │   ├── card.tsx
-│   │   │   ├── checkbox.tsx
-│   │   │   ├── dialog.tsx
-│   │   │   ├── form.tsx
-│   │   │   ├── input.tsx
-│   │   │   ├── select.tsx
-│   │   │   ├── sheet.tsx
-│   │   │   ├── skeleton.tsx
-│   │   │   ├── stats-card.tsx
-│   │   │   ├── textarea.tsx
-│   │   │   └── toaster.tsx
-│   │   ├── lib/utils.ts   # cn() helper
-│   │   └── globals.css    # Estilos globais
-│   └── package.json
-│
-├── db/                    # Database Layer (@essencia/db)
-│   ├── src/
-│   │   ├── schema/
-│   │   │   ├── users.ts
-│   │   │   ├── schools.ts
-│   │   │   ├── units.ts
-│   │   │   ├── sessions.ts
-│   │   │   ├── planejamento.ts
-│   │   │   └── index.ts
-│   │   ├── client.ts      # Connection factory
-│   │   └── index.ts       # Exports
-│   ├── drizzle/           # Migrations
-│   └── package.json
-│
-├── shared/                # Tipos e Schemas (@essencia/shared)
-│   ├── src/
-│   │   ├── types/         # TypeScript types
-│   │   ├── schemas/       # Zod validation schemas
-│   │   ├── fetchers/
-│   │   │   ├── client.ts  # Client-side fetcher
-│   │   │   └── server.ts  # Server-side fetcher
-│   │   └── providers/
-│   │       └── tenant.tsx # TenantProvider
-│   └── package.json
-│
-├── components/            # Componentes React (@essencia/components)
-├── lib/                   # Utilitarios (@essencia/lib)
-├── config/                # Configs compartilhados (@essencia/config)
-└── tailwind-config/       # Preset Tailwind (@essencia/tailwind-config)
++-- ui/                 # Design System (@essencia/ui)
++-- db/                 # Drizzle ORM + migrations
++-- shared/             # Tipos, schemas, fetchers
++-- components/         # Componentes React compartilhados
++-- lib/                # Utilitarios compartilhados
++-- config/             # ESLint/TSConfig compartilhado
++-- tailwind-config/    # Preset Tailwind
 ```
 
 ---
@@ -475,6 +387,30 @@ apps/planejamento/
 
 ---
 
+
+### Fluxo de Pedido (CEF Shop)
+
+```
+1. Catalogo publico
+   GET /shop/locations
+   GET /shop/catalog/:schoolId/:unitId
+
+2. Pedido online (voucher)
+   POST /shop/orders
+   -> Reserva estoque por unidade
+   -> Status AGUARDANDO_PAGAMENTO
+   -> expiresAt = now + 7 dias
+
+3. Pagamento presencial (admin)
+   PATCH /shop/admin/orders/:id/confirm-payment
+   -> Converte reserva em venda
+   -> Status PAGO
+
+4. Retirada (admin)
+   PATCH /shop/admin/orders/:id/pickup
+   -> Status RETIRADO
+```
+
 ## Padroes de Resposta API
 
 ### Sucesso
@@ -523,6 +459,7 @@ interface SessionData {
   role: string;
   schoolId: string | null;
   unitId: string | null;
+  stageId: string | null;
   createdAt: number;
 }
 ```
@@ -548,6 +485,7 @@ Max-Age: 86400      # 24 horas
 | Endpoint           | Limite     | Janela      |
 | ------------------ | ---------- | ----------- |
 | `/stats/dashboard` | 5 requests | 15 segundos |
+| `/shop/orders`     | 5 requests | 1 hora      |
 
 ---
 
@@ -639,16 +577,6 @@ Estrutura de testes:
 - Compartilhamento de codigo
 - Dependencias bem definidas
 - Developer experience superior
-
----
-
-## Proximos Passos
-
-1. **Modulo de Comunicados**: Sistema de avisos para pais
-2. **Painel de Responsaveis**: Area exclusiva para pais
-3. **Sistema de Turmas**: Gestao completa de turmas
-4. **Integracao com Calendario**: Eventos e lembretes
-5. **App Mobile**: React Native com compartilhamento de codigo
 
 ---
 

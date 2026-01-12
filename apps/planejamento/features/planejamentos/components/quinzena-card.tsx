@@ -5,7 +5,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { CheckCircle2, Clock, Lock } from "lucide-react";
 import Link from "next/link";
-import { getDeadlineColor } from "../mocks";
+import { getDeadlineColor } from "../utils";
 import type { Quinzena } from "../types";
 
 interface QuinzenaCardProps {

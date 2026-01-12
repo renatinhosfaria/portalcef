@@ -1,9 +1,19 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  output: 'standalone',
   reactStrictMode: true,
   transpilePackages: ['@essencia/ui', '@essencia/shared'],
   images: {
-    domains: ['localhost'], // MinIO URL será adicionado em produção
+    remotePatterns: [
+      {
+        protocol: 'http',
+        hostname: 'localhost',
+      },
+      {
+        protocol: 'https',
+        hostname: 'storage.portalcef.com.br',
+      },
+    ],
   },
 };
 

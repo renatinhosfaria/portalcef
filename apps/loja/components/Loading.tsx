@@ -1,5 +1,7 @@
 'use client';
 
+import { Loader2 } from 'lucide-react';
+
 interface LoadingSpinnerProps {
   size?: 'sm' | 'md' | 'lg';
   className?: string;
@@ -7,29 +9,42 @@ interface LoadingSpinnerProps {
 
 export function LoadingSpinner({ size = 'md', className = '' }: LoadingSpinnerProps) {
   const sizeClasses = {
-    sm: 'w-6 h-6',
-    md: 'w-12 h-12',
-    lg: 'w-16 h-16',
+    sm: 'w-5 h-5',
+    md: 'w-8 h-8',
+    lg: 'w-12 h-12',
   };
 
   return (
-    <div className={`spinner ${sizeClasses[size]} ${className}`}></div>
+    <Loader2
+      className={`${sizeClasses[size]} text-[#A3D154] animate-spin ${className}`}
+      aria-label="Carregando"
+    />
   );
 }
 
 export function LoadingSkeleton() {
   return (
     <div className="animate-pulse">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {[...Array(6)].map((_, i) => (
-          <div key={i} className="card">
-            <div className="w-full aspect-square bg-gray-200 rounded-lg mb-4"></div>
-            <div className="h-4 bg-gray-200 rounded w-1/3 mb-2"></div>
-            <div className="h-6 bg-gray-200 rounded w-3/4 mb-3"></div>
-            <div className="h-8 bg-gray-200 rounded w-1/2"></div>
+          <div key={i} className="bg-white rounded-lg border border-slate-200 overflow-hidden">
+            <div className="w-full aspect-[4/5] bg-slate-100" />
+            <div className="p-4 space-y-3">
+              <div className="h-3 bg-slate-100 rounded w-1/3" />
+              <div className="h-4 bg-slate-100 rounded w-3/4" />
+              <div className="h-5 bg-slate-100 rounded w-1/2" />
+            </div>
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+export function LoadingPage() {
+  return (
+    <div className="min-h-[400px] flex items-center justify-center">
+      <LoadingSpinner size="lg" />
     </div>
   );
 }

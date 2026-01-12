@@ -7,6 +7,7 @@ import {
   Query,
   HttpCode,
   HttpStatus,
+  BadRequestException,
 } from "@nestjs/common";
 import { Throttle } from "@nestjs/throttler";
 import {
@@ -19,6 +20,7 @@ import { ShopProductsService } from "./shop-products.service";
 import { ShopOrdersService } from "./shop-orders.service";
 import { ShopInterestService } from "./shop-interest.service";
 import { ShopLocationsService } from "./shop-locations.service";
+import { PaymentsService } from "../payments/payments.service";
 
 /**
  * ShopPublicController
@@ -38,6 +40,7 @@ export class ShopPublicController {
     private readonly ordersService: ShopOrdersService,
     private readonly interestService: ShopInterestService,
     private readonly locationsService: ShopLocationsService,
+    private readonly paymentsService: PaymentsService,
   ) {}
 
   /**
@@ -175,6 +178,28 @@ export class ShopPublicController {
     return {
       success: true,
       data: result,
+    };
+  }
+
+  /**
+   * POST /shop/checkout/init
+   *
+   * Inicializa PaymentIntent para Stripe Elements
+   * Permite renderizar o formulário de pagamento antes de criar o pedido
+   */
+  @Post("checkout/init")
+  @HttpCode(HttpStatus.CREATED)
+  async initCheckout(@Body() body: { amount: number }) {
+    if (!body.amount || body.amount < 100) {
+      throw new BadRequestException("Valor inválido (mínimo 100 centavos)");
+    }
+
+    const { clientSecret, paymentIntentId } =
+      await this.paymentsService.createPaymentIntent(body.amount, {});
+
+    return {
+      success: true,
+      data: { clientSecret, paymentIntentId },
     };
   }
 }

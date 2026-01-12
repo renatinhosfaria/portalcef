@@ -68,7 +68,7 @@ export class ShopOrdersService {
     private inventoryService: ShopInventoryService,
     @Inject(forwardRef(() => PaymentsService))
     private paymentsService: PaymentsService,
-  ) {}
+  ) { }
 
   /**
    * Gera número de pedido único de 6 dígitos
@@ -129,7 +129,7 @@ export class ShopOrdersService {
         with: { product: true },
       });
 
-      const itemPrice = variant!.product.price;
+      const itemPrice = variant!.priceOverride ?? variant!.product.basePrice;
       const itemTotal = itemPrice * item.quantity;
       totalAmount += itemTotal;
 
@@ -176,7 +176,8 @@ export class ShopOrdersService {
     }
 
     // 5. Criar pedido
-    const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutos
+    // Voucher válido por 7 dias (cliente paga presencialmente na escola)
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 dias
 
     const [order] = await db
       .insert(shopOrders)
@@ -206,26 +207,62 @@ export class ShopOrdersService {
 
     await db.insert(shopOrderItems).values(orderItemsValues);
 
-    // 7. Criar PaymentIntent no Stripe
+    // ============================================================
+    // STRIPE DESABILITADO - Sistema de Voucher Ativo
+    // Cliente recebe voucher e paga presencialmente na escola
+    // Código mantido para futura reintegração com Stripe
+    // ============================================================
+    /*
+    // 7. Processar PaymentIntent (Criar novo ou Atualizar existente)
     let clientSecret: string | undefined;
     let paymentIntentId: string | undefined;
 
     try {
-      const paymentIntent = await this.paymentsService.createPaymentIntent(
-        totalAmount,
-        {
+      if (dto.paymentIntentId) {
+        // Cenário A: Intent já existe (Checkout Elements Flow)
+        paymentIntentId = dto.paymentIntentId;
+
+        // Atualizar metadata do Intent com dados do pedido real
+        await this.paymentsService.updatePaymentIntent(paymentIntentId, {
           orderId: order.id,
           orderNumber: order.orderNumber,
           schoolId: dto.schoolId,
           unitId: dto.unitId,
           customerName: dto.customerName,
           customerPhone: dto.customerPhone,
-        },
-        dto.installments || 1,
-      );
+        });
 
-      clientSecret = paymentIntent.clientSecret;
-      paymentIntentId = paymentIntent.paymentIntentId;
+        // Recuperar clientSecret (opcional, mas bom retornar)
+        const intent = await this.paymentsService
+          .getStripeClient()
+          .paymentIntents.retrieve(paymentIntentId);
+        clientSecret = intent.client_secret || undefined;
+
+        // TODO: Validar se amount do intent bate com totalAmount?
+        // Se houver divergência (ex: preço mudou durante checkout), devíamos cancelar/erro.
+        if (intent.amount !== totalAmount) {
+          throw new BadRequestException(
+            "Valor do pagamento diverge do total do pedido",
+          );
+        }
+      } else {
+        // Cenário B: Criar novo Intent (Flow antigo / Backend-only)
+        const paymentIntent = await this.paymentsService.createPaymentIntent(
+          totalAmount,
+          {
+            orderId: order.id,
+            orderNumber: order.orderNumber,
+            schoolId: dto.schoolId,
+            unitId: dto.unitId,
+            customerName: dto.customerName,
+            customerPhone: dto.customerPhone,
+          },
+          dto.installments || 1,
+        );
+
+        clientSecret = paymentIntent.clientSecret;
+        paymentIntentId = paymentIntent.paymentIntentId;
+      }
 
       // Atualizar pedido com stripePaymentIntentId
       await db
@@ -248,13 +285,15 @@ export class ShopOrdersService {
 
       throw error;
     }
+    */
+    // ============================================================
 
     return {
       orderId: order.id,
       orderNumber: order.orderNumber,
       totalAmount: order.totalAmount,
       expiresAt: order.expiresAt,
-      clientSecret,
+      // clientSecret não retornado - sistema de voucher ativo
     };
   }
 
@@ -648,6 +687,75 @@ export class ShopOrdersService {
   }
 
   /**
+   * PATCH /shop/admin/orders/:id/confirm-payment
+   *
+   * Confirma pagamento presencial de pedido online (sistema de voucher)
+   * Converte reservas de estoque em vendas confirmadas
+   */
+  async confirmPayment(
+    orderId: string,
+    paymentMethod: "DINHEIRO" | "PIX" | "CARTAO_CREDITO" | "CARTAO_DEBITO",
+    adminUserId: string,
+  ) {
+    const db = getDb();
+
+    const order = await db.query.shopOrders.findFirst({
+      where: eq(shopOrders.id, orderId),
+      with: { items: true },
+    });
+
+    if (!order) {
+      throw new NotFoundException({
+        code: "RESOURCE_NOT_FOUND",
+        message: `Pedido ${orderId} não encontrado`,
+      });
+    }
+
+    // Validar status permite confirmação de pagamento
+    if (order.status !== "AGUARDANDO_PAGAMENTO") {
+      throw new BadRequestException({
+        code: "INVALID_STATUS",
+        message: `Apenas pedidos aguardando pagamento podem ter pagamento confirmado. Status atual: ${order.status}`,
+      });
+    }
+
+    // Verificar se pedido não expirou
+    if (order.expiresAt && new Date() > order.expiresAt) {
+      throw new BadRequestException({
+        code: "ORDER_EXPIRED",
+        message: `Pedido expirado em ${order.expiresAt.toLocaleString("pt-BR")}. Por favor, crie um novo pedido.`,
+      });
+    }
+
+    // Converter reservas em vendas confirmadas
+    for (const item of order.items) {
+      await this.inventoryService.confirmSale(
+        item.variantId,
+        order.unitId,
+        item.quantity,
+        order.id,
+      );
+    }
+
+    // Atualizar pedido para PAGO
+    await db
+      .update(shopOrders)
+      .set({
+        status: "PAGO",
+        paymentMethod,
+        paidAt: new Date(),
+      })
+      .where(eq(shopOrders.id, orderId));
+
+    return {
+      success: true,
+      message: "Pagamento confirmado com sucesso",
+      orderNumber: order.orderNumber,
+      paymentMethod,
+    };
+  }
+
+  /**
    * Formata resposta de pedido
    */
   private formatOrderResponse(order: OrderWithItems) {
@@ -675,10 +783,10 @@ export class ShopOrdersService {
           id: item.variant.product.id,
           name: item.variant.product.name,
           category: item.variant.product.category,
+          imageUrl: item.variant.product.imageUrl,
         },
         variant: {
           size: item.variant.size,
-          color: item.variant.color,
           sku: item.variant.sku,
         },
       })),

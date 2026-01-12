@@ -1,5 +1,6 @@
 'use client';
 
+import { jsPDF } from 'jspdf';
 import Link from 'next/link';
 import { use, useEffect, useState } from 'react';
 
@@ -23,6 +24,10 @@ interface ApiOrderItem {
   quantity: number;
   unitPrice: number;
   studentName: string;
+  product?: {
+    name?: string;
+    imageUrl?: string;
+  };
   variant?: {
     size?: string;
     product?: {
@@ -104,13 +109,13 @@ export default function VoucherPage({
             pickupInstructions: 'Retire seu pedido na secretaria da unidade, de segunda a sexta, das 7h às 18h. Apresente o código de 6 dígitos acima.',
             items: orderData.items?.map((item: ApiOrderItem) => ({
               id: item.id,
-              productName: item.variant?.product?.name || 'Produto',
+              productName: item.product?.name || item.variant?.product?.name || 'Produto',
               variantSize: item.variant?.size || 'Único',
               quantity: item.quantity,
-              unitPrice: item.unitPrice,
-              subtotal: item.unitPrice * item.quantity,
+              unitPrice: item.unitPrice / 100, // Converter de centavos para reais
+              subtotal: (item.unitPrice * item.quantity) / 100, // Converter de centavos para reais
               studentName: item.studentName,
-              imageUrl: item.variant?.product?.imageUrl || '/placeholder-product.jpg',
+              imageUrl: item.product?.imageUrl || item.variant?.product?.imageUrl || '/placeholder-product.jpg',
             })) || [],
           };
 
@@ -132,42 +137,198 @@ export default function VoucherPage({
   const getStatusBadge = (status: Order['status']) => {
     switch (status) {
       case 'AGUARDANDO_PAGAMENTO':
-        return <span className="badge-low-stock">⏳ Aguardando Pagamento</span>;
+        return <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-amber-100 text-amber-800 border border-amber-300">⏳ Aguardando Pagamento Presencial</span>;
       case 'PAGO':
-        return <span className="badge-in-stock">✅ Pago</span>;
+        return <span className="badge-in-stock">✅ Pago - Pronto para Retirada</span>;
       case 'RETIRADO':
         return <span className="badge-in-stock">📦 Retirado</span>;
       case 'EXPIRADO':
-        return <span className="badge-out-of-stock">❌ Expirado</span>;
+        return <span className="badge-out-of-stock">❌ Voucher Expirado</span>;
       default:
         return null;
     }
   };
 
-  const handleCopyLink = async () => {
-    if (typeof window === 'undefined' || !navigator.clipboard) return;
+  const handleShareWhatsApp = async () => {
+    if (!order || typeof window === 'undefined') return;
 
     setCopying(true);
     try {
-      const link = `${window.location.origin}/pedido/${orderNumber}?phone=${phone}`;
-      await navigator.clipboard.writeText(link);
-      if (typeof window !== 'undefined') {
-        window.alert('Link copiado para a área de transferência!');
+      // Gerar PDF em memória
+      const doc = new jsPDF();
+
+      // Header com gradiente azul
+      doc.setFillColor(59, 130, 246);
+      doc.rect(0, 0, 210, 45, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(22);
+      doc.text('VOUCHER DE RETIRADA', 105, 20, { align: 'center' });
+      doc.setFontSize(14);
+      doc.text(`Código: ${order.orderNumber}`, 105, 32, { align: 'center' });
+
+      // Informações do cliente
+      doc.setTextColor(0, 0, 0);
+      doc.setFontSize(11);
+      let y = 55;
+      doc.text(`Responsável: ${order.customerName}`, 20, y);
+      doc.text(`Telefone: ${order.customerPhone}`, 120, y);
+      y += 8;
+      doc.text(`Data: ${new Date(order.createdAt).toLocaleDateString('pt-BR')}`, 20, y);
+      doc.text(`Validade: ${new Date(order.expiresAt).toLocaleDateString('pt-BR')}`, 120, y);
+
+      // Código grande no centro
+      y += 15;
+      doc.setDrawColor(59, 130, 246);
+      doc.setLineWidth(2);
+      doc.roundedRect(50, y, 110, 25, 3, 3);
+      doc.setFontSize(28);
+      doc.setTextColor(59, 130, 246);
+      doc.text(order.orderNumber, 105, y + 17, { align: 'center' });
+
+      // Instruções
+      y += 35;
+      doc.setFontSize(10);
+      doc.setTextColor(100, 100, 100);
+      doc.text('Apresente este código na secretaria da unidade para retirar seus produtos.', 105, y, { align: 'center' });
+
+      // Itens do pedido
+      y += 15;
+      doc.setFontSize(12);
+      doc.setTextColor(0, 0, 0);
+      doc.text('Itens do Pedido:', 20, y);
+      y += 8;
+
+      doc.setFontSize(10);
+      order.items.forEach((item) => {
+        const itemText = `${item.quantity}x ${item.productName} (${item.variantSize}) - Aluno: ${item.studentName}`;
+        doc.text(itemText, 20, y);
+        const priceText = `R$ ${item.unitPrice.toFixed(2)}`;
+        doc.text(priceText, 180, y, { align: 'right' });
+        y += 7;
+      });
+
+      // Total
+      y += 5;
+      doc.setDrawColor(200, 200, 200);
+      doc.line(20, y, 190, y);
+      y += 8;
+      doc.setFontSize(14);
+      doc.setTextColor(59, 130, 246);
+      const totalReais = order.totalAmount / 100;
+      doc.text(`TOTAL: R$ ${totalReais.toFixed(2)}`, 180, y, { align: 'right' });
+
+      // Gerar blob do PDF
+      const pdfBlob = doc.output('blob');
+      const pdfFile = new File([pdfBlob], `voucher-${order.orderNumber}.pdf`, { type: 'application/pdf' });
+
+      // Tentar usar Web Share API para compartilhar o arquivo (mobile)
+      if (navigator.share && navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
+        await navigator.share({
+          files: [pdfFile],
+          title: `Voucher #${order.orderNumber}`,
+          text: `Voucher de retirada - Pedido #${order.orderNumber}`
+        });
+      } else {
+        // Desktop/WhatsApp Web: baixar o PDF e abrir WhatsApp com mensagem completa
+        doc.save(`voucher-${order.orderNumber}.pdf`);
+
+        const link = `${window.location.origin}/pedido/${orderNumber}?phone=${phone}`;
+        const totalFormatted = (order.totalAmount / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+        // Lista de itens formatada
+        const itemsList = order.items.map(item =>
+          `• ${item.quantity}x ${item.productName} (${item.variantSize}) - ${item.studentName}`
+        ).join('\n');
+
+        const message = `🛒 *VOUCHER DE RETIRADA*
+
+📋 *Pedido #${order.orderNumber}*
+
+👤 *Responsável:* ${order.customerName}
+📱 *Telefone:* ${order.customerPhone}
+
+📦 *Itens:*
+${itemsList}
+
+💰 *Total:* ${totalFormatted}
+
+📍 *Retirada:* Apresente o código *${order.orderNumber}* na secretaria da unidade.
+
+📥 *PDF baixado!* Anexe o arquivo "voucher-${order.orderNumber}.pdf" nesta conversa.
+
+🔗 *Link online:* ${link}
+
+_Válido até ${new Date(order.expiresAt).toLocaleDateString('pt-BR')}_`;
+
+        const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
+
+        // Mostrar instrução para o usuário
+        window.alert(`✅ PDF baixado com sucesso!\n\nO WhatsApp Web será aberto.\nAnexe o arquivo "voucher-${order.orderNumber}.pdf" na conversa.`);
+
+        window.open(whatsappUrl, '_blank');
       }
-    } catch {
-      if (typeof window !== 'undefined') {
-        window.alert('Erro ao copiar link. Tente novamente.');
-      }
+    } catch (err) {
+      console.error('Erro ao compartilhar:', err);
+      window.alert('Erro ao gerar ou compartilhar PDF. Tente novamente.');
     } finally {
       setCopying(false);
     }
   };
 
   const handleDownloadPDF = () => {
-    // TODO: Implementar geração de PDF com jsPDF ou react-pdf
-    if (typeof window !== 'undefined') {
-      window.alert('Funcionalidade de download em PDF será implementada em breve!');
-    }
+    if (!order) return;
+
+    const doc = new jsPDF();
+
+    // Header
+    doc.setFillColor(59, 130, 246); // Blue
+    doc.rect(0, 0, 210, 40, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(24);
+    doc.text('Voucher de Retirada', 105, 25, { align: 'center' });
+
+    // Order Info
+    doc.setTextColor(0, 0, 0);
+    doc.setFontSize(12);
+    doc.text(`Pedido #${order.orderNumber}`, 20, 60);
+    doc.text(`Status: ${order.status}`, 20, 70);
+    doc.text(`Total: R$ ${(order.totalAmount / 100).toFixed(2)}`, 20, 80);
+
+    // Customer
+    doc.text(`Responsável: ${order.customerName}`, 120, 60);
+    doc.text(`Telefone: ${order.customerPhone}`, 120, 70);
+    doc.text(`Data: ${new Date(order.createdAt).toLocaleDateString('pt-BR')}`, 120, 80);
+
+    // Code Box
+    doc.setDrawColor(0, 0, 0);
+    doc.rect(50, 95, 110, 30);
+    doc.setFontSize(30);
+    doc.setTextColor(59, 130, 246);
+    doc.text(order.orderNumber, 105, 115, { align: 'center' });
+
+    // Instructions
+    doc.setFontSize(10);
+    doc.setTextColor(100, 100, 100);
+    const splitInstructions = doc.splitTextToSize(order.pickupInstructions, 170);
+    doc.text(splitInstructions, 20, 140);
+
+    // Items
+    let y = 160;
+    doc.setFontSize(12);
+    doc.setTextColor(0, 0, 0);
+    doc.text('Itens do Pedido:', 20, y);
+    y += 10;
+
+    order.items.forEach((item) => {
+      const itemText = `${item.quantity}x ${item.productName} (${item.variantSize}) - Aluno: ${item.studentName}`;
+      doc.setFontSize(10);
+      doc.text(itemText, 20, y);
+      const priceText = `R$ ${item.unitPrice.toFixed(2)}`;
+      doc.text(priceText, 180, y, { align: 'right' });
+      y += 8;
+    });
+
+    doc.save(`voucher-${order.orderNumber}.pdf`);
   };
 
   const handlePrint = () => {
@@ -228,10 +389,31 @@ export default function VoucherPage({
                 <div className="mt-1">{getStatusBadge(order.status)}</div>
               </div>
               <div className="text-right">
-                <p className="text-sm text-gray-600">Total Pago</p>
+                <p className="text-sm text-gray-600">
+                  {order.status === 'AGUARDANDO_PAGAMENTO' ? 'Total a Pagar' : 'Total Pago'}
+                </p>
                 <p className="text-2xl font-bold text-blue-600">R$ {totalReais.toFixed(2)}</p>
               </div>
             </div>
+
+            {/* Alerta de Pagamento Pendente */}
+            {order.status === 'AGUARDANDO_PAGAMENTO' && (
+              <div className="bg-amber-50 border-2 border-amber-300 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <span className="text-2xl">💰</span>
+                  <div>
+                    <p className="font-bold text-amber-800 mb-1">Pagamento Pendente</p>
+                    <p className="text-sm text-amber-700">
+                      Dirija-se à secretaria da escola para efetuar o pagamento presencial.
+                      Após o pagamento, seus produtos estarão disponíveis para retirada.
+                    </p>
+                    <p className="text-xs text-amber-600 mt-2">
+                      Formas de pagamento aceitas: Dinheiro, PIX, Cartão de Crédito ou Débito
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
@@ -276,8 +458,8 @@ export default function VoucherPage({
               <button onClick={handleDownloadPDF} className="btn-outline">
                 📄 Baixar PDF
               </button>
-              <button onClick={handleCopyLink} disabled={copying} className="btn-outline">
-                {copying ? <LoadingSpinner size="sm" /> : '🔗 Compartilhar'}
+              <button onClick={handleShareWhatsApp} disabled={copying} className="btn-outline">
+                {copying ? <LoadingSpinner size="sm" /> : '� WhatsApp'}
               </button>
             </div>
 

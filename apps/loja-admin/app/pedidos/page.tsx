@@ -1,6 +1,6 @@
 'use client';
 
-import { Search, Eye, Check, ChevronDown, ChevronRight, Globe, Store } from 'lucide-react';
+import { Search, Eye, Check, ChevronDown, ChevronRight, Globe, Store, CreditCard, X } from 'lucide-react';
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 
@@ -25,6 +25,8 @@ interface Order {
     items: OrderItem[];
 }
 
+type PaymentMethod = 'DINHEIRO' | 'PIX' | 'CARTAO_CREDITO' | 'CARTAO_DEBITO';
+
 export default function PedidosPage() {
     const [orders, setOrders] = useState<Order[]>([]);
     const [loading, setLoading] = useState(true);
@@ -32,78 +34,44 @@ export default function PedidosPage() {
     const [statusFilter, setStatusFilter] = useState('');
     const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
 
+    // Estado para modal de confirmação de pagamento
+    const [confirmPaymentModal, setConfirmPaymentModal] = useState<{
+        open: boolean;
+        orderId: string;
+        orderNumber: string;
+        totalAmount: number;
+    } | null>(null);
+    const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod>('DINHEIRO');
+    const [confirmingPayment, setConfirmingPayment] = useState(false);
+
     const loadOrders = useCallback(async () => {
         try {
             setLoading(true);
 
-            // TODO: Call real API /api/shop/admin/orders with filters
-            await new Promise(resolve => setTimeout(resolve, 500));
+            const params = new URLSearchParams();
+            if (search) params.set('search', search);
+            if (statusFilter) params.set('status', statusFilter);
 
-            // Mock data
-            const mockOrders: Order[] = [
-                {
-                    id: '1',
-                    orderNumber: '234567',
-                    customerName: 'Maria Silva',
-                    customerPhone: '11987654321',
-                    totalAmount: 13500,
-                    status: 'PAGO',
-                    orderSource: 'ONLINE',
-                    createdAt: new Date().toISOString(),
-                    items: [
-                        { id: 'i1', productName: 'Camiseta Uniforme', variantSize: '8', studentName: 'João Silva', quantity: 2, unitPrice: 4500 },
-                        { id: 'i2', productName: 'Calça Uniforme', variantSize: '10', studentName: 'João Silva', quantity: 1, unitPrice: 4500 },
-                    ],
-                },
-                {
-                    id: '2',
-                    orderNumber: '234566',
-                    customerName: 'Carlos Santos',
-                    customerPhone: '11998765432',
-                    totalAmount: 9000,
-                    status: 'PAGO',
-                    orderSource: 'ONLINE',
-                    createdAt: new Date(Date.now() - 3600000).toISOString(),
-                    items: [
-                        { id: 'i3', productName: 'Camiseta Ed. Física', variantSize: '12', studentName: 'Ana Santos', quantity: 2, unitPrice: 3500 },
-                        { id: 'i4', productName: 'Short Ed. Física', variantSize: '12', studentName: 'Ana Santos', quantity: 1, unitPrice: 2000 },
-                    ],
-                },
-                {
-                    id: '3',
-                    orderNumber: '234565',
-                    customerName: 'Ana Costa',
-                    customerPhone: '11912345678',
-                    totalAmount: 22500,
-                    status: 'RETIRADO',
-                    orderSource: 'PRESENCIAL',
-                    createdAt: new Date(Date.now() - 86400000).toISOString(),
-                    items: [
-                        { id: 'i5', productName: 'Kit Uniforme Completo', variantSize: '6', studentName: 'Pedro Costa', quantity: 1, unitPrice: 22500 },
-                    ],
-                },
-            ];
+            const response = await fetch(`/api/shop/admin/orders?${params.toString()}`);
 
-            // Filter by search
-            let filtered = mockOrders;
-            if (search) {
-                const searchLower = search.toLowerCase();
-                filtered = filtered.filter(o =>
-                    o.orderNumber.includes(search) ||
-                    o.customerName.toLowerCase().includes(searchLower) ||
-                    o.customerPhone.includes(search) ||
-                    o.items.some(i => i.studentName.toLowerCase().includes(searchLower))
-                );
+            if (!response.ok) {
+                console.warn('API de pedidos não disponível:', response.status);
+                setOrders([]);
+                return;
             }
+
+            const result = await response.json();
+            let filtered = result.data || [];
 
             // Filter by status
             if (statusFilter) {
-                filtered = filtered.filter(o => o.status === statusFilter);
+                filtered = filtered.filter((o: Order) => o.status === statusFilter);
             }
 
             setOrders(filtered);
         } catch (err) {
-            console.error('Error loading orders:', err);
+            console.warn('Não foi possível carregar pedidos. API ainda não implementada?', err);
+            setOrders([]);
         } finally {
             setLoading(false);
         }
@@ -133,7 +101,7 @@ export default function PedidosPage() {
 
     const getStatusBadge = (status: string) => {
         const statusConfig: Record<string, { class: string; label: string }> = {
-            AGUARDANDO_PAGAMENTO: { class: 'badge-warning', label: 'Aguardando' },
+            AGUARDANDO_PAGAMENTO: { class: 'badge-warning', label: 'Aguardando Pgto' },
             PAGO: { class: 'badge-success', label: 'Pago' },
             RETIRADO: { class: 'badge-info', label: 'Retirado' },
             CANCELADO: { class: 'badge-danger', label: 'Cancelado' },
@@ -143,10 +111,75 @@ export default function PedidosPage() {
         return <span className={`badge ${config.class}`}>{config.label}</span>;
     };
 
+    const getPaymentMethodLabel = (method: PaymentMethod) => {
+        const labels: Record<PaymentMethod, string> = {
+            DINHEIRO: 'Dinheiro',
+            PIX: 'PIX',
+            CARTAO_CREDITO: 'Cartão de Crédito',
+            CARTAO_DEBITO: 'Cartão de Débito',
+        };
+        return labels[method];
+    };
+
     const handleMarkPickedUp = async (orderId: string) => {
-        // TODO: Call real API PATCH /shop/admin/orders/{id}/pickup
-        alert(`Marcar pedido ${orderId} como retirado`);
-        loadOrders();
+        if (!confirm('Confirmar retirada deste pedido?')) return;
+
+        try {
+            const res = await fetch(`/api/shop/admin/orders/${orderId}/pickup`, {
+                method: 'PATCH'
+            });
+
+            if (!res.ok) throw new Error('Falha ao marcar retirada');
+
+            loadOrders();
+        } catch (err) {
+            console.error(err);
+            alert('Erro ao confirmar retirada');
+        }
+    };
+
+    const openConfirmPaymentModal = (order: Order) => {
+        setConfirmPaymentModal({
+            open: true,
+            orderId: order.id,
+            orderNumber: order.orderNumber,
+            totalAmount: order.totalAmount,
+        });
+        setSelectedPaymentMethod('DINHEIRO');
+    };
+
+    const closeConfirmPaymentModal = () => {
+        setConfirmPaymentModal(null);
+        setSelectedPaymentMethod('DINHEIRO');
+    };
+
+    const handleConfirmPayment = async () => {
+        if (!confirmPaymentModal) return;
+
+        setConfirmingPayment(true);
+
+        try {
+            const res = await fetch(`/api/shop/admin/orders/${confirmPaymentModal.orderId}/confirm-payment`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ paymentMethod: selectedPaymentMethod }),
+            });
+
+            if (!res.ok) {
+                const errorData = await res.json();
+                throw new Error(errorData.error?.message || 'Falha ao confirmar pagamento');
+            }
+
+            closeConfirmPaymentModal();
+            loadOrders();
+            alert('Pagamento confirmado com sucesso!');
+        } catch (err) {
+            console.error(err);
+            const message = err instanceof Error ? err.message : 'Erro ao confirmar pagamento';
+            alert(message);
+        } finally {
+            setConfirmingPayment(false);
+        }
     };
 
     return (
@@ -175,6 +208,7 @@ export default function PedidosPage() {
                     className="form-select w-auto min-w-[180px]"
                 >
                     <option value="">Todos os Status</option>
+                    <option value="AGUARDANDO_PAGAMENTO">Aguardando Pagamento</option>
                     <option value="PAGO">Aguardando Retirada</option>
                     <option value="RETIRADO">Retirado</option>
                     <option value="CANCELADO">Cancelado</option>
@@ -256,6 +290,16 @@ export default function PedidosPage() {
                                                     >
                                                         <Eye className="w-4 h-4" />
                                                     </Link>
+                                                    {order.status === 'AGUARDANDO_PAGAMENTO' && (
+                                                        <button
+                                                            onClick={() => openConfirmPaymentModal(order)}
+                                                            className="btn-admin btn-admin-warning btn-admin-sm"
+                                                            title="Confirmar Pagamento"
+                                                        >
+                                                            <CreditCard className="w-4 h-4" />
+                                                            Pagamento
+                                                        </button>
+                                                    )}
                                                     {order.status === 'PAGO' && (
                                                         <button
                                                             onClick={() => handleMarkPickedUp(order.id)}
@@ -278,7 +322,7 @@ export default function PedidosPage() {
                                                                 <div key={item.id} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
                                                                     <p className="font-semibold text-slate-800">{item.productName}</p>
                                                                     <p className="text-sm text-slate-500 mt-1">
-                                                                        Tamanho: <span className="font-medium text-slate-700">{item.variantSize}</span> | 
+                                                                        Tamanho: <span className="font-medium text-slate-700">{item.variantSize}</span> |
                                                                         Qtd: <span className="font-medium text-slate-700">{item.quantity}</span>
                                                                     </p>
                                                                     <p className="text-sm text-slate-500">
@@ -301,6 +345,99 @@ export default function PedidosPage() {
                     </table>
                 </div>
             </div>
+
+            {/* Modal de Confirmação de Pagamento */}
+            {confirmPaymentModal?.open && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                    {/* Backdrop */}
+                    <div
+                        className="absolute inset-0 bg-black/50"
+                        onClick={closeConfirmPaymentModal}
+                    />
+
+                    {/* Modal */}
+                    <div className="relative bg-white rounded-xl shadow-xl max-w-md w-full p-6 space-y-6">
+                        {/* Header */}
+                        <div className="flex items-center justify-between">
+                            <h2 className="text-xl font-bold text-slate-800">
+                                Confirmar Pagamento
+                            </h2>
+                            <button
+                                onClick={closeConfirmPaymentModal}
+                                className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                            >
+                                <X className="w-5 h-5 text-slate-500" />
+                            </button>
+                        </div>
+
+                        {/* Order Info */}
+                        <div className="bg-slate-50 rounded-lg p-4">
+                            <div className="flex justify-between items-center">
+                                <span className="text-slate-600">Pedido</span>
+                                <span className="font-mono font-bold text-slate-800">
+                                    #{confirmPaymentModal.orderNumber}
+                                </span>
+                            </div>
+                            <div className="flex justify-between items-center mt-2">
+                                <span className="text-slate-600">Total</span>
+                                <span className="text-xl font-bold text-[#A3D154]">
+                                    {formatCurrency(confirmPaymentModal.totalAmount)}
+                                </span>
+                            </div>
+                        </div>
+
+                        {/* Payment Method Selection */}
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-3">
+                                Forma de Pagamento
+                            </label>
+                            <div className="grid grid-cols-2 gap-3">
+                                {(['DINHEIRO', 'PIX', 'CARTAO_CREDITO', 'CARTAO_DEBITO'] as PaymentMethod[]).map(
+                                    (method) => (
+                                        <button
+                                            key={method}
+                                            type="button"
+                                            onClick={() => setSelectedPaymentMethod(method)}
+                                            className={`p-3 rounded-lg border-2 text-sm font-medium transition-all ${
+                                                selectedPaymentMethod === method
+                                                    ? 'border-[#A3D154] bg-[#A3D154]/10 text-[#8FBD3F]'
+                                                    : 'border-slate-200 hover:border-slate-300 text-slate-600'
+                                            }`}
+                                        >
+                                            {getPaymentMethodLabel(method)}
+                                        </button>
+                                    )
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Actions */}
+                        <div className="flex gap-3 pt-2">
+                            <button
+                                onClick={closeConfirmPaymentModal}
+                                className="flex-1 px-4 py-2.5 rounded-lg border border-slate-200 text-slate-600 font-medium hover:bg-slate-50 transition-colors"
+                                disabled={confirmingPayment}
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={handleConfirmPayment}
+                                disabled={confirmingPayment}
+                                className="flex-1 px-4 py-2.5 rounded-lg bg-[#A3D154] text-white font-medium hover:bg-[#8FBD3F] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {confirmingPayment ? (
+                                    <span className="flex items-center justify-center gap-2">
+                                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                        Confirmando...
+                                    </span>
+                                ) : (
+                                    'Confirmar Pagamento'
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

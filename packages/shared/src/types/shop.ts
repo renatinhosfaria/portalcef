@@ -29,6 +29,14 @@ export type MovementType =
 // ============================================
 // Product
 // ============================================
+export interface ShopProductImage {
+  id: string;
+  productId: string;
+  imageUrl: string;
+  displayOrder: number;
+  createdAt: Date;
+}
+
 export interface ShopProduct {
   id: string;
   schoolId: string;
@@ -40,6 +48,10 @@ export interface ShopProduct {
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
+}
+
+export interface ShopProductWithImages extends ShopProduct {
+  images: string[];
 }
 
 export interface ShopProductVariant {
@@ -168,7 +180,20 @@ export interface ShopSettings {
 // API Request/Response Types
 // ============================================
 
-// Product Listing
+// Product Listing (Catalog)
+export interface ProductCatalogVariant {
+  id: string;
+  size: string;
+  sku?: string | null;
+  price: number; // basePrice or priceOverride
+  availableStock: number;
+  isAvailable: boolean;
+}
+
+export interface ProductCatalogItem extends ShopProductWithImages {
+  variants: ProductCatalogVariant[];
+}
+
 export interface ProductListQuery {
   category?: ProductCategory;
   search?: string;
@@ -178,7 +203,7 @@ export interface ProductListQuery {
 
 export interface ProductListResponse {
   success: true;
-  data: ShopProductWithVariants[];
+  data: ProductCatalogItem[];
   meta: {
     pagination: {
       page: number;

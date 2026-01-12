@@ -68,7 +68,8 @@
       "Bash(docker restart:*)",
       "Bash(docker inspect:*)",
       "Bash(docker logs:*)",
-      "Bash(du:*)"
+      "Bash(du:*)",
+      "Bash(tree:*)"
     ]
   }
 }

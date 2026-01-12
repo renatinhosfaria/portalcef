@@ -101,6 +101,31 @@ export type ShopProduct = typeof shopProducts.$inferSelect;
 export type NewShopProduct = typeof shopProducts.$inferInsert;
 
 // ============================================
+// Table: shop_product_images
+// ============================================
+export const shopProductImages = pgTable(
+  "shop_product_images",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    productId: uuid("product_id")
+      .notNull()
+      .references(() => shopProducts.id, { onDelete: "cascade" }),
+    imageUrl: varchar("image_url", { length: 500 }).notNull(),
+    displayOrder: integer("display_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    productIdIdx: index("shop_product_images_product_id_idx").on(table.productId),
+    displayOrderIdx: index("shop_product_images_display_order_idx").on(table.displayOrder),
+  }),
+);
+
+export type ShopProductImage = typeof shopProductImages.$inferSelect;
+export type NewShopProductImage = typeof shopProductImages.$inferInsert;
+
+// ============================================
 // Table: shop_product_variants
 // ============================================
 export const shopProductVariants = pgTable(
@@ -179,7 +204,7 @@ export const shopInventoryLedger = pgTable(
       .references(() => shopInventory.id, { onDelete: "cascade" }),
     movementType: text("movement_type", { enum: movementTypeEnum }).notNull(),
     quantityChange: integer("quantity_change").notNull(),
-    referenceId: uuid("reference_id"),
+    referenceId: text("reference_id"), // Pode ser UUID de pedido ou orderNumber (6 dígitos)
     notes: text("notes"),
     createdBy: uuid("created_by").references(() => users.id, {
       onDelete: "set null",
@@ -421,3 +446,7 @@ export const selectShopInterestRequestSchema =
 
 export const insertShopSettingsSchema = createInsertSchema(shopSettings);
 export const selectShopSettingsSchema = createSelectSchema(shopSettings);
+
+// End of file
+
+

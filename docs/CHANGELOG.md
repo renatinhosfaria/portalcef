@@ -9,6 +9,10 @@ e o projeto adhere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Documentacao
+
+- Sincroniza docs com o estado atual do codigo (API, DATABASE, SECURITY, DEPLOYMENT, MODULO_LOJA, ANALYSIS_REPORT, Agents AI).
+
 ### Em Desenvolvimento
 
 - Sistema completo de gestao de turmas
@@ -18,6 +22,97 @@ e o projeto adhere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 - Workflow completo de revisao e aprovacao de planejamentos
 - Metricas avancadas de dashboard com graficos
 - Notificacoes em tempo real
+
+### Adicionado
+
+#### Sistema de Voucher para Pagamento Presencial (12/01/2026)
+
+- **Backend - Desabilitação Temporária do Stripe** (`services/api/src/modules/shop`)
+  - Integração com Stripe comentada/desabilitada para futura reintegração
+  - Validade de pedidos alterada de 15 minutos para 7 dias
+  - Novo endpoint `PATCH /shop/admin/orders/:id/confirm-payment` para confirmação de pagamento presencial
+  - Job de expiração atualizado para refletir prazo de 7 dias
+  - DTO `ConfirmPaymentDto` adicionado com validação de método de pagamento
+
+- **Frontend Loja - Checkout Simplificado** (`apps/loja/app/checkout`)
+  - Stripe Elements removidos do checkout
+  - Novo fluxo: cliente preenche dados → gera voucher → paga presencialmente
+  - Informações claras sobre o sistema de voucher e prazo de 7 dias
+  - Rota `/api/shop/checkout/init` desabilitada (retorna 503)
+
+- **Frontend Loja - Página do Voucher Melhorada** (`apps/loja/app/pedido/[orderNumber]`)
+  - Status "Aguardando Pagamento" mais visível
+  - Alerta de pagamento pendente com instruções claras
+  - Label "Total a Pagar" para pedidos aguardando pagamento
+  - Formas de pagamento aceitas exibidas
+
+- **Frontend Admin - Confirmação de Pagamento** (`apps/loja-admin/app/pedidos`)
+  - Botão "Confirmar Pagamento" para pedidos aguardando pagamento
+  - Modal com seleção de método de pagamento (Dinheiro, PIX, Cartão Crédito/Débito)
+  - Filtro de status atualizado para incluir "Aguardando Pagamento"
+  - Nova rota API `/api/shop/admin/orders/:id/confirm-payment`
+
+- **Fluxo de Pedido Atualizado**
+  - Cliente: Catálogo → Carrinho → Checkout → Voucher (7 dias de validade)
+  - Admin: Recebe cliente → Confirma pagamento (escolhe método) → Marca retirada
+  - Estoque: Reservado na criação → Confirmado no pagamento → Liberado se expirar
+
+#### Carrosséis de Imagens de Produtos (12/01/2026)
+
+- **Frontend - Componentes de Carrossel** (`apps/loja/components`)
+  - `ProductCardCarousel.tsx` - Carrossel para cards do catálogo com navegação por setas e dots
+  - `ProductDetailCarousel.tsx` - Carrossel para página de detalhes com imagem principal + thumbnails
+  - Suporte a swipe gestures no mobile para navegação intuitiva
+  - Animações smooth com Framer Motion (fade + slide)
+  - Fallback automático: `images[]` → `imageUrl` → placeholder
+  - Navegação escondida automaticamente para produtos com uma única imagem
+  - Acessibilidade: aria-labels, screen reader announcements, navegação por teclado
+
+- **Backend - Suporte a Múltiplas Imagens no Catálogo** (`services/api/src/modules/shop`)
+  - Endpoint `GET /shop/catalog/:schoolId/:unitId` agora retorna array `images[]` para cada produto
+  - Imagens ordenadas por `displayOrder` via Drizzle ORM
+  - `imageUrl` mantido para compatibilidade retroativa
+  - Fallback para array vazio se produto não tiver imagens
+
+- **Types - Tipos Compartilhados** (`packages/shared/src/types/shop.ts`)
+  - Nova interface `ShopProductImage` com campos `imageUrl` e `displayOrder`
+  - Nova interface `ShopProductWithImages` estendendo `ShopProduct` com `images: string[]`
+  - Novo tipo `ProductCatalogItem` com variantes e imagens
+
+- **Testes** (`apps/loja/components/__tests__`)
+  - Testes unitários para `ProductCardCarousel` (navegação, swipe, dots, fallback)
+  - Testes unitários para `ProductDetailCarousel` (thumbnails, navegação, aria)
+  - Configuração Vitest + RTL com tipos de jest-dom
+
+- **Zero Breaking Changes**
+  - Campo `images[]` é novo, campo `imageUrl` mantido
+  - Clientes antigos continuam funcionando com `imageUrl` apenas
+  - Todas as imagens estão ordenadas por `displayOrder` (consistente)
+
+#### APIs Administrativas do Shop (11/01/2026)
+
+- **Backend - Endpoints Administrativos Completos** (`services/api/src/modules/shop`)
+  - GET /shop/admin/dashboard - Dashboard com estatísticas (pendingPickups, lowStockAlerts, pendingInterest)
+  - GET /shop/admin/products - Listar todos os produtos da escola
+  - GET /shop/admin/products/:id - Detalhes de produto com variantes e inventário por unidade
+  - GET /shop/admin/inventory - Listar todo inventário com status (quantity, reserved, available, needsRestock)
+  - GET /shop/admin/orders - Listar pedidos com paginação, filtros (status, orderSource) e busca
+  - GET /shop/admin/orders/:id - Detalhes completos de um pedido
+  - Integração completa com services existentes (ShopProductsService, ShopInventoryService, ShopOrdersService)
+  - Queries otimizadas com joins e agregações SQL
+  - Filtros por tenant (schoolId/unitId) respeitando RBAC
+  - Formatação de resposta padronizada com meta.pagination
+  - ~150 linhas de código adicionadas ao controller
+  - Documentação completa em docs/API.md
+
+- **Frontend - Integração com APIs Reais**
+  - Removidos todos os mocks de loja-admin (produtos, estoque, pedidos, interesse, dashboard)
+  - Removidos todos os mocks de loja pública (detalhes de produto)
+  - Removidos todos os mocks de planejamento (quinzenas)
+  - Apps agora consomem APIs do backend via fetch
+  - Graceful error handling: console.warn em vez de erro fatal
+  - Estados vazios exibidos quando APIs retornam 404
+  - 12+ arquivos modificados para remover dados mock
 
 ### Corrigido
 

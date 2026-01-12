@@ -54,9 +54,14 @@ export class CreateOrderDto {
   @Type(() => OrderItemDto)
   items!: OrderItemDto[];
 
+  @IsOptional()
   @IsInt()
   @Min(1)
   installments?: number; // Default: 1
+
+  @IsOptional()
+  @IsString()
+  paymentIntentId?: string; // Se já criou Intent via /checkout/init
 }
 
 /**
@@ -143,4 +148,15 @@ export class CreatePresentialSaleDto {
 export class CancelOrderDto {
   @IsString()
   reason!: string; // Motivo obrigatório
+}
+
+/**
+ * DTO para confirmar pagamento presencial
+ * PATCH /shop/admin/orders/:id/confirm-payment
+ *
+ * Usado no sistema de voucher onde cliente paga presencialmente na escola
+ */
+export class ConfirmPaymentDto {
+  @IsEnum(["DINHEIRO", "PIX", "CARTAO_CREDITO", "CARTAO_DEBITO"])
+  paymentMethod!: "DINHEIRO" | "PIX" | "CARTAO_CREDITO" | "CARTAO_DEBITO";
 }

@@ -3,50 +3,80 @@
 @tailwind utilities;
 
 @layer components {
-@layer components {
-  /* Shop-specific styles - Premium & Modern */
+  /* Shop Card - Clean & Modern */
   .shop-card {
-    @apply bg-white/90 backdrop-blur-md rounded-2xl border border-white/20 shadow-xl shadow-brand-900/5 transition-all duration-300 hover:shadow-2xl hover:shadow-brand-900/10 hover:-translate-y-1;
+    @apply bg-white rounded-lg border border-slate-200 shadow-sm transition-all duration-200 hover:shadow-md hover:border-slate-300;
   }
 
-  /* Glassmorphism Utilities */
+  /* Glass Utilities - Subtle */
   .glass {
-    @apply bg-white/70 backdrop-blur-lg border border-white/50;
+    @apply bg-white/90 backdrop-blur-sm border border-slate-200;
   }
 
   .glass-dark {
-    @apply bg-brand-950/80 backdrop-blur-lg border border-white/10 text-white;
+    @apply bg-slate-900/95 backdrop-blur-sm border border-slate-700 text-white;
   }
 
-  /* Text Gradients */
-  .text-gradient-brand {
-    @apply bg-clip-text text-transparent bg-gradient-to-r from-brand-600 to-essencia-green;
-  }
-
-  /* Buttons */
+  /* Buttons - Clean without gradients */
   .btn-shop-primary {
-    @apply bg-gradient-to-r from-brand-600 to-brand-500 text-white font-semibold px-6 py-3 rounded-xl 
-    hover:from-brand-700 hover:to-brand-600 transition-all shadow-lg shadow-brand-500/30 
-    hover:shadow-brand-500/50 hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply bg-[#A3D154] text-white font-semibold px-6 py-3 rounded-lg
+    hover:bg-[#8FBD3F] transition-colors duration-150
+    disabled:opacity-50 disabled:cursor-not-allowed;
   }
 
   .btn-shop-secondary {
-    @apply bg-white text-brand-900 font-semibold px-6 py-3 rounded-xl border-2 border-slate-100 
-    hover:border-brand-200 hover:bg-brand-50/50 transition-all shadow-sm hover:shadow-md;
+    @apply bg-white text-slate-800 font-semibold px-6 py-3 rounded-lg border border-slate-200
+    hover:border-slate-300 hover:bg-slate-50 transition-colors duration-150;
+  }
+
+  .btn-shop-outline {
+    @apply bg-transparent text-[#A3D154] font-semibold px-6 py-3 rounded-lg border-2 border-[#A3D154]
+    hover:bg-[#A3D154]/10 transition-colors duration-150;
   }
 
   /* Form Elements */
   .input-shop {
-    @apply w-full px-4 py-3 rounded-xl border border-slate-200 bg-white/50 transition-all
-    focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500;
+    @apply w-full px-4 py-3 rounded-lg border border-slate-200 bg-white transition-colors duration-150
+    focus:outline-none focus:ring-2 focus:ring-[#A3D154]/20 focus:border-[#A3D154];
+  }
+
+  .select-shop {
+    @apply w-full px-4 py-3 rounded-lg border border-slate-200 bg-white transition-colors duration-150
+    focus:outline-none focus:ring-2 focus:ring-[#A3D154]/20 focus:border-[#A3D154] appearance-none cursor-pointer;
+  }
+
+  /* Status Badges */
+  .badge-shop {
+    @apply inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium;
+  }
+
+  .badge-shop-success {
+    @apply bg-[#A3D154]/15 text-[#5a7a1f];
+  }
+
+  .badge-shop-warning {
+    @apply bg-amber-50 text-amber-700;
+  }
+
+  .badge-shop-danger {
+    @apply bg-red-50 text-red-700;
+  }
+
+  .badge-shop-info {
+    @apply bg-blue-50 text-blue-700;
   }
 }
 
-/* Animations */
+/* Animations - Subtle & Fast */
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
 @keyframes fade-in-up {
   from {
     opacity: 0;
-    transform: translateY(20px);
+    transform: translateY(8px);
   }
   to {
     opacity: 1;
@@ -54,17 +84,20 @@
   }
 }
 
+.animate-fade-in {
+  animation: fade-in 200ms ease-out forwards;
+}
+
 .animate-fade-in-up {
-  animation: fade-in-up 0.6s ease-out forwards;
+  animation: fade-in-up 200ms ease-out forwards;
 }
 
-.animate-delay-100 {
-  animation-delay: 100ms;
+.animate-delay-75 {
+  animation-delay: 75ms;
 }
 
-.animate-delay-200 {
-  animation-delay: 200ms;
-}
+.animate-delay-150 {
+  animation-delay: 150ms;
 }
 
 /* Print styles para voucher */
@@ -72,12 +105,12 @@
   body {
     @apply bg-white text-black;
   }
-  
+
   .no-print {
     display: none !important;
   }
-  
+
   .voucher-code {
-    @apply text-8xl;
+    @apply text-6xl font-mono;
   }
 }

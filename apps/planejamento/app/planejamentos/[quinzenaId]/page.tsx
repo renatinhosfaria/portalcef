@@ -14,8 +14,6 @@ import { ArrowLeft, Calendar, FileText, Plus } from "lucide-react";
 import { cookies } from "next/headers";
 import Link from "next/link";
 
-import { generateMockQuinzenas } from "../../../features/planejamentos";
-
 interface PageProps {
   params: Promise<{
     quinzenaId: string;
@@ -157,18 +155,11 @@ function parseQuinzenaNumber(quinzenaId: string): number {
 }
 
 /**
- * Gera uma quinzena virtual baseada no ID se não existir na lista mock.
- * Isso permite navegar para quinzenas que existem no banco mas não no mock.
+ * Cria uma quinzena virtual baseada no ID.
+ * TODO: Buscar quinzena real da API
  */
 function getOrCreateQuinzena(quinzenaId: string) {
-  const quinzenas = generateMockQuinzenas();
-  const existing = quinzenas.find((q) => q.id === quinzenaId);
-
-  if (existing) {
-    return existing;
-  }
-
-  // Se não encontrar, criar uma quinzena virtual
+  // TODO: Buscar da API real
   const number = parseQuinzenaNumber(quinzenaId);
 
   // Calcular datas aproximadas

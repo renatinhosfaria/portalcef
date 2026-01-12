@@ -1,47 +1,64 @@
 'use client';
 
-import { Elements, PaymentElement, useElements, useStripe } from '@stripe/react-stripe-js';
-import { loadStripe, type StripeElementsOptions } from '@stripe/stripe-js';
+import { ArrowLeft, FileText, Info, Loader2, Trash2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useState, useEffect } from 'react';
 
 import { LoadingSpinner } from '@/components/Loading';
 import { OrderItemCard } from '@/components/OrderItemCard';
 import { Toast, useToast } from '@/components/Toast';
 import { useCart, type CartItem } from '@/lib/useCart';
 
-// TODO: Mover STRIPE_PUBLIC_KEY para .env.local
-const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || '');
-
-function CheckoutForm() {
-  const stripe = useStripe();
-  const elements = useElements();
+export default function CheckoutPage() {
   const router = useRouter();
-  const { items, getTotalAmount, clearCart } = useCart();
+  const { items, getTotalAmount, clearCart, isLoaded } = useCart();
   const { toast, showToast } = useToast();
 
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
-  const [installments, setInstallments] = useState(1);
   const [processing, setProcessing] = useState(false);
+  const [orderCreated, setOrderCreated] = useState(false);
 
-  const totalCents = getTotalAmount();
-  const totalReais = totalCents / 100;
-  const installmentValue = totalReais / installments;
+  const totalReais = getTotalAmount();
+
+  useEffect(() => {
+    if (isLoaded && items.length === 0 && !orderCreated && !processing) {
+      router.push('/');
+    }
+  }, [isLoaded, items.length, router, orderCreated, processing]);
+
+  if (!isLoaded || (isLoaded && items.length === 0 && !orderCreated)) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <LoadingSpinner size="lg" />
+      </div>
+    );
+  }
+
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    let value = e.target.value.replace(/\D/g, '');
+    if (value.length > 11) value = value.slice(0, 11);
+
+    let formatted = value;
+    if (value.length > 10) {
+      formatted = `(${value.slice(0, 2)}) ${value.slice(2, 7)}-${value.slice(7)}`;
+    } else if (value.length > 6) {
+      formatted = `(${value.slice(0, 2)}) ${value.slice(2, 6)}-${value.slice(6)}`;
+    } else if (value.length > 2) {
+      formatted = `(${value.slice(0, 2)}) ${value.slice(2)}`;
+    }
+
+    setCustomerPhone(formatted);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (!stripe || !elements) {
-      return;
-    }
 
     if (!customerName.trim() || !customerPhone.trim()) {
       showToast({ message: 'Preencha todos os campos obrigatórios', type: 'error' });
       return;
     }
 
-    // Validate phone format (10-13 digits)
     const phoneDigits = customerPhone.replace(/\D/g, '');
     if (phoneDigits.length < 10 || phoneDigits.length > 13) {
       showToast({ message: 'Telefone inválido. Use formato: (11) 98765-4321', type: 'error' });
@@ -51,11 +68,9 @@ function CheckoutForm() {
     setProcessing(true);
 
     try {
-      // Get schoolId from localStorage or first item
       const storedSchoolId = localStorage.getItem('cef_shop_school_id') || 'default';
       const storedUnitId = localStorage.getItem('cef_shop_unit_id') || 'default';
 
-      // Call real API to create order
       const response = await fetch(`/api/shop/orders/${storedSchoolId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -69,7 +84,6 @@ function CheckoutForm() {
           })),
           customerName: customerName.trim(),
           customerPhone: phoneDigits,
-          installments
         })
       });
 
@@ -91,28 +105,15 @@ function CheckoutForm() {
 
       const { orderNumber } = result.data;
 
-      // Confirm payment with Stripe using the real client secret
-      const { error, paymentIntent } = await stripe.confirmPayment({
-        elements,
-        confirmParams: {
-          return_url: `${window.location.origin}/pedido/${orderNumber}?phone=${phoneDigits}`,
-        },
-        redirect: 'if_required',
-      });
+      setOrderCreated(true);
+      showToast({ message: 'Voucher gerado com sucesso!', type: 'success' });
+      router.replace(`/pedido/${orderNumber}?phone=${phoneDigits}`);
 
-      if (error) {
-        showToast({ message: error.message || 'Erro no pagamento', type: 'error' });
-        return;
-      }
+      setTimeout(() => clearCart(), 500);
 
-      if (paymentIntent && paymentIntent.status === 'succeeded') {
-        clearCart();
-        showToast({ message: 'Pagamento aprovado!', type: 'success' });
-        router.push(`/pedido/${orderNumber}?phone=${phoneDigits}`);
-      }
     } catch (err: unknown) {
       console.error('Checkout error:', err);
-      const message = err instanceof Error ? err.message : 'Erro ao processar pagamento';
+      const message = err instanceof Error ? err.message : 'Erro ao gerar voucher';
       showToast({ message, type: 'error' });
     } finally {
       setProcessing(false);
@@ -120,188 +121,139 @@ function CheckoutForm() {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
-      {/* Dados do Cliente */}
-      <div className="card">
-        <h3 className="text-lg font-bold text-gray-800 mb-4">Dados do Responsável</h3>
-        <div className="space-y-4">
-          <div>
-            <label htmlFor="customerName" className="block text-sm font-medium text-gray-700 mb-2">
-              Nome Completo *
-            </label>
-            <input
-              type="text"
-              id="customerName"
-              value={customerName}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCustomerName(e.target.value)}
-              className="input w-full"
-              placeholder="Ex: João da Silva"
-              required
-            />
-          </div>
-          <div>
-            <label htmlFor="customerPhone" className="block text-sm font-medium text-gray-700 mb-2">
-              Telefone *
-            </label>
-            <input
-              type="tel"
-              id="customerPhone"
-              value={customerPhone}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCustomerPhone(e.target.value)}
-              className="input w-full"
-              placeholder="(11) 98765-4321"
-              required
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Dados de Pagamento */}
-      <div className="card">
-        <h3 className="text-lg font-bold text-gray-800 mb-4">Dados de Pagamento</h3>
-        <div className="space-y-4">
-          <PaymentElement />
-
-          {/* Parcelamento */}
-          <div>
-            <label htmlFor="installments" className="block text-sm font-medium text-gray-700 mb-2">
-              Parcelamento
-            </label>
-            <select
-              id="installments"
-              value={installments}
-              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setInstallments(Number(e.target.value))}
-              className="input w-full"
-            >
-              {[...Array(12)].map((_, i) => {
-                const parcelas = i + 1;
-                const valor = totalReais / parcelas;
-                return (
-                  <option key={parcelas} value={parcelas}>
-                    {parcelas}x de R$ {valor.toFixed(2)} {parcelas === 1 ? '(à vista)' : ''}
-                  </option>
-                );
-              })}
-            </select>
-          </div>
-        </div>
-      </div>
-
-      {/* Resumo do Pedido */}
-      <div className="card bg-blue-50 border-2 border-blue-200">
-        <h3 className="text-lg font-bold text-gray-800 mb-4">Resumo do Pedido</h3>
-        <div className="space-y-2 mb-4">
-          {items.map((item: CartItem, index: number) => (
-            <OrderItemCard key={`${item.variantId}-${item.studentName}-${index}`} {...item} subtotal={item.unitPrice * item.quantity} />
-          ))}
-        </div>
-        <div className="pt-4 border-t border-blue-300">
-          <div className="flex justify-between items-center">
-            <span className="text-lg font-bold text-gray-800">Total:</span>
-            <span className="text-2xl font-bold text-blue-600">R$ {totalReais.toFixed(2)}</span>
-          </div>
-          {installments > 1 && (
-            <p className="text-sm text-gray-600 mt-2 text-right">
-              {installments}x de R$ {installmentValue.toFixed(2)}
-            </p>
-          )}
-        </div>
-      </div>
-
-      {/* Botão de Pagamento */}
-      <button type="submit" disabled={!stripe || processing} className="btn-primary w-full">
-        {processing ? <LoadingSpinner size="sm" /> : `💳 Pagar R$ ${totalReais.toFixed(2)}`}
-      </button>
-
-      {toast && <Toast message={toast.message} type={toast.type} duration={toast.duration} onClose={() => { }} />}
-    </form>
-  );
-}
-
-export default function CheckoutPage() {
-  const { items, getTotalAmount } = useCart();
-  const router = useRouter();
-  const [clientSecret, setClientSecret] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    if (items.length === 0) {
-      router.push('/');
-      return;
-    }
-
-    async function initCheckout() {
-      try {
-        // TODO: Chamar API para criar PaymentIntent e obter client_secret
-        // const response = await fetch('/api/shop/checkout/init', {
-        //   method: 'POST',
-        //   headers: { 'Content-Type': 'application/json' },
-        //   body: JSON.stringify({ amount: getTotalAmount() })
-        // });
-        // const { data } = await response.json();
-        // setClientSecret(data.client_secret);
-
-        // Mock: Simular criação de clientSecret
-        await new Promise((resolve) => setTimeout(resolve, 500));
-        setClientSecret('mock_client_secret_' + Date.now());
-      } catch (err) {
-        console.error('Erro ao inicializar checkout:', err);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    initCheckout();
-  }, [items, router, getTotalAmount]);
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <LoadingSpinner size="lg" />
-      </div>
-    );
-  }
-
-  if (!clientSecret) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-        <div className="card max-w-md w-full text-center">
-          <p className="text-xl text-red-600 mb-4">❌</p>
-          <p className="text-gray-700 mb-4">Erro ao carregar checkout. Tente novamente.</p>
-          <button onClick={() => router.push('/carrinho')} className="btn-primary w-full">
-            Voltar ao Carrinho
+    <div className="min-h-screen bg-slate-50">
+      <header className="bg-white border-b border-slate-200">
+        <div className="max-w-2xl mx-auto px-4 py-4 flex items-center gap-3">
+          <button
+            onClick={() => router.back()}
+            className="p-2 -ml-2 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors duration-150"
+          >
+            <ArrowLeft className="w-5 h-5" />
           </button>
-        </div>
-      </div>
-    );
-  }
-
-  const options: StripeElementsOptions = {
-    clientSecret,
-    appearance: {
-      theme: 'stripe',
-      variables: {
-        colorPrimary: '#3b82f6',
-        colorText: '#1f2937',
-        colorDanger: '#ef4444',
-        borderRadius: '8px',
-      },
-    },
-    locale: 'pt-BR',
-  };
-
-  return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-gray-200">
-        <div className="max-w-4xl mx-auto px-4 py-4">
-          <h1 className="text-xl font-bold text-gray-800">🛒 Finalizar Pedido</h1>
+          <h1 className="text-lg font-semibold text-slate-800">Finalizar Pedido</h1>
         </div>
       </header>
 
-      <main className="max-w-4xl mx-auto p-4 md:p-6 lg:p-8">
-        <Elements stripe={stripePromise} options={options}>
-          <CheckoutForm />
-        </Elements>
+      <main className="max-w-2xl mx-auto p-4">
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Info Box */}
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex gap-3">
+            <Info className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" aria-hidden="true" />
+            <div className="text-sm">
+              <p className="font-medium text-amber-800 mb-1">Como funciona?</p>
+              <p className="text-amber-700">
+                Você receberá um voucher para pagamento presencial na escola. Válido por 7 dias.
+              </p>
+            </div>
+          </div>
+
+          {/* Customer Data */}
+          <div className="bg-white rounded-lg border border-slate-200 p-4">
+            <h3 className="font-semibold text-slate-800 mb-4">Dados do Responsável</h3>
+            <div className="space-y-4">
+              <div>
+                <label htmlFor="customerName" className="block text-sm font-medium text-slate-700 mb-1.5">
+                  Nome Completo
+                </label>
+                <input
+                  type="text"
+                  id="customerName"
+                  value={customerName}
+                  onChange={(e) => setCustomerName(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-lg border border-slate-200 text-sm focus:border-[#A3D154] focus:ring-2 focus:ring-[#A3D154]/20 outline-none transition-colors duration-150"
+                  placeholder="Ex: Maria Silva"
+                  required
+                />
+              </div>
+              <div>
+                <label htmlFor="customerPhone" className="block text-sm font-medium text-slate-700 mb-1.5">
+                  Telefone
+                </label>
+                <input
+                  type="tel"
+                  id="customerPhone"
+                  value={customerPhone}
+                  onChange={handlePhoneChange}
+                  className="w-full px-3 py-2.5 rounded-lg border border-slate-200 text-sm focus:border-[#A3D154] focus:ring-2 focus:ring-[#A3D154]/20 outline-none transition-colors duration-150"
+                  placeholder="(11) 98765-4321"
+                  maxLength={15}
+                  required
+                />
+                <p className="text-xs text-slate-400 mt-1">
+                  Usado para consultar seu pedido
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Order Summary */}
+          <div className="bg-white rounded-lg border border-slate-200 p-4">
+            <h3 className="font-semibold text-slate-800 mb-4">Resumo do Pedido</h3>
+            <div className="space-y-2 mb-4">
+              {items.map((item: CartItem, index: number) => (
+                <OrderItemCard
+                  key={`${item.variantId}-${item.studentName}-${index}`}
+                  {...item}
+                  subtotal={item.unitPrice * item.quantity}
+                />
+              ))}
+            </div>
+            <div className="pt-4 border-t border-slate-100">
+              <div className="flex justify-between items-center">
+                <span className="font-medium text-slate-700">Total a Pagar:</span>
+                <span className="text-xl font-semibold text-slate-800 tabular-nums">
+                  {totalReais.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 mt-2">
+                Pagamento realizado presencialmente na escola
+              </p>
+            </div>
+          </div>
+
+          {/* Submit Button */}
+          <button
+            type="submit"
+            disabled={processing}
+            className="w-full bg-[#A3D154] text-white font-medium py-3 rounded-lg hover:bg-[#8FBD3F] transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          >
+            {processing ? (
+              <>
+                <Loader2 className="w-5 h-5 animate-spin" />
+                Gerando voucher...
+              </>
+            ) : (
+              <>
+                <FileText className="w-5 h-5" />
+                Gerar Voucher
+              </>
+            )}
+          </button>
+
+          {/* Clear Cart */}
+          <button
+            type="button"
+            onClick={() => {
+              if (confirm('Tem certeza que deseja limpar o carrinho?')) {
+                clearCart();
+                router.push('/');
+              }
+            }}
+            className="w-full text-center text-sm text-slate-400 hover:text-red-500 py-2 flex items-center justify-center gap-1.5 transition-colors duration-150"
+          >
+            <Trash2 className="w-4 h-4" />
+            Limpar Carrinho
+          </button>
+
+          {toast && (
+            <Toast
+              message={toast.message}
+              type={toast.type}
+              duration={toast.duration}
+              onClose={() => {}}
+            />
+          )}
+        </form>
       </main>
     </div>
   );

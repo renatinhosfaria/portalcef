@@ -1,11 +1,8 @@
+import { isInVacationPeriod } from "@essencia/shared/config/quinzenas";
 import { LayoutDashboard, Umbrella } from "lucide-react";
 import type { Metadata } from "next";
 
-import {
-  generateMockQuinzenas,
-  isInVacationPeriod,
-  QuinzenasGrid,
-} from "../../features/planejamentos";
+import { QuinzenasGrid, type Quinzena } from "../../features/planejamentos";
 
 export const metadata: Metadata = {
   title: "Meus Planejamentos | Essência",
@@ -13,7 +10,8 @@ export const metadata: Metadata = {
 };
 
 export default function PlanejamentosPage() {
-  const quinzenas = generateMockQuinzenas();
+  // TODO: Buscar quinzenas da API real
+  const quinzenas: Quinzena[] = [];
   const isVacation = isInVacationPeriod(new Date());
 
   return (

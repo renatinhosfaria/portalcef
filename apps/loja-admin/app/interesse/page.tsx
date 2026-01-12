@@ -24,24 +24,26 @@ export default function InteressePage() {
     const loadRequests = useCallback(async () => {
         try {
             setLoading(true);
-            await new Promise(resolve => setTimeout(resolve, 500));
-
-            const mockData: InterestRequest[] = [
-                { id: '1', customerName: 'Maria Silva', customerPhone: '11987654321', customerEmail: 'maria@email.com', studentName: 'João Silva', studentClass: 'Infantil 3A', notes: 'Preciso de 2 camisetas tamanho 8', itemsCount: 2, contactedAt: null, createdAt: new Date().toISOString() },
-                { id: '2', customerName: 'Carlos Santos', customerPhone: '11998765432', customerEmail: 'carlos@email.com', studentName: 'Ana Santos', studentClass: '3º Ano B', notes: '', itemsCount: 3, contactedAt: null, createdAt: new Date(Date.now() - 86400000).toISOString() },
-                { id: '3', customerName: 'Ana Costa', customerPhone: '11912345678', customerEmail: 'ana@email.com', studentName: 'Pedro Costa', studentClass: '5º Ano A', notes: 'Aguardando uniforme de educação física', itemsCount: 1, contactedAt: new Date(Date.now() - 3600000).toISOString(), createdAt: new Date(Date.now() - 172800000).toISOString() },
-            ];
-
-            let filtered = mockData;
-            if (statusFilter === 'PENDENTE') {
-                filtered = mockData.filter(r => !r.contactedAt);
-            } else if (statusFilter === 'CONTATADO') {
-                filtered = mockData.filter(r => r.contactedAt);
+            
+            const params = new URLSearchParams();
+            if (statusFilter !== 'TODOS') {
+                params.set('status', statusFilter);
             }
-
-            setRequests(filtered);
+            
+            // TODO: Implementar API /api/shop/admin/interest no backend
+            const response = await fetch(`/api/shop/admin/interest?${params.toString()}`);
+            
+            if (!response.ok) {
+                console.warn('API de interesse não disponível:', response.status);
+                setRequests([]);
+                return;
+            }
+            
+            const result = await response.json();
+            setRequests(result.data || []);
         } catch (err) {
-            console.error('Error loading requests:', err);
+            console.warn('Não foi possível carregar lista de interesse. API ainda não implementada?', err);
+            setRequests([]);
         } finally {
             setLoading(false);
         }

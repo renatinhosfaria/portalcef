@@ -2,11 +2,15 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  Inject,
+  Optional,
 } from "@nestjs/common";
+import { MultipartFile } from "@fastify/multipart";
 import {
   getDb,
   shopProducts,
   shopProductVariants,
+  shopProductImages,
   shopInventory,
   eq,
   and,
@@ -17,6 +21,7 @@ import type {
   UpdateProductDto,
   CatalogFiltersDto,
 } from "./dto";
+import { StorageService } from "../../common/storage/storage.service";
 
 type ProductInventory = typeof shopInventory.$inferSelect;
 type ProductVariantWithInventory = typeof shopProductVariants.$inferSelect & {
@@ -24,6 +29,7 @@ type ProductVariantWithInventory = typeof shopProductVariants.$inferSelect & {
 };
 type ProductWithVariants = typeof shopProducts.$inferSelect & {
   variants: ProductVariantWithInventory[];
+  images: (typeof shopProductImages.$inferSelect)[];
 };
 
 /**
@@ -34,6 +40,12 @@ type ProductWithVariants = typeof shopProducts.$inferSelect & {
  */
 @Injectable()
 export class ShopProductsService {
+  constructor(
+    @Optional()
+    @Inject(StorageService)
+    private readonly storageService?: StorageService,
+  ) { }
+
   /**
    * GET /shop/catalog/:schoolId/:unitId
    *
@@ -68,6 +80,9 @@ export class ShopProductsService {
               where: eq(shopInventory.unitId, unitId),
             },
           },
+        },
+        images: {
+          orderBy: asc(shopProductImages.displayOrder),
         },
       },
       orderBy: [asc(shopProducts.name)],
@@ -114,6 +129,7 @@ export class ShopProductsService {
           category: product.category,
           basePrice: product.basePrice,
           imageUrl: product.imageUrl,
+          images: product.images?.map((img: { imageUrl: string }) => img.imageUrl) || [],
           variants,
         };
       })
@@ -134,10 +150,12 @@ export class ShopProductsService {
       where: eq(shopProducts.id, id),
       with: {
         variants: {
-          where: eq(shopProductVariants.isActive, true),
           with: {
             inventory: true,
           },
+        },
+        images: {
+          orderBy: asc(shopProductImages.displayOrder),
         },
       },
     })) as ProductWithVariants | null;
@@ -155,6 +173,8 @@ export class ShopProductsService {
         id: variant.id,
         size: variant.size,
         sku: variant.sku,
+        priceOverride: variant.priceOverride,
+        isActive: variant.isActive,
         price: variant.priceOverride || product.basePrice,
         inventory: variant.inventory.map((inv: ProductInventory) => ({
           unitId: inv.unitId,
@@ -172,6 +192,7 @@ export class ShopProductsService {
       category: product.category,
       basePrice: product.basePrice,
       imageUrl: product.imageUrl,
+      images: product.images.map((img: { imageUrl: string }) => img.imageUrl),
       isActive: product.isActive,
       variants,
     };
@@ -185,6 +206,9 @@ export class ShopProductsService {
   async createProduct(dto: CreateProductDto, _userId: string) {
     const db = getDb();
 
+    // Use first image as main imageUrl if provided
+    const mainImageUrl = dto.images?.length ? dto.images[0] : dto.imageUrl;
+
     // Insert product
     const [product] = await db
       .insert(shopProducts)
@@ -194,10 +218,21 @@ export class ShopProductsService {
         description: dto.description || null,
         category: dto.category,
         basePrice: dto.basePrice,
-        imageUrl: dto.imageUrl || null,
+        imageUrl: mainImageUrl || null,
         isActive: dto.isActive !== undefined ? dto.isActive : true,
       })
       .returning();
+
+    // Insert images if provided
+    if (dto.images && dto.images.length > 0) {
+      await db.insert(shopProductImages).values(
+        dto.images.map((url, index) => ({
+          productId: product.id,
+          imageUrl: url,
+          displayOrder: index,
+        })),
+      );
+    }
 
     return product;
   }
@@ -228,14 +263,39 @@ export class ShopProductsService {
     if (dto.description !== undefined) updateData.description = dto.description;
     if (dto.category !== undefined) updateData.category = dto.category;
     if (dto.basePrice !== undefined) updateData.basePrice = dto.basePrice;
-    if (dto.imageUrl !== undefined) updateData.imageUrl = dto.imageUrl;
     if (dto.isActive !== undefined) updateData.isActive = dto.isActive;
 
-    if (Object.keys(updateData).length === 0) {
+    // Handle images if provided
+    if (dto.images && dto.images.length > 0) {
+      updateData.imageUrl = dto.images[0];
+    } else if (dto.imageUrl !== undefined) {
+      updateData.imageUrl = dto.imageUrl;
+    }
+
+    if (Object.keys(updateData).length === 0 && !dto.images) {
       throw new BadRequestException({
         code: "VALIDATION_ERROR",
         message: "Nenhum campo para atualizar",
       });
+    }
+
+    // Sync images if provided
+    if (dto.images) {
+      // 1. Delete existing images
+      await db
+        .delete(shopProductImages)
+        .where(eq(shopProductImages.productId, id));
+
+      // 2. Insert new images
+      if (dto.images.length > 0) {
+        await db.insert(shopProductImages).values(
+          dto.images.map((url, index) => ({
+            productId: id,
+            imageUrl: url,
+            displayOrder: index,
+          })),
+        );
+      }
     }
 
     const [updated] = await db
@@ -250,7 +310,7 @@ export class ShopProductsService {
   /**
    * DELETE /shop/admin/products/:id
    *
-   * Remove produto (soft delete - marca isActive=false)
+   * Remove produto permanentemente do banco de dados
    */
   async deleteProduct(id: string, _userId: string) {
     const db = getDb();
@@ -267,10 +327,188 @@ export class ShopProductsService {
       });
     }
 
-    // Soft delete
+    // Hard delete - remove permanentemente
     await db
-      .update(shopProducts)
-      .set({ isActive: false })
+      .delete(shopProducts)
       .where(eq(shopProducts.id, id));
+  }
+
+  /**
+   * POST /shop/admin/products/:id/upload-image
+   *
+   * Upload de imagem do produto para MinIO
+   * Recebe um MultipartFile do Fastify
+   */
+  async uploadProductImage(
+    productId: string,
+    file: MultipartFile,
+  ): Promise<string> {
+    const db = getDb();
+
+    // Verificar se produto existe
+    const product = await db.query.shopProducts.findFirst({
+      where: eq(shopProducts.id, productId),
+    });
+
+    if (!product) {
+      throw new NotFoundException({
+        code: "RESOURCE_NOT_FOUND",
+        message: "Produto não encontrado",
+      });
+    }
+
+    try {
+      if (!this.storageService) {
+        throw new Error("Storage service is not configured");
+      }
+      // Upload para MinIO usando o StorageService
+      const result = await this.storageService.uploadFile(file);
+      const imageUrl = result.url;
+
+      // Atualizar produto com nova imageUrl
+      await db
+        .update(shopProducts)
+        .set({ imageUrl })
+        .where(eq(shopProducts.id, productId));
+
+      return imageUrl;
+    } catch (error) {
+      throw new BadRequestException({
+        code: "UPLOAD_ERROR",
+        message: `Erro ao fazer upload: ${error instanceof Error ? error.message : "Erro desconhecido"}`,
+      });
+    }
+  }
+
+  // ==================== VARIANTES ====================
+
+  /**
+   * POST /shop/admin/variants
+   *
+   * Cria nova variante de produto
+   */
+  async createVariant(
+    dto: { productId: string; size: string; sku?: string; priceOverride?: number },
+    _userId: string,
+    unitId?: string,
+  ) {
+    const db = getDb();
+
+    // Verificar se produto existe
+    const product = await db.query.shopProducts.findFirst({
+      where: eq(shopProducts.id, dto.productId),
+    });
+
+    if (!product) {
+      throw new NotFoundException({
+        code: "RESOURCE_NOT_FOUND",
+        message: "Produto não encontrado",
+      });
+    }
+
+    // Verificar se já existe variante com esse tamanho
+    const existing = await db.query.shopProductVariants.findFirst({
+      where: and(
+        eq(shopProductVariants.productId, dto.productId),
+        eq(shopProductVariants.size, dto.size),
+      ),
+    });
+
+    if (existing) {
+      throw new BadRequestException({
+        code: "VARIANT_EXISTS",
+        message: `Já existe uma variante com tamanho ${dto.size}`,
+      });
+    }
+
+    const [variant] = await db
+      .insert(shopProductVariants)
+      .values({
+        productId: dto.productId,
+        size: dto.size,
+        sku: dto.sku || null,
+        priceOverride: dto.priceOverride || null,
+        isActive: true,
+      })
+      .returning();
+
+    // Auto-criar entrada de inventário se unitId foi fornecido
+    if (unitId) {
+      await db
+        .insert(shopInventory)
+        .values({
+          variantId: variant.id,
+          unitId: unitId,
+          quantity: 0,
+          reservedQuantity: 0,
+          lowStockThreshold: 5,
+        })
+        .onConflictDoNothing();
+    }
+
+    return variant;
+  }
+
+  /**
+   * PATCH /shop/admin/variants/:id
+   *
+   * Atualiza variante existente
+   */
+  async updateVariant(
+    id: string,
+    dto: { size?: string; sku?: string; priceOverride?: number; isActive?: boolean },
+    _userId: string,
+  ) {
+    const db = getDb();
+
+    // Verificar se variante existe
+    const existing = await db.query.shopProductVariants.findFirst({
+      where: eq(shopProductVariants.id, id),
+    });
+
+    if (!existing) {
+      throw new NotFoundException({
+        code: "RESOURCE_NOT_FOUND",
+        message: "Variante não encontrada",
+      });
+    }
+
+    const [updated] = await db
+      .update(shopProductVariants)
+      .set({
+        ...(dto.size && { size: dto.size }),
+        ...(dto.sku !== undefined && { sku: dto.sku || null }),
+        ...(dto.priceOverride !== undefined && { priceOverride: dto.priceOverride || null }),
+        ...(dto.isActive !== undefined && { isActive: dto.isActive }),
+        updatedAt: new Date(),
+      })
+      .where(eq(shopProductVariants.id, id))
+      .returning();
+
+    return updated;
+  }
+
+  /**
+   * DELETE /shop/admin/variants/:id
+   *
+   * Remove variante permanentemente
+   */
+  async deleteVariant(id: string, _userId: string) {
+    const db = getDb();
+
+    // Verificar se variante existe
+    const existing = await db.query.shopProductVariants.findFirst({
+      where: eq(shopProductVariants.id, id),
+    });
+
+    if (!existing) {
+      throw new NotFoundException({
+        code: "RESOURCE_NOT_FOUND",
+        message: "Variante não encontrada",
+      });
+    }
+
+    // Hard delete
+    await db.delete(shopProductVariants).where(eq(shopProductVariants.id, id));
   }
 }

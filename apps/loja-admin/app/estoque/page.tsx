@@ -6,10 +6,11 @@ import { useEffect, useState } from 'react';
 interface InventoryItem {
     variantId: string;
     productName: string;
-    size: string;
+    variantSize: string;
     quantity: number;
     reservedQuantity: number;
     lowStockThreshold: number;
+    unitId: string;
 }
 
 export default function EstoquePage() {
@@ -26,18 +27,19 @@ export default function EstoquePage() {
     const loadInventory = async () => {
         try {
             setLoading(true);
-            // TODO: Call real API GET /shop/admin/inventory
-            await new Promise(resolve => setTimeout(resolve, 500));
+            const response = await fetch('/api/shop/admin/inventory');
 
-            setInventory([
-                { variantId: '1', productName: 'Camiseta Uniforme Diário', size: '8', quantity: 15, reservedQuantity: 2, lowStockThreshold: 5 },
-                { variantId: '2', productName: 'Camiseta Uniforme Diário', size: '10', quantity: 3, reservedQuantity: 0, lowStockThreshold: 5 },
-                { variantId: '3', productName: 'Calça Uniforme Diário', size: '8', quantity: 20, reservedQuantity: 1, lowStockThreshold: 5 },
-                { variantId: '4', productName: 'Calça Uniforme Diário', size: '10', quantity: 2, reservedQuantity: 0, lowStockThreshold: 5 },
-                { variantId: '5', productName: 'Camiseta Ed. Física', size: '6', quantity: 0, reservedQuantity: 0, lowStockThreshold: 5 },
-            ]);
+            if (!response.ok) {
+                console.warn('API de estoque não disponível:', response.status);
+                setInventory([]);
+                return;
+            }
+
+            const result = await response.json();
+            setInventory(result.data || []);
         } catch (err) {
-            console.error('Error loading inventory:', err);
+            console.warn('Não foi possível carregar estoque. API ainda não implementada?', err);
+            setInventory([]);
         } finally {
             setLoading(false);
         }
@@ -45,7 +47,7 @@ export default function EstoquePage() {
 
     const filteredInventory = inventory.filter(item =>
         item.productName.toLowerCase().includes(search.toLowerCase()) ||
-        item.size.includes(search)
+        item.variantSize.includes(search)
     );
 
     const getStockStatus = (item: InventoryItem) => {
@@ -162,7 +164,7 @@ export default function EstoquePage() {
                                         <tr key={item.variantId} className={isLow ? 'bg-red-50/50' : ''}>
                                             <td className="font-semibold text-slate-800">{item.productName}</td>
                                             <td>
-                                                <span className="badge badge-neutral">{item.size}</span>
+                                                <span className="badge badge-neutral">{item.variantSize}</span>
                                             </td>
                                             <td className="font-mono text-slate-700">{item.quantity}</td>
                                             <td className="font-mono text-amber-600">{item.reservedQuantity}</td>
@@ -205,7 +207,7 @@ export default function EstoquePage() {
                     <div className="bg-white rounded-2xl shadow-xl max-w-md w-full">
                         <div className="flex items-center justify-between p-6 border-b border-slate-100">
                             <h3 className="text-lg font-bold text-slate-800">Entrada de Estoque</h3>
-                            <button 
+                            <button
                                 onClick={() => setShowEntryModal(false)}
                                 className="p-2 hover:bg-slate-100 rounded-xl transition-colors"
                             >
@@ -215,29 +217,57 @@ export default function EstoquePage() {
                         <div className="p-6">
                             <div className="bg-slate-50 rounded-xl p-4 mb-6">
                                 <p className="font-semibold text-slate-800">{selectedVariant.productName}</p>
-                                <p className="text-sm text-slate-500">Tamanho {selectedVariant.size}</p>
+                                <p className="text-sm text-slate-500">Tamanho {selectedVariant.variantSize}</p>
                             </div>
-                            
+
                             <div className="space-y-4">
                                 <div>
                                     <label className="form-label">Quantidade</label>
-                                    <input type="number" min="1" defaultValue="1" className="form-input" />
+                                    <input id="entry-quantity" type="number" min="1" defaultValue="1" className="form-input" />
                                 </div>
                                 <div>
                                     <label className="form-label">Observação</label>
-                                    <input type="text" placeholder="Ex: Compra fornecedor X" className="form-input" />
+                                    <input id="entry-notes" type="text" placeholder="Ex: Compra fornecedor X" className="form-input" />
                                 </div>
                             </div>
-                            
+
                             <div className="flex gap-3 mt-6">
                                 <button onClick={() => setShowEntryModal(false)} className="btn-admin btn-admin-secondary flex-1">
                                     Cancelar
                                 </button>
-                                <button 
-                                    onClick={() => { 
-                                        window.alert('Entrada registrada!'); 
-                                        setShowEntryModal(false); 
-                                    }} 
+                                <button
+                                    onClick={async () => {
+                                        try {
+                                            const quantityInput = document.getElementById('entry-quantity') as HTMLInputElement;
+                                            const notesInput = document.getElementById('entry-notes') as HTMLInputElement;
+                                            const quantity = parseInt(quantityInput.value) || 0;
+
+                                            if (quantity <= 0) {
+                                                alert('Quantidade deve ser maior que zero');
+                                                return;
+                                            }
+
+                                            const res = await fetch('/api/shop/admin/inventory/entry', {
+                                                method: 'POST',
+                                                headers: { 'Content-Type': 'application/json' },
+                                                body: JSON.stringify({
+                                                    variantId: selectedVariant.variantId,
+                                                    unitId: selectedVariant.unitId,
+                                                    quantity,
+                                                    notes: notesInput.value
+                                                })
+                                            });
+
+                                            if (!res.ok) throw new Error('Falha ao registrar entrada');
+
+                                            alert('Entrada registrada com sucesso!');
+                                            setShowEntryModal(false);
+                                            loadInventory();
+                                        } catch (err) {
+                                            console.error(err);
+                                            alert('Erro ao registrar entrada');
+                                        }
+                                    }}
                                     className="btn-admin btn-admin-primary flex-1"
                                 >
                                     Confirmar Entrada

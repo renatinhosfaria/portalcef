@@ -24,20 +24,26 @@ O **Portal Digital Colegio Essencia Feliz** e uma plataforma web moderna para ge
 
 ### Modulos Disponiveis
 
-| Modulo           | Porta | Descricao                           |
-| ---------------- | ----- | ----------------------------------- |
-| **Home**         | 3006  | Portal publico e landing page       |
-| **Login**        | 3003  | Autenticacao centralizada           |
-| **Usuarios**     | 3004  | Gestao de usuarios e permissoes     |
-| **Escolas**      | 3005  | Administracao de escolas e unidades |
-| **Planejamento** | 3007  | Planejamento pedagogico quinzenal   |
-| **API**          | 3001  | Backend REST centralizado           |
+| Modulo            | Porta | Descricao                                   |
+| ----------------- | ----- | ------------------------------------------- |
+| **Home**          | 3000  | Portal publico e landing page               |
+| **Calendario**    | 3002  | Calendario escolar                          |
+| **Login**         | 3003  | Autenticacao centralizada                   |
+| **Usuarios**      | 3004  | Gestao de usuarios e permissoes             |
+| **Escolas**       | 3005  | Administracao de escolas e unidades         |
+| **Turmas**        | 3006  | Gestao de turmas                            |
+| **Planejamento**  | 3007  | Planejamento pedagogico quinzenal           |
+| **Loja**          | 3010  | Loja publica (uniformes)                    |
+| **Loja Admin**    | 3011  | Administracao de produtos, estoque, pedidos |
+| **API**           | 3001  | Backend REST centralizado                   |
 
 ### Principais Funcionalidades
 
 - **Autenticacao Segura**: Sessoes com Redis, cookies HttpOnly, sliding window
-- **RBAC Hierarquico**: 11 niveis de permissao com isolamento multi-tenant
+- **RBAC Hierarquico**: 14 roles com isolamento multi-tenant
 - **Planejamento Pedagogico**: Wizard de criacao com auto-save e fluxo de aprovacao
+- **CEF Shop**: Catalogo, pedidos com voucher presencial, estoque e lista de interesse
+- **Calendario Escolar**: Eventos letivos com filtros por unidade e permissao
 - **Dashboard Analitico**: Metricas, indicadores semaforicos, KPIs de First Pass Yield
 - **Design System**: Componentes consistentes com shadcn/ui e Tailwind CSS
 
@@ -67,8 +73,8 @@ pnpm install
 # Configure variaveis de ambiente
 cp .env.example .env
 
-# Inicie infraestrutura (PostgreSQL + Redis)
-docker compose up -d
+# Inicie infraestrutura (Docker dev)
+pnpm docker:up
 
 # Execute migracoes
 pnpm db:migrate
@@ -81,11 +87,15 @@ pnpm dev
 
 | Servico        | URL                   |
 | -------------- | --------------------- |
-| Home           | http://localhost:3006 |
+| Home           | http://localhost:3000 |
+| Calendario     | http://localhost:3002 |
 | Login          | http://localhost:3003 |
 | Usuarios       | http://localhost:3004 |
 | Escolas        | http://localhost:3005 |
+| Turmas         | http://localhost:3006 |
 | Planejamento   | http://localhost:3007 |
+| Loja           | http://localhost:3010 |
+| Loja Admin     | http://localhost:3011 |
 | API            | http://localhost:3001 |
 | Drizzle Studio | http://localhost:4983 |
 
@@ -97,42 +107,46 @@ pnpm dev
 
 | Camada             | Tecnologia               | Versao       |
 | ------------------ | ------------------------ | ------------ |
-| **Monorepo**       | Turborepo + pnpm         | 2.3+ / 9.15+ |
+| **Monorepo**       | Turborepo + pnpm         | 2.3.3 / 9.15 |
 | **Frontend**       | Next.js (App Router)     | 15.1.0       |
-| **Backend**        | NestJS + Fastify         | 10.4+        |
-| **Database**       | PostgreSQL + Drizzle ORM | 16 / 0.38+   |
+| **UI Runtime**     | React                    | 19.0.0       |
+| **Backend**        | NestJS + Fastify         | 10.4.15      |
+| **Database**       | PostgreSQL + Drizzle ORM | 16 / 0.38.2  |
 | **Cache/Sessions** | Redis                    | 7            |
-| **UI**             | Tailwind CSS + shadcn/ui | 3.4+         |
+| **UI**             | Tailwind CSS + shadcn/ui | 3.4.17       |
 | **Runtime**        | Node.js                  | 22+          |
-| **Language**       | TypeScript               | 5.7+         |
+| **Language**       | TypeScript               | 5.7.2        |
 
 ### Estrutura do Projeto
 
-```
-portalessencia/
-├── apps/                          # Aplicacoes Next.js
-│   ├── home/              :3006   # Portal publico
-│   ├── login/             :3003   # Autenticacao
-│   ├── usuarios/          :3004   # Gestao de usuarios
-│   ├── escolas/           :3005   # Gestao de escolas
-│   └── planejamento/      :3007   # Planejamento pedagogico
-│
-├── services/
-│   └── api/               :3001   # Backend NestJS
-│
-├── packages/
-│   ├── ui/                        # Design System (shadcn/ui)
-│   ├── db/                        # Drizzle ORM & Migrations
-│   ├── shared/                    # Tipos, Schemas, Fetchers
-│   ├── components/                # Componentes React compartilhados
-│   ├── lib/                       # Utilitarios compartilhados
-│   ├── config/                    # ESLint, TSConfig
-│   └── tailwind-config/           # Preset Tailwind
-│
-├── scripts/                       # Scripts de deploy
-├── docs/                          # Documentacao
-├── docker-compose.yml             # Desenvolvimento
-└── turbo.json                     # Configuracao Turborepo
+```portalessencia/
++-- apps/                           # Aplicacoes Next.js
+|   +-- home/             :3000     # Portal publico
+|   +-- calendario/       :3002     # Calendario escolar
+|   +-- login/            :3003     # Autenticacao
+|   +-- usuarios/         :3004     # Gestao de usuarios
+|   +-- escolas/          :3005     # Gestao de escolas
+|   +-- turmas/           :3006     # Gestao de turmas
+|   +-- planejamento/     :3007     # Planejamento pedagogico
+|   +-- loja/             :3010     # Loja publica
+|   +-- loja-admin/       :3011     # Admin da loja
+|
++-- services/
+|   +-- api/              :3001     # Backend NestJS
+|
++-- packages/
+|   +-- ui/                        # Design System (shadcn/ui)
+|   +-- db/                        # Drizzle ORM & Migrations
+|   +-- shared/                    # Tipos, Schemas, Fetchers
+|   +-- components/                # Componentes React compartilhados
+|   +-- lib/                       # Utilitarios compartilhados
+|   +-- config/                    # ESLint, TSConfig
+|   +-- tailwind-config/           # Preset Tailwind
+|
++-- scripts/                       # Scripts de deploy
++-- docs/                          # Documentacao
++-- docker-compose.dev.yml         # Desenvolvimento (Docker)
++-- turbo.json                     # Configuracao Turborepo
 ```
 
 ### Principios Arquiteturais
@@ -154,6 +168,7 @@ portalessencia/
 | [CONTRIBUTING.md](./CONTRIBUTING.md) | Guia de contribuicao                   |
 | [DATABASE.md](./DATABASE.md)         | Schema, migracoes, relacionamentos     |
 | [DEPLOYMENT.md](./DEPLOYMENT.md)     | Deploy, Docker, producao               |
+| [MODULO_LOJA.md](./MODULO_LOJA.md)   | Documentacao do modulo de loja         |
 | [SECURITY.md](./SECURITY.md)         | Autenticacao, RBAC, seguranca          |
 
 ---
@@ -164,15 +179,15 @@ portalessencia/
 
 ```bash
 # Desenvolvimento
-pnpm dev                    # Inicia todos os apps
-pnpm dev --filter=planejamento  # App especifico
+pnpm dev                         # Inicia todos os apps
+pnpm turbo dev --filter=planejamento  # App especifico
 
 # Qualidade de Codigo
-pnpm format                 # Prettier
-pnpm lint                   # ESLint
-pnpm typecheck              # TypeScript
-pnpm test                   # Vitest/Jest
-pnpm build                  # Build producao
+pnpm turbo format               # Prettier
+pnpm turbo lint                 # ESLint
+pnpm turbo typecheck            # TypeScript
+pnpm turbo test                 # Vitest/Jest
+pnpm turbo build                # Build producao
 
 # Banco de Dados
 pnpm db:generate            # Gerar migracao
@@ -187,7 +202,7 @@ pnpm clean                  # Remove builds e node_modules
 
 ```bash
 # Execute antes de cada commit
-pnpm format && pnpm lint && pnpm typecheck && pnpm build && pnpm test
+pnpm turbo format && pnpm turbo lint && pnpm turbo typecheck && pnpm turbo build && pnpm turbo test
 ```
 
 ### Convencoes de Codigo
@@ -224,11 +239,26 @@ REDIS_URL=redis://localhost:6379
 # API
 API_PORT=3001
 API_HOST=0.0.0.0
+API_INTERNAL_URL=http://localhost:3001
+NEXT_PUBLIC_API_URL=http://localhost:3001
 
-# Auth
-COOKIE_SECRET=your-secret-key-here
-COOKIE_DOMAIN=localhost
+# Auth/Sessao
 SESSION_TTL_HOURS=24
+SESSION_RENEWAL_THRESHOLD=0.25
+COOKIE_SECRET=your-cookie-secret-here
+COOKIE_DOMAIN=localhost
+
+# Storage (MinIO/S3 - opcional)
+MINIO_ENDPOINT=http://localhost:9000
+MINIO_ACCESS_KEY=minioadmin
+MINIO_SECRET_KEY=minioadmin
+MINIO_BUCKET=essencia-uploads
+
+# Shop (Stripe - opcional)
+STRIPE_SECRET_KEY=sk_test_...
+STRIPE_PUBLISHABLE_KEY=pk_test_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_...
 
 # Node
 NODE_ENV=development

@@ -23,12 +23,28 @@ import {
   InventoryAdjustDto,
   CreatePresentialSaleDto,
   CancelOrderDto,
+  ConfirmPaymentDto,
   InterestFiltersDto,
+  ListOrdersDto,
+  UpdateSettingsDto,
 } from "./dto";
 import { ShopProductsService } from "./shop-products.service";
 import { ShopInventoryService } from "./shop-inventory.service";
 import { ShopOrdersService } from "./shop-orders.service";
 import { ShopInterestService } from "./shop-interest.service";
+import { ShopSettingsService } from "./shop-settings.service";
+import {
+  getDb,
+  shopProducts,
+  shopInventory,
+  shopOrders,
+  shopProductImages,
+  shopInterestRequests,
+  eq,
+  asc,
+  and,
+  sql,
+} from "@essencia/db";
 
 interface UserContext {
   userId: string;
@@ -59,9 +75,134 @@ export class ShopAdminController {
     private readonly inventoryService: ShopInventoryService,
     private readonly ordersService: ShopOrdersService,
     private readonly interestService: ShopInterestService,
-  ) {}
+    private readonly settingsService: ShopSettingsService,
+  ) { }
+
+  // ==================== DASHBOARD ====================
+
+  /**
+   * GET /shop/admin/dashboard
+   *
+   * Retorna estatísticas do dashboard administrativo
+   * Roles: master, diretora_geral, gerente_unidade, gerente_financeiro
+   */
+  @Get("dashboard")
+  @Roles("master", "diretora_geral", "gerente_unidade", "gerente_financeiro")
+  async getDashboard(@Req() req: { user: UserContext }) {
+    const db = getDb();
+    const { schoolId, unitId } = req.user;
+
+    // Construir condições baseadas no tenant
+    const orderConditions = unitId
+      ? and(
+        eq(shopOrders.schoolId, schoolId),
+        eq(shopOrders.unitId, unitId),
+        eq(shopOrders.status, "CONFIRMADO"),
+      )
+      : and(
+        eq(shopOrders.schoolId, schoolId),
+        eq(shopOrders.status, "CONFIRMADO"),
+      );
+
+    const inventoryConditions = unitId
+      ? and(
+        eq(shopInventory.unitId, unitId),
+        sql`(${shopInventory.quantity} - ${shopInventory.reservedQuantity}) <= ${shopInventory.lowStockThreshold}`,
+      )
+      : sql`(${shopInventory.quantity} - ${shopInventory.reservedQuantity}) <= ${shopInventory.lowStockThreshold}`;
+
+    const interestConditions = unitId
+      ? and(
+        eq(shopInterestRequests.unitId, unitId),
+        eq(shopInterestRequests.status, "PENDENTE"),
+      )
+      : eq(shopInterestRequests.status, "PENDENTE");
+
+    // Contadores de pedidos pendentes de retirada
+    const [pendingPickupResult] = await db
+      .select({ count: sql<number>`cast(count(*) as integer)` })
+      .from(shopOrders)
+      .where(orderConditions);
+
+    // Contadores de produtos com estoque baixo
+    const [lowStockResult] = await db
+      .select({ count: sql<number>`cast(count(*) as integer)` })
+      .from(shopInventory)
+      .where(inventoryConditions);
+
+    // Contadores de interesse não contatado
+    const [pendingInterestResult] = await db
+      .select({ count: sql<number>`cast(count(*) as integer)` })
+      .from(shopInterestRequests)
+      .where(interestConditions);
+
+    return {
+      success: true,
+      data: {
+        pendingPickups: pendingPickupResult?.count || 0,
+        lowStockAlerts: lowStockResult?.count || 0,
+        pendingInterest: pendingInterestResult?.count || 0,
+      },
+    };
+  }
 
   // ==================== PRODUTOS ====================
+
+  /**
+   * GET /shop/admin/products
+   *
+   * Lista todos os produtos administrativos
+   * Roles: master, diretora_geral, gerente_unidade, gerente_financeiro
+   */
+  @Get("products")
+  @Roles("master", "diretora_geral", "gerente_unidade", "gerente_financeiro")
+  async getAllProducts(@Req() req: { user: UserContext }) {
+    const db = getDb();
+
+    const products = await db.query.shopProducts.findMany({
+      where: eq(shopProducts.schoolId, req.user.schoolId),
+      with: {
+        variants: true,
+        images: {
+          orderBy: [asc(shopProductImages.displayOrder)],
+        },
+      },
+      orderBy: [asc(shopProducts.name)],
+    });
+
+    // Transform to expected format (flatten images array)
+    const formattedProducts = products.map((p: any) => ({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ...p,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      images: p.images.map((img: any) => img.imageUrl),
+    }));
+
+    return {
+      success: true,
+      data: formattedProducts,
+    };
+  }
+
+  /**
+   * GET /shop/admin/products/:id
+   *
+   * Detalhes de um produto com variantes e inventário
+   * Roles: master, diretora_geral, gerente_unidade, gerente_financeiro
+   */
+  @Get("products/:id")
+  @Roles("master", "diretora_geral", "gerente_unidade", "gerente_financeiro")
+  async getProductById(
+    @Req() req: { user: UserContext },
+    @Param("id") id: string,
+  ) {
+    const product = await this.productsService.getProductById(id);
+
+    return {
+      success: true,
+      data: product,
+    };
+  }
 
   /**
    * POST /shop/admin/products
@@ -119,7 +260,7 @@ export class ShopAdminController {
    * Roles: master, diretora_geral
    */
   @Delete("products/:id")
-  @Roles("master", "diretora_geral")
+  @Roles("master", "diretora_geral", "gerente_unidade")
   @HttpCode(HttpStatus.NO_CONTENT)
   async deleteProduct(
     @Req() req: { user: UserContext },
@@ -128,7 +269,136 @@ export class ShopAdminController {
     await this.productsService.deleteProduct(id, req.user.userId);
   }
 
+  // ==================== VARIANTES ====================
+
+  /**
+   * POST /shop/admin/variants
+   *
+   * Cria nova variante de produto
+   * Roles: master, diretora_geral, gerente_unidade
+   */
+  @Post("variants")
+  @Roles("master", "diretora_geral", "gerente_unidade")
+  @HttpCode(HttpStatus.CREATED)
+  async createVariant(
+    @Req() req: { user: UserContext },
+    @Body() dto: { productId: string; size: string; sku?: string; priceOverride?: number },
+  ) {
+    const variant = await this.productsService.createVariant(
+      dto,
+      req.user.userId,
+      req.user.unitId || undefined,
+    );
+
+    return {
+      success: true,
+      data: variant,
+    };
+  }
+
+  /**
+   * PATCH /shop/admin/variants/:id
+   *
+   * Atualiza variante existente
+   * Roles: master, diretora_geral, gerente_unidade
+   */
+  @Patch("variants/:id")
+  @Roles("master", "diretora_geral", "gerente_unidade")
+  async updateVariant(
+    @Req() req: { user: UserContext },
+    @Param("id") id: string,
+    @Body() dto: { size?: string; sku?: string; priceOverride?: number; isActive?: boolean },
+  ) {
+    const variant = await this.productsService.updateVariant(id, dto, req.user.userId);
+
+    return {
+      success: true,
+      data: variant,
+    };
+  }
+
+  /**
+   * DELETE /shop/admin/variants/:id
+   *
+   * Remove variante permanentemente
+   * Roles: master, diretora_geral, gerente_unidade
+   */
+  @Delete("variants/:id")
+  @Roles("master", "diretora_geral", "gerente_unidade")
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async deleteVariant(
+    @Req() req: { user: UserContext },
+    @Param("id") id: string,
+  ) {
+    await this.productsService.deleteVariant(id, req.user.userId);
+  }
+
   // ==================== ESTOQUE ====================
+
+  /**
+   * GET /shop/admin/inventory
+   *
+   * Lista todo o inventário com status de estoque
+   * Roles: master, diretora_geral, gerente_unidade, gerente_financeiro
+   */
+  @Get("inventory")
+  @Roles("master", "diretora_geral", "gerente_unidade", "gerente_financeiro")
+  async getAllInventory(@Req() req: { user: UserContext }) {
+    const db = getDb();
+
+    // Filtrar por unidade se não for master ou diretora_geral
+    const whereClause =
+      req.user.role === "master"
+        ? undefined
+        : req.user.role === "diretora_geral"
+          ? eq(shopInventory.unitId, req.user.schoolId)
+          : eq(shopInventory.unitId, req.user.unitId!);
+
+    const inventory = await db.query.shopInventory.findMany({
+      where: whereClause,
+      with: {
+        variant: {
+          with: {
+            product: true,
+          },
+        },
+        unit: true,
+      },
+      orderBy: [asc(shopInventory.quantity)],
+    });
+
+    // Definir tipo para item com relações
+    type InventoryWithRelations = (typeof inventory)[number];
+
+    // Transformar para formato mais legível
+    const formattedInventory = inventory.map((item: InventoryWithRelations) => {
+      // Acessar relações com type assertion seguro
+      const unitRelation = item as unknown as { unit?: { name?: string } };
+      const variantRelation = item as unknown as {
+        variant?: { size?: string; product?: { name?: string } };
+      };
+
+      return {
+        id: item.id,
+        variantId: item.variantId,
+        unitId: item.unitId,
+        unitName: unitRelation.unit?.name || "N/A",
+        productName: variantRelation.variant?.product?.name || "N/A",
+        variantSize: variantRelation.variant?.size || "N/A",
+        quantity: item.quantity,
+        reservedQuantity: item.reservedQuantity,
+        available: Math.max(0, item.quantity - item.reservedQuantity),
+        lowStockThreshold: item.lowStockThreshold,
+        needsRestock:
+          item.quantity - item.reservedQuantity <= item.lowStockThreshold,
+      };
+    });
+
+    return {
+      success: true,
+      data: formattedInventory,
+    };
+  }
 
   /**
    * GET /shop/admin/inventory/:variantId/:unitId
@@ -242,18 +512,16 @@ export class ShopAdminController {
   @Roles("master", "diretora_geral", "gerente_unidade", "gerente_financeiro")
   async listOrders(
     @Req() req: { user: UserContext },
-    @Query("page") page?: number,
-    @Query("limit") limit?: number,
-    @Query("status") status?: string,
-    @Query("search") search?: string,
+    @Query() query: ListOrdersDto,
   ) {
-    const filters = {
+    const filters: ListOrdersDto = {
       schoolId: req.user.schoolId,
       unitId: req.user.unitId || undefined,
-      page: page || 1,
-      limit: limit || 20,
-      status,
-      search,
+      page: query.page || 1,
+      limit: query.limit || 20,
+      status: query.status,
+      orderSource: query.orderSource,
+      search: query.search,
     };
 
     const result = await this.ordersService.listOrders(filters);
@@ -270,7 +538,7 @@ export class ShopAdminController {
   /**
    * GET /shop/admin/orders/:id
    *
-   * Retorna detalhe de um pedido
+   * Detalhes de um pedido específico
    * Roles: master, diretora_geral, gerente_unidade, gerente_financeiro
    */
   @Get("orders/:id")
@@ -326,6 +594,33 @@ export class ShopAdminController {
     return {
       success: true,
       data: { message: "Pedido cancelado com sucesso" },
+    };
+  }
+
+  /**
+   * PATCH /shop/admin/orders/:id/confirm-payment
+   *
+   * Confirma pagamento presencial de pedido online (sistema de voucher)
+   * Converte reservas de estoque em vendas confirmadas
+   *
+   * Roles: master, diretora_geral, gerente_unidade, gerente_financeiro
+   */
+  @Patch("orders/:id/confirm-payment")
+  @Roles("master", "diretora_geral", "gerente_unidade", "gerente_financeiro")
+  async confirmPayment(
+    @Req() req: { user: UserContext },
+    @Param("id") id: string,
+    @Body() dto: ConfirmPaymentDto,
+  ) {
+    const result = await this.ordersService.confirmPayment(
+      id,
+      dto.paymentMethod,
+      req.user.userId,
+    );
+
+    return {
+      success: true,
+      data: result,
     };
   }
 
@@ -421,6 +716,50 @@ export class ShopAdminController {
     return {
       success: true,
       data: result,
+    };
+  }
+
+  // ==================== CONFIGURAÇÕES ====================
+
+  /**
+   * GET /shop/admin/settings/:unitId
+   *
+   * Retorna configurações da loja para uma unidade
+   * Roles: master, diretora_geral, gerente_unidade, gerente_financeiro
+   */
+  @Get("settings/:unitId")
+  @Roles("master", "diretora_geral", "gerente_unidade", "gerente_financeiro")
+  async getSettings(@Param("unitId") unitId: string) {
+    const settings = await this.settingsService.getSettings(unitId);
+
+    return {
+      success: true,
+      data: settings,
+    };
+  }
+
+  /**
+   * PATCH /shop/admin/settings/:unitId
+   *
+   * Atualiza configurações da loja
+   * Roles: master, diretora_geral, gerente_unidade
+   */
+  @Patch("settings/:unitId")
+  @Roles("master", "diretora_geral", "gerente_unidade")
+  async updateSettings(
+    @Req() req: { user: UserContext },
+    @Param("unitId") unitId: string,
+    @Body() dto: UpdateSettingsDto,
+  ) {
+    const settings = await this.settingsService.updateSettings(
+      unitId,
+      dto,
+      req.user.userId,
+    );
+
+    return {
+      success: true,
+      data: settings,
     };
   }
 }

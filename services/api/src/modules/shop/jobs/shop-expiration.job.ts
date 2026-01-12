@@ -11,11 +11,14 @@ type ExpiredOrder = typeof shopOrders.$inferSelect & {
 /**
  * ShopExpirationJob
  *
- * Cron job para expirar pedidos nao pagos apos 15 minutos
+ * Cron job para expirar pedidos/vouchers nao pagos apos 7 dias
  * - Executa a cada minuto
  * - Libera estoque reservado
  * - Atualiza status para EXPIRADO
- * - Cancela PaymentIntent no Stripe (best-effort)
+ * - Cancela PaymentIntent no Stripe se existir (best-effort)
+ *
+ * Sistema de Voucher:
+ * Cliente gera voucher online e tem 7 dias para pagar presencialmente na escola
  */
 @Injectable()
 export class ShopExpirationJob {
@@ -118,7 +121,7 @@ export class ShopExpirationJob {
         status: "EXPIRADO",
         cancelledAt: new Date(),
         cancellationReason:
-          "Pagamento nao realizado dentro do prazo de 15 minutos",
+          "Voucher expirado - pagamento nao realizado dentro do prazo de 7 dias",
       })
       .where(eq(shopOrders.id, order.id));
 

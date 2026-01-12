@@ -1,18 +1,20 @@
 'use client';
 
-import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { use, useEffect, useState } from 'react';
 
 import { LoadingSpinner } from '@/components/Loading';
+import { ProductDetailCarousel } from '@/components/ProductDetailCarousel';
 import { Toast, useToast } from '@/components/Toast';
 import { useCart } from '@/lib/useCart';
 
 interface ProductVariant {
   id: string;
   size: string;
-  available_stock: number;
+  // inventory is returned by backend, we calculate available_stock from it
+  inventory?: { quantity: number; reservedQuantity: number }[];
+  available_stock?: number; // Calculated on frontend
 }
 
 interface Product {
@@ -20,7 +22,9 @@ interface Product {
   name: string;
   description: string;
   category: string;
-  image_url: string;
+  imageUrl: string; // CamelCase from backend
+  basePrice: number; // From backend (cents)
+  images?: string[]; // Array of image URLs (optional fallback to imageUrl)
   variants: ProductVariant[];
 }
 
@@ -32,8 +36,9 @@ export default function ProductDetailPage({
   const resolvedParams = use(params);
   const { schoolId, unitId, id } = resolvedParams;
   const router = useRouter();
-  const { addItem } = useCart();
+  const { addItem, getTotalItems } = useCart();
   const { toast, showToast } = useToast();
+  const cartItemCount = getTotalItems();
 
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
@@ -48,35 +53,68 @@ export default function ProductDetailPage({
       try {
         setLoading(true);
         setError(null);
-        // TODO: Substituir por chamada real à API GET /shop/products/${id}
-        await new Promise((resolve) => setTimeout(resolve, 500));
 
-        // Mock data
-        const mockProduct: Product = {
-          id,
-          name: 'Camiseta Uniforme Diário',
-          description:
-            'Camiseta branca de malha 100% algodão com bordado do colégio. Tecido respirável e confortável para uso diário.',
-          category: 'UNIFORME_DIARIO',
-          image_url: '/placeholder-product.jpg',
-          variants: [
-            { id: 'var-1', size: '6', available_stock: 10 },
-            { id: 'var-2', size: '8', available_stock: 5 },
-            { id: 'var-3', size: '10', available_stock: 0 },
-            { id: 'var-4', size: '12', available_stock: 8 },
-          ],
+        const response = await fetch(`/api/shop/products/${id}`);
+
+        if (!response.ok) {
+          if (response.status === 404) {
+            setError('Produto não encontrado. Aguarde o cadastro de produtos.');
+          } else {
+            setError('Erro ao carregar produto.');
+          }
+          return;
+        }
+
+        const result = await response.json();
+
+        // Map backend response to match Component expectations
+        const rawProduct = result.data;
+
+        interface RawInventory {
+          unitId: string;
+          available: number;
+          total: number;
+          reserved: number;
+        }
+
+        interface RawVariant {
+          id: string;
+          size: string;
+          sku: string;
+          priceOverride: number | null;
+          inventory: RawInventory[];
+        }
+
+        const mappedProduct: Product = {
+          ...rawProduct,
+          variants: (rawProduct.variants as RawVariant[]).map((v) => {
+            // Calculate stock from inventory for current unit
+            const inventoryStock = v.inventory?.reduce((sum: number, inv: RawInventory) => {
+              // Only count stock for the current unit
+              if (inv.unitId === unitId) {
+                return sum + inv.available;
+              }
+              return sum;
+            }, 0) || 0;
+
+            return {
+              ...v,
+              available_stock: inventoryStock
+            };
+          })
         };
 
-        setProduct(mockProduct);
-      } catch {
-        setError('Erro ao carregar produto. Tente novamente.');
+        setProduct(mappedProduct);
+      } catch (err) {
+        console.warn('Erro ao carregar produto:', err);
+        setError('Erro ao carregar detalhes do produto.');
       } finally {
         setLoading(false);
       }
     }
 
     loadProduct();
-  }, [id]);
+  }, [id, unitId]);
 
   const handleAddToCart = async () => {
     if (!selectedVariant || !studentName.trim()) {
@@ -85,7 +123,9 @@ export default function ProductDetailPage({
     }
 
     const variant = product?.variants.find((v) => v.id === selectedVariant);
-    if (!variant || variant.available_stock < quantity) {
+    const availableStock = variant?.available_stock || 0;
+
+    if (!variant || availableStock < quantity) {
       showToast({ message: 'Estoque insuficiente', type: 'error' });
       return;
     }
@@ -100,10 +140,10 @@ export default function ProductDetailPage({
         productName: product!.name,
         variantSize: variant.size,
         quantity,
-        unitPrice: 4500, // TODO: Pegar preço real da API
+        unitPrice: product!.basePrice / 100, // Use real price from backend (cents -> float)
         studentName: studentName.trim(),
-        imageUrl: product!.image_url,
-        availableStock: variant.available_stock,
+        imageUrl: product!.imageUrl,
+        availableStock: availableStock,
       });
 
       showToast({ message: 'Produto adicionado ao carrinho!', type: 'success' });
@@ -148,26 +188,37 @@ export default function ProductDetailPage({
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center gap-4">
-          <Link href={`/${schoolId}/${unitId}`} className="text-blue-600 hover:text-blue-800 font-medium">
-            ← Voltar
+        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <Link href={`/${schoolId}/${unitId}`} className="text-blue-600 hover:text-blue-800 font-medium">
+              ← Continuar Comprando
+            </Link>
+            <h1 className="text-xl font-bold text-gray-800">Detalhes do Produto</h1>
+          </div>
+          <Link
+            href="/checkout"
+            className="relative inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium"
+          >
+            🛒 Carrinho
+            {cartItemCount > 0 && (
+              <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center">
+                {cartItemCount}
+              </span>
+            )}
           </Link>
-          <h1 className="text-xl font-bold text-gray-800">Detalhes do Produto</h1>
         </div>
       </header>
 
       <main className="max-w-4xl mx-auto p-4 md:p-6 lg:p-8">
         <div className="bg-white rounded-lg shadow-md overflow-hidden">
           <div className="md:flex">
-            {/* Imagem */}
+            {/* Imagem com Carrossel */}
             <div className="md:w-1/2 bg-gray-100 flex items-center justify-center p-8">
-              <div className="relative w-full aspect-square max-w-sm">
-                <Image
-                  src={product.image_url}
-                  alt={product.name}
-                  fill
-                  className="object-cover rounded-lg"
-                  sizes="(max-width: 768px) 100vw, 50vw"
+              <div className="relative w-full max-w-sm">
+                <ProductDetailCarousel
+                  images={product.images || []}
+                  fallbackImage={product.imageUrl}
+                  productName={product.name}
                 />
               </div>
             </div>
@@ -191,13 +242,12 @@ export default function ProductDetailPage({
                         key={variant.id}
                         onClick={() => !isOutOfStock && setSelectedVariant(variant.id)}
                         disabled={isOutOfStock}
-                        className={`py-2 px-4 rounded-lg border-2 font-medium transition ${
-                          isOutOfStock
-                            ? 'bg-gray-100 text-gray-400 border-gray-300 cursor-not-allowed'
-                            : isSelected
-                              ? 'bg-blue-600 text-white border-blue-600'
-                              : 'bg-white text-gray-700 border-gray-300 hover:border-blue-600'
-                        }`}
+                        className={`py-2 px-4 rounded-lg border-2 font-medium transition ${isOutOfStock
+                          ? 'bg-gray-100 text-gray-400 border-gray-300 cursor-not-allowed'
+                          : isSelected
+                            ? 'bg-blue-600 text-white border-blue-600'
+                            : 'bg-white text-gray-700 border-gray-300 hover:border-blue-600'
+                          }`}
                       >
                         {variant.size}
                       </button>
@@ -295,7 +345,7 @@ export default function ProductDetailPage({
         </div>
       </main>
 
-      {toast && <Toast message={toast.message} type={toast.type} duration={toast.duration} onClose={() => {}} />}
+      {toast && <Toast message={toast.message} type={toast.type} duration={toast.duration} onClose={() => { }} />}
     </div>
   );
 }

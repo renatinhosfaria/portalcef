@@ -9,6 +9,7 @@ import {
   shopInterestRequests,
   shopInterestItems,
   shopSettings,
+  shopProductImages,
 } from "./shop";
 import { schools } from "./schools";
 import { units } from "./units";
@@ -25,8 +26,20 @@ export const shopProductsRelations = relations(
       references: [schools.id],
     }),
     variants: many(shopProductVariants),
+    images: many(shopProductImages),
   }),
 );
+
+// ============================================
+// Shop Product Images Relations
+// ============================================
+export const shopProductImagesRelations = relations(shopProductImages, ({ one }) => ({
+  product: one(shopProducts, {
+    fields: [shopProductImages.productId],
+    references: [shopProducts.id],
+  }),
+}));
+
 
 // ============================================
 // Shop Product Variants Relations

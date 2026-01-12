@@ -81,19 +81,25 @@ git clone https://github.com/renatinhosfaria/portalessencia.git
 cd portalessencia
 
 # 2. Inicie ambiente completo (todos os apps + API + DB)
-pnpm docker:dev
+pnpm docker:up
 
 # 3. Execute migracoes
 docker compose -f docker-compose.dev.yml exec dev pnpm db:migrate
 
 # 4. Acesse os servicos
-# Home:         http://localhost:3006
+# Home:         http://localhost:3000
+# Calendario:   http://localhost:3002
 # Login:        http://localhost:3003
 # Usuarios:     http://localhost:3004
 # Escolas:      http://localhost:3005
+# Turmas:       http://localhost:3006
 # Planejamento: http://localhost:3007
+# Loja:         http://localhost:3010
+# Loja Admin:   http://localhost:3011
 # API:          http://localhost:3001
 ```
+
+**Nota:** O `docker-compose.dev.yml` atualmente expõe o Home na porta `3006`. Se preferir manter a porta `3000` do app `home`, ajuste o mapeamento de portas no compose.
 
 **IMPORTANTE (Windows):** O projeto DEVE estar no filesystem WSL2 para performance aceitavel:
 
@@ -103,7 +109,7 @@ mkdir -p ~/projects && cd ~/projects
 git clone https://github.com/renatinhosfaria/portalessencia.git
 ```
 
-Veja mais detalhes em [DOCKER-DEVELOPMENT.md](./DOCKER-DEVELOPMENT.md).
+Veja mais detalhes em [DEPLOYMENT.md](./DEPLOYMENT.md).
 
 ### Opcao 2: Desenvolvimento Hibrido (Tradicional)
 
@@ -123,10 +129,7 @@ docker compose up -d
 # 4. Execute migracoes
 pnpm db:migrate
 
-# 5. (Opcional) Seed de dados
-pnpm db:seed
-
-# 6. Inicie desenvolvimento
+# 5. Inicie desenvolvimento
 pnpm turbo dev
 ```
 
@@ -134,12 +137,16 @@ pnpm turbo dev
 
 | Servico        | Porta | URL                   |
 | -------------- | ----- | --------------------- |
-| home           | 3006  | http://localhost:3006 |
+| home           | 3000  | http://localhost:3000 |
+| calendario     | 3002  | http://localhost:3002 |
 | api            | 3001  | http://localhost:3001 |
 | login          | 3003  | http://localhost:3003 |
 | usuarios       | 3004  | http://localhost:3004 |
 | escolas        | 3005  | http://localhost:3005 |
+| turmas         | 3006  | http://localhost:3006 |
 | planejamento   | 3007  | http://localhost:3007 |
+| loja           | 3010  | http://localhost:3010 |
+| loja-admin     | 3011  | http://localhost:3011 |
 | PostgreSQL     | 5432  | localhost:5432        |
 | Redis          | 6379  | localhost:6379        |
 | Drizzle Studio | 4983  | http://localhost:4983 |
@@ -349,7 +356,12 @@ Seguimos [Conventional Commits](https://www.conventionalcommits.org/):
 | `login`        | App login               |
 | `usuarios`     | App usuarios            |
 | `escolas`      | App escolas             |
+| `calendario`   | App calendario          |
+| `turmas`       | App turmas              |
 | `planejamento` | App planejamento        |
+| `loja`         | App loja publica        |
+| `loja-admin`   | App loja admin           |
+| `shop`         | Modulo CEF Shop (API)   |
 | `ui`           | Design System           |
 | `db`           | Database/migrations     |
 | `shared`       | Packages compartilhados |
@@ -501,7 +513,7 @@ pnpm --filter planejamento test
 | Nova feature / bug fix        | `docs/CHANGELOG.md`           |
 | Mudanca em deploy/infra       | `docs/DEPLOYMENT.md`          |
 | Novo modulo/arquitetura       | `docs/ARCHITECTURE.md`        |
-| Modulo de planejamento        | `docs/MODULO_PLANEJAMENTO.md` |
+| Modulo de loja                | `docs/MODULO_LOJA.md`         |
 
 ### Formato de Documentacao
 

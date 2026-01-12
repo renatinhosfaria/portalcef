@@ -15,20 +15,32 @@ export default function ConsultaPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    
+
     if (!orderNumber || !phone) {
       setError('Preencha todos os campos');
       return;
     }
 
     setLoading(true);
-    
+
     try {
-      // TODO: API call to validate order
-      // For now, just redirect
-      router.push(`/pedido/${orderNumber}?phone=${encodeURIComponent(phone)}`);
+      // Validate order existence and phone match
+      const res = await fetch(`/api/shop/orders/lookup/${orderNumber}?phone=${encodeURIComponent(phone.replace(/\D/g, ''))}`);
+
+      if (res.ok) {
+        // Order exists, redirect
+        router.push(`/pedido/${orderNumber}?phone=${encodeURIComponent(phone.replace(/\D/g, ''))}`);
+      } else {
+        const data = await res.json();
+        if (res.status === 404) {
+          setError('Pedido não encontrado. Verifique o número e o telefone informado.');
+        } else {
+          setError(data.error?.message || 'Erro ao buscar pedido. Tente novamente.');
+        }
+        setLoading(false);
+      }
     } catch {
-      setError('Erro ao buscar pedido. Verifique os dados e tente novamente.');
+      setError('Erro de conexão. Verifique sua internet e tente novamente.');
       setLoading(false);
     }
   };
@@ -76,7 +88,7 @@ export default function ConsultaPage() {
             </div>
 
             {error && (
-              <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+              <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded text-sm">
                 {error}
               </div>
             )}
