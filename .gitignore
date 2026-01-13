@@ -8,35 +8,25 @@ dist
 .turbo
 *.tsbuildinfo
 
-# Environment
-.env
-.env.local
-.env.*.local
+# Backups (não commitar dados)
+backup-*.sql
+backup-*.tar.gz
+
+# Environment variables (não commitar senhas)
+.env.production
 .env.docker
+.env.local
 
-# IDE
-.vscode/*
-!.vscode/extensions.json
-!.vscode/settings.json
-.idea
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Logs
-logs
+# Logs e crashes
+.logs/
 *.log
-npm-debug.log*
-pnpm-debug.log*
+api-crash.log
 
-# Testing
-coverage
+# Coverage de testes
+coverage/
 
-# Docker
-.docker
-docker-compose.override.yml
+# Arquivos temporários
+tmpclaude-*
 
-# Misc
-*.pem
-*.key
+# Environment variables reais
+.env

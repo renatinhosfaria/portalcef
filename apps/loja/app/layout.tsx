@@ -8,8 +8,8 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Loja | Essência",
-  description: "Compre uniformes escolares do Colégio Essência Feliz de forma rápida e segura",
+  title: "Portal CEF Store",
+  description: "Compre uniformes escolares do Portal CEF de forma rápida e segura",
   icons: {
     icon: "/favicon.ico",
   },

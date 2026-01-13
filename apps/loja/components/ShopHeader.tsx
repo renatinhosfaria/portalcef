@@ -25,7 +25,7 @@ export function ShopHeader() {
               </div>
               <div className="flex flex-col">
                 <span className="text-lg font-semibold text-slate-800 tracking-tight leading-none">
-                  Essência
+                  Portal CEF
                 </span>
                 <span className="text-[10px] font-medium text-[#A3D154] tracking-wider uppercase">
                   Store
@@ -40,18 +40,16 @@ export function ShopHeader() {
               <input
                 type="text"
                 placeholder="Buscar produtos..."
-                className={`w-full pl-10 pr-4 py-2 bg-slate-50 border rounded-lg text-sm text-slate-800 placeholder-slate-400 transition-colors duration-150 focus:outline-none ${
-                  isSearchFocused
+                className={`w-full pl-10 pr-4 py-2 bg-slate-50 border rounded-lg text-sm text-slate-800 placeholder-slate-400 transition-colors duration-150 focus:outline-none ${isSearchFocused
                     ? 'border-[#A3D154] bg-white ring-2 ring-[#A3D154]/20'
                     : 'border-slate-200 hover:border-slate-300'
-                }`}
+                  }`}
                 onFocus={() => setIsSearchFocused(true)}
                 onBlur={() => setIsSearchFocused(false)}
               />
               <Search
-                className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors duration-150 ${
-                  isSearchFocused ? 'text-[#A3D154]' : 'text-slate-400'
-                }`}
+                className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors duration-150 ${isSearchFocused ? 'text-[#A3D154]' : 'text-slate-400'
+                  }`}
               />
             </div>
           </div>

@@ -2,7 +2,7 @@
 
 import { Search, Eye, Check, ChevronDown, ChevronRight, Globe, Store, CreditCard, X } from 'lucide-react';
 import Link from 'next/link';
-import { useCallback, useEffect, useState } from 'react';
+import { Fragment, useCallback, useEffect, useState } from 'react';
 
 interface OrderItem {
     id: string;
@@ -92,7 +92,8 @@ export default function PedidosPage() {
         return new Date(dateStr).toLocaleString('pt-BR');
     };
 
-    const formatPhone = (phone: string) => {
+    const formatPhone = (phone: string | undefined | null) => {
+        if (!phone) return '-';
         if (phone.length === 11) {
             return `(${phone.slice(0, 2)}) ${phone.slice(2, 7)}-${phone.slice(7)}`;
         }
@@ -253,8 +254,8 @@ export default function PedidosPage() {
                                 </tr>
                             ) : (
                                 orders.map((order) => (
-                                    <>
-                                        <tr key={order.id}>
+                                    <Fragment key={order.id}>
+                                        <tr>
                                             <td>
                                                 <button
                                                     onClick={() => setExpandedOrder(expandedOrder === order.id ? null : order.id)}
@@ -338,7 +339,7 @@ export default function PedidosPage() {
                                                 </td>
                                             </tr>
                                         )}
-                                    </>
+                                    </Fragment>
                                 ))
                             )}
                         </tbody>
@@ -398,11 +399,10 @@ export default function PedidosPage() {
                                             key={method}
                                             type="button"
                                             onClick={() => setSelectedPaymentMethod(method)}
-                                            className={`p-3 rounded-lg border-2 text-sm font-medium transition-all ${
-                                                selectedPaymentMethod === method
-                                                    ? 'border-[#A3D154] bg-[#A3D154]/10 text-[#8FBD3F]'
-                                                    : 'border-slate-200 hover:border-slate-300 text-slate-600'
-                                            }`}
+                                            className={`p-3 rounded-lg border-2 text-sm font-medium transition-all ${selectedPaymentMethod === method
+                                                ? 'border-[#A3D154] bg-[#A3D154]/10 text-[#8FBD3F]'
+                                                : 'border-slate-200 hover:border-slate-300 text-slate-600'
+                                                }`}
                                         >
                                             {getPaymentMethodLabel(method)}
                                         </button>

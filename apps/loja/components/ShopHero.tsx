@@ -3,7 +3,7 @@
 import { Sparkles } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
-export function ShopHero({ schoolName = 'Colégio Essência' }: { schoolName?: string }) {
+export function ShopHero({ schoolName = 'Portal CEF' }: { schoolName?: string }) {
   const [greeting, setGreeting] = useState('');
 
   useEffect(() => {

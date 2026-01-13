@@ -46,12 +46,11 @@ export default function ConsultaPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4 py-12">
+    <div className="min-h-screen bg-slate-50 p-4 py-12">
       <div className="max-w-md mx-auto">
         <div className="text-center mb-8">
-          <div className="text-6xl mb-4">📋</div>
-          <h1 className="text-3xl font-bold mb-2">Consultar Pedido</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-3xl font-bold mb-2 text-slate-800">Consultar Pedido</h1>
+          <p className="text-slate-600">
             Digite o número do pedido e o telefone cadastrado
           </p>
         </div>
@@ -88,7 +87,7 @@ export default function ConsultaPage() {
             </div>
 
             {error && (
-              <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded text-sm">
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
                 {error}
               </div>
             )}
@@ -111,7 +110,7 @@ export default function ConsultaPage() {
         </form>
 
         <div className="text-center mt-8">
-          <a href="/" className="text-primary hover:underline">
+          <a href="/" className="text-slate-600 hover:text-slate-800 font-medium transition-colors duration-150">
             ← Voltar ao catálogo
           </a>
         </div>

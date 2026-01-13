@@ -44,6 +44,7 @@ import {
   asc,
   and,
   sql,
+  isNull,
 } from "@essencia/db";
 
 interface UserContext {
@@ -104,19 +105,22 @@ export class ShopAdminController {
         eq(shopOrders.status, "CONFIRMADO"),
       );
 
+    // Condição de estoque baixo usando SQL raw para evitar problemas de interpolação
+    const lowStockCondition = sql`("shop_inventory"."quantity" - "shop_inventory"."reserved_quantity") <= "shop_inventory"."low_stock_threshold"`;
+
     const inventoryConditions = unitId
       ? and(
         eq(shopInventory.unitId, unitId),
-        sql`(${shopInventory.quantity} - ${shopInventory.reservedQuantity}) <= ${shopInventory.lowStockThreshold}`,
+        lowStockCondition,
       )
-      : sql`(${shopInventory.quantity} - ${shopInventory.reservedQuantity}) <= ${shopInventory.lowStockThreshold}`;
+      : lowStockCondition;
 
     const interestConditions = unitId
       ? and(
         eq(shopInterestRequests.unitId, unitId),
-        eq(shopInterestRequests.status, "PENDENTE"),
+        isNull(shopInterestRequests.contactedAt),
       )
-      : eq(shopInterestRequests.status, "PENDENTE");
+      : isNull(shopInterestRequests.contactedAt);
 
     // Contadores de pedidos pendentes de retirada
     const [pendingPickupResult] = await db

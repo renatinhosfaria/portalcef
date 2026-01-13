@@ -251,10 +251,10 @@ export default function InterestFormPage({
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-gray-200">
+    <div className="min-h-screen bg-slate-50">
+      <header className="bg-white border-b border-slate-200">
         <div className="max-w-4xl mx-auto px-4 py-4">
-          <h1 className="text-xl font-bold text-gray-800">📋 Registrar Interesse</h1>
+          <h1 className="text-xl font-semibold text-slate-800">Registrar Interesse</h1>
         </div>
       </header>
 
@@ -265,16 +265,16 @@ export default function InterestFormPage({
             {[1, 2, 3, 4].map((s) => (
               <div key={s} className="flex items-center">
                 <div
-                  className={`w-10 h-10 rounded-full flex items-center justify-center font-bold transition-colors ${s <= step ? 'bg-blue-600 text-white' : 'bg-gray-300 text-gray-600'
+                  className={`w-10 h-10 rounded-full flex items-center justify-center font-semibold transition-colors duration-200 tabular-nums ${s <= step ? 'bg-[#A3D154] text-white' : 'bg-slate-200 text-slate-600'
                     }`}
                 >
                   {s}
                 </div>
-                {s < 4 && <div className={`w-16 h-1 transition-colors ${s < step ? 'bg-blue-600' : 'bg-gray-300'}`} />}
+                {s < 4 && <div className={`w-16 h-1 transition-colors duration-200 ${s < step ? 'bg-[#A3D154]' : 'bg-slate-200'}`} />}
               </div>
             ))}
           </div>
-          <div className="flex justify-between text-xs text-gray-600">
+          <div className="flex justify-between text-xs text-slate-600">
             <span>Responsável</span>
             <span>Aluno</span>
             <span>Produtos</span>
@@ -285,9 +285,9 @@ export default function InterestFormPage({
         {/* Step 1: Customer */}
         {step === 1 && (
           <div className="card space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
-            <h2 className="text-lg font-bold text-gray-800">Dados do Responsável</h2>
+            <h2 className="text-lg font-semibold text-slate-800">Dados do Responsável</h2>
             <div>
-              <label htmlFor="customerName" className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="customerName" className="block text-sm font-medium text-slate-700 mb-2">
                 Nome Completo *
               </label>
               <input
@@ -301,7 +301,7 @@ export default function InterestFormPage({
               />
             </div>
             <div>
-              <label htmlFor="customerPhone" className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="customerPhone" className="block text-sm font-medium text-slate-700 mb-2">
                 Telefone *
               </label>
               <input
@@ -314,7 +314,7 @@ export default function InterestFormPage({
               />
             </div>
             <div>
-              <label htmlFor="customerEmail" className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="customerEmail" className="block text-sm font-medium text-slate-700 mb-2">
                 E-mail (opcional)
               </label>
               <input
@@ -335,9 +335,9 @@ export default function InterestFormPage({
         {/* Step 2: Student */}
         {step === 2 && (
           <div className="card space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
-            <h2 className="text-lg font-bold text-gray-800">Dados do Aluno</h2>
+            <h2 className="text-lg font-semibold text-slate-800">Dados do Aluno</h2>
             <div>
-              <label htmlFor="studentName" className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="studentName" className="block text-sm font-medium text-slate-700 mb-2">
                 Nome do Aluno *
               </label>
               <input
@@ -351,7 +351,7 @@ export default function InterestFormPage({
               />
             </div>
             <div>
-              <label htmlFor="studentClass" className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="studentClass" className="block text-sm font-medium text-slate-700 mb-2">
                 Turma *
               </label>
               <input
@@ -377,13 +377,13 @@ export default function InterestFormPage({
         {/* Step 3: Products */}
         {step === 3 && (
           <div className="card space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
-            <h2 className="text-lg font-bold text-gray-800">Produtos de Interesse</h2>
-            <p className="text-sm text-gray-600">Selecione os produtos, tamanhos e quantidades desejadas.</p>
+            <h2 className="text-lg font-semibold text-slate-800">Produtos de Interesse</h2>
+            <p className="text-sm text-slate-600">Selecione os produtos, tamanhos e quantidades desejadas.</p>
 
             {loadingProducts ? (
               <LoadingSkeleton />
             ) : products.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
+              <div className="text-center py-8 text-slate-500">
                 Nenhum produto disponível para esta unidade.
               </div>
             ) : (
@@ -391,23 +391,23 @@ export default function InterestFormPage({
                 {products.map((product) => {
                   const isSelected = !!selectedProducts[product.id];
                   return (
-                    <div key={product.id} className={`border rounded-lg p-4 transition-colors ${isSelected ? 'border-blue-500 bg-blue-50/10' : 'border-gray-200'}`}>
+                    <div key={product.id} className={`border rounded-lg p-4 transition-colors duration-150 ${isSelected ? 'border-[#A3D154] bg-[#A3D154]/5' : 'border-slate-200'}`}>
                       <div className="flex items-center gap-3 mb-3">
                         <input
                           type="checkbox"
                           id={`product-${product.id}`}
                           checked={isSelected}
                           onChange={() => handleProductToggle(product.id)}
-                          className="w-5 h-5 accent-blue-600 rounded"
+                          className="w-5 h-5 accent-[#A3D154] rounded"
                         />
-                        <label htmlFor={`product-${product.id}`} className="font-medium text-gray-800 flex-1 cursor-pointer select-none">
+                        <label htmlFor={`product-${product.id}`} className="font-medium text-slate-800 flex-1 cursor-pointer select-none">
                           {product.name}
                         </label>
                       </div>
                       {isSelected && (
                         <div className="ml-8 space-y-3 animate-in fade-in slide-in-from-top-2">
                           <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">Tamanho *</label>
+                            <label className="block text-sm font-medium text-slate-700 mb-2">Tamanho *</label>
                             {product.sizes.length > 0 ? (
                               <select
                                 value={selectedProducts[product.id]?.size || ''}
@@ -426,7 +426,7 @@ export default function InterestFormPage({
                             )}
                           </div>
                           <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">Quantidade</label>
+                            <label className="block text-sm font-medium text-slate-700 mb-2">Quantidade</label>
                             <input
                               type="number"
                               min="1"
@@ -457,34 +457,34 @@ export default function InterestFormPage({
         {/* Step 4: Confirmation */}
         {step === 4 && (
           <div className="card space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
-            <h2 className="text-lg font-bold text-gray-800">Confirmar e Enviar</h2>
+            <h2 className="text-lg font-semibold text-slate-800">Confirmar e Enviar</h2>
 
             {/* Summary */}
             <div className="space-y-4 divide-y divider-gray-100">
               <div className="pt-2">
-                <h3 className="font-medium text-gray-700 mb-2">Responsável</h3>
-                <p className="text-gray-800 font-medium">
+                <h3 className="font-medium text-slate-700 mb-2">Responsável</h3>
+                <p className="text-slate-800 font-medium">
                   {customerName}
                 </p>
-                <p className="text-gray-600 text-sm">{customerPhone} {customerEmail ? `• ${customerEmail}` : ''}</p>
+                <p className="text-slate-600 text-sm">{customerPhone} {customerEmail ? `• ${customerEmail}` : ''}</p>
               </div>
 
               <div className="pt-4">
-                <h3 className="font-medium text-gray-700 mb-2">Aluno</h3>
-                <p className="text-gray-800 text-sm">
+                <h3 className="font-medium text-slate-700 mb-2">Aluno</h3>
+                <p className="text-slate-800 text-sm">
                   <span className="font-medium">{studentName}</span> • Turma {studentClass}
                 </p>
               </div>
 
               <div className="pt-4">
-                <h3 className="font-medium text-gray-700 mb-2">Produtos Selecionados</h3>
+                <h3 className="font-medium text-slate-700 mb-2">Produtos Selecionados</h3>
                 <ul className="space-y-2">
                   {Object.entries(selectedProducts).map(([productId, data]) => {
                     const product = products.find((p) => p.id === productId);
                     return (
-                      <li key={productId} className="flex justify-between text-sm items-center bg-gray-50 p-2 rounded">
-                        <span className="text-gray-800">{product?.name}</span>
-                        <div className="flex gap-3 text-gray-600">
+                      <li key={productId} className="flex justify-between text-sm items-center bg-slate-50 p-2 rounded">
+                        <span className="text-slate-800">{product?.name}</span>
+                        <div className="flex gap-3 text-slate-600">
                           <span className="font-medium bg-white px-2 rounded border">Tam: {data.size}</span>
                           <span>x{data.quantity}</span>
                         </div>
@@ -495,7 +495,7 @@ export default function InterestFormPage({
               </div>
 
               <div className="pt-4">
-                <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="notes" className="block text-sm font-medium text-slate-700 mb-2">
                   Observações (opcional)
                 </label>
                 <textarea
@@ -509,13 +509,10 @@ export default function InterestFormPage({
               </div>
             </div>
 
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <div className="flex gap-3">
-                <div className="text-2xl">ℹ️</div>
-                <p className="text-sm text-blue-800 pt-1">
-                  Ao enviar, seus dados serão registrados na secretaria da unidade. Entraremos em contato assim que os produtos selecionados estiverem disponíveis em estoque.
-                </p>
-              </div>
+            <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
+              <p className="text-sm text-slate-700">
+                Ao enviar, seus dados serão registrados na secretaria da unidade. Entraremos em contato assim que os produtos selecionados estiverem disponíveis em estoque.
+              </p>
             </div>
 
             <div className="flex gap-3">
@@ -531,7 +528,7 @@ export default function InterestFormPage({
                   <>
                     <LoadingSpinner size="sm" /> Enviando...
                   </>
-                ) : '✅ Enviar Interesse'}
+                ) : 'Enviar Interesse'}
               </button>
             </div>
           </div>

@@ -137,13 +137,13 @@ export default function VoucherPage({
   const getStatusBadge = (status: Order['status']) => {
     switch (status) {
       case 'AGUARDANDO_PAGAMENTO':
-        return <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-amber-100 text-amber-800 border border-amber-300">⏳ Aguardando Pagamento Presencial</span>;
+        return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-sm font-medium bg-amber-50 text-amber-700 border border-amber-200">Aguardando Pagamento Presencial</span>;
       case 'PAGO':
-        return <span className="badge-in-stock">✅ Pago - Pronto para Retirada</span>;
+        return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-sm font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">Pago - Pronto para Retirada</span>;
       case 'RETIRADO':
-        return <span className="badge-in-stock">📦 Retirado</span>;
+        return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-sm font-medium bg-blue-50 text-blue-700 border border-blue-200">Retirado</span>;
       case 'EXPIRADO':
-        return <span className="badge-out-of-stock">❌ Voucher Expirado</span>;
+        return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-sm font-medium bg-red-50 text-red-700 border border-red-200">Voucher Expirado</span>;
       default:
         return null;
     }
@@ -339,7 +339,7 @@ _Válido até ${new Date(order.expiresAt).toLocaleDateString('pt-BR')}_`;
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <LoadingSpinner size="lg" />
       </div>
     );
@@ -347,10 +347,9 @@ _Válido até ${new Date(order.expiresAt).toLocaleDateString('pt-BR')}_`;
 
   if (error || !order) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
         <div className="card max-w-md w-full text-center">
-          <p className="text-xl text-red-600 mb-4">❌</p>
-          <p className="text-gray-700 mb-4">{error || 'Pedido não encontrado'}</p>
+          <p className="text-slate-700 mb-4">{error || 'Pedido não encontrado'}</p>
           <Link href="/consulta" className="btn-primary">
             Consultar Outro Pedido
           </Link>
@@ -364,45 +363,44 @@ _Válido até ${new Date(order.expiresAt).toLocaleDateString('pt-BR')}_`;
   const expiresDate = new Date(order.expiresAt).toLocaleDateString('pt-BR');
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-      <header className="bg-white border-b border-gray-200 no-print">
+    <div className="min-h-screen bg-slate-50">
+      <header className="bg-white border-b border-slate-200 no-print">
         <div className="max-w-4xl mx-auto px-4 py-4">
-          <h1 className="text-xl font-bold text-gray-800">📋 Voucher de Retirada</h1>
+          <h1 className="text-xl font-semibold text-slate-800">Voucher de Retirada</h1>
         </div>
       </header>
 
       <main className="max-w-4xl mx-auto p-4 md:p-6 lg:p-8">
         {/* Voucher Card */}
-        <div className="bg-white rounded-lg shadow-lg overflow-hidden mb-6">
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-6">
           {/* Código de 6 dígitos */}
-          <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-8 text-center voucher-code">
-            <p className="text-sm font-medium mb-2">CÓDIGO DE RETIRADA</p>
-            <p className="text-6xl font-bold tracking-wider mb-2">{order.orderNumber}</p>
-            <p className="text-sm opacity-90">Apresente este código na secretaria</p>
+          <div className="bg-slate-900 text-white p-8 text-center voucher-code">
+            <p className="text-sm font-medium mb-2 text-slate-300">CÓDIGO DE RETIRADA</p>
+            <p className="text-6xl font-bold tracking-wider mb-2 tabular-nums">{order.orderNumber}</p>
+            <p className="text-sm text-slate-300">Apresente este código na secretaria</p>
           </div>
 
           {/* Status e Informações */}
           <div className="p-6 space-y-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">Status do Pedido</p>
+                <p className="text-sm text-slate-600">Status do Pedido</p>
                 <div className="mt-1">{getStatusBadge(order.status)}</div>
               </div>
               <div className="text-right">
-                <p className="text-sm text-gray-600">
+                <p className="text-sm text-slate-600">
                   {order.status === 'AGUARDANDO_PAGAMENTO' ? 'Total a Pagar' : 'Total Pago'}
                 </p>
-                <p className="text-2xl font-bold text-blue-600">R$ {totalReais.toFixed(2)}</p>
+                <p className="text-2xl font-bold text-slate-800 tabular-nums">R$ {totalReais.toFixed(2)}</p>
               </div>
             </div>
 
             {/* Alerta de Pagamento Pendente */}
             {order.status === 'AGUARDANDO_PAGAMENTO' && (
-              <div className="bg-amber-50 border-2 border-amber-300 rounded-lg p-4">
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
                 <div className="flex items-start gap-3">
-                  <span className="text-2xl">💰</span>
                   <div>
-                    <p className="font-bold text-amber-800 mb-1">Pagamento Pendente</p>
+                    <p className="font-semibold text-amber-800 mb-1">Pagamento Pendente</p>
                     <p className="text-sm text-amber-700">
                       Dirija-se à secretaria da escola para efetuar o pagamento presencial.
                       Após o pagamento, seus produtos estarão disponíveis para retirada.
@@ -417,32 +415,32 @@ _Válido até ${new Date(order.expiresAt).toLocaleDateString('pt-BR')}_`;
 
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
-                <p className="text-gray-600">Responsável</p>
-                <p className="font-medium text-gray-800">{order.customerName}</p>
+                <p className="text-slate-600">Responsável</p>
+                <p className="font-medium text-slate-800">{order.customerName}</p>
               </div>
               <div>
-                <p className="text-gray-600">Telefone</p>
-                <p className="font-medium text-gray-800">{order.customerPhone}</p>
+                <p className="text-slate-600">Telefone</p>
+                <p className="font-medium text-slate-800">{order.customerPhone}</p>
               </div>
               <div>
-                <p className="text-gray-600">Data do Pedido</p>
-                <p className="font-medium text-gray-800">{createdDate}</p>
+                <p className="text-slate-600">Data do Pedido</p>
+                <p className="font-medium text-slate-800">{createdDate}</p>
               </div>
               <div>
-                <p className="text-gray-600">Validade</p>
-                <p className="font-medium text-gray-800">{expiresDate}</p>
+                <p className="text-slate-600">Validade</p>
+                <p className="font-medium text-slate-800">{expiresDate}</p>
               </div>
             </div>
 
             {/* Instruções de Retirada */}
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-              <p className="font-medium text-yellow-800 mb-2">📍 Instruções de Retirada</p>
-              <p className="text-sm text-yellow-700">{order.pickupInstructions}</p>
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+              <p className="font-semibold text-amber-800 mb-2">Instruções de Retirada</p>
+              <p className="text-sm text-amber-700">{order.pickupInstructions}</p>
             </div>
 
             {/* Itens do Pedido */}
             <div>
-              <h3 className="font-bold text-gray-800 mb-4">Itens do Pedido</h3>
+              <h3 className="font-semibold text-slate-800 mb-4">Itens do Pedido</h3>
               <div className="space-y-2">
                 {order.items.map((item) => (
                   <OrderItemCard key={item.id} {...item} />
@@ -453,18 +451,18 @@ _Válido até ${new Date(order.expiresAt).toLocaleDateString('pt-BR')}_`;
             {/* Ações */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-4 no-print">
               <button onClick={handlePrint} className="btn-primary">
-                🖨️ Imprimir
+                Imprimir
               </button>
               <button onClick={handleDownloadPDF} className="btn-outline">
-                📄 Baixar PDF
+                Baixar PDF
               </button>
               <button onClick={handleShareWhatsApp} disabled={copying} className="btn-outline">
-                {copying ? <LoadingSpinner size="sm" /> : '� WhatsApp'}
+                {copying ? <LoadingSpinner size="sm" /> : 'WhatsApp'}
               </button>
             </div>
 
             <div className="text-center pt-4 no-print">
-              <Link href="/" className="text-blue-600 hover:text-blue-800 font-medium">
+              <Link href="/" className="text-slate-600 hover:text-slate-800 font-medium transition-colors duration-150">
                 ← Voltar ao Catálogo
               </Link>
             </div>
@@ -472,8 +470,8 @@ _Válido até ${new Date(order.expiresAt).toLocaleDateString('pt-BR')}_`;
         </div>
 
         {/* Informações Adicionais */}
-        <div className="bg-white rounded-lg shadow-md p-6 text-sm text-gray-600 no-print">
-          <p className="font-medium text-gray-800 mb-2">ℹ️ Importante:</p>
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 text-sm text-slate-600 no-print">
+          <p className="font-semibold text-slate-800 mb-2">Importante:</p>
           <ul className="list-disc list-inside space-y-1">
             <li>Este voucher é válido por 7 dias a partir da data do pedido</li>
             <li>Traga um documento de identificação com foto</li>
