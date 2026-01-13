@@ -26,7 +26,7 @@ COPY services/*/package.json ./services/*/
 COPY packages/*/package.json ./packages/*/
 
 # Install dependencies (including devDependencies for build)
-RUN pnpm install --frozen-lockfile
+RUN pnpm install
 
 # -----------------------------------------------------------------------------
 # Stage 3: Builder - Build all apps and services
