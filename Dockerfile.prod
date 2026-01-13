@@ -15,51 +15,29 @@ RUN corepack enable && corepack prepare pnpm@latest --activate
 WORKDIR /app
 
 # -----------------------------------------------------------------------------
-# Stage 2: Dependencies - Install all dependencies
-# -----------------------------------------------------------------------------
-FROM base AS deps
-
-# Copy package files
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY apps/*/package.json ./apps/*/
-COPY services/*/package.json ./services/*/
-COPY packages/*/package.json ./packages/*/
-
-# Install dependencies (including devDependencies for build)
-RUN pnpm install
-
-# -----------------------------------------------------------------------------
-# Stage 3: Builder - Build all apps and services
+# Stage 2: Builder - Install dependencies and build
 # -----------------------------------------------------------------------------
 FROM base AS builder
 
-# Copy dependencies from deps stage
-COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/apps ./apps
-COPY --from=deps /app/services ./services
-COPY --from=deps /app/packages ./packages
-
-# Copy source code
+# Copy all source code (needed for pnpm workspace)
 COPY . .
 
-# Copy node_modules to each workspace
-COPY --from=deps /app/apps/*/node_modules ./apps/*/node_modules
-COPY --from=deps /app/services/*/node_modules ./services/*/node_modules
-COPY --from=deps /app/packages/*/node_modules ./packages/*/node_modules
+# Install dependencies
+RUN pnpm install
 
 # Build all apps and services using Turbo
 ENV NODE_ENV=production
 RUN pnpm turbo build
 
 # -----------------------------------------------------------------------------
-# Stage 4: Production - Minimal runtime image
+# Stage 3: Production - Minimal runtime image
 # -----------------------------------------------------------------------------
 FROM base AS production
 
 # Install dumb-init for proper signal handling
 RUN apk add --no-cache dumb-init
 
-# Copy built artifacts from builder
+# Copy built artifacts and dependencies from builder
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/apps ./apps
 COPY --from=builder /app/services ./services
