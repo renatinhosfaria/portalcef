@@ -1,3 +1,4 @@
+
 # =============================================================================
 # Docker Compose for PRODUCTION
 # Portal Essencia Feliz - Production Deployment with Traefik
@@ -129,6 +130,198 @@ services:
       "
 
   # ===========================================================================
+  # Frontend Apps - Next.js
+  # ===========================================================================
+  home:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+      target: production
+    container_name: essencia-home
+    command: pnpm --filter home start
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      API_INTERNAL_URL: http://api:3002
+      NEXT_PUBLIC_API_URL: https://www.portalcef.com.br/api
+    networks:
+      - essencia-prod
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  login:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+      target: production
+    container_name: essencia-login
+    command: pnpm --filter login start
+    environment:
+      NODE_ENV: production
+      PORT: 3003
+      API_INTERNAL_URL: http://api:3002
+      NEXT_PUBLIC_API_URL: https://www.portalcef.com.br/api
+    networks:
+      - essencia-prod
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  usuarios:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+      target: production
+    container_name: essencia-usuarios
+    command: pnpm --filter usuarios start
+    environment:
+      NODE_ENV: production
+      PORT: 3004
+      API_INTERNAL_URL: http://api:3002
+      NEXT_PUBLIC_API_URL: https://www.portalcef.com.br/api
+    networks:
+      - essencia-prod
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  escolas:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+      target: production
+    container_name: essencia-escolas
+    command: pnpm --filter escolas start
+    environment:
+      NODE_ENV: production
+      PORT: 3005
+      API_INTERNAL_URL: http://api:3002
+      NEXT_PUBLIC_API_URL: https://www.portalcef.com.br/api
+    networks:
+      - essencia-prod
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  turmas:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+      target: production
+    container_name: essencia-turmas
+    command: pnpm --filter @essencia/turmas start
+    environment:
+      NODE_ENV: production
+      PORT: 3006
+      API_INTERNAL_URL: http://api:3002
+      NEXT_PUBLIC_API_URL: https://www.portalcef.com.br/api
+    networks:
+      - essencia-prod
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  planejamento:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+      target: production
+    container_name: essencia-planejamento
+    command: pnpm --filter planejamento start
+    environment:
+      NODE_ENV: production
+      PORT: 3007
+      API_INTERNAL_URL: http://api:3002
+      NEXT_PUBLIC_API_URL: https://www.portalcef.com.br/api
+    networks:
+      - essencia-prod
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  loja:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+      target: production
+    container_name: essencia-loja
+    command: pnpm --filter @essencia/loja start
+    environment:
+      NODE_ENV: production
+      PORT: 3010
+      API_INTERNAL_URL: http://api:3002
+      NEXT_PUBLIC_API_URL: https://www.portalcef.com.br/api
+    networks:
+      - essencia-prod
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  loja-admin:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+      target: production
+    container_name: essencia-loja-admin
+    command: pnpm --filter @essencia/loja-admin start
+    environment:
+      NODE_ENV: production
+      PORT: 3011
+      API_INTERNAL_URL: http://api:3002
+      NEXT_PUBLIC_API_URL: https://www.portalcef.com.br/api
+    networks:
+      - essencia-prod
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  calendario:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+      target: production
+    container_name: essencia-calendario
+    command: pnpm --filter @essencia/calendario start
+    environment:
+      NODE_ENV: production
+      PORT: 3008
+      API_INTERNAL_URL: http://api:3002
+      NEXT_PUBLIC_API_URL: https://www.portalcef.com.br/api
+    networks:
+      - essencia-prod
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ===========================================================================
   # API - NestJS Backend
   # ===========================================================================
   api:
@@ -141,8 +334,7 @@ services:
       - .env.docker
     environment:
       NODE_ENV: production
-      # Database
-      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      # Database URL is loaded from .env.docker (already URL-encoded)
       # Redis
       REDIS_URL: redis://redis:6379
       # MinIO
@@ -170,17 +362,6 @@ services:
     networks:
       - essencia-prod
     restart: unless-stopped
-    labels:
-      - "traefik.enable=true"
-      # API routes
-      - "traefik.http.routers.api.rule=Host(`www.portalcef.com.br`) && PathPrefix(`/api`)"
-      - "traefik.http.routers.api.entrypoints=websecure"
-      - "traefik.http.routers.api.tls.certresolver=letsencrypt"
-      - "traefik.http.services.api.loadbalancer.server.port=3002"
-      # Health check route
-      - "traefik.http.routers.api-health.rule=Host(`www.portalcef.com.br`) && Path(`/health`)"
-      - "traefik.http.routers.api-health.entrypoints=websecure"
-      - "traefik.http.routers.api-health.tls.certresolver=letsencrypt"
     logging:
       driver: "json-file"
       options:
