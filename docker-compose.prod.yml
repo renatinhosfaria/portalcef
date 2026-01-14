@@ -330,6 +330,7 @@ services:
       dockerfile: Dockerfile.prod
       target: production
     container_name: essencia-api
+    command: pnpm --filter @essencia/api start
     env_file:
       - .env.docker
     environment:
@@ -382,10 +383,13 @@ networks:
 volumes:
   postgres_data:
     name: essencia-postgres-data
+    external: true
   redis_data:
     name: essencia-redis-data
+    external: true
   minio_data:
     name: essencia-minio-data
+    external: true
   nginx_certs:
     name: essencia-nginx-certs
   nginx_webroot:

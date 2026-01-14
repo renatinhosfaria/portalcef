@@ -77,7 +77,7 @@ async function getCookieHeader(): Promise<string> {
 
 async function getCurrentUser(cookieHeader: string): Promise<UserData | null> {
   try {
-    const response = await serverApi.get<UserResponse>("/auth/me", {
+    const response = await serverApi.get<UserResponse>("/api/auth/me", {
       cookies: cookieHeader,
     });
 
@@ -93,7 +93,7 @@ async function getCurrentUser(cookieHeader: string): Promise<UserData | null> {
 
 async function getUserTurmas(cookieHeader: string): Promise<Turma[]> {
   try {
-    const response = await serverApi.get<Turma[]>("/plannings/turmas", {
+    const response = await serverApi.get<Turma[]>("/api/plannings/turmas", {
       cookies: cookieHeader,
     });
 
@@ -110,7 +110,7 @@ async function getUserTurmas(cookieHeader: string): Promise<Turma[]> {
 
 async function getStages(cookieHeader: string): Promise<Stage[]> {
   try {
-    const response = await serverApi.get<Stage[]>("/stages", {
+    const response = await serverApi.get<Stage[]>("/api/stages", {
       cookies: cookieHeader,
     });
 

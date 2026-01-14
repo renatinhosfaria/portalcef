@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 
 import {
   createUserSchema,
+  updateUserSchema,
   type EducationStage,
   type UserRole,
 } from "@essencia/shared/schemas";
@@ -26,6 +27,7 @@ import type { UserSummary } from "@essencia/lib/types";
 
 import { api } from "@essencia/shared/fetchers/client";
 import { useTenant } from "@essencia/shared/providers/tenant";
+import { ROLE_HIERARCHY } from "@essencia/shared/roles";
 import type { School, Unit } from "@essencia/shared/schemas";
 import { Sheet } from "@essencia/ui/components/sheet";
 
@@ -63,6 +65,8 @@ export function UserForm({ isOpen, onClose, userToEdit }: UserFormProps) {
   const [success, setSuccess] = useState(false);
   const [units, setUnits] = useState<Unit[]>([]);
   const [school, setSchool] = useState<School | null>(null);
+  const [schools, setSchools] = useState<School[]>([]);
+  const [selectedSchoolId, setSelectedSchoolId] = useState<string>("");
   const [isLoadingSchool, setIsLoadingSchool] = useState(false);
   const [stages, setStages] = useState<EducationStage[]>([]);
   const [isLoadingStages, setIsLoadingStages] = useState(false);
@@ -71,30 +75,56 @@ export function UserForm({ isOpen, onClose, userToEdit }: UserFormProps) {
     const abortController = new AbortController();
 
     async function fetchData() {
-      if (schoolId) {
-        setIsLoadingSchool(true);
-        try {
-          const [schoolData, unitsData] = await Promise.all([
-            api.get<School>(`/schools/${schoolId}`, {
-              signal: abortController.signal,
-            }),
-            api.get<Unit[]>(`/schools/${schoolId}/units`, {
-              signal: abortController.signal,
-            }),
-          ]);
-          setSchool(schoolData);
-          setUnits(unitsData);
-        } catch (e) {
-          // Ignore abort errors
-          if (e instanceof Error && e.name === "AbortError") return;
-          console.error("Failed to fetch school/units data", e);
-          setError(
-            "Erro ao carregar dados da escola. Verifique suas permissões.",
-          );
-        } finally {
-          if (!abortController.signal.aborted) {
-            setIsLoadingSchool(false);
+      setIsLoadingSchool(true);
+      try {
+        // If user is master, fetch all schools
+        if (currentUserRole === "master") {
+          const schoolsData = await api.get<School[]>("/schools", {
+            signal: abortController.signal,
+          });
+          setSchools(schoolsData);
+
+          // If editing, also fetch the specific school and units
+          if (userToEdit?.schoolId) {
+            const [schoolData, unitsData] = await Promise.all([
+              api.get<School>(`/schools/${userToEdit.schoolId}`, {
+                signal: abortController.signal,
+              }),
+              api.get<Unit[]>(`/schools/${userToEdit.schoolId}/units`, {
+                signal: abortController.signal,
+              }),
+            ]);
+            setSchool(schoolData);
+            setUnits(unitsData);
+            setSelectedSchoolId(userToEdit.schoolId);
           }
+        } else {
+          // For non-master users, use tenant's schoolId
+          const targetSchoolId = schoolId;
+
+          if (targetSchoolId) {
+            const [schoolData, unitsData] = await Promise.all([
+              api.get<School>(`/schools/${targetSchoolId}`, {
+                signal: abortController.signal,
+              }),
+              api.get<Unit[]>(`/schools/${targetSchoolId}/units`, {
+                signal: abortController.signal,
+              }),
+            ]);
+            setSchool(schoolData);
+            setUnits(unitsData);
+          }
+        }
+      } catch (e) {
+        // Ignore abort errors
+        if (e instanceof Error && e.name === "AbortError") return;
+        console.error("Failed to fetch school/units data", e);
+        setError(
+          "Erro ao carregar dados da escola. Verifique suas permissões.",
+        );
+      } finally {
+        if (!abortController.signal.aborted) {
+          setIsLoadingSchool(false);
         }
       }
     }
@@ -103,7 +133,38 @@ export function UserForm({ isOpen, onClose, userToEdit }: UserFormProps) {
     return () => {
       abortController.abort();
     };
-  }, [schoolId]);
+  }, [schoolId, userToEdit, currentUserRole]);
+
+  // Fetch units when master selects a school
+  useEffect(() => {
+    const abortController = new AbortController();
+
+    async function fetchUnits() {
+      if (currentUserRole === "master" && selectedSchoolId && !userToEdit) {
+        try {
+          const [schoolData, unitsData] = await Promise.all([
+            api.get<School>(`/schools/${selectedSchoolId}`, {
+              signal: abortController.signal,
+            }),
+            api.get<Unit[]>(`/schools/${selectedSchoolId}/units`, {
+              signal: abortController.signal,
+            }),
+          ]);
+          setSchool(schoolData);
+          setUnits(unitsData);
+        } catch (e) {
+          if (e instanceof Error && e.name === "AbortError") return;
+          console.error("Failed to fetch units for selected school", e);
+        }
+      }
+    }
+
+    fetchUnits();
+
+    return () => {
+      abortController.abort();
+    };
+  }, [selectedSchoolId, currentUserRole, userToEdit]);
 
   useEffect(() => {
     const abortController = new AbortController();
@@ -145,6 +206,37 @@ export function UserForm({ isOpen, onClose, userToEdit }: UserFormProps) {
     stageId: "",
   });
 
+  // Populate form when editing
+  useEffect(() => {
+    if (userToEdit && isOpen) {
+      setFormData({
+        name: userToEdit.name,
+        email: userToEdit.email,
+        password: "", // Never pre-fill password
+        role: userToEdit.role,
+        unitId: userToEdit.unitId || unitId || "",
+        stageId: userToEdit.stageId || "",
+      });
+      if (userToEdit.schoolId) {
+        setSelectedSchoolId(userToEdit.schoolId);
+      }
+    } else if (!isOpen) {
+      // Reset form when closing
+      setFormData({
+        name: "",
+        email: "",
+        password: "",
+        role: "professora",
+        unitId: unitId || "",
+        stageId: "",
+      });
+      setSelectedSchoolId("");
+      setSchools([]);
+      setUnits([]);
+      setSchool(null);
+    }
+  }, [userToEdit, isOpen, unitId]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
@@ -152,6 +244,18 @@ export function UserForm({ isOpen, onClose, userToEdit }: UserFormProps) {
 
     try {
       const requiresStage = stageRequiredRoles.includes(formData.role);
+
+      // Validate school selection for master creating non-master users
+      if (
+        currentUserRole === "master" &&
+        formData.role !== "master" &&
+        !selectedSchoolId &&
+        !userToEdit
+      ) {
+        setError("Por favor, selecione uma escola.");
+        setIsLoading(false);
+        return;
+      }
 
       // Prepare payload based on role
       let payload: {
@@ -163,6 +267,10 @@ export function UserForm({ isOpen, onClose, userToEdit }: UserFormProps) {
         unitId: string | null;
         stageId: string | null;
       };
+
+      // Determine schoolId based on current user role
+      const effectiveSchoolId =
+        currentUserRole === "master" ? selectedSchoolId : schoolId;
 
       if (formData.role === "master") {
         // Master: no school or unit
@@ -176,7 +284,7 @@ export function UserForm({ isOpen, onClose, userToEdit }: UserFormProps) {
         // Diretora Geral: school required, no unit
         payload = {
           ...formData,
-          schoolId: schoolId,
+          schoolId: effectiveSchoolId,
           unitId: null,
           stageId: null,
         };
@@ -184,28 +292,40 @@ export function UserForm({ isOpen, onClose, userToEdit }: UserFormProps) {
         // Other roles: both school and unit required
         payload = {
           ...formData,
-          schoolId: schoolId,
+          schoolId: effectiveSchoolId,
           unitId: formData.unitId || null,
           stageId: requiresStage ? formData.stageId || null : null,
         };
       }
 
-      // Validate client-side
-      const result = createUserSchema.safeParse(payload);
-
-      if (!result.success) {
-        const issues = result.error.issues;
-        const firstIssue = issues[0];
-        setError(firstIssue?.message ?? "Dados invalidos.");
-        setIsLoading(false);
-        return;
-      }
-
       if (isEditing) {
-        // TODO: Implement real update
-        console.warn("Update implementation pending");
-        await new Promise((resolve) => setTimeout(resolve, 1500));
+        // When editing, remove password and validate with updateUserSchema
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { password: _password, ...updatePayload } = payload;
+        const result = updateUserSchema.safeParse(updatePayload);
+
+        if (!result.success) {
+          const issues = result.error.issues;
+          const firstIssue = issues[0];
+          setError(firstIssue?.message ?? "Dados invalidos.");
+          setIsLoading(false);
+          return;
+        }
+
+        await api.put(`/users/${userToEdit.id}`, updatePayload);
+        router.refresh();
       } else {
+        // When creating, validate with createUserSchema (password required)
+        const result = createUserSchema.safeParse(payload);
+
+        if (!result.success) {
+          const issues = result.error.issues;
+          const firstIssue = issues[0];
+          setError(firstIssue?.message ?? "Dados invalidos.");
+          setIsLoading(false);
+          return;
+        }
+
         await api.post("/users", payload);
         router.refresh();
       }
@@ -223,6 +343,10 @@ export function UserForm({ isOpen, onClose, userToEdit }: UserFormProps) {
           unitId: unitId || "",
           stageId: "",
         });
+        setSelectedSchoolId("");
+        setSchools([]);
+        setUnits([]);
+        setSchool(null);
       }, 1000);
     } catch (e) {
       console.error(e);
@@ -328,40 +452,74 @@ export function UserForm({ isOpen, onClose, userToEdit }: UserFormProps) {
               }));
             }}
           >
-            {ROLE_OPTIONS.map((opt) => (
-              <option
-                key={opt.value}
-                value={opt.value}
-                disabled={
-                  currentUserRole !== "master" && opt.value === "master"
-                }
-              >
+            {ROLE_OPTIONS.filter((opt) => {
+              // Master can assign any role
+              if (currentUserRole === "master") return true;
+
+              // Others can only assign roles with lower privilege (higher number)
+              const currentLevel = ROLE_HIERARCHY[currentUserRole] ?? 999;
+              const optionLevel = ROLE_HIERARCHY[opt.value] ?? 999;
+              return optionLevel > currentLevel;
+            }).map((opt) => (
+              <option key={opt.value} value={opt.value}>
                 {opt.label}
               </option>
             ))}
           </select>
         </div>
 
-        {/* Always show School field (read-only) */}
+        {/* School field */}
         {formData.role !== "master" && (
           <div className="space-y-2">
             <Label htmlFor="school">Escola</Label>
-            <div className="relative">
-              <Building2 className="absolute left-3 top-3 h-5 w-5 text-slate-400" />
-              <Input
-                id="school"
-                value={
-                  isLoadingSchool
-                    ? "Carregando..."
-                    : school?.name || "Escola não encontrada"
-                }
-                readOnly
-                className="pl-10 bg-slate-50 text-slate-500"
-                disabled
-              />
-            </div>
+            {currentUserRole === "master" ? (
+              // Master can select school
+              <div className="relative">
+                <select
+                  id="school"
+                  className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  value={selectedSchoolId}
+                  onChange={(e) => {
+                    setSelectedSchoolId(e.target.value);
+                    // Reset unit selection when school changes
+                    setFormData({ ...formData, unitId: "" });
+                  }}
+                  required={!userToEdit}
+                  disabled={isLoadingSchool || !!userToEdit}
+                >
+                  <option value="">
+                    {isLoadingSchool
+                      ? "Carregando escolas..."
+                      : "Selecione a Escola"}
+                  </option>
+                  {schools.map((sch) => (
+                    <option key={sch.id} value={sch.id}>
+                      {sch.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              // Non-master users see read-only school field
+              <div className="relative">
+                <Building2 className="absolute left-3 top-3 h-5 w-5 text-slate-400" />
+                <Input
+                  id="school"
+                  value={
+                    isLoadingSchool
+                      ? "Carregando..."
+                      : school?.name || "Escola não encontrada"
+                  }
+                  readOnly
+                  className="pl-10 bg-slate-50 text-slate-500"
+                  disabled
+                />
+              </div>
+            )}
             <p className="text-xs text-slate-500">
-              Todos os usuários (exceto Master) são vinculados a esta escola.
+              {currentUserRole === "master"
+                ? "Selecione a escola a qual este usuário pertence."
+                : "Todos os usuários (exceto Master) são vinculados a esta escola."}
             </p>
           </div>
         )}
@@ -438,6 +596,14 @@ export function UserForm({ isOpen, onClose, userToEdit }: UserFormProps) {
           <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-700 text-sm">
             <strong>Atenção:</strong> Diretora Geral tem acesso a toda a escola
             e todas as suas unidades.
+          </div>
+        )}
+
+        {/* Hierarchy info message */}
+        {currentUserRole !== "master" && (
+          <div className="p-4 rounded-xl bg-blue-50 border border-blue-200 text-blue-700 text-sm">
+            <strong>Nota:</strong> Você pode criar usuários apenas com roles de
+            menor privilégio que o seu.
           </div>
         )}
 

@@ -133,7 +133,28 @@ origin: [
 ]
 ```
 
-Se adicionar novos apps (ex: calendario, loja, loja-admin), inclua a origem correspondente.
+> **⚠️ PENDÊNCIA CONHECIDA**: O código atual **não inclui** as origens dos apps:
+> - `calendario` (porta 3008)
+> - `loja` (porta 3010)
+> - `loja-admin` (porta 3011)
+>
+> Esses apps terão erros de CORS até que `services/api/src/main.ts` seja atualizado para incluir essas origens.
+
+**CORS completo recomendado:**
+
+```ts
+origin: [
+  "http://localhost:3000",  // home
+  "http://localhost:3003",  // login
+  "http://localhost:3004",  // usuarios
+  "http://localhost:3005",  // escolas
+  "http://localhost:3006",  // turmas
+  "http://localhost:3007",  // planejamento
+  "http://localhost:3008",  // calendario
+  "http://localhost:3010",  // loja
+  "http://localhost:3011"   // loja-admin
+]
+```
 
 ---
 

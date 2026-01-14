@@ -149,7 +149,7 @@ export async function submitPlanning(planningId: string) {
     const options = cookieHeader ? { cookies: cookieHeader } : undefined;
 
     const existing = await serverApi.get<PlanningDetails>(
-      `/plannings/${planningId}`,
+      `/api/plannings/${planningId}`,
       options,
     );
 

@@ -13,6 +13,9 @@ type ApiUser = {
   role: UserRole;
   schoolName?: string | null;
   unitName?: string | null;
+  schoolId?: string | null;
+  unitId?: string | null;
+  stageId?: string | null;
 };
 export default async function Page() {
   const cookieStore = await cookies();
@@ -21,7 +24,7 @@ export default async function Page() {
   let users: UserSummary[] = [];
 
   try {
-    const fetchedUsers = await serverApi.get<ApiUser[]>("/users", {
+    const fetchedUsers = await serverApi.get<ApiUser[]>("/api/users", {
       cookies: cookieString,
     });
 
@@ -32,6 +35,9 @@ export default async function Page() {
       role: user.role,
       school: user.schoolName ?? "N/A",
       unit: user.unitName ?? "N/A",
+      schoolId: user.schoolId ?? null,
+      unitId: user.unitId ?? null,
+      stageId: user.stageId ?? null,
       status: "active",
       lastActive: "N/A",
     }));

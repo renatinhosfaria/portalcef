@@ -1,5 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+    basePath: "/loja-admin",
     transpilePackages: ["@essencia/ui", "@essencia/components", "@essencia/shared"],
 
     // Configuração de imagens para MinIO

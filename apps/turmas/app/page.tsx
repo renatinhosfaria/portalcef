@@ -58,7 +58,7 @@ export default function TurmasPage() {
       console.warn(
         `Acesso negado ao módulo de turmas. Role atual: ${role}. Redirecionando para home.`,
       );
-      router.push("http://localhost:3000"); // Redireciona para o app home
+      router.push("https://www.portalcef.com.br/"); // Redireciona para o app home
       return;
     }
   }, [isLoaded, role, router]);
@@ -92,7 +92,7 @@ export default function TurmasPage() {
           Você não tem permissão para acessar esta página.
         </p>
         <button
-          onClick={() => router.push("http://localhost:3000")}
+          onClick={() => router.push("https://www.portalcef.com.br/")}
           className="px-4 py-2 bg-slate-900 text-white rounded hover:bg-slate-800 transition-colors"
         >
           Voltar para Home

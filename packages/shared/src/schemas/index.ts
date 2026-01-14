@@ -190,6 +190,7 @@ export const createUserSchema = baseUserDataSchema.refine(validateRoleScope, {
 export const updateUserSchema = z.object({
   email: z.string().email("Email invalido").optional(),
   name: z.string().min(2, "Nome deve ter pelo menos 2 caracteres").optional(),
+  password: z.string().min(6, "Senha deve ter pelo menos 6 caracteres").optional(),
   role: userRoleSchema.optional(),
   schoolId: z.string().uuid("Escola invalida").nullable().optional(),
   unitId: z.string().uuid("Unidade invalida").nullable().optional(),

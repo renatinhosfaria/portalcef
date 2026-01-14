@@ -75,7 +75,7 @@ export default function LoginPage() {
 
         // Redirect to Home with Payload
         const payload = encodeURIComponent(JSON.stringify(tenantData));
-        router.push(`http://localhost:3000?data=${payload}`);
+        window.location.href = `https://www.portalcef.com.br?data=${payload}`;
       } else {
         setError(data.error?.message || "Erro ao fazer login");
       }
@@ -93,7 +93,7 @@ export default function LoginPage() {
         {/* Background Image */}
         <div
           className="absolute inset-0 bg-cover bg-center bg-no-repeat z-0"
-          style={{ backgroundImage: "url('/login-bg.jpg')" }}
+          style={{ backgroundImage: "url('/login/login-bg.jpg')" }}
         />
 
         {/* Gradient Overlay for Text Readability */}

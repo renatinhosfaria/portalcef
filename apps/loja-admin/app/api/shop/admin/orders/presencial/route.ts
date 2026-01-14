@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+const API_URL = process.env.API_INTERNAL_URL || "http://localhost:3001";
 
 export async function POST(request: Request) {
     try {
         const body = await request.json();
 
-        const res = await fetch(`${API_URL}/shop/admin/orders/presencial`, {
+        const res = await fetch(`${API_URL}/api/shop/admin/orders/presencial`, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",

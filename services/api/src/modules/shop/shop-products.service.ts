@@ -44,7 +44,7 @@ export class ShopProductsService {
     @Optional()
     @Inject(StorageService)
     private readonly storageService?: StorageService,
-  ) { }
+  ) {}
 
   /**
    * GET /shop/catalog/:schoolId/:unitId
@@ -129,7 +129,9 @@ export class ShopProductsService {
           category: product.category,
           basePrice: product.basePrice,
           imageUrl: product.imageUrl,
-          images: product.images?.map((img: { imageUrl: string }) => img.imageUrl) || [],
+          images:
+            product.images?.map((img: { imageUrl: string }) => img.imageUrl) ||
+            [],
           variants,
         };
       })
@@ -328,9 +330,7 @@ export class ShopProductsService {
     }
 
     // Hard delete - remove permanentemente
-    await db
-      .delete(shopProducts)
-      .where(eq(shopProducts.id, id));
+    await db.delete(shopProducts).where(eq(shopProducts.id, id));
   }
 
   /**
@@ -388,7 +388,12 @@ export class ShopProductsService {
    * Cria nova variante de produto
    */
   async createVariant(
-    dto: { productId: string; size: string; sku?: string; priceOverride?: number },
+    dto: {
+      productId: string;
+      size: string;
+      sku?: string;
+      priceOverride?: number;
+    },
     _userId: string,
     unitId?: string,
   ) {
@@ -456,7 +461,12 @@ export class ShopProductsService {
    */
   async updateVariant(
     id: string,
-    dto: { size?: string; sku?: string; priceOverride?: number; isActive?: boolean },
+    dto: {
+      size?: string;
+      sku?: string;
+      priceOverride?: number;
+      isActive?: boolean;
+    },
     _userId: string,
   ) {
     const db = getDb();
@@ -478,7 +488,9 @@ export class ShopProductsService {
       .set({
         ...(dto.size && { size: dto.size }),
         ...(dto.sku !== undefined && { sku: dto.sku || null }),
-        ...(dto.priceOverride !== undefined && { priceOverride: dto.priceOverride || null }),
+        ...(dto.priceOverride !== undefined && {
+          priceOverride: dto.priceOverride || null,
+        }),
         ...(dto.isActive !== undefined && { isActive: dto.isActive }),
         updatedAt: new Date(),
       })

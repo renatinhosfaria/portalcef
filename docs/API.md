@@ -11,7 +11,7 @@ Documentacao da API REST do Portal Digital Colegio Essencia Feliz.
 | Ambiente        | URL                           |
 | --------------- | ----------------------------- |
 | Desenvolvimento | http://localhost:3001         |
-| Producao        | https://api.essencia.edu.br   |
+| Producao        | https://www.portalcef.com.br  |
 
 ### Formato de Respostas
 

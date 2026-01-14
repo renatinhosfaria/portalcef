@@ -8,11 +8,11 @@ dist
 .turbo
 *.tsbuildinfo
 
-# Backups (não commitar dados)
+# Backups (nï¿½o commitar dados)
 backup-*.sql
 backup-*.tar.gz
 
-# Environment variables (não commitar senhas)
+# Environment variables (nï¿½o commitar senhas)
 .env.production
 .env.docker
 .env.local
@@ -25,7 +25,13 @@ api-crash.log
 # Coverage de testes
 coverage/
 
-# Arquivos temporários
+# Playwright E2E test results
+e2e-results/
+test-results/
+playwright-report/
+.playwright/
+
+# Arquivos temporï¿½rios
 tmpclaude-*
 
 # Environment variables reais

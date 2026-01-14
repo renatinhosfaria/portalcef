@@ -18,7 +18,7 @@ export default async function Page() {
 
   // Fetch stats from API (governed data access)
   const stats = await serverApi.get<MasterOverviewStats>(
-    "/stats/master-overview",
+    "/api/stats/master-overview",
     { cookies: cookieHeader },
   );
 

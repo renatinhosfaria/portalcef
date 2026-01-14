@@ -16,7 +16,6 @@
     "@essencia/ui": "workspace:*",
     "@essencia/tailwind-config": "workspace:*",
     "@essencia/shared": "workspace:*",
-    "@essencia/db": "workspace:*",
     "framer-motion": "^12.23.26",
     "lucide-react": "^0.469.0",
     "next": "15.1.0",

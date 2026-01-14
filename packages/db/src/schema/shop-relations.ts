@@ -33,13 +33,15 @@ export const shopProductsRelations = relations(
 // ============================================
 // Shop Product Images Relations
 // ============================================
-export const shopProductImagesRelations = relations(shopProductImages, ({ one }) => ({
-  product: one(shopProducts, {
-    fields: [shopProductImages.productId],
-    references: [shopProducts.id],
+export const shopProductImagesRelations = relations(
+  shopProductImages,
+  ({ one }) => ({
+    product: one(shopProducts, {
+      fields: [shopProductImages.productId],
+      references: [shopProducts.id],
+    }),
   }),
-}));
-
+);
 
 // ============================================
 // Shop Product Variants Relations

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+const API_URL = process.env.API_INTERNAL_URL || "http://localhost:3001";
 
 export async function GET(
     request: Request,
@@ -9,7 +9,7 @@ export async function GET(
     try {
         const { id } = await params;
 
-        const res = await fetch(`${API_URL}/shop/admin/products/${id}`, {
+        const res = await fetch(`${API_URL}/api/shop/admin/products/${id}`, {
             method: "GET",
             headers: {
                 "Content-Type": "application/json",

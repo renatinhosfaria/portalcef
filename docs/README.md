@@ -27,7 +27,7 @@ O **Portal Digital Colegio Essencia Feliz** e uma plataforma web moderna para ge
 | Modulo            | Porta | Descricao                                   |
 | ----------------- | ----- | ------------------------------------------- |
 | **Home**          | 3000  | Portal publico e landing page               |
-| **Calendario**    | 3002  | Calendario escolar                          |
+| **Calendario**    | 3008  | Calendario escolar                          |
 | **Login**         | 3003  | Autenticacao centralizada                   |
 | **Usuarios**      | 3004  | Gestao de usuarios e permissoes             |
 | **Escolas**       | 3005  | Administracao de escolas e unidades         |
@@ -88,7 +88,7 @@ pnpm dev
 | Servico        | URL                   |
 | -------------- | --------------------- |
 | Home           | http://localhost:3000 |
-| Calendario     | http://localhost:3002 |
+| Calendario     | http://localhost:3008 |
 | Login          | http://localhost:3003 |
 | Usuarios       | http://localhost:3004 |
 | Escolas        | http://localhost:3005 |
@@ -122,7 +122,7 @@ pnpm dev
 ```portalessencia/
 +-- apps/                           # Aplicacoes Next.js
 |   +-- home/             :3000     # Portal publico
-|   +-- calendario/       :3002     # Calendario escolar
+|   +-- calendario/       :3008     # Calendario escolar
 |   +-- login/            :3003     # Autenticacao
 |   +-- usuarios/         :3004     # Gestao de usuarios
 |   +-- escolas/          :3005     # Gestao de escolas

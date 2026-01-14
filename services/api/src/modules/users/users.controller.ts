@@ -1,4 +1,5 @@
 import { createUserSchema, updateUserSchema } from "@essencia/shared/schemas";
+import { canViewRole } from "@essencia/shared/roles";
 import { stageRequiredRoles } from "@essencia/shared/types";
 import {
   Body,
@@ -32,7 +33,7 @@ export class UsersController {
   ) {}
 
   @Get()
-  @Roles("diretora_geral", "gerente_unidade", "gerente_financeiro")
+  @Roles("master", "diretora_geral", "gerente_unidade", "gerente_financeiro")
   async findAll(
     @CurrentUser()
     currentUser: {
@@ -76,7 +77,7 @@ export class UsersController {
   }
 
   @Get(":id")
-  @Roles("diretora_geral", "gerente_unidade", "gerente_financeiro")
+  @Roles("master", "diretora_geral", "gerente_unidade", "gerente_financeiro")
   async findById(
     @Param("id") id: string,
     @CurrentUser()
@@ -122,6 +123,17 @@ export class UsersController {
       }
     }
 
+    // Hierarchy validation: can only view users with equal or lower privilege
+    if (user && !canViewRole(currentUser.role, user.role)) {
+      return {
+        success: false,
+        error: {
+          code: "FORBIDDEN",
+          message: "Acesso negado - usuário de maior privilégio",
+        },
+      };
+    }
+
     // Enrich with school/unit names
     let schoolName: string | null = null;
     let unitName: string | null = null;
@@ -143,7 +155,7 @@ export class UsersController {
   }
 
   @Post()
-  @Roles("diretora_geral", "gerente_unidade", "gerente_financeiro")
+  @Roles("master", "diretora_geral", "gerente_unidade", "gerente_financeiro")
   async create(
     @Body() body: unknown,
     @CurrentUser()
@@ -212,7 +224,7 @@ export class UsersController {
       };
     }
 
-    const user = await this.usersService.create(result.data);
+    const user = await this.usersService.create(result.data, currentUser);
     return {
       success: true,
       data: user,
@@ -220,7 +232,7 @@ export class UsersController {
   }
 
   @Put(":id")
-  @Roles("diretora_geral", "gerente_unidade", "gerente_financeiro")
+  @Roles("master", "diretora_geral", "gerente_unidade", "gerente_financeiro")
   async update(
     @Param("id") id: string,
     @Body() body: unknown,
@@ -322,7 +334,7 @@ export class UsersController {
       };
     }
 
-    const user = await this.usersService.update(id, result.data);
+    const user = await this.usersService.update(id, result.data, currentUser);
     return {
       success: true,
       data: user,
@@ -330,7 +342,7 @@ export class UsersController {
   }
 
   @Delete(":id")
-  @Roles("diretora_geral", "gerente_unidade", "gerente_financeiro")
+  @Roles("master", "diretora_geral", "gerente_unidade", "gerente_financeiro")
   @HttpCode(HttpStatus.OK)
   async delete(
     @Param("id") id: string,
@@ -398,7 +410,7 @@ export class UsersController {
       };
     }
 
-    await this.usersService.delete(id);
+    await this.usersService.delete(id, currentUser);
     return {
       success: true,
       data: null,

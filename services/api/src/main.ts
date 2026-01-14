@@ -61,6 +61,11 @@ async function bootstrap() {
     },
   });
 
+  // Set global prefix (exclude health check)
+  app.setGlobalPrefix("api", {
+    exclude: ["/health"],
+  });
+
   // Enable CORS for the frontend apps
   app.enableCors({
     origin: [

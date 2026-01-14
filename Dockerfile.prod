@@ -89,12 +89,16 @@ FROM base AS production
 # Install dumb-init for proper signal handling (PID 1 problem)
 RUN apk add --no-cache dumb-init
 
-# Copy everything from builder (maintains pnpm workspace structure)
-COPY --from=builder /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml /app/turbo.json /app/tsconfig.json ./
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/apps ./apps
-COPY --from=builder /app/services ./services
-COPY --from=builder /app/packages ./packages
+# Create user BEFORE copying files (optimization: no chown needed)
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nodejs -u 1001
+
+# Copy everything from builder with correct ownership (eliminates slow chown -R)
+COPY --from=builder --chown=nodejs:nodejs /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml /app/turbo.json /app/tsconfig.json ./
+COPY --from=builder --chown=nodejs:nodejs /app/node_modules ./node_modules
+COPY --from=builder --chown=nodejs:nodejs /app/apps ./apps
+COPY --from=builder --chown=nodejs:nodejs /app/services ./services
+COPY --from=builder --chown=nodejs:nodejs /app/packages ./packages
 
 # Remove devDependencies to reduce image size (keeps workspace structure)
 RUN pnpm prune --prod
@@ -104,11 +108,6 @@ ENV NODE_ENV=production
 
 # Expose all service ports (configurable via docker-compose)
 EXPOSE 3000 3002 3003 3004 3005 3006 3007 3008 3010 3011
-
-# Security: Run as non-root user
-RUN addgroup -g 1001 -S nodejs && \
-    adduser -S nodejs -u 1001 && \
-    chown -R nodejs:nodejs /app
 
 USER nodejs
 

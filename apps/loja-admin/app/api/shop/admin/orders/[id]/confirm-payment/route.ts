@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+const API_URL = process.env.API_INTERNAL_URL || "http://localhost:3001";
 
 /**
  * PATCH /api/shop/admin/orders/:id/confirm-payment
@@ -16,7 +16,7 @@ export async function PATCH(
         const { id } = await params;
         const body = await request.json();
 
-        const res = await fetch(`${API_URL}/shop/admin/orders/${id}/confirm-payment`, {
+        const res = await fetch(`${API_URL}/api/shop/admin/orders/${id}/confirm-payment`, {
             method: "PATCH",
             headers: {
                 "Content-Type": "application/json",

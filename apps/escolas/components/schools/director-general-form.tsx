@@ -13,6 +13,7 @@ import {
   AlertCircle,
   Check,
   Loader2,
+  Lock,
   Mail,
   ShieldCheck,
   User,
@@ -150,7 +151,12 @@ export function DirectorGeneralForm({
       };
 
       if (isEditing && directorId) {
-        const result = updateUserSchema.safeParse(basePayload);
+        // Include password if provided
+        const updatePayload = formData.password.trim()
+          ? { ...basePayload, password: formData.password }
+          : basePayload;
+
+        const result = updateUserSchema.safeParse(updatePayload);
         if (!result.success) {
           const issue = result.error.issues[0];
           setError(issue?.message ?? "Dados invalidos.");
@@ -279,14 +285,18 @@ export function DirectorGeneralForm({
           </div>
         </div>
 
-        {!isEditing && (
-          <div className="space-y-2">
-            <Label htmlFor="director-general-password">Senha Temporaria</Label>
+        <div className="space-y-2">
+          <Label htmlFor="director-general-password">
+            {isEditing ? "Nova Senha (opcional)" : "Senha Temporária"}
+          </Label>
+          <div className="relative">
+            <Lock className="absolute left-3 top-3 h-5 w-5 text-slate-400" />
             <Input
               id="director-general-password"
               type="password"
-              placeholder="*******"
-              required
+              placeholder={isEditing ? "Deixe em branco para manter" : "Mínimo 6 caracteres"}
+              required={!isEditing}
+              className="pl-10"
               value={formData.password}
               onChange={(e) =>
                 setFormData((current) => ({
@@ -297,7 +307,12 @@ export function DirectorGeneralForm({
               disabled={isDisabled}
             />
           </div>
-        )}
+          {isEditing && (
+            <p className="text-xs text-slate-500">
+              Preencha apenas se deseja alterar a senha de acesso.
+            </p>
+          )}
+        </div>
 
         <div className="pt-4 flex items-center justify-end gap-3">
           <Button type="button" variant="ghost" onClick={handleClose}>

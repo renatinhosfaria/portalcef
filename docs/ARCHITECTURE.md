@@ -11,7 +11,7 @@ O sistema segue uma arquitetura de **monorepo** com separacao clara entre fronte
 ```
 Frontend (Next.js)
   - home :3000
-  - calendario :3002
+  - calendario :3008
   - login :3003
   - usuarios :3004
   - escolas :3005
@@ -81,7 +81,7 @@ Data Layer
 | **Redis**      | 7      | Cache e sessoes           |
 | **Docker**     | -      | Containerizacao           |
 | **MinIO**      | -      | Storage de arquivos (opcional) |
-| **Traefik**    | -      | Reverse proxy (producao, nao versionado no repo) |
+| **Nginx + Certbot** | - | Reverse proxy SSL (producao, versionado: `nginx.conf`, `docker-compose.prod.yml`) |
 
 ---
 
@@ -97,7 +97,7 @@ apps/
 |   +-- app/
 |   +-- components/
 |   +-- package.json
-+-- calendario/         # Calendario escolar (:3002)
++-- calendario/         # Calendario escolar (:3008)
 |   +-- app/
 |   +-- features/
 |   +-- lib/

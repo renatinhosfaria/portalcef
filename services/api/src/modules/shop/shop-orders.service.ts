@@ -68,7 +68,7 @@ export class ShopOrdersService {
     private inventoryService: ShopInventoryService,
     @Inject(forwardRef(() => PaymentsService))
     private paymentsService: PaymentsService,
-  ) { }
+  ) {}
 
   /**
    * Gera número de pedido único de 6 dígitos

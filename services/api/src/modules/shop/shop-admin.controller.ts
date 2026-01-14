@@ -67,6 +67,7 @@ interface UserContext {
  * - diretora_geral: todas as unidades da escola
  * - gerente_unidade: apenas sua unidade
  * - gerente_financeiro: apenas sua unidade
+ * - auxiliar_administrativo: leitura e operações de venda (não pode gerenciar produtos/estoque)
  */
 @Controller("shop/admin")
 @UseGuards(AuthGuard, RolesGuard, TenantGuard)
@@ -88,7 +89,13 @@ export class ShopAdminController {
    * Roles: master, diretora_geral, gerente_unidade, gerente_financeiro
    */
   @Get("dashboard")
-  @Roles("master", "diretora_geral", "gerente_unidade", "gerente_financeiro")
+  @Roles(
+    "master",
+    "diretora_geral",
+    "gerente_unidade",
+    "gerente_financeiro",
+    "auxiliar_administrativo",
+  )
   async getDashboard(@Req() req: { user: UserContext }) {
     const db = getDb();
     const { schoolId, unitId } = req.user;
@@ -109,10 +116,7 @@ export class ShopAdminController {
     const lowStockCondition = sql`("shop_inventory"."quantity" - "shop_inventory"."reserved_quantity") <= "shop_inventory"."low_stock_threshold"`;
 
     const inventoryConditions = unitId
-      ? and(
-        eq(shopInventory.unitId, unitId),
-        lowStockCondition,
-      )
+      ? and(eq(shopInventory.unitId, unitId), lowStockCondition)
       : lowStockCondition;
 
     const interestConditions = unitId
@@ -156,15 +160,21 @@ export class ShopAdminController {
    * GET /shop/admin/products
    *
    * Lista todos os produtos administrativos
-   * Roles: master, diretora_geral, gerente_unidade, gerente_financeiro
+   * Roles: master, diretora_geral, gerente_unidade, gerente_financeiro, auxiliar_administrativo
    */
   @Get("products")
-  @Roles("master", "diretora_geral", "gerente_unidade", "gerente_financeiro")
+  @Roles("master", "diretora_geral", "gerente_unidade", "gerente_financeiro", "auxiliar_administrativo")
   async getAllProducts(@Req() req: { user: UserContext }) {
     const db = getDb();
 
+    // Master tem acesso a todos os produtos (sem filtro por schoolId)
+    const whereClause =
+      req.user.role === "master" || !req.user.schoolId
+        ? undefined
+        : eq(shopProducts.schoolId, req.user.schoolId);
+
     const products = await db.query.shopProducts.findMany({
-      where: eq(shopProducts.schoolId, req.user.schoolId),
+      where: whereClause,
       with: {
         variants: true,
         images: {
@@ -174,12 +184,13 @@ export class ShopAdminController {
       orderBy: [asc(shopProducts.name)],
     });
 
-    // Transform to expected format (flatten images array)
+    // Transform to expected format (flatten images array + add variantsCount)
     const formattedProducts = products.map((p: any) => ({
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       ...p,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       images: p.images.map((img: any) => img.imageUrl),
+      variantsCount: p.variants?.length || 0,
     }));
 
     return {
@@ -192,14 +203,11 @@ export class ShopAdminController {
    * GET /shop/admin/products/:id
    *
    * Detalhes de um produto com variantes e inventário
-   * Roles: master, diretora_geral, gerente_unidade, gerente_financeiro
+   * Roles: master, diretora_geral, gerente_unidade, gerente_financeiro, auxiliar_administrativo
    */
   @Get("products/:id")
-  @Roles("master", "diretora_geral", "gerente_unidade", "gerente_financeiro")
-  async getProductById(
-    @Req() req: { user: UserContext },
-    @Param("id") id: string,
-  ) {
+  @Roles("master", "diretora_geral", "gerente_unidade", "gerente_financeiro", "auxiliar_administrativo")
+  async getProductById(@Param("id") id: string) {
     const product = await this.productsService.getProductById(id);
 
     return {
@@ -286,7 +294,13 @@ export class ShopAdminController {
   @HttpCode(HttpStatus.CREATED)
   async createVariant(
     @Req() req: { user: UserContext },
-    @Body() dto: { productId: string; size: string; sku?: string; priceOverride?: number },
+    @Body()
+    dto: {
+      productId: string;
+      size: string;
+      sku?: string;
+      priceOverride?: number;
+    },
   ) {
     const variant = await this.productsService.createVariant(
       dto,
@@ -311,9 +325,19 @@ export class ShopAdminController {
   async updateVariant(
     @Req() req: { user: UserContext },
     @Param("id") id: string,
-    @Body() dto: { size?: string; sku?: string; priceOverride?: number; isActive?: boolean },
+    @Body()
+    dto: {
+      size?: string;
+      sku?: string;
+      priceOverride?: number;
+      isActive?: boolean;
+    },
   ) {
-    const variant = await this.productsService.updateVariant(id, dto, req.user.userId);
+    const variant = await this.productsService.updateVariant(
+      id,
+      dto,
+      req.user.userId,
+    );
 
     return {
       success: true,
@@ -343,10 +367,10 @@ export class ShopAdminController {
    * GET /shop/admin/inventory
    *
    * Lista todo o inventário com status de estoque
-   * Roles: master, diretora_geral, gerente_unidade, gerente_financeiro
+   * Roles: master, diretora_geral, gerente_unidade, gerente_financeiro, auxiliar_administrativo
    */
   @Get("inventory")
-  @Roles("master", "diretora_geral", "gerente_unidade", "gerente_financeiro")
+  @Roles("master", "diretora_geral", "gerente_unidade", "gerente_financeiro", "auxiliar_administrativo")
   async getAllInventory(@Req() req: { user: UserContext }) {
     const db = getDb();
 
@@ -408,10 +432,10 @@ export class ShopAdminController {
    * GET /shop/admin/inventory/:variantId/:unitId
    *
    * Retorna status de estoque de uma variante em uma unidade
-   * Roles: master, diretora_geral, gerente_unidade, gerente_financeiro
+   * Roles: master, diretora_geral, gerente_unidade, gerente_financeiro, auxiliar_administrativo
    */
   @Get("inventory/:variantId/:unitId")
-  @Roles("master", "diretora_geral", "gerente_unidade", "gerente_financeiro")
+  @Roles("master", "diretora_geral", "gerente_unidade", "gerente_financeiro", "auxiliar_administrativo")
   async getInventory(
     @Param("variantId") variantId: string,
     @Param("unitId") unitId: string,
@@ -485,10 +509,10 @@ export class ShopAdminController {
    * GET /shop/admin/inventory/ledger/:variantId/:unitId
    *
    * Retorna histórico de movimentações de estoque
-   * Roles: master, diretora_geral, gerente_unidade, gerente_financeiro
+   * Roles: master, diretora_geral, gerente_unidade, gerente_financeiro, auxiliar_administrativo
    */
   @Get("inventory/ledger/:variantId/:unitId")
-  @Roles("master", "diretora_geral", "gerente_unidade", "gerente_financeiro")
+  @Roles("master", "diretora_geral", "gerente_unidade", "gerente_financeiro", "auxiliar_administrativo")
   async getInventoryLedger(
     @Param("variantId") variantId: string,
     @Param("unitId") unitId: string,
@@ -510,10 +534,10 @@ export class ShopAdminController {
    * GET /shop/admin/orders
    *
    * Lista pedidos com filtros e busca
-   * Roles: master, diretora_geral, gerente_unidade, gerente_financeiro
+   * Roles: master, diretora_geral, gerente_unidade, gerente_financeiro, auxiliar_administrativo
    */
   @Get("orders")
-  @Roles("master", "diretora_geral", "gerente_unidade", "gerente_financeiro")
+  @Roles("master", "diretora_geral", "gerente_unidade", "gerente_financeiro", "auxiliar_administrativo")
   async listOrders(
     @Req() req: { user: UserContext },
     @Query() query: ListOrdersDto,
@@ -543,10 +567,10 @@ export class ShopAdminController {
    * GET /shop/admin/orders/:id
    *
    * Detalhes de um pedido específico
-   * Roles: master, diretora_geral, gerente_unidade, gerente_financeiro
+   * Roles: master, diretora_geral, gerente_unidade, gerente_financeiro, auxiliar_administrativo
    */
   @Get("orders/:id")
-  @Roles("master", "diretora_geral", "gerente_unidade", "gerente_financeiro")
+  @Roles("master", "diretora_geral", "gerente_unidade", "gerente_financeiro", "auxiliar_administrativo")
   async getOrderById(@Param("id") id: string) {
     const order = await this.ordersService.getOrderById(id);
 
@@ -560,10 +584,10 @@ export class ShopAdminController {
    * POST /shop/admin/orders/presencial
    *
    * Cria venda presencial (baixa estoque DIRETO, sem reserva)
-   * Roles: master, diretora_geral, gerente_unidade, gerente_financeiro
+   * Roles: master, diretora_geral, gerente_unidade, gerente_financeiro, auxiliar_administrativo
    */
   @Post("orders/presencial")
-  @Roles("master", "diretora_geral", "gerente_unidade", "gerente_financeiro")
+  @Roles("master", "diretora_geral", "gerente_unidade", "gerente_financeiro", "auxiliar_administrativo")
   @HttpCode(HttpStatus.CREATED)
   async createPresentialSale(
     @Req() req: { user: UserContext },
@@ -607,10 +631,10 @@ export class ShopAdminController {
    * Confirma pagamento presencial de pedido online (sistema de voucher)
    * Converte reservas de estoque em vendas confirmadas
    *
-   * Roles: master, diretora_geral, gerente_unidade, gerente_financeiro
+   * Roles: master, diretora_geral, gerente_unidade, gerente_financeiro, auxiliar_administrativo
    */
   @Patch("orders/:id/confirm-payment")
-  @Roles("master", "diretora_geral", "gerente_unidade", "gerente_financeiro")
+  @Roles("master", "diretora_geral", "gerente_unidade", "gerente_financeiro", "auxiliar_administrativo")
   async confirmPayment(
     @Req() req: { user: UserContext },
     @Param("id") id: string,
@@ -632,10 +656,10 @@ export class ShopAdminController {
    * PATCH /shop/admin/orders/:id/pickup
    *
    * Marca pedido como RETIRADO
-   * Roles: master, diretora_geral, gerente_unidade, gerente_financeiro
+   * Roles: master, diretora_geral, gerente_unidade, gerente_financeiro, auxiliar_administrativo
    */
   @Patch("orders/:id/pickup")
-  @Roles("master", "diretora_geral", "gerente_unidade", "gerente_financeiro")
+  @Roles("master", "diretora_geral", "gerente_unidade", "gerente_financeiro", "auxiliar_administrativo")
   async markAsPickedUp(
     @Req() req: { user: UserContext },
     @Param("id") id: string,
@@ -654,12 +678,12 @@ export class ShopAdminController {
    * GET /shop/admin/interest
    *
    * Lista requisições de interesse com filtros
-   * Roles: master, diretora_geral, gerente_unidade, gerente_financeiro
+   * Roles: master, diretora_geral, gerente_unidade, gerente_financeiro, auxiliar_administrativo
    *
    * Query params: status, search, page, limit
    */
   @Get("interest")
-  @Roles("master", "diretora_geral", "gerente_unidade", "gerente_financeiro")
+  @Roles("master", "diretora_geral", "gerente_unidade", "gerente_financeiro", "auxiliar_administrativo")
   async listInterestRequests(
     @Req() req: { user: UserContext },
     @Query() filters: InterestFiltersDto,
@@ -684,10 +708,10 @@ export class ShopAdminController {
    * - Top 10 produtos mais solicitados (últimos 30 dias)
    * - Contadores por status
    *
-   * Roles: master, diretora_geral, gerente_unidade, gerente_financeiro
+   * Roles: master, diretora_geral, gerente_unidade, gerente_financeiro, auxiliar_administrativo
    */
   @Get("interest/summary")
-  @Roles("master", "diretora_geral", "gerente_unidade", "gerente_financeiro")
+  @Roles("master", "diretora_geral", "gerente_unidade", "gerente_financeiro", "auxiliar_administrativo")
   async getInterestSummary(@Req() req: { user: UserContext }) {
     const unitId = req.user.unitId!;
     const result = await this.interestService.getInterestSummary(unitId);
@@ -704,10 +728,10 @@ export class ShopAdminController {
    * Marca requisição como CONTATADO
    * Atualiza status, contactedAt e contactedBy
    *
-   * Roles: master, diretora_geral, gerente_unidade, gerente_financeiro
+   * Roles: master, diretora_geral, gerente_unidade, gerente_financeiro, auxiliar_administrativo
    */
   @Patch("interest/:id/contacted")
-  @Roles("master", "diretora_geral", "gerente_unidade", "gerente_financeiro")
+  @Roles("master", "diretora_geral", "gerente_unidade", "gerente_financeiro", "auxiliar_administrativo")
   async markAsContacted(
     @Req() req: { user: UserContext },
     @Param("id") id: string,
@@ -729,10 +753,10 @@ export class ShopAdminController {
    * GET /shop/admin/settings/:unitId
    *
    * Retorna configurações da loja para uma unidade
-   * Roles: master, diretora_geral, gerente_unidade, gerente_financeiro
+   * Roles: master, diretora_geral, gerente_unidade, gerente_financeiro, auxiliar_administrativo
    */
   @Get("settings/:unitId")
-  @Roles("master", "diretora_geral", "gerente_unidade", "gerente_financeiro")
+  @Roles("master", "diretora_geral", "gerente_unidade", "gerente_financeiro", "auxiliar_administrativo")
   async getSettings(@Param("unitId") unitId: string) {
     const settings = await this.settingsService.getSettings(unitId);
 

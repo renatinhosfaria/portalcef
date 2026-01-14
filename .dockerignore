@@ -49,6 +49,8 @@ docker-compose.override.yml
 # Documentation (not needed in container)
 BMAD/
 docs/
+README.md
+*.md
 
 # Test files (excluded for smaller builds)
 **/*.test.ts
@@ -66,3 +68,19 @@ vitest.setup.ts
 LICENSE
 CHANGELOG.md
 CONTRIBUTING.md
+
+# E2E tests (not needed in production image)
+e2e/
+playwright-report/
+test-results/
+
+# Scripts and CI/CD (not needed in container)
+scripts/
+.github/
+.gitlab-ci.yml
+
+# Nginx and deployment configs (mounted as volumes)
+nginx.conf
+nginx-temp.conf
+docker-compose*.yml
+Dockerfile*

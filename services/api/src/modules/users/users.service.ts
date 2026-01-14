@@ -7,11 +7,12 @@ import {
 } from "@essencia/db/schema";
 import {
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
 import * as bcrypt from "bcrypt";
-import { ROLE_HIERARCHY } from "@essencia/shared/roles";
+import { ROLE_HIERARCHY, canManageRole } from "@essencia/shared/roles";
 import { stageRequiredRoles } from "@essencia/shared/types";
 
 interface CurrentUser {
@@ -114,16 +115,27 @@ export class UsersService {
     return user ?? null;
   }
 
-  async create(data: {
-    email: string;
-    password: string;
-    name: string;
-    role: UserRole;
-    schoolId: string | null;
-    unitId: string | null;
-    stageId: string | null;
-  }): Promise<Omit<User, "passwordHash">> {
+  async create(
+    data: {
+      email: string;
+      password: string;
+      name: string;
+      role: UserRole;
+      schoolId: string | null;
+      unitId: string | null;
+      stageId: string | null;
+    },
+    currentUser: CurrentUser,
+  ): Promise<Omit<User, "passwordHash">> {
     const db = getDb();
+
+    // Hierarchy validation: cannot create user with equal or higher privilege
+    if (!canManageRole(currentUser.role, data.role)) {
+      throw new ForbiddenException({
+        code: "ROLE_HIERARCHY_VIOLATION",
+        message: `Você não pode criar usuário com role ${data.role}`,
+      });
+    }
 
     // Check if email already exists
     const existing = await db.query.users.findFirst({
@@ -167,11 +179,13 @@ export class UsersService {
     data: Partial<{
       email: string;
       name: string;
+      password: string;
       role: UserRole;
       schoolId: string | null;
       unitId: string | null;
       stageId: string | null;
     }>,
+    currentUser: CurrentUser,
   ): Promise<Omit<User, "passwordHash">> {
     const db = getDb();
 
@@ -180,9 +194,37 @@ export class UsersService {
       throw new NotFoundException("Usuario nao encontrado");
     }
 
+    // Hierarchy validation: cannot edit user with equal or higher privilege
+    if (!canManageRole(currentUser.role, existing.role)) {
+      throw new ForbiddenException({
+        code: "ROLE_HIERARCHY_VIOLATION",
+        message: `Você não pode editar usuário com role ${existing.role}`,
+      });
+    }
+
+    // If changing role, validate new role is also manageable
+    if (data.role && !canManageRole(currentUser.role, data.role)) {
+      throw new ForbiddenException({
+        code: "ROLE_HIERARCHY_VIOLATION",
+        message: `Você não pode promover usuário para role ${data.role}`,
+      });
+    }
+
+    // Prepare update data
+    const updateData: Record<string, unknown> = {
+      ...data,
+      updatedAt: new Date(),
+    };
+
+    // Hash password if provided
+    if (data.password) {
+      updateData.passwordHash = await bcrypt.hash(data.password, 12);
+      delete updateData.password;
+    }
+
     const [updated] = await db
       .update(usersTable)
-      .set({ ...data, updatedAt: new Date() })
+      .set(updateData)
       .where(sql`${usersTable.id} = ${id}`)
       .returning({
         id: usersTable.id,
@@ -199,12 +241,20 @@ export class UsersService {
     return updated;
   }
 
-  async delete(id: string): Promise<void> {
+  async delete(id: string, currentUser: CurrentUser): Promise<void> {
     const db = getDb();
 
     const existing = await this.findById(id);
     if (!existing) {
       throw new NotFoundException("Usuario nao encontrado");
+    }
+
+    // Hierarchy validation: cannot delete user with equal or higher privilege
+    if (!canManageRole(currentUser.role, existing.role)) {
+      throw new ForbiddenException({
+        code: "ROLE_HIERARCHY_VIOLATION",
+        message: `Você não pode deletar usuário com role ${existing.role}`,
+      });
     }
 
     await db.delete(usersTable).where(sql`${usersTable.id} = ${id}`);

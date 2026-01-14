@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+const API_URL = process.env.API_INTERNAL_URL || "http://localhost:3001";
 
 export async function PATCH(
     request: Request,
@@ -10,7 +10,7 @@ export async function PATCH(
         const { id } = await params;
         const body = await request.json();
 
-        const res = await fetch(`${API_URL}/shop/admin/variants/${id}`, {
+        const res = await fetch(`${API_URL}/api/shop/admin/variants/${id}`, {
             method: "PATCH",
             headers: {
                 "Content-Type": "application/json",
@@ -38,7 +38,7 @@ export async function DELETE(
     try {
         const { id } = await params;
 
-        const res = await fetch(`${API_URL}/shop/admin/variants/${id}`, {
+        const res = await fetch(`${API_URL}/api/shop/admin/variants/${id}`, {
             method: "DELETE",
             headers: {
                 "Content-Type": "application/json",

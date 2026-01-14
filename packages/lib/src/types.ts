@@ -7,6 +7,9 @@ export type UserSummary = {
   role: UserRole;
   school: string;
   unit: string;
+  schoolId: string | null;
+  unitId: string | null;
+  stageId: string | null;
   status: "active" | "inactive";
   lastActive: string;
 };

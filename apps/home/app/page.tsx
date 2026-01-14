@@ -82,31 +82,31 @@ export default function Home() {
 
             <div className="grid grid-cols-2 gap-3">
               <ModuleLink
-                href="http://localhost:3007"
+                href="https://www.portalcef.com.br/planejamento"
                 label="Planejamento"
                 icon={BookOpen}
                 color="text-emerald-400"
               />
               <ModuleLink
-                href="http://localhost:3005"
+                href="https://www.portalcef.com.br/escolas"
                 label="Escolas"
                 icon={School}
                 color="text-blue-400"
               />
               <ModuleLink
-                href="http://localhost:3006"
+                href="https://www.portalcef.com.br/turmas"
                 label="Turmas"
                 icon={GraduationCap}
                 color="text-violet-400"
               />
               <ModuleLink
-                href="http://localhost:3004"
+                href="https://www.portalcef.com.br/usuarios"
                 label="Usuários"
                 icon={Users}
                 color="text-orange-400"
               />
               <ModuleLink
-                href="http://localhost:3002"
+                href="https://www.portalcef.com.br/calendario"
                 label="Calendário"
                 icon={Calendar}
                 color="text-rose-400"

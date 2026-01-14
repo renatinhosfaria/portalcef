@@ -40,7 +40,7 @@ export default function HomePage() {
       const homeUrl =
         typeof window !== "undefined" &&
         window.location.hostname === "localhost"
-          ? "http://localhost:3000"
+          ? "https://www.portalcef.com.br/"
           : "/";
       window.location.href = homeUrl;
       return;

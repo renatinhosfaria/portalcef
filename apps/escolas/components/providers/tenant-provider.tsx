@@ -47,7 +47,7 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
 
     const stored = localStorage.getItem("tenant");
     if (!stored) {
-      window.location.href = "http://localhost:3003"; // Login
+      window.location.href = "https://www.portalcef.com.br/login"; // Login
       return;
     }
 
@@ -62,14 +62,14 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
           "Acesso negado: Apenas usuários Master podem acessar este módulo.",
         );
         localStorage.removeItem("tenant"); // Force verify or send back
-        window.location.href = "http://localhost:3003"; // Redirect to Login
+        window.location.href = "https://www.portalcef.com.br/login"; // Redirect to Login
         return;
       }
 
       setTenant({ ...parsed, role, isLoaded: true });
     } catch {
       localStorage.removeItem("tenant");
-      window.location.href = "http://localhost:3003";
+      window.location.href = "https://www.portalcef.com.br/login";
     }
   }, [router]);
 

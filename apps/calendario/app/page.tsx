@@ -60,7 +60,7 @@ export default function CalendarioPage() {
       console.warn(
         `Acesso negado ao módulo de calendário. Role atual: ${role}. Redirecionando para home.`,
       );
-      router.push("http://localhost:3000");
+      router.push("https://www.portalcef.com.br/");
       return;
     }
   }, [isLoaded, role, router]);
@@ -86,7 +86,7 @@ export default function CalendarioPage() {
           Você não tem permissão para acessar esta página.
         </p>
         <button
-          onClick={() => router.push("http://localhost:3000")}
+          onClick={() => router.push("https://www.portalcef.com.br/")}
           className="px-4 py-2 bg-slate-900 text-white rounded hover:bg-slate-800 transition-colors"
         >
           Voltar para Home

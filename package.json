@@ -18,6 +18,10 @@
     "typecheck": "turbo run typecheck",
     "clean": "turbo run clean && pnpm dlx rimraf node_modules",
     "format": "prettier --write \"**/*.{ts,tsx,md,json}\"",
+    "e2e": "playwright test",
+    "e2e:ui": "playwright test --ui",
+    "e2e:headed": "playwright test --headed",
+    "e2e:report": "playwright show-report e2e-results/html",
     "db:generate": "pnpm --filter @essencia/db generate",
     "db:migrate": "pnpm --filter @essencia/db migrate",
     "db:studio": "pnpm --filter @essencia/db studio",
@@ -36,6 +40,7 @@
     "docker:quality": "docker compose -f docker-compose.dev.yml exec dev sh -lc \"pnpm turbo format && pnpm turbo lint && pnpm turbo typecheck && pnpm turbo build && pnpm turbo test\""
   },
   "devDependencies": {
+    "@playwright/test": "^1.49.0",
     "@types/node": "^22.10.2",
     "prettier": "^3.4.2",
     "rimraf": "^5.0.5",

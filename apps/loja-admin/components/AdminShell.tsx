@@ -68,12 +68,12 @@ function AdminSidebar() {
       console.warn("Logout API call failed");
     } finally {
       localStorage.removeItem("tenant");
-      window.location.href = "http://localhost:3003";
+      window.location.href = "https://www.portalcef.com.br/login";
     }
   };
 
   const handleBackToPortal = () => {
-    window.location.href = `http://localhost:3000?data=${tenantPayload}`;
+    window.location.href = `https://www.portalcef.com.br/?data=${tenantPayload}`;
   };
 
   return (
@@ -198,6 +198,7 @@ function TopBar() {
             width={120}
             height={48}
             className="h-12 w-auto object-contain"
+            unoptimized
           />
         </div>
       </div>
@@ -206,6 +207,32 @@ function TopBar() {
 }
 
 export function AdminShell({ children }: { children: React.ReactNode }) {
+  const { role, schoolId, unitId, name, email } = useTenant();
+
+  // Validate access
+  const allowedRoles = [
+    "master",
+    "diretora_geral",
+    "gerente_unidade",
+    "gerente_financeiro",
+    "auxiliar_administrativo",
+  ];
+
+  const hasAccess = role && allowedRoles.includes(role);
+
+  if (!hasAccess && typeof window !== "undefined") {
+    // Redirect to portal if no access
+    // Encode payload to maintain session context if needed, though portal handles its own auth
+    const tenantPayload = encodeURIComponent(
+      JSON.stringify({ schoolId, unitId, role, name, email }),
+    );
+    window.location.href = `https://www.portalcef.com.br/?data=${tenantPayload}`;
+    return null;
+  }
+
+  // Prevent flash of content
+  if (!hasAccess) return null;
+
   return (
     <div className="flex min-h-screen bg-slate-50 font-sans selection:bg-[#A3D154]/20">
       <AdminSidebar />

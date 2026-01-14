@@ -13,7 +13,6 @@ import {
   Users,
   type LucideIcon,
 } from "lucide-react";
-import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import { useTenant } from "@essencia/shared/providers/tenant";
@@ -29,7 +28,7 @@ interface SidebarItemProps {
 
 function SidebarItem({ icon: Icon, label, href, active }: SidebarItemProps) {
   return (
-    <Link
+    <a
       href={href}
       className={cn(
         "flex items-center gap-4 px-4 py-4 rounded-2xl w-full transition-all duration-200 group relative overflow-hidden text-left",
@@ -43,7 +42,7 @@ function SidebarItem({ icon: Icon, label, href, active }: SidebarItemProps) {
       )}
       <Icon className="w-5 h-5 relative z-10" />
       <span className="hidden lg:block relative z-10">{label}</span>
-    </Link>
+    </a>
   );
 }
 
@@ -90,7 +89,7 @@ export function AppSidebar() {
       console.warn("Logout API call failed, continuing with local cleanup");
     } finally {
       localStorage.removeItem("tenant");
-      window.location.href = "http://localhost:3003";
+      window.location.href = "https://www.portalcef.com.br/login";
     }
   };
 
@@ -110,45 +109,45 @@ export function AppSidebar() {
         <SidebarItem
           icon={LayoutDashboard}
           label="Visão Geral"
-          href={`http://localhost:3000?data=${tenantPayload}`}
+          href={`https://www.portalcef.com.br/?data=${tenantPayload}`}
           active={activePage === "home"}
         />
         <SidebarItem
           icon={Users}
           label="Usuários"
-          href={`http://localhost:3004?data=${tenantPayload}`}
+          href={`https://www.portalcef.com.br/usuarios?data=${tenantPayload}`}
           active={activePage === "usuarios"}
         />
         {role === "master" && (
           <SidebarItem
             icon={School}
             label="Gestão Escolar"
-            href={`http://localhost:3005?data=${tenantPayload}`}
+            href={`https://www.portalcef.com.br/escolas?data=${tenantPayload}`}
             active={activePage === "escolas"}
           />
         )}
         <SidebarItem
           icon={GraduationCap}
           label="Turmas"
-          href={`http://localhost:3006?data=${tenantPayload}`}
+          href={`https://www.portalcef.com.br/turmas?data=${tenantPayload}`}
           active={activePage === "turmas"}
         />
         <SidebarItem
           icon={BookOpen}
           label="Planejamento"
-          href={`http://localhost:3007?data=${tenantPayload}`}
+          href={`https://www.portalcef.com.br/planejamento?data=${tenantPayload}`}
           active={activePage === "planejamento"}
         />
         <SidebarItem
           icon={Calendar}
           label="Calendário"
-          href={`http://localhost:3002?data=${tenantPayload}`}
+          href={`https://www.portalcef.com.br/calendario?data=${tenantPayload}`}
           active={activePage === "calendario"}
         />
         <SidebarItem
           icon={ShoppingBag}
           label="Loja"
-          href={`http://localhost:3011?data=${tenantPayload}`}
+          href={`https://www.portalcef.com.br/loja-admin?data=${tenantPayload}`}
           active={activePage === "loja-admin"}
         />
       </nav>

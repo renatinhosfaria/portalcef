@@ -13,7 +13,7 @@ import { NextResponse } from "next/server";
 
 // URL do backend (services/api)
 // Default para localhost:3001 em desenvolvimento
-const API_URL = process.env.API_URL || "http://localhost:3001";
+const API_URL = process.env.API_INTERNAL_URL || "http://localhost:3001";
 
 /**
  * Encaminha a requisição para o backend

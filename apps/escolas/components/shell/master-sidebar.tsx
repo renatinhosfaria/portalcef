@@ -23,7 +23,7 @@ export function MasterSidebar() {
         <SidebarItem
           icon={LayoutGrid}
           label="Voltar aos Apps"
-          href="http://localhost:3006"
+          href="https://www.portalcef.com.br/"
           active={false}
         />
 
@@ -39,7 +39,7 @@ export function MasterSidebar() {
           className="w-full justify-start gap-3 text-red-500 hover:text-red-600 hover:bg-red-50 rounded-xl py-6"
           onClick={() => {
             localStorage.removeItem("tenant");
-            window.location.href = "http://localhost:3003";
+            window.location.href = "https://www.portalcef.com.br/login";
           }}
         >
           <LogOut className="w-5 h-5" />

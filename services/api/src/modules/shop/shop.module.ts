@@ -39,4 +39,4 @@ import { PaymentsModule } from "../payments/payments.module";
     ShopSettingsService,
   ],
 })
-export class ShopModule { }
+export class ShopModule {}

@@ -117,8 +117,12 @@ export const shopProductImages = pgTable(
       .defaultNow(),
   },
   (table) => ({
-    productIdIdx: index("shop_product_images_product_id_idx").on(table.productId),
-    displayOrderIdx: index("shop_product_images_display_order_idx").on(table.displayOrder),
+    productIdIdx: index("shop_product_images_product_id_idx").on(
+      table.productId,
+    ),
+    displayOrderIdx: index("shop_product_images_display_order_idx").on(
+      table.displayOrder,
+    ),
   }),
 );
 
@@ -448,5 +452,3 @@ export const insertShopSettingsSchema = createInsertSchema(shopSettings);
 export const selectShopSettingsSchema = createSelectSchema(shopSettings);
 
 // End of file
-
-

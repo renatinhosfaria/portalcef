@@ -18,6 +18,7 @@ import {
   TableRow,
 } from "@essencia/ui/components/table";
 import {
+  Ban,
   MoreHorizontal,
   Plus,
   Search,
@@ -31,6 +32,7 @@ import { useState } from "react";
 import type { UserSummary } from "@essencia/lib/types";
 
 import { useTenant } from "@essencia/shared/providers/tenant";
+import { ROLE_HIERARCHY, canManageRole } from "@essencia/shared/roles";
 
 const ROLE_LABELS: Record<string, string> = {
   master: "Master",
@@ -68,9 +70,10 @@ interface UserListProps {
   users: UserSummary[];
   onCreateClick: () => void;
   onEditClick: (user: UserSummary) => void;
+  onDeleteClick: (user: UserSummary) => void;
 }
 
-export function UserList({ users, onCreateClick, onEditClick }: UserListProps) {
+export function UserList({ users, onCreateClick, onEditClick, onDeleteClick }: UserListProps) {
   const { role: currentUserRole } = useTenant();
   const [filter, setFilter] = useState("");
 
@@ -80,11 +83,19 @@ export function UserList({ users, onCreateClick, onEditClick }: UserListProps) {
     currentUserRole === "gerente_unidade" ||
     currentUserRole === "gerente_financeiro";
 
-  const filteredUsers = users.filter(
-    (user) =>
-      user.name.toLowerCase().includes(filter.toLowerCase()) ||
-      user.email.toLowerCase().includes(filter.toLowerCase()),
-  );
+  const currentUserLevel = ROLE_HIERARCHY[currentUserRole] ?? 999;
+
+  const filteredUsers = users
+    .filter((user) => {
+      // Show only users with equal or lower privilege (number >= current)
+      const userLevel = ROLE_HIERARCHY[user.role] ?? 999;
+      return userLevel >= currentUserLevel;
+    })
+    .filter(
+      (user) =>
+        user.name.toLowerCase().includes(filter.toLowerCase()) ||
+        user.email.toLowerCase().includes(filter.toLowerCase()),
+    );
 
   return (
     <div className="space-y-6">
@@ -217,7 +228,7 @@ export function UserList({ users, onCreateClick, onEditClick }: UserListProps) {
                         className="w-48 rounded-xl"
                       >
                         <DropdownMenuLabel>Ações</DropdownMenuLabel>
-                        {canEdit && (
+                        {canEdit && canManageRole(currentUserRole, user.role) ? (
                           <>
                             <DropdownMenuItem
                               className="gap-2 cursor-pointer"
@@ -226,16 +237,18 @@ export function UserList({ users, onCreateClick, onEditClick }: UserListProps) {
                               <UserCog className="w-4 h-4 text-slate-500" />
                               Editar Dados
                             </DropdownMenuItem>
-                            <DropdownMenuItem className="gap-2 cursor-pointer text-red-600 focus:text-red-700 bg-red-50/50 hover:bg-red-50">
+                            <DropdownMenuItem
+                              className="gap-2 cursor-pointer text-red-600 focus:text-red-700 bg-red-50/50 hover:bg-red-50"
+                              onClick={() => onDeleteClick(user)}
+                            >
                               <Trash2 className="w-4 h-4" />
-                              Desativar Acesso
+                              Excluir Usuário
                             </DropdownMenuItem>
                           </>
-                        )}
-                        {!canEdit && (
-                          <DropdownMenuItem className="gap-2 cursor-pointer">
-                            <Search className="w-4 h-4 text-slate-500" />
-                            Ver Detalhes
+                        ) : (
+                          <DropdownMenuItem className="gap-2 cursor-default opacity-50">
+                            <Ban className="w-4 h-4" />
+                            Sem permissão
                           </DropdownMenuItem>
                         )}
                       </DropdownMenuContent>

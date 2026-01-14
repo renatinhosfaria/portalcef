@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
-const API_URL = process.env.API_URL || "http://localhost:3001";
+const API_URL = process.env.API_INTERNAL_URL || "http://localhost:3001";
 
 /**
  * GET /api/shop/admin/settings
@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const response = await fetch(`${API_URL}/shop/admin/settings/${unitId}`, {
+    const response = await fetch(`${API_URL}/api/shop/admin/settings/${unitId}`, {
       method: "GET",
       headers: {
         "Content-Type": "application/json",
@@ -55,7 +55,7 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    const response = await fetch(`${API_URL}/shop/admin/settings/${unitId}`, {
+    const response = await fetch(`${API_URL}/api/shop/admin/settings/${unitId}`, {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",

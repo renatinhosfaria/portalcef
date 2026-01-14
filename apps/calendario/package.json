@@ -4,9 +4,9 @@
   "private": true,
   "scripts": {
     "clean": "rimraf .next",
-    "dev": "next dev -p 3002",
+    "dev": "next dev -p 3008",
     "build": "next build",
-    "start": "next start -p 3002",
+    "start": "next start",
     "lint": "next lint",
     "format": "prettier --write \"**/*.{ts,tsx,md,json}\"",
     "typecheck": "tsc --noEmit",

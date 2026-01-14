@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+const API_URL = process.env.API_INTERNAL_URL || "http://localhost:3001";
 
 export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
     const queryString = url.search;
 
-    const res = await fetch(`${API_URL}/shop/admin/products${queryString}`, {
+    const res = await fetch(`${API_URL}/api/shop/admin/products${queryString}`, {
       method: "GET",
       headers: {
         "Content-Type": "application/json",
@@ -32,7 +32,7 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
 
-    const res = await fetch(`${API_URL}/shop/admin/products`, {
+    const res = await fetch(`${API_URL}/api/shop/admin/products`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
