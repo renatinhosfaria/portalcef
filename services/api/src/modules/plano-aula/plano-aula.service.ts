@@ -9,16 +9,12 @@ import {
   and,
   eq,
   or,
-  sql,
   desc,
-  inArray,
   planoAula,
   planoDocumento,
   documentoComentario,
   quinzenaConfig,
   turmas,
-  users,
-  educationStages,
   type PlanoAula,
   type PlanoDocumento,
   type DocumentoComentario,
@@ -34,7 +30,6 @@ import {
   isCoordenadora,
   isGestao,
   getSegmentosPermitidos,
-  COORDENADORA_STAGE_MAP,
 } from "./dto/plano-aula.dto";
 
 // ============================================
@@ -791,7 +786,24 @@ export class PlanoAulaService {
   /**
    * Formata resposta do plano com documentos
    */
-  private formatPlanoResponse(plano: any): PlanoComDocumentos {
+  private formatPlanoResponse(plano: PlanoAula & {
+    user: { id: string; name: string };
+    turma: { id: string; name: string; code: string };
+    documentos?: Array<PlanoDocumento & {
+      comentarios?: Array<DocumentoComentario & {
+        autor: { id: string; name: string };
+      }>;
+    }>;
+  }): PlanoComDocumentos {
+    type DocType = PlanoDocumento & {
+      comentarios?: Array<DocumentoComentario & {
+        autor: { id: string; name: string };
+      }>;
+    };
+    type ComentarioType = DocumentoComentario & {
+      autor: { id: string; name: string };
+    };
+
     return {
       ...plano,
       user: {
@@ -803,9 +815,9 @@ export class PlanoAulaService {
         name: plano.turma.name,
         code: plano.turma.code,
       },
-      documentos: (plano.documentos || []).map((doc: any) => ({
+      documentos: (plano.documentos || []).map((doc: DocType) => ({
         ...doc,
-        comentarios: (doc.comentarios || []).map((c: any) => ({
+        comentarios: (doc.comentarios || []).map((c: ComentarioType) => ({
           ...c,
           autor: {
             id: c.autor.id,
@@ -841,5 +853,114 @@ export class PlanoAulaService {
     });
 
     return planos;
+  }
+
+  // ============================================
+  // Métodos de Documentos
+  // ============================================
+
+  /**
+   * Adiciona documento do tipo upload ao plano
+   */
+  async adicionarDocumentoUpload(
+    planoId: string,
+    dados: {
+      tipo: "UPLOAD";
+      fileName: string;
+      fileKey: string;
+      fileUrl: string;
+      fileSize: number;
+      mimeType: string;
+    },
+  ): Promise<PlanoDocumento> {
+    const db = getDb();
+
+    // Verificar se plano existe
+    const plano = await db.query.planoAula.findFirst({
+      where: eq(planoAula.id, planoId),
+    });
+
+    if (!plano) {
+      throw new NotFoundException("Plano não encontrado");
+    }
+
+    const [documento] = await db
+      .insert(planoDocumento)
+      .values({
+        planoId,
+        tipo: dados.tipo,
+        fileName: dados.fileName,
+        fileKey: dados.fileKey,
+        fileUrl: dados.fileUrl,
+        fileSize: dados.fileSize,
+        mimeType: dados.mimeType,
+      })
+      .returning();
+
+    return documento;
+  }
+
+  /**
+   * Adiciona documento do tipo link (YouTube) ao plano
+   */
+  async adicionarDocumentoLink(
+    planoId: string,
+    dados: {
+      tipo: "YOUTUBE";
+      url: string;
+      titulo?: string;
+    },
+  ): Promise<PlanoDocumento> {
+    const db = getDb();
+
+    // Verificar se plano existe
+    const plano = await db.query.planoAula.findFirst({
+      where: eq(planoAula.id, planoId),
+    });
+
+    if (!plano) {
+      throw new NotFoundException("Plano não encontrado");
+    }
+
+    const [documento] = await db
+      .insert(planoDocumento)
+      .values({
+        planoId,
+        tipo: dados.tipo,
+        linkUrl: dados.url,
+        titulo: dados.titulo,
+      })
+      .returning();
+
+    return documento;
+  }
+
+  /**
+   * Remove documento de um plano
+   */
+  async removerDocumento(planoId: string, documentoId: string): Promise<void> {
+    const db = getDb();
+
+    // Verificar se documento existe e pertence ao plano
+    const documento = await db.query.planoDocumento.findFirst({
+      where: and(
+        eq(planoDocumento.id, documentoId),
+        eq(planoDocumento.planoId, planoId),
+      ),
+    });
+
+    if (!documento) {
+      throw new NotFoundException(
+        "Documento não encontrado ou não pertence ao plano",
+      );
+    }
+
+    // Deletar comentários do documento primeiro
+    await db
+      .delete(documentoComentario)
+      .where(eq(documentoComentario.documentoId, documentoId));
+
+    // Deletar documento
+    await db.delete(planoDocumento).where(eq(planoDocumento.id, documentoId));
   }
 }

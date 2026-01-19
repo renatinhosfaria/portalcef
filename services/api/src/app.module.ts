@@ -8,6 +8,7 @@ import { StorageModule } from "./common/storage/storage.module";
 import { AuthModule } from "./modules/auth/auth.module";
 import { CalendarModule } from "./modules/calendar/calendar.module";
 import { HealthModule } from "./modules/health/health.module";
+import { PlanoAulaModule } from "./modules/plano-aula/plano-aula.module";
 import { PlanningsModule } from "./modules/plannings/plannings.module";
 import { SchoolsModule } from "./modules/schools/schools.module";
 import { SetupModule } from "./modules/setup/setup.module";
@@ -17,6 +18,7 @@ import { StatsModule } from "./modules/stats/stats.module";
 import { TurmasModule } from "./modules/turmas/turmas.module";
 import { UnitsModule } from "./modules/units/units.module";
 import { UsersModule } from "./modules/users/users.module";
+import { QuinzenaDocumentsModule } from "./modules/quinzena-documents/quinzena-documents.module";
 
 @Module({
   imports: [
@@ -42,6 +44,8 @@ import { UsersModule } from "./modules/users/users.module";
     AuthModule,
     CalendarModule,
     PlanningsModule,
+    // Novo workflow de Plano de Aula
+    PlanoAulaModule,
     SchoolsModule,
     ShopModule,
     StagesModule,
@@ -52,6 +56,8 @@ import { UsersModule } from "./modules/users/users.module";
     StatsModule,
     // Storage (conditional - only loads if MinIO is configured)
     StorageModule.forRoot(),
+    // Documentos de Quinzena (upload de planos de aula)
+    QuinzenaDocumentsModule,
   ],
   providers: [
     {

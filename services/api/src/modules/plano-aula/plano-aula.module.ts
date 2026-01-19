@@ -1,6 +1,8 @@
 import { Module } from "@nestjs/common";
 
+import { StorageModule } from "../../common/storage/storage.module";
 import { AuthModule } from "../auth/auth.module";
+import { PlanoAulaController } from "./plano-aula.controller";
 import { PlanoAulaService } from "./plano-aula.service";
 
 /**
@@ -11,13 +13,10 @@ import { PlanoAulaService } from "./plano-aula.service";
  * - Analista revisa e aprova/devolve
  * - Coordenadora aprova final ou devolve
  * - Gestão visualiza dashboard e define deadlines
- *
- * Nota: O Controller será criado em uma task posterior.
- * Este módulo exporta o Service para uso por outros módulos.
  */
 @Module({
-  imports: [AuthModule],
-  controllers: [], // Controller será adicionado na Task 2.2
+  imports: [AuthModule, StorageModule.forRoot()],
+  controllers: [PlanoAulaController],
   providers: [PlanoAulaService],
   exports: [PlanoAulaService],
 })
