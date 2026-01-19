@@ -25,3 +25,11 @@ export {
   useDeadlines,
   usePlanoDetalhe,
 } from "./hooks";
+
+// Components
+export {
+  DocumentoUpload,
+  DocumentoList,
+  DocumentoComentarios,
+  PlanoStatusBadge,
+} from "./components";
