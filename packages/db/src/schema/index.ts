@@ -1,5 +1,6 @@
 export * from "./calendar-events.js";
 export * from "./education-stages.js";
+export * from "./plano-aula.js";
 export * from "./planejamento.js";
 export * from "./role-groups.js";
 export * from "./schools.js";
@@ -11,3 +12,4 @@ export * from "./unit-stages.js";
 export * from "./units.js";
 export * from "./users.js";
 export * from "./turmas-relations";
+export * from "./quinzena-documents.js";
