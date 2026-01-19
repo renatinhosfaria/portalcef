@@ -80,6 +80,7 @@ export const planoAula = pgTable(
     statusIdx: index("plano_aula_status_idx").on(table.status),
     quinzenaIdIdx: index("plano_aula_quinzena_id_idx").on(table.quinzenaId),
     unitIdIdx: index("plano_aula_unit_id_idx").on(table.unitId),
+    userIdx: index("plano_aula_user_idx").on(table.userId),
     // Constraint: um professor não pode ter 2 planos para mesma turma/quinzena
     uniquePlanoIdx: uniqueIndex("plano_aula_user_turma_quinzena_unique").on(
       table.userId,
@@ -107,7 +108,7 @@ export const planoDocumento = pgTable(
       .references(() => planoAula.id, { onDelete: "cascade" }),
 
     // Tipo do documento
-    tipo: varchar("tipo", { length: 20 }).notNull(), // 'ARQUIVO' ou 'LINK_YOUTUBE'
+    tipo: text("tipo", { enum: documentoTipoEnum }).notNull(),
 
     // Dados do arquivo/link
     storageKey: varchar("storage_key", { length: 500 }), // Key no storage (para ARQUIVO)
