@@ -10,6 +10,9 @@ import {
   eq,
   or,
   desc,
+  gte,
+  lte,
+  inArray,
   planoAula,
   planoDocumento,
   documentoComentario,
@@ -26,6 +29,8 @@ import {
   type AddComentarioDto,
   type DevolverPlanoDto,
   type SetDeadlineDto,
+  type ListarPlanosGestaoDto,
+  STATUS_URL_MAP,
   isAnalista,
   isCoordenadora,
   isGestao,
@@ -291,10 +296,30 @@ export class PlanoAulaService {
   // ============================================
 
   /**
+   * Interface para resumo de planos pendentes
+   */
+  private mapToPlanoSummary(plano: PlanoAula & {
+    user?: { name: string } | null;
+    turma?: { name: string; code: string; stage?: { name: string; code: string } | null } | null;
+  }) {
+    return {
+      id: plano.id,
+      quinzenaId: plano.quinzenaId,
+      status: plano.status,
+      submittedAt: plano.submittedAt?.toISOString(),
+      professorName: plano.user?.name ?? "",
+      turmaName: plano.turma?.name ?? "",
+      turmaCode: plano.turma?.code ?? "",
+      stageCode: plano.turma?.stage?.code ?? "",
+      stageName: plano.turma?.stage?.name ?? "",
+    };
+  }
+
+  /**
    * Lista planos pendentes para analista
    * Status: AGUARDANDO_ANALISTA ou REVISAO_ANALISTA
    */
-  async listarPendentesAnalista(user: UserContext): Promise<PlanoAula[]> {
+  async listarPendentesAnalista(user: UserContext) {
     const db = getDb();
 
     if (!user.unitId) {
@@ -311,12 +336,16 @@ export class PlanoAulaService {
       ),
       with: {
         user: true,
-        turma: true,
+        turma: {
+          with: {
+            stage: true,
+          },
+        },
       },
       orderBy: [desc(planoAula.submittedAt)],
     });
 
-    return planos;
+    return planos.map((p: typeof planos[number]) => this.mapToPlanoSummary(p));
   }
 
   /**
@@ -423,7 +452,7 @@ export class PlanoAulaService {
    * Lista planos pendentes para coordenadora
    * Filtrado por segmento da coordenadora
    */
-  async listarPendentesCoordenadora(user: UserContext): Promise<PlanoAula[]> {
+  async listarPendentesCoordenadora(user: UserContext) {
     const db = getDb();
 
     if (!user.unitId) {
@@ -450,17 +479,18 @@ export class PlanoAulaService {
     // Filtrar por segmento da coordenadora
     const segmentosPermitidos = getSegmentosPermitidos(user.role);
 
-    if (segmentosPermitidos === null) {
-      // Gestão/Coordenadora Geral vê todos
-      return planosBase;
+    let planosFiltrados = planosBase;
+
+    if (segmentosPermitidos !== null) {
+      // Filtrar por segmento
+      type PlanoComTurmaStage = (typeof planosBase)[number];
+      planosFiltrados = planosBase.filter((p: PlanoComTurmaStage) => {
+        const turmaComStage = p.turma as { stage?: { code: string } };
+        return segmentosPermitidos.includes(turmaComStage?.stage?.code || "");
+      });
     }
 
-    // Filtrar por segmento
-    type PlanoComTurmaStage = (typeof planosBase)[number];
-    return planosBase.filter((p: PlanoComTurmaStage) => {
-      const turmaComStage = p.turma as { stage?: { code: string } };
-      return segmentosPermitidos.includes(turmaComStage?.stage?.code || "");
-    });
+    return planosFiltrados.map((p: typeof planosFiltrados[number]) => this.mapToPlanoSummary(p));
   }
 
   /**
@@ -603,6 +633,7 @@ export class PlanoAulaService {
   async getDashboard(
     user: UserContext,
     unitId?: string,
+    quinzenaId?: string,
   ): Promise<{
     totais: DashboardItem[];
     porSegmento: Record<string, DashboardItem[]>;
@@ -622,9 +653,15 @@ export class PlanoAulaService {
       );
     }
 
+    // Construir filtro
+    const filters = [eq(planoAula.unitId, targetUnitId)];
+    if (quinzenaId) {
+      filters.push(eq(planoAula.quinzenaId, quinzenaId));
+    }
+
     // Buscar todos os planos da unidade com turma e stage
     const planos = await db.query.planoAula.findMany({
-      where: eq(planoAula.unitId, targetUnitId),
+      where: and(...filters),
       with: {
         turma: {
           with: { stage: true },
@@ -670,6 +707,184 @@ export class PlanoAulaService {
     }
 
     return { totais, porSegmento };
+  }
+
+  /**
+   * Lista planos com filtros e paginação para gestão
+   * GET /plano-aula/gestao/listar
+   */
+  async listarPlanosGestao(
+    user: UserContext,
+    dto: ListarPlanosGestaoDto,
+  ): Promise<{
+    data: Array<{
+      id: string;
+      professorName: string;
+      turmaCode: string;
+      turmaName: string;
+      segmento: string;
+      quinzenaId: string;
+      quinzenaPeriodo: string;
+      status: PlanoAulaStatus;
+      submittedAt: string | null;
+      createdAt: string;
+      updatedAt: string;
+      documentosCount: number;
+    }>;
+    pagination: {
+      total: number;
+      page: number;
+      limit: number;
+      totalPages: number;
+    };
+  }> {
+    const db = getDb();
+
+    // Determinar unitId a usar (da sessão)
+    const targetUnitId = user.unitId;
+    if (!targetUnitId) {
+      throw new BadRequestException("Unidade não especificada");
+    }
+
+    // Verificar permissão de acesso
+    if (!isGestao(user.role)) {
+      throw new ForbiddenException(
+        "Você não tem permissão para acessar esta listagem",
+      );
+    }
+
+    // Construir condições de filtro
+    const conditions: ReturnType<typeof eq>[] = [eq(planoAula.unitId, targetUnitId)];
+
+    // Filtro por status
+    if (dto.status && dto.status !== "todos") {
+      const statusDb = STATUS_URL_MAP[dto.status];
+      if (statusDb && statusDb.length > 0) {
+        conditions.push(inArray(planoAula.status, statusDb as PlanoAulaStatus[]));
+      }
+    }
+
+    // Filtro por quinzena
+    if (dto.quinzenaId) {
+      conditions.push(eq(planoAula.quinzenaId, dto.quinzenaId));
+    }
+
+    // Filtro por data de submissão
+    if (dto.dataInicio) {
+      conditions.push(gte(planoAula.submittedAt, new Date(dto.dataInicio)));
+    }
+    if (dto.dataFim) {
+      conditions.push(lte(planoAula.submittedAt, new Date(dto.dataFim)));
+    }
+
+    // Buscar planos com relacionamentos
+    const planosBase = await db.query.planoAula.findMany({
+      where: and(...conditions),
+      with: {
+        user: true,
+        turma: {
+          with: {
+            stage: true,
+          },
+        },
+        documentos: true,
+      },
+      orderBy: [desc(planoAula.submittedAt), desc(planoAula.createdAt)],
+    });
+
+    // Tipo para planos com relacionamentos
+    type PlanoComRelacoes = (typeof planosBase)[number];
+
+    // Aplicar filtros pós-query
+    let planosFiltrados: PlanoComRelacoes[] = planosBase;
+
+    // Filtro por professora (busca parcial no nome)
+    if (dto.professora) {
+      const termoBusca = dto.professora.toLowerCase();
+      planosFiltrados = planosFiltrados.filter((p: PlanoComRelacoes) => {
+        const nome = (p.user as { name?: string })?.name || "";
+        return nome.toLowerCase().includes(termoBusca);
+      });
+    }
+
+    // Filtro por segmento
+    if (dto.segmentoId) {
+      planosFiltrados = planosFiltrados.filter((p: PlanoComRelacoes) => {
+        const turmaComStage = p.turma as { stage?: { code: string } };
+        return turmaComStage?.stage?.code === dto.segmentoId;
+      });
+    }
+
+    // Calcular paginação
+    const total = planosFiltrados.length;
+    const page = dto.page || 1;
+    const limit = dto.limit || 20;
+    const totalPages = Math.ceil(total / limit);
+    const offset = (page - 1) * limit;
+
+    // Aplicar paginação
+    const planosPaginados = planosFiltrados.slice(offset, offset + limit);
+
+    // Formatar resposta
+    const data = planosPaginados.map((plano: PlanoComRelacoes) => {
+      const turmaComStage = plano.turma as {
+        name: string;
+        code: string;
+        stage?: { name: string; code: string };
+      };
+
+      return {
+        id: plano.id,
+        professorName: (plano.user as { name: string })?.name || "",
+        turmaCode: turmaComStage?.code || "",
+        turmaName: turmaComStage?.name || "",
+        segmento: turmaComStage?.stage?.name || "",
+        quinzenaId: plano.quinzenaId,
+        quinzenaPeriodo: this.formatarPeriodoQuinzena(plano.quinzenaId),
+        status: plano.status,
+        submittedAt: plano.submittedAt?.toISOString() || null,
+        createdAt: plano.createdAt.toISOString(),
+        updatedAt: plano.updatedAt.toISOString(),
+        documentosCount: (plano.documentos as unknown[])?.length || 0,
+      };
+    });
+
+    return {
+      data,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages,
+      },
+    };
+  }
+
+  /**
+   * Formata período da quinzena (ex: "2026-Q01" -> "02/01 a 15/01")
+   */
+  private formatarPeriodoQuinzena(quinzenaId: string): string {
+    const match = quinzenaId.match(/^(\d{4})-Q(\d{2})$/);
+    if (!match) return quinzenaId;
+
+    const ano = parseInt(match[1], 10);
+    const numQuinzena = parseInt(match[2], 10);
+
+    // Cada quinzena tem 14 dias, começando em 02/01
+    // Q01: 02/01-15/01, Q02: 16/01-29/01, etc.
+    const diasPorQuinzena = 14;
+    const diaInicial = 2 + (numQuinzena - 1) * diasPorQuinzena;
+
+    const dataInicio = new Date(ano, 0, diaInicial); // Janeiro = 0
+    const dataFim = new Date(ano, 0, diaInicial + diasPorQuinzena - 1);
+
+    const formatarData = (d: Date) => {
+      const dia = d.getDate().toString().padStart(2, "0");
+      const mes = (d.getMonth() + 1).toString().padStart(2, "0");
+      return `${dia}/${mes}`;
+    };
+
+    return `${formatarData(dataInicio)} a ${formatarData(dataFim)}`;
   }
 
   /**
