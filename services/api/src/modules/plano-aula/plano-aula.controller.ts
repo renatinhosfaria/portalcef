@@ -30,6 +30,8 @@ import {
   devolverPlanoSchema,
   type SetDeadlineDto,
   setDeadlineSchema,
+  type ListarPlanosGestaoDto,
+  listarPlanosGestaoSchema,
   GESTAO_ROLES,
   COORDENADORA_ROLES,
   ANALISTA_ROLES,
@@ -99,7 +101,7 @@ export class PlanoAulaController {
   constructor(
     private readonly planoAulaService: PlanoAulaService,
     private readonly storageService: StorageService,
-  ) {}
+  ) { }
 
   // ============================================
   // Endpoints da Professora
@@ -529,10 +531,41 @@ export class PlanoAulaController {
     const dashboard = await this.planoAulaService.getDashboard(
       req.user,
       parsed.data.unitId,
+      parsed.data.quinzenaId,
     );
     return {
       success: true,
       data: dashboard,
+    };
+  }
+
+  /**
+   * GET /plano-aula/gestao/listar
+   * Lista planos com filtros e paginação para gestão
+   */
+  @Get("gestao/listar")
+  @Roles(...GESTAO_ACCESS)
+  async listarPlanosGestao(
+    @Req() req: { user: UserContext },
+    @Query() query: ListarPlanosGestaoDto,
+  ) {
+    const parsed = listarPlanosGestaoSchema.safeParse(query);
+    if (!parsed.success) {
+      throw new BadRequestException({
+        code: "VALIDATION_ERROR",
+        message: "Parâmetros inválidos",
+        errors: parsed.error.errors,
+      });
+    }
+
+    const result = await this.planoAulaService.listarPlanosGestao(
+      req.user,
+      parsed.data,
+    );
+
+    return {
+      success: true,
+      ...result,
     };
   }
 
