@@ -189,3 +189,49 @@ export const getSegmentosPermitidos = (role: string): string[] | null => {
   }
   return []; // Sem permissão
 };
+
+// ============================================
+// Listagem de Planos para Gestão
+// ============================================
+
+/**
+ * Schema para listagem de planos da gestão (com paginação)
+ * GET /plano-aula/gestao/listar
+ */
+export const listarPlanosGestaoSchema = z.object({
+  status: z
+    .enum([
+      "todos",
+      "rascunho",
+      "aguardando-analise",
+      "aguardando-aprovacao",
+      "devolvidos",
+      "aprovados",
+    ])
+    .optional()
+    .default("todos"),
+  quinzenaId: z
+    .string()
+    .regex(/^\d{4}-Q\d{2}$/)
+    .optional(),
+  segmentoId: z.string().optional(),
+  professora: z.string().optional(),
+  dataInicio: z.string().datetime().optional(),
+  dataFim: z.string().datetime().optional(),
+  page: z.coerce.number().int().min(1).optional().default(1),
+  limit: z.coerce.number().int().min(1).max(100).optional().default(20),
+});
+
+export type ListarPlanosGestaoDto = z.infer<typeof listarPlanosGestaoSchema>;
+
+/**
+ * Mapeamento de status da URL para status do banco
+ */
+export const STATUS_URL_MAP: Record<string, string[]> = {
+  todos: [],
+  rascunho: ["RASCUNHO"],
+  "aguardando-analise": ["AGUARDANDO_ANALISTA", "REVISAO_ANALISTA"],
+  "aguardando-aprovacao": ["AGUARDANDO_COORDENADORA"],
+  devolvidos: ["DEVOLVIDO_ANALISTA", "DEVOLVIDO_COORDENADORA"],
+  aprovados: ["APROVADO"],
+};
