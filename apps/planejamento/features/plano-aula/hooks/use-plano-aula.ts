@@ -9,6 +9,9 @@ import type {
   CriarPlanoResult,
   PlanoDocumento,
   AddComentarioDto,
+  FiltrosGestaoPlanos,
+  ListagemPlanosResponse,
+  PlanoAulaListItem,
 } from "../types";
 
 // ============================================
@@ -151,6 +154,7 @@ export function usePlanoAula(): UsePlanoAulaReturn {
       try {
         const result = await api.post<{ success: boolean }>(
           `/plano-aula/${planoId}/submeter`,
+          {}, // Body vazio necessário para Content-Type: application/json
         );
         return result;
       } catch (err) {
@@ -300,7 +304,7 @@ interface UseDashboardReturn {
   loading: boolean;
   data: DashboardData | null;
   error: string | null;
-  fetchDashboard: () => Promise<void>;
+  fetchDashboard: (quinzenaId?: string) => Promise<void>;
 }
 
 /**
@@ -313,11 +317,17 @@ export function useDashboard(): UseDashboardReturn {
   const [data, setData] = useState<DashboardData | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchDashboard = useCallback(async (): Promise<void> => {
+  const fetchDashboard = useCallback(async (quinzenaId?: string): Promise<void> => {
     setLoading(true);
     setError(null);
     try {
-      const result = await api.get<DashboardData>("/plano-aula/dashboard");
+      const params = new URLSearchParams();
+      if (quinzenaId) {
+        params.append("quinzenaId", quinzenaId);
+      }
+      const queryString = params.toString() ? `?${params.toString()}` : "";
+
+      const result = await api.get<DashboardData>(`/plano-aula/dashboard${queryString}`);
       setData(result);
     } catch (err) {
       const message =
@@ -451,4 +461,89 @@ export function usePlanoDetalhe(planoId?: string): UsePlanoDetalheReturn {
   }, [currentId, fetchPlano]);
 
   return { loading, plano, error, fetchPlano, refetch };
+}
+
+// ============================================
+// Hook para Listagem de Planos (Gestão)
+// ============================================
+
+interface UseGestaoPlanosReturn {
+  planos: PlanoAulaListItem[];
+  pagination: {
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  };
+  isLoading: boolean;
+  error: string | null;
+  fetchPlanos: (filtros: FiltrosGestaoPlanos) => Promise<void>;
+}
+
+/**
+ * Hook para Listagem de Planos da Gestão
+ * - Lista planos com filtros e paginação
+ * - Suporta filtros por status, quinzena, segmento, professora
+ */
+export function useGestaoPlanos(): UseGestaoPlanosReturn {
+  const [planos, setPlanos] = useState<PlanoAulaListItem[]>([]);
+  const [pagination, setPagination] = useState({
+    total: 0,
+    page: 1,
+    limit: 20,
+    totalPages: 0,
+  });
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchPlanos = useCallback(
+    async (filtros: FiltrosGestaoPlanos): Promise<void> => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const params = new URLSearchParams();
+
+        // Adicionar filtros aos query params
+        if (filtros.status) {
+          params.append("status", filtros.status);
+        }
+        if (filtros.quinzenaId) {
+          params.append("quinzenaId", filtros.quinzenaId);
+        }
+        if (filtros.segmentoId) {
+          params.append("segmentoId", filtros.segmentoId);
+        }
+        if (filtros.professora) {
+          params.append("professora", filtros.professora);
+        }
+        if (filtros.dataInicio) {
+          params.append("dataInicio", filtros.dataInicio);
+        }
+        if (filtros.dataFim) {
+          params.append("dataFim", filtros.dataFim);
+        }
+        params.append("page", String(filtros.page));
+        params.append("limit", String(filtros.limit));
+
+        const queryString = params.toString();
+        const result = await api.get<ListagemPlanosResponse>(
+          `/plano-aula/gestao/listar?${queryString}`,
+        );
+
+        setPlanos(result.data);
+        setPagination(result.pagination);
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "Erro ao buscar planos";
+        setError(message);
+        setPlanos([]);
+        setPagination({ total: 0, page: 1, limit: 20, totalPages: 0 });
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [],
+  );
+
+  return { planos, pagination, isLoading, error, fetchPlanos };
 }
