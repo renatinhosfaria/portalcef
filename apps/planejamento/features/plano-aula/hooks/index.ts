@@ -5,4 +5,5 @@ export {
   useDashboard,
   useDeadlines,
   usePlanoDetalhe,
+  useGestaoPlanos,
 } from "./use-plano-aula";

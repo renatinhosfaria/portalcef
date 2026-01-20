@@ -12,9 +12,12 @@ export type {
   AddComentarioDto,
   DevolverPlanoDto,
   QuinzenaConfig,
+  PlanoAulaListItem,
+  FiltrosGestaoPlanos,
+  ListagemPlanosResponse,
 } from "./types";
 
-export { STATUS_LABELS, STATUS_COLORS } from "./types";
+export { STATUS_LABELS, STATUS_COLORS, STATUS_FILTER_OPTIONS } from "./types";
 
 // Hooks
 export {
@@ -24,6 +27,7 @@ export {
   useDashboard,
   useDeadlines,
   usePlanoDetalhe,
+  useGestaoPlanos,
 } from "./hooks";
 
 // Components
