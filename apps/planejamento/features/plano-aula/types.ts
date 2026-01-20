@@ -199,3 +199,64 @@ export const STATUS_COLORS: Record<
     border: "border-green-300",
   },
 };
+
+// ============================================
+// Listagem de Planos para Gestão
+// ============================================
+
+/**
+ * Item da listagem de planos para gestão
+ */
+export interface PlanoAulaListItem {
+  id: string;
+  professorName: string;
+  turmaCode: string;
+  turmaName: string;
+  segmento: string;
+  quinzenaId: string;
+  quinzenaPeriodo: string;
+  status: PlanoAulaStatus;
+  submittedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  documentosCount: number;
+}
+
+/**
+ * Filtros para listagem de planos da gestão
+ */
+export interface FiltrosGestaoPlanos {
+  status: string;
+  quinzenaId?: string;
+  segmentoId?: string;
+  professora?: string;
+  dataInicio?: string;
+  dataFim?: string;
+  page: number;
+  limit: number;
+}
+
+/**
+ * Resposta paginada da listagem
+ */
+export interface ListagemPlanosResponse {
+  data: PlanoAulaListItem[];
+  pagination: {
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  };
+}
+
+/**
+ * Labels de status para filtros (URL-friendly)
+ */
+export const STATUS_FILTER_OPTIONS = [
+  { value: "todos", label: "Todos os Planos" },
+  { value: "rascunho", label: "Em Rascunho" },
+  { value: "aguardando-analise", label: "Aguardando Análise" },
+  { value: "aguardando-aprovacao", label: "Aguardando Aprovação" },
+  { value: "devolvidos", label: "Devolvidos" },
+  { value: "aprovados", label: "Aprovados" },
+] as const;
