@@ -13,6 +13,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@essencia/ui/components/card";
+
 import { Progress } from "@essencia/ui/components/progress";
 import { Skeleton } from "@essencia/ui/components/skeleton";
 import { cn } from "@essencia/ui/lib/utils";
@@ -27,10 +28,11 @@ import {
   Send,
   Users,
 } from "lucide-react";
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useDashboard } from "../../features/plano-aula";
-import { useQuinzenas } from "../../features/wizard/hooks";
+
 
 /**
  * Segmentos disponiveis no sistema
@@ -42,15 +44,7 @@ const SEGMENTOS = [
   { code: "FUNDAMENTAL_II", label: "Fund. II", color: "bg-purple-500" },
 ] as const;
 
-/**
- * Formata a data da quinzena para exibicao
- */
-function formatarQuinzenaAtual(quinzenas: { id: string; label: string }[]): string {
-  if (quinzenas.length === 0) return "Carregando...";
-  // Pega a quinzena atual (primeira da lista)
-  const atual = quinzenas[0];
-  return atual?.label || atual?.id || "Quinzena atual";
-}
+
 
 /**
  * Interface para os cards de estatisticas
@@ -61,12 +55,14 @@ interface StatCardProps {
   icon: React.ReactNode;
   variant?: "default" | "success" | "warning" | "destructive" | "info" | "purple";
   description?: string;
+  href?: string;
 }
 
 /**
  * Card de estatistica individual
+ * Quando href esta presente, o card se torna clicavel
  */
-function StatCard({ title, value, icon, variant = "default", description }: StatCardProps) {
+function StatCard({ title, value, icon, variant = "default", description, href }: StatCardProps) {
   const variantStyles = {
     default: {
       card: "border-border",
@@ -102,8 +98,12 @@ function StatCard({ title, value, icon, variant = "default", description }: Stat
 
   const styles = variantStyles[variant];
 
-  return (
-    <Card className={cn("transition-all hover:shadow-md", styles.card)}>
+  const cardContent = (
+    <Card className={cn(
+      "transition-all hover:shadow-md",
+      styles.card,
+      href && "cursor-pointer hover:scale-[1.02]"
+    )}>
       <CardContent className="p-4">
         <div className="flex items-start justify-between">
           <div className="flex-1">
@@ -122,6 +122,12 @@ function StatCard({ title, value, icon, variant = "default", description }: Stat
       </CardContent>
     </Card>
   );
+
+  if (href) {
+    return <Link href={href}>{cardContent}</Link>;
+  }
+
+  return cardContent;
 }
 
 /**
@@ -186,8 +192,9 @@ function DashboardSkeleton() {
 
 export function DashboardContent() {
   const { fetchDashboard, data, loading: dashboardLoading, error } = useDashboard();
-  const { quinzenas, isLoading: quinzenasLoading } = useQuinzenas();
+
   const [isRefreshing, setIsRefreshing] = useState(false);
+
 
   /**
    * Carrega os dados do dashboard
@@ -222,11 +229,20 @@ export function DashboardContent() {
   const estatisticas = useMemo(() => {
     if (!data) return null;
 
-    const { stats, porSegmento } = data;
-    const totalDevolvidos = stats.devolvidos;
-    const totalPendentes = stats.aguardandoAnalista + stats.aguardandoCoordenadora;
-    const taxaAprovacao = stats.total > 0
-      ? Math.round((stats.aprovados / stats.total) * 100)
+    const stats = data.stats || {
+      total: 0,
+      rascunho: 0,
+      aguardandoAnalista: 0,
+      aguardandoCoordenadora: 0,
+      devolvidos: 0,
+      aprovados: 0,
+    };
+    const porSegmento = data.porSegmento || {};
+
+    const totalDevolvidos = stats.devolvidos || 0;
+    const totalPendentes = (stats.aguardandoAnalista || 0) + (stats.aguardandoCoordenadora || 0);
+    const taxaAprovacao = (stats.total || 0) > 0
+      ? Math.round(((stats.aprovados || 0) / stats.total) * 100)
       : 0;
 
     return {
@@ -238,14 +254,7 @@ export function DashboardContent() {
     };
   }, [data]);
 
-  /**
-   * Nome da quinzena atual
-   */
-  const quinzenaAtual = useMemo(() => {
-    return formatarQuinzenaAtual(quinzenas);
-  }, [quinzenas]);
-
-  const isLoading = dashboardLoading || quinzenasLoading;
+  const isLoading = dashboardLoading;
 
   if (isLoading && !data) {
     return <DashboardSkeleton />;
@@ -306,28 +315,22 @@ export function DashboardContent() {
               <h1 className="text-2xl font-bold tracking-tight">
                 Dashboard de Planos de Aula
               </h1>
-              <p className="text-muted-foreground">
-                {quinzenasLoading ? (
-                  <Skeleton className="h-4 w-32 inline-block" />
-                ) : (
-                  quinzenaAtual
-                )}
-              </p>
+
             </div>
           </div>
-          <button
-            onClick={handleRefresh}
-            disabled={isRefreshing}
-            className={cn(
-              "flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md",
-              "bg-muted hover:bg-muted/80 transition-colors",
-              "disabled:opacity-50 disabled:cursor-not-allowed"
-            )}
-          >
-            <RefreshCcw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
-            Atualizar
-          </button>
         </div>
+        <button
+          onClick={handleRefresh}
+          disabled={isRefreshing}
+          className={cn(
+            "flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md",
+            "bg-muted hover:bg-muted/80 transition-colors",
+            "disabled:opacity-50 disabled:cursor-not-allowed"
+          )}
+        >
+          <RefreshCcw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
+          Atualizar
+        </button>
       </div>
 
       {/* Stats Cards */}
@@ -338,6 +341,7 @@ export function DashboardContent() {
           icon={<Users className="h-5 w-5" />}
           variant="default"
           description="planos criados"
+          href="/gestao/planos?status=todos"
         />
         <StatCard
           title="Em Rascunho"
@@ -345,6 +349,7 @@ export function DashboardContent() {
           icon={<FileEdit className="h-5 w-5" />}
           variant="default"
           description="ainda nao enviados"
+          href="/gestao/planos?status=rascunho"
         />
         <StatCard
           title="Aguardando Analise"
@@ -352,6 +357,7 @@ export function DashboardContent() {
           icon={<Clock className="h-5 w-5" />}
           variant="info"
           description="com a analista"
+          href="/gestao/planos?status=aguardando-analise"
         />
         <StatCard
           title="Aguardando Aprovacao"
@@ -359,6 +365,7 @@ export function DashboardContent() {
           icon={<Send className="h-5 w-5" />}
           variant="purple"
           description="com a coordenadora"
+          href="/gestao/planos?status=aguardando-aprovacao"
         />
         <StatCard
           title="Devolvidos"
@@ -366,6 +373,7 @@ export function DashboardContent() {
           icon={<AlertCircle className="h-5 w-5" />}
           variant={estatisticas.devolvidos > 0 ? "warning" : "default"}
           description="precisam de ajustes"
+          href="/gestao/planos?status=devolvidos"
         />
         <StatCard
           title="Aprovados"
@@ -373,6 +381,7 @@ export function DashboardContent() {
           icon={<CheckCircle2 className="h-5 w-5" />}
           variant="success"
           description={`${estatisticas.taxaAprovacao}% do total`}
+          href="/gestao/planos?status=aprovados"
         />
       </div>
 
@@ -475,7 +484,7 @@ export function DashboardContent() {
           </CardContent>
         </Card>
       </div>
-    </div>
+    </div >
   );
 }
 
