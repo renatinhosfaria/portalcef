@@ -67,7 +67,12 @@ export function validarContextosPorRole(
 }
 
 /**
- * Calcula prioridade automática baseada no prazo
+ * Calcula prioridade automática baseada no prazo.
+ *
+ * @remarks
+ * Esta função será utilizada na Task 10 quando implementarmos
+ * a criação automática de tarefas via eventos do sistema
+ * (ex: planejamento reprovado, prazo próximo do vencimento).
  *
  * @param prazo Data de prazo da tarefa
  * @returns Prioridade calculada (ALTA, MEDIA, BAIXA)

@@ -94,9 +94,13 @@ export class TarefasService {
       );
     }
 
-    // Validar que prazo não está no passado
-    const agora = new Date();
-    if (dto.prazo < agora) {
+    // Validar que prazo não está no passado (comparação em nível de dia)
+    const agoraInicioDoDia = new Date();
+    agoraInicioDoDia.setHours(0, 0, 0, 0);
+    const prazoInicioDoDia = new Date(dto.prazo);
+    prazoInicioDoDia.setHours(0, 0, 0, 0);
+
+    if (prazoInicioDoDia < agoraInicioDoDia) {
       throw new BadRequestException("Prazo não pode estar no passado");
     }
 
@@ -140,6 +144,14 @@ export class TarefasService {
       professoraId?: string | null;
     }>;
   }): Promise<Tarefa> {
+    // Validar que todos os contextos têm módulo definido
+    const contextosInvalidos = params.contextos.filter((c) => !c.modulo);
+    if (contextosInvalidos.length > 0) {
+      throw new BadRequestException(
+        "Todos os contextos devem ter um módulo definido",
+      );
+    }
+
     return this.create({
       ...params,
       tipoOrigem: "AUTOMATICA",
