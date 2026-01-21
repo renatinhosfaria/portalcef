@@ -22,9 +22,9 @@ export const tarefaContextoSchema = z.object({
   modulo: z.enum([
     "PLANEJAMENTO",
     "CALENDARIO",
+    "USUARIOS",
     "TURMAS",
-    "SHOP",
-    "GERAL",
+    "LOJA",
   ]),
   quinzenaId: z.string().optional(),
   etapaId: z.string().uuid().optional(),
@@ -46,12 +46,12 @@ export const criarTarefaSchema = z.object({
     .string()
     .max(1000, "Descrição não pode exceder 1000 caracteres")
     .optional(),
-  prioridade: z.enum(["BAIXA", "MEDIA", "ALTA", "URGENTE"]),
+  prioridade: z.enum(["ALTA", "MEDIA", "BAIXA"]),
   prazo: z.string().datetime("Prazo deve ser uma data/hora ISO válida"),
   responsavel: z
     .string()
     .uuid("Responsável deve ser um UUID válido"),
-  tipoOrigem: z.enum(["MANUAL", "WORKFLOW", "SISTEMA"]),
+  tipoOrigem: z.enum(["AUTOMATICA", "MANUAL"]),
   contextos: z.array(tarefaContextoSchema).optional(),
 });
 
@@ -70,7 +70,7 @@ export const atualizarTarefaSchema = z.object({
     .string()
     .max(1000, "Descrição não pode exceder 1000 caracteres")
     .optional(),
-  prioridade: z.enum(["BAIXA", "MEDIA", "ALTA", "URGENTE"]).optional(),
+  prioridade: z.enum(["ALTA", "MEDIA", "BAIXA"]).optional(),
   prazo: z.string().datetime("Prazo deve ser uma data/hora ISO válida").optional(),
   responsavel: z
     .string()
@@ -87,11 +87,11 @@ export type AtualizarTarefaDto = z.infer<typeof atualizarTarefaSchema>;
 export const listarTarefasSchema = z.object({
   // Filtros
   status: z.enum(["PENDENTE", "CONCLUIDA", "CANCELADA"]).optional(),
-  prioridade: z.enum(["BAIXA", "MEDIA", "ALTA", "URGENTE"]).optional(),
+  prioridade: z.enum(["ALTA", "MEDIA", "BAIXA"]).optional(),
   responsavel: z.string().uuid().optional(),
   criadoPor: z.string().uuid().optional(),
   modulo: z
-    .enum(["PLANEJAMENTO", "CALENDARIO", "TURMAS", "SHOP", "GERAL"])
+    .enum(["PLANEJAMENTO", "CALENDARIO", "USUARIOS", "TURMAS", "LOJA"])
     .optional(),
   quinzenaId: z.string().optional(),
   etapaId: z.string().uuid().optional(),
