@@ -1,4 +1,9 @@
-import { Injectable } from "@nestjs/common";
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+  ConflictException,
+} from "@nestjs/common";
 import { eq } from "@essencia/db";
 import { tarefas, tarefaContextos } from "@essencia/db";
 import type {
@@ -8,6 +13,16 @@ import type {
   TarefaContextoModulo,
 } from "@essencia/shared/types";
 import { DatabaseService } from "../../common/database/database.service";
+
+/**
+ * Tipos auxiliares para transações do Drizzle
+ */
+type Db = ReturnType<DatabaseService["db"]["db"]>;
+type DbTransaction = Parameters<Db["transaction"]>[0] extends (
+  tx: infer T,
+) => Promise<unknown>
+  ? T
+  : never;
 
 /**
  * TarefasService
@@ -48,42 +63,45 @@ export class TarefasService {
   }): Promise<Tarefa> {
     const db = this.db.db;
 
-    // Inserir tarefa
-    const [tarefaCriada] = await db
-      .insert(tarefas)
-      .values({
-        schoolId: params.schoolId,
-        unitId: params.unitId,
-        titulo: params.titulo,
-        descricao: params.descricao,
-        prioridade: params.prioridade,
-        prazo: params.prazo,
-        criadoPor: params.criadoPor,
-        responsavel: params.responsavel,
-        tipoOrigem: params.tipoOrigem,
-        status: "PENDENTE",
-      })
-      .returning();
+    // Usar transação para garantir atomicidade
+    return await db.transaction(async (tx: DbTransaction) => {
+      // Inserir tarefa
+      const [tarefaCriada] = await tx
+        .insert(tarefas)
+        .values({
+          schoolId: params.schoolId,
+          unitId: params.unitId,
+          titulo: params.titulo,
+          descricao: params.descricao,
+          prioridade: params.prioridade,
+          prazo: params.prazo,
+          criadoPor: params.criadoPor,
+          responsavel: params.responsavel,
+          tipoOrigem: params.tipoOrigem,
+          status: "PENDENTE",
+        })
+        .returning();
 
-    if (!tarefaCriada) {
-      throw new Error("Falha ao criar tarefa");
-    }
+      if (!tarefaCriada) {
+        throw new ConflictException("Falha ao criar tarefa");
+      }
 
-    // Inserir contextos se houver
-    if (params.contextos.length > 0) {
-      for (const contexto of params.contextos) {
-        await db.insert(tarefaContextos).values({
+      // Inserir contextos em bulk se houver
+      if (params.contextos.length > 0) {
+        const contextosValues = params.contextos.map((contexto) => ({
           tarefaId: tarefaCriada.id,
           modulo: contexto.modulo,
           quinzenaId: contexto.quinzenaId ?? null,
           etapaId: contexto.etapaId ?? null,
           turmaId: contexto.turmaId ?? null,
           professoraId: contexto.professoraId ?? null,
-        });
-      }
-    }
+        }));
 
-    return this.mapTarefaToDto(tarefaCriada);
+        await tx.insert(tarefaContextos).values(contextosValues);
+      }
+
+      return this.mapTarefaToDto(tarefaCriada);
+    });
   }
 
   /**
@@ -116,41 +134,46 @@ export class TarefasService {
   async concluir(tarefaId: string, userId: string): Promise<Tarefa> {
     const db = this.db.db;
 
-    // Buscar tarefa
-    const tarefaDb = await db.query.tarefas.findFirst({
-      where: eq(tarefas.id, tarefaId),
+    // Usar transação para evitar race conditions
+    return await db.transaction(async (tx: DbTransaction) => {
+      // Buscar tarefa
+      const tarefaDb = await tx.query.tarefas.findFirst({
+        where: eq(tarefas.id, tarefaId),
+      });
+
+      if (!tarefaDb) {
+        throw new NotFoundException("Tarefa não encontrada");
+      }
+
+      // Validar que usuário é responsável
+      if (tarefaDb.responsavel !== userId) {
+        throw new ForbiddenException(
+          "Usuário não é responsável pela tarefa",
+        );
+      }
+
+      // Validar que tarefa não está concluída
+      if (tarefaDb.status === "CONCLUIDA") {
+        throw new ConflictException("Tarefa já foi concluída");
+      }
+
+      // Atualizar tarefa
+      const [tarefaAtualizada] = await tx
+        .update(tarefas)
+        .set({
+          status: "CONCLUIDA",
+          concluidaEm: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(tarefas.id, tarefaId))
+        .returning();
+
+      if (!tarefaAtualizada) {
+        throw new ConflictException("Falha ao concluir tarefa");
+      }
+
+      return this.mapTarefaToDto(tarefaAtualizada);
     });
-
-    if (!tarefaDb) {
-      throw new Error("Tarefa não encontrada");
-    }
-
-    // Validar que usuário é responsável
-    if (tarefaDb.responsavel !== userId) {
-      throw new Error("Usuário não é responsável pela tarefa");
-    }
-
-    // Validar que tarefa não está concluída
-    if (tarefaDb.status === "CONCLUIDA") {
-      throw new Error("Tarefa já foi concluída");
-    }
-
-    // Atualizar tarefa
-    const [tarefaAtualizada] = await db
-      .update(tarefas)
-      .set({
-        status: "CONCLUIDA",
-        concluidaEm: new Date(),
-        updatedAt: new Date(),
-      })
-      .where(eq(tarefas.id, tarefaId))
-      .returning();
-
-    if (!tarefaAtualizada) {
-      throw new Error("Falha ao concluir tarefa");
-    }
-
-    return this.mapTarefaToDto(tarefaAtualizada);
   }
 
   /**
