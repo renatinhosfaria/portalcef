@@ -3,6 +3,7 @@ import {
   NotFoundException,
   ForbiddenException,
   ConflictException,
+  BadRequestException,
 } from "@nestjs/common";
 import { eq } from "@essencia/db";
 import { tarefas, tarefaContextos } from "@essencia/db";
@@ -13,6 +14,10 @@ import type {
   TarefaContextoModulo,
 } from "@essencia/shared/types";
 import { DatabaseService } from "../../common/database/database.service";
+import {
+  validarContextosPorRole,
+  calcularPrioridadeAutomatica,
+} from "./utils/validacoes";
 
 /**
  * Tipos auxiliares para transações do Drizzle
@@ -23,6 +28,17 @@ type DbTransaction = Parameters<Db["transaction"]>[0] extends (
 ) => Promise<unknown>
   ? T
   : never;
+
+/**
+ * Interface de contexto do usuário (da sessão)
+ */
+export interface UserContext {
+  userId: string;
+  role: string;
+  schoolId: string | null;
+  unitId: string | null;
+  stageId: string | null;
+}
 
 /**
  * TarefasService
@@ -36,6 +52,99 @@ type DbTransaction = Parameters<Db["transaction"]>[0] extends (
 @Injectable()
 export class TarefasService {
   constructor(private readonly db: DatabaseService) {}
+
+  /**
+   * Cria tarefa manual com validações de role e permissões
+   *
+   * @param dto Dados da tarefa
+   * @param session Contexto do usuário da sessão
+   * @returns Tarefa criada
+   */
+  async criarManual(
+    dto: {
+      titulo: string;
+      descricao: string | null;
+      prioridade: TarefaPrioridade;
+      prazo: Date;
+      responsavel: string;
+      contextos: Array<{
+        modulo: TarefaContextoModulo;
+        quinzenaId?: string | null;
+        etapaId?: string | null;
+        turmaId?: string | null;
+        professoraId?: string | null;
+      }>;
+    },
+    session: UserContext,
+  ): Promise<Tarefa> {
+    // Validar que schoolId e unitId existem na sessão
+    if (!session.schoolId || !session.unitId) {
+      throw new BadRequestException(
+        "Sessão inválida: schoolId e unitId são obrigatórios",
+      );
+    }
+
+    // Validar contextos baseados na role
+    validarContextosPorRole(session.role, dto.contextos);
+
+    // Validar que professora só pode criar tarefas para ela mesma
+    if (session.role === "professora" && dto.responsavel !== session.userId) {
+      throw new ForbiddenException(
+        "Professoras só podem criar tarefas para si mesmas",
+      );
+    }
+
+    // Validar que prazo não está no passado
+    const agora = new Date();
+    if (dto.prazo < agora) {
+      throw new BadRequestException("Prazo não pode estar no passado");
+    }
+
+    // Criar tarefa usando método base
+    return this.create({
+      schoolId: session.schoolId,
+      unitId: session.unitId,
+      titulo: dto.titulo,
+      descricao: dto.descricao,
+      prioridade: dto.prioridade,
+      prazo: dto.prazo,
+      criadoPor: session.userId,
+      responsavel: dto.responsavel,
+      tipoOrigem: "MANUAL",
+      contextos: dto.contextos,
+    });
+  }
+
+  /**
+   * Cria tarefa automática (sem validações de role)
+   *
+   * Usado por eventos do sistema (ex: planejamento reprovado)
+   *
+   * @param params Parâmetros da tarefa
+   * @returns Tarefa criada
+   */
+  async criarAutomatica(params: {
+    schoolId: string;
+    unitId: string | null;
+    titulo: string;
+    descricao: string | null;
+    prioridade: TarefaPrioridade;
+    prazo: Date;
+    criadoPor: string;
+    responsavel: string;
+    contextos: Array<{
+      modulo: TarefaContextoModulo;
+      quinzenaId?: string | null;
+      etapaId?: string | null;
+      turmaId?: string | null;
+      professoraId?: string | null;
+    }>;
+  }): Promise<Tarefa> {
+    return this.create({
+      ...params,
+      tipoOrigem: "AUTOMATICA",
+    });
+  }
 
   /**
    * Cria uma nova tarefa com contextos
