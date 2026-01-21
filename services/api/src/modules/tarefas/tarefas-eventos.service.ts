@@ -1,7 +1,7 @@
 import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
-import { EventEmitter2, OnEvent } from "@nestjs/event-emitter";
+import { OnEvent } from "@nestjs/event-emitter";
 import { TarefasService } from "./tarefas.service";
-import { calcularPrioridadeAutomatica } from "./utils/validacoes";
+// import { calcularPrioridadeAutomatica } from "./utils/validacoes"; // TODO: Usar quando implementar criação de tarefas
 
 /**
  * TarefasEventosService
@@ -20,7 +20,6 @@ export class TarefasEventosService implements OnModuleInit {
   private readonly logger = new Logger(TarefasEventosService.name);
 
   constructor(
-    private readonly eventEmitter: EventEmitter2,
     private readonly tarefasService: TarefasService,
   ) {}
 
@@ -28,7 +27,7 @@ export class TarefasEventosService implements OnModuleInit {
    * Registra listeners de eventos quando o módulo é inicializado
    */
   onModuleInit() {
-    this.logger.log("Registrando listeners de eventos do planejamento");
+    this.logger.log("TarefasEventosService inicializado - 4 listeners ativos");
   }
 
   /**
