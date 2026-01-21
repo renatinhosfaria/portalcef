@@ -1,5 +1,6 @@
 import { MiddlewareConsumer, Module, NestModule } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
+import { EventEmitterModule } from "@nestjs/event-emitter";
 import { ThrottlerModule, ThrottlerGuard } from "@nestjs/throttler";
 import { APP_GUARD } from "@nestjs/core";
 
@@ -27,6 +28,16 @@ import { TarefasModule } from "./modules/tarefas/tarefas.module";
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: ["../../.env", ".env.local", ".env"],
+    }),
+    // Event Emitter - Sistema de eventos global
+    EventEmitterModule.forRoot({
+      wildcard: false,
+      delimiter: ".",
+      newListener: false,
+      removeListener: false,
+      maxListeners: 10,
+      verboseMemoryLeak: false,
+      ignoreErrors: false,
     }),
     // Rate Limiting - Desabilitado em dev (limites muito altos)
     ThrottlerModule.forRoot([

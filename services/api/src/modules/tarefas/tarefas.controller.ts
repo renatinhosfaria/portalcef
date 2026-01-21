@@ -10,6 +10,7 @@ import {
   Req,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
 } from "@nestjs/common";
 
 import { Roles } from "../../common/decorators/roles.decorator";
@@ -159,50 +160,6 @@ export class TarefasController {
     };
   }
 
-  /**
-   * GET /tarefas/:id
-   * Busca tarefa por ID
-   */
-  @Get(":id")
-  @Roles(...VISUALIZAR_ACCESS)
-  async getTarefaById(
-    @Req() req: { user: UserContext },
-    @Param("id") id: string,
-  ) {
-    const tarefa = await this.tarefasService.findById(id);
-
-    if (!tarefa) {
-      throw new NotFoundException({
-        code: "TAREFA_NOT_FOUND",
-        message: "Tarefa não encontrada",
-      });
-    }
-
-    return {
-      success: true,
-      data: tarefa,
-    };
-  }
-
-  /**
-   * PATCH /tarefas/:id/concluir
-   * Marca tarefa como concluída
-   */
-  @Patch(":id/concluir")
-  @Roles(...VISUALIZAR_ACCESS)
-  async concluirTarefa(
-    @Req() req: { user: UserContext },
-    @Param("id") id: string,
-  ) {
-    const tarefa = await this.tarefasService.concluir(id, req.user.userId);
-
-    return {
-      success: true,
-      message: "Tarefa concluída com sucesso",
-      data: tarefa,
-    };
-  }
-
   // ============================================
   // Endpoints de Estatísticas
   // ============================================
@@ -238,6 +195,74 @@ export class TarefasController {
           LOJA: 0,
         },
       },
+    };
+  }
+
+  /**
+   * GET /tarefas/:id
+   * Busca tarefa por ID
+   *
+   * SEGURANÇA:
+   * - Valida isolamento de tenant (schoolId)
+   * - Valida autorização (criador ou responsável)
+   */
+  @Get(":id")
+  @Roles(...VISUALIZAR_ACCESS)
+  async getTarefaById(
+    @Req() req: { user: UserContext },
+    @Param("id") id: string,
+  ) {
+    const tarefa = await this.tarefasService.findById(id);
+
+    if (!tarefa) {
+      throw new NotFoundException({
+        code: "TAREFA_NOT_FOUND",
+        message: "Tarefa não encontrada",
+      });
+    }
+
+    // Validar isolamento de tenant
+    if (tarefa.schoolId !== req.user.schoolId) {
+      throw new ForbiddenException({
+        code: "TENANT_ISOLATION_VIOLATION",
+        message: "Acesso negado à tarefa de outra escola",
+      });
+    }
+
+    // Validar autorização - usuário deve ser criador ou responsável
+    const isAuthorized =
+      tarefa.criadoPor === req.user.userId ||
+      tarefa.responsavel === req.user.userId;
+
+    if (!isAuthorized) {
+      throw new ForbiddenException({
+        code: "UNAUTHORIZED_ACCESS",
+        message: "Usuário não tem permissão para visualizar esta tarefa",
+      });
+    }
+
+    return {
+      success: true,
+      data: tarefa,
+    };
+  }
+
+  /**
+   * PATCH /tarefas/:id/concluir
+   * Marca tarefa como concluída
+   */
+  @Patch(":id/concluir")
+  @Roles(...VISUALIZAR_ACCESS)
+  async concluirTarefa(
+    @Req() req: { user: UserContext },
+    @Param("id") id: string,
+  ) {
+    const tarefa = await this.tarefasService.concluir(id, req.user.userId);
+
+    return {
+      success: true,
+      message: "Tarefa concluída com sucesso",
+      data: tarefa,
     };
   }
 }
