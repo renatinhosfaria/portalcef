@@ -1,7 +1,8 @@
+import { cn } from "@essencia/ui/lib/utils";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Clock, AlertTriangle } from "lucide-react";
-import { cn } from "@essencia/ui/lib/utils";
+
 import {
   calcularDiasRestantes,
   isAtrasada,

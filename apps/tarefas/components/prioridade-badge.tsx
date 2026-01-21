@@ -1,6 +1,6 @@
+import type { TarefaPrioridade } from "@essencia/shared/types";
 import { Badge } from "@essencia/ui/components/badge";
 import { cn } from "@essencia/ui/lib/utils";
-import type { TarefaPrioridade } from "@essencia/shared/types";
 
 interface PrioridadeBadgeProps {
   prioridade: TarefaPrioridade;

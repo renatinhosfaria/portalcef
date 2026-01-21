@@ -1,11 +1,16 @@
+import { DashboardContent } from "./dashboard-content";
+
 export default function TarefasPage() {
   return (
-    <div className="flex min-h-screen items-center justify-center">
-      <div className="text-center">
-        <h1 className="text-4xl font-bold">Tarefas</h1>
-        <p className="mt-4 text-muted-foreground">
-          Sistema de gerenciamento de tarefas
-        </p>
+    <div className="container mx-auto py-8">
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold">Tarefas</h1>
+          <p className="text-muted-foreground">
+            Gerencie e acompanhe suas tarefas
+          </p>
+        </div>
+        <DashboardContent />
       </div>
     </div>
   );
