@@ -8,14 +8,13 @@ import {
   Body,
   Query,
   Req,
-  NotFoundException,
   BadRequestException,
-  ForbiddenException,
 } from "@nestjs/common";
 
 import { Roles } from "../../common/decorators/roles.decorator";
 import { AuthGuard } from "../../common/guards/auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
+import { TarefaAccessGuard } from "./guards/tarefa-access.guard";
 import { TarefasService, type UserContext } from "./tarefas.service";
 import {
   type CriarTarefaDto,
@@ -203,44 +202,19 @@ export class TarefasController {
    * Busca tarefa por ID
    *
    * SEGURANÇA:
-   * - Valida isolamento de tenant (schoolId)
-   * - Valida autorização (criador ou responsável)
+   * - Guard valida isolamento de tenant (schoolId)
+   * - Guard valida autorização baseada em role e relacionamento
    */
   @Get(":id")
   @Roles(...VISUALIZAR_ACCESS)
+  @UseGuards(TarefaAccessGuard)
   async getTarefaById(
     @Req() req: { user: UserContext },
     @Param("id") id: string,
   ) {
     const tarefa = await this.tarefasService.findById(id);
 
-    if (!tarefa) {
-      throw new NotFoundException({
-        code: "TAREFA_NOT_FOUND",
-        message: "Tarefa não encontrada",
-      });
-    }
-
-    // Validar isolamento de tenant
-    if (tarefa.schoolId !== req.user.schoolId) {
-      throw new ForbiddenException({
-        code: "TENANT_ISOLATION_VIOLATION",
-        message: "Acesso negado à tarefa de outra escola",
-      });
-    }
-
-    // Validar autorização - usuário deve ser criador ou responsável
-    const isAuthorized =
-      tarefa.criadoPor === req.user.userId ||
-      tarefa.responsavel === req.user.userId;
-
-    if (!isAuthorized) {
-      throw new ForbiddenException({
-        code: "UNAUTHORIZED_ACCESS",
-        message: "Usuário não tem permissão para visualizar esta tarefa",
-      });
-    }
-
+    // Guard já validou autorização e existência da tarefa
     return {
       success: true,
       data: tarefa,
@@ -253,6 +227,7 @@ export class TarefasController {
    */
   @Patch(":id/concluir")
   @Roles(...VISUALIZAR_ACCESS)
+  @UseGuards(TarefaAccessGuard)
   async concluirTarefa(
     @Req() req: { user: UserContext },
     @Param("id") id: string,
