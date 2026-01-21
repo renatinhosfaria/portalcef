@@ -1,7 +1,10 @@
 'use client';
 
+import { useTenant } from "@essencia/shared/providers/tenant";
 import { Save, Store, CreditCard, Settings2, Shield, Power } from 'lucide-react';
 import { useEffect, useState } from 'react';
+
+import { apiFetch } from '../../lib/api';
 
 interface ShopSettings {
     id: string;
@@ -13,10 +16,10 @@ interface ShopSettings {
     updatedAt: string;
 }
 
-// TODO: Obter unitId da sessão do usuário
-const UNIT_ID = 'default-unit-id';
+
 
 export default function ConfiguracoesPage() {
+    const { unitId } = useTenant();
     const [_settings, setSettings] = useState<ShopSettings | null>(null);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -29,20 +32,22 @@ export default function ConfiguracoesPage() {
     const [pickupInstructions, setPickupInstructions] = useState('');
 
     useEffect(() => {
-        loadSettings();
-    }, []);
+        if (unitId) {
+            loadSettings();
+        }
+    }, [unitId]);
 
     const loadSettings = async () => {
         try {
             setLoading(true);
             setError(null);
-            
-            const response = await fetch(`/api/shop/admin/settings?unitId=${UNIT_ID}`, {
+
+            const response = await apiFetch(`/api/shop/admin/settings/${unitId}`, {
                 credentials: 'include',
             });
-            
+
             const data = await response.json();
-            
+
             if (data.success && data.data) {
                 setSettings(data.data);
                 setMaxInstallments(data.data.maxInstallments || 1);
@@ -67,11 +72,13 @@ export default function ConfiguracoesPage() {
     };
 
     const handleSave = async () => {
+        if (!unitId) return;
+
         try {
             setSaving(true);
             setError(null);
 
-            const response = await fetch(`/api/shop/admin/settings?unitId=${UNIT_ID}`, {
+            const response = await apiFetch(`/api/shop/admin/settings/${unitId}`, {
                 method: 'PATCH',
                 headers: {
                     'Content-Type': 'application/json',
@@ -154,9 +161,8 @@ export default function ConfiguracoesPage() {
                 {/* Status da Loja */}
                 <div className="admin-card">
                     <div className="flex items-center gap-3 mb-6">
-                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                            isShopEnabled ? 'bg-emerald-100' : 'bg-slate-100'
-                        }`}>
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isShopEnabled ? 'bg-emerald-100' : 'bg-slate-100'
+                            }`}>
                             <Power className={`w-5 h-5 ${isShopEnabled ? 'text-emerald-600' : 'text-slate-400'}`} />
                         </div>
                         <h2 className="text-lg font-semibold text-slate-800">Status da Loja</h2>
@@ -166,8 +172,8 @@ export default function ConfiguracoesPage() {
                             <div>
                                 <p className="font-medium text-slate-800">Loja Habilitada</p>
                                 <p className="text-sm text-slate-500 mt-0.5">
-                                    {isShopEnabled 
-                                        ? 'Clientes podem fazer compras' 
+                                    {isShopEnabled
+                                        ? 'Clientes podem fazer compras'
                                         : 'Loja está temporariamente fechada'
                                     }
                                 </p>
@@ -175,14 +181,12 @@ export default function ConfiguracoesPage() {
                             <button
                                 type="button"
                                 onClick={() => setIsShopEnabled(!isShopEnabled)}
-                                className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[#A3D154] focus:ring-offset-2 ${
-                                    isShopEnabled ? 'bg-[#A3D154]' : 'bg-slate-200'
-                                }`}
+                                className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[#A3D154] focus:ring-offset-2 ${isShopEnabled ? 'bg-[#A3D154]' : 'bg-slate-200'
+                                    }`}
                             >
                                 <span
-                                    className={`inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                                        isShopEnabled ? 'translate-x-5' : 'translate-x-0'
-                                    }`}
+                                    className={`inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${isShopEnabled ? 'translate-x-5' : 'translate-x-0'
+                                        }`}
                                 />
                             </button>
                         </div>
@@ -250,7 +254,7 @@ export default function ConfiguracoesPage() {
                                 Essas instruções serão exibidas no voucher de compra após a confirmação do pagamento.
                             </p>
                         </div>
-                        
+
                         {/* Preview */}
                         {pickupInstructions && (
                             <div className="mt-4">

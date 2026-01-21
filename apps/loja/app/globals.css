@@ -2,81 +2,236 @@
 @tailwind components;
 @tailwind utilities;
 
-@layer components {
-  /* Shop Card - Clean & Modern */
-  .shop-card {
-    @apply bg-white rounded-lg border border-slate-200 shadow-sm transition-all duration-200 hover:shadow-md hover:border-slate-300;
+/* ========================================
+   🎨 PORTAL CEF STORE - DESIGN SYSTEM
+   Identidade Visual Baseada nas Cores da Marca
+   Verde: #A3D154 | Laranja: #F59E0B
+   ======================================== */
+
+@layer base {
+  :root {
+    /* === Cores da Marca === */
+    --brand-green: #A3D154;
+    --brand-green-dark: #8FBD3F;
+    --brand-green-darker: #5a7a1f;
+    --brand-green-light: #DCFCE7;
+    --brand-green-lighter: #F0FDF4;
+
+    --brand-orange: #F59E0B;
+    --brand-orange-dark: #D97706;
+    --brand-orange-light: #FCD34D;
+    --brand-orange-lighter: #FEF3C7;
+
+    /* === Paleta Neutra (Warm Tones) === */
+    --stone-50: #FAFAF9;
+    --stone-100: #F5F5F4;
+    --stone-200: #E7E5E4;
+    --stone-300: #D6D3D1;
+    --stone-400: #A8A29E;
+    --stone-500: #78716C;
+    --stone-600: #57534E;
+    --stone-700: #44403C;
+    --stone-800: #292524;
+    --stone-900: #1C1917;
+
+    /* === Cores de Status === */
+    --success: var(--brand-green);
+    --warning: var(--brand-orange);
+    --danger: #EF4444;
+    --info: #3B82F6;
+
+    /* === Tipografia === */
+    --font-display: 'Outfit', system-ui, sans-serif;
+    --font-body: 'DM Sans', system-ui, sans-serif;
   }
 
-  /* Glass Utilities - Subtle */
-  .glass {
-    @apply bg-white/90 backdrop-blur-sm border border-slate-200;
+  /* Smooth scroll */
+  html {
+    scroll-behavior: smooth;
   }
 
-  .glass-dark {
-    @apply bg-slate-900/95 backdrop-blur-sm border border-slate-700 text-white;
-  }
-
-  /* Buttons - Clean without gradients */
-  .btn-shop-primary {
-    @apply bg-[#A3D154] text-white font-semibold px-6 py-3 rounded-lg
-    hover:bg-[#8FBD3F] transition-colors duration-150
-    disabled:opacity-50 disabled:cursor-not-allowed;
-  }
-
-  .btn-shop-secondary {
-    @apply bg-white text-slate-800 font-semibold px-6 py-3 rounded-lg border border-slate-200
-    hover:border-slate-300 hover:bg-slate-50 transition-colors duration-150;
-  }
-
-  .btn-shop-outline {
-    @apply bg-transparent text-[#A3D154] font-semibold px-6 py-3 rounded-lg border-2 border-[#A3D154]
-    hover:bg-[#A3D154]/10 transition-colors duration-150;
-  }
-
-  /* Form Elements */
-  .input-shop {
-    @apply w-full px-4 py-3 rounded-lg border border-slate-200 bg-white transition-colors duration-150
-    focus:outline-none focus:ring-2 focus:ring-[#A3D154]/20 focus:border-[#A3D154];
-  }
-
-  .select-shop {
-    @apply w-full px-4 py-3 rounded-lg border border-slate-200 bg-white transition-colors duration-150
-    focus:outline-none focus:ring-2 focus:ring-[#A3D154]/20 focus:border-[#A3D154] appearance-none cursor-pointer;
-  }
-
-  /* Status Badges */
-  .badge-shop {
-    @apply inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium;
-  }
-
-  .badge-shop-success {
-    @apply bg-[#A3D154]/15 text-[#5a7a1f];
-  }
-
-  .badge-shop-warning {
-    @apply bg-amber-50 text-amber-700;
-  }
-
-  .badge-shop-danger {
-    @apply bg-red-50 text-red-700;
-  }
-
-  .badge-shop-info {
-    @apply bg-blue-50 text-blue-700;
+  /* Otimização de renderização */
+  body {
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 }
 
-/* Animations - Subtle & Fast */
+@layer utilities {
+  /* === Tipografia Customizada === */
+  .font-display {
+    font-family: var(--font-display);
+  }
+
+  .font-body {
+    font-family: var(--font-body);
+  }
+
+  /* === Gradientes da Marca === */
+  .bg-gradient-brand {
+    background: linear-gradient(135deg, #A3D154 0%, #8FBD3F 100%);
+  }
+
+  .bg-gradient-brand-radial {
+    background: radial-gradient(circle at top right, #A3D154 0%, #5a7a1f 100%);
+  }
+
+  .bg-gradient-hero {
+    background: linear-gradient(135deg, #1C1917 0%, #292524 50%, #1a2e1a 100%);
+  }
+
+  .text-gradient-brand {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-[#A3D154] to-[#8FBD3F];
+  }
+
+  .text-gradient-warm {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-[#F59E0B] to-[#D97706];
+  }
+
+  /* === Efeitos de Glow === */
+  .glow-green {
+    box-shadow: 0 0 20px rgba(163, 209, 84, 0.3), 0 0 40px rgba(163, 209, 84, 0.1);
+  }
+
+  .glow-orange {
+    box-shadow: 0 0 20px rgba(245, 158, 11, 0.3), 0 0 40px rgba(245, 158, 11, 0.1);
+  }
+
+  /* === Texturas === */
+  .noise-texture {
+    position: relative;
+  }
+
+  .noise-texture::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    opacity: 0.03;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+    pointer-events: none;
+  }
+}
+
+@layer components {
+  /* =======================================
+     COMPONENTES DA LOJA
+     ======================================= */
+
+  /* === Cards === */
+  .shop-card {
+    @apply bg-white rounded-xl border-2 border-stone-200
+    transition-all duration-300 ease-out
+    hover:border-[#A3D154] hover:shadow-xl hover:-translate-y-1;
+  }
+
+  .shop-card-featured {
+    @apply shop-card relative overflow-hidden;
+  }
+
+  .shop-card-featured::before {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    background: linear-gradient(135deg, #A3D154 0%, #F59E0B 100%);
+    border-radius: 0.875rem;
+    opacity: 0;
+    transition: opacity 300ms;
+    z-index: -1;
+  }
+
+  .shop-card-featured:hover::before {
+    opacity: 0.15;
+  }
+
+  /* === Glass Effects === */
+  .glass {
+    @apply bg-white/95 backdrop-blur-md border border-stone-200 shadow-sm;
+  }
+
+  .glass-dark {
+    @apply bg-stone-900/95 backdrop-blur-md border border-stone-700 text-white;
+  }
+
+  /* === Botões === */
+  .btn-primary {
+    @apply bg-[#A3D154] text-white font-semibold px-6 py-3 rounded-xl
+    hover:bg-[#8FBD3F] active:scale-[0.98]
+    transition-all duration-200 ease-out
+    disabled:opacity-50 disabled:cursor-not-allowed
+    shadow-lg shadow-[#A3D154]/20 hover:shadow-xl hover:shadow-[#A3D154]/30;
+  }
+
+  .btn-secondary {
+    @apply bg-[#F59E0B] text-white font-semibold px-6 py-3 rounded-xl
+    hover:bg-[#D97706] active:scale-[0.98]
+    transition-all duration-200 ease-out
+    shadow-lg shadow-[#F59E0B]/20 hover:shadow-xl hover:shadow-[#F59E0B]/30;
+  }
+
+  .btn-outline {
+    @apply bg-transparent text-[#A3D154] font-semibold px-6 py-3 rounded-xl
+    border-2 border-[#A3D154]
+    hover:bg-[#A3D154]/10 active:scale-[0.98]
+    transition-all duration-200 ease-out;
+  }
+
+  .btn-ghost {
+    @apply bg-stone-100 text-stone-700 font-medium px-6 py-3 rounded-xl
+    hover:bg-stone-200 active:scale-[0.98]
+    transition-all duration-200 ease-out;
+  }
+
+  /* === Form Elements === */
+  .input-shop {
+    @apply w-full px-4 py-3 rounded-xl border-2 border-stone-200 bg-white
+    transition-all duration-200 ease-out
+    focus:outline-none focus:border-[#A3D154] focus:ring-4 focus:ring-[#A3D154]/10;
+  }
+
+  .input-shop-search {
+    @apply input-shop pl-11;
+  }
+
+  /* === Badges === */
+  .badge {
+    @apply inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold uppercase tracking-wide;
+  }
+
+  .badge-success {
+    @apply bg-[#F0FDF4] text-[#5a7a1f] border border-[#A3D154]/20;
+  }
+
+  .badge-warning {
+    @apply bg-[#FEF3C7] text-[#D97706] border border-[#F59E0B]/20;
+  }
+
+  .badge-danger {
+    @apply bg-red-50 text-red-700 border border-red-200;
+  }
+
+  .badge-info {
+    @apply bg-blue-50 text-blue-700 border border-blue-200;
+  }
+}
+
+/* =======================================
+   ANIMAÇÕES
+   ======================================= */
+
 @keyframes fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 @keyframes fade-in-up {
   from {
     opacity: 0;
-    transform: translateY(8px);
+    transform: translateY(24px);
   }
   to {
     opacity: 1;
@@ -84,23 +239,108 @@
   }
 }
 
+@keyframes fade-in-down {
+  from {
+    opacity: 0;
+    transform: translateY(-24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slide-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes glow-pulse {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(163, 209, 84, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 40px rgba(163, 209, 84, 0.6), 0 0 60px rgba(163, 209, 84, 0.3);
+  }
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+/* Aplicação das animações */
 .animate-fade-in {
-  animation: fade-in 200ms ease-out forwards;
+  animation: fade-in 400ms ease-out forwards;
 }
 
 .animate-fade-in-up {
-  animation: fade-in-up 200ms ease-out forwards;
+  animation: fade-in-up 500ms ease-out forwards;
 }
 
-.animate-delay-75 {
-  animation-delay: 75ms;
+.animate-fade-in-down {
+  animation: fade-in-down 400ms ease-out forwards;
 }
 
-.animate-delay-150 {
-  animation-delay: 150ms;
+.animate-slide-in-right {
+  animation: slide-in-right 400ms ease-out forwards;
 }
 
-/* Print styles para voucher */
+.animate-scale-in {
+  animation: scale-in 300ms ease-out forwards;
+}
+
+.animate-glow-pulse {
+  animation: glow-pulse 2s ease-in-out infinite;
+}
+
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+/* Delays para animações escalonadas */
+.delay-75 { animation-delay: 75ms; }
+.delay-100 { animation-delay: 100ms; }
+.delay-150 { animation-delay: 150ms; }
+.delay-200 { animation-delay: 200ms; }
+.delay-300 { animation-delay: 300ms; }
+.delay-500 { animation-delay: 500ms; }
+
+/* =======================================
+   RESPONSIVIDADE
+   ======================================= */
+
+@media (max-width: 768px) {
+  .shop-card {
+    @apply hover:translate-y-0;
+  }
+}
+
+/* =======================================
+   IMPRESSÃO (para vouchers)
+   ======================================= */
+
 @media print {
   body {
     @apply bg-white text-black;
@@ -113,4 +353,26 @@
   .voucher-code {
     @apply text-6xl font-mono;
   }
+}
+
+/* =======================================
+   SCROLLBAR CUSTOMIZADA
+   ======================================= */
+
+::-webkit-scrollbar {
+  width: 12px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--stone-100);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--brand-green);
+  border-radius: 6px;
+  border: 3px solid var(--stone-100);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--brand-green-dark);
 }

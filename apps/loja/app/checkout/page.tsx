@@ -142,7 +142,7 @@ export default function CheckoutPage() {
             <div className="text-sm">
               <p className="font-medium text-amber-800 mb-1">Como funciona?</p>
               <p className="text-amber-700">
-                Você receberá um voucher para pagamento presencial na escola. Válido por 7 dias.
+                Você receberá um voucher para pagamento presencial na escola. Válido por 5 dias.
               </p>
             </div>
           </div>

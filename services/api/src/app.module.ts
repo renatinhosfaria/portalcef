@@ -4,6 +4,7 @@ import { ThrottlerModule, ThrottlerGuard } from "@nestjs/throttler";
 import { APP_GUARD } from "@nestjs/core";
 
 import { CorrelationIdMiddleware } from "./common/middleware/correlation-id.middleware";
+import { DatabaseModule } from "./common/database/database.module";
 import { StorageModule } from "./common/storage/storage.module";
 import { AuthModule } from "./modules/auth/auth.module";
 import { CalendarModule } from "./modules/calendar/calendar.module";
@@ -40,6 +41,8 @@ import { TarefasModule } from "./modules/tarefas/tarefas.module";
         limit: 1000, // 1000 requisições por hora (desabilitado em dev)
       },
     ]),
+    // Database (global module)
+    DatabaseModule,
     HealthModule,
     SetupModule,
     AuthModule,

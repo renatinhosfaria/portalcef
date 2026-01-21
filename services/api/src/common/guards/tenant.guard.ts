@@ -23,6 +23,7 @@ const FULL_UNIT_ACCESS_ROLES: UserRole[] = [
   "gerente_financeiro",
   "coordenadora_geral",
   "analista_pedagogico",
+  "auxiliar_administrativo",
 ];
 
 /**

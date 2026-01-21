@@ -17,6 +17,7 @@ export function ProductDetailCarousel({
   productName,
 }: ProductDetailCarouselProps) {
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [imageRatios, setImageRatios] = useState<Record<string, number>>({});
 
   const displayImages = images.length > 0
     ? images
@@ -29,6 +30,8 @@ export function ProductDetailCarousel({
         ];
 
   const hasMultiple = displayImages.length > 1;
+  const currentImage = displayImages[selectedIndex];
+  const currentAspectRatio = imageRatios[currentImage] ?? 1;
 
   const handlePrevious = () => {
     setSelectedIndex(
@@ -43,7 +46,10 @@ export function ProductDetailCarousel({
   return (
     <div className="flex flex-col gap-3">
       {/* Main Image */}
-      <div className="relative aspect-square w-full overflow-hidden rounded-lg bg-slate-100 border border-slate-200">
+      <div
+        className="relative w-full overflow-hidden rounded-lg bg-slate-100 border border-slate-200"
+        style={{ aspectRatio: currentAspectRatio }}
+      >
         <motion.div
           drag={hasMultiple ? 'x' : false}
           dragConstraints={{ left: 0, right: 0 }}
@@ -64,13 +70,21 @@ export function ProductDetailCarousel({
               className="relative w-full h-full"
             >
               <Image
-                src={displayImages[selectedIndex]}
+                src={currentImage}
                 alt={`${productName} - imagem ${selectedIndex + 1} de ${displayImages.length}`}
                 fill
-                className="object-cover"
+                className="object-contain"
                 priority={selectedIndex === 0}
                 sizes="(max-width: 768px) 100vw, 50vw"
                 unoptimized
+                onLoadingComplete={(img) => {
+                  const { naturalWidth, naturalHeight } = img;
+                  if (!naturalWidth || !naturalHeight) return;
+                  setImageRatios((prev) => {
+                    if (prev[currentImage]) return prev;
+                    return { ...prev, [currentImage]: naturalWidth / naturalHeight };
+                  });
+                }}
               />
             </motion.div>
           </AnimatePresence>

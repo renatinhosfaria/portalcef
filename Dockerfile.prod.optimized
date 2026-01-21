@@ -1,0 +1,199 @@
+# =============================================================================
+# Multi-stage Dockerfile for PRODUCTION - ULTRA OPTIMIZED
+# Portal Essencia Feliz - Maximum Performance
+# =============================================================================
+# NOVA VERSÃO COM OTIMIZAÇÕES ADICIONAIS:
+# ✅ Cache inline para registry remoto
+# ✅ Cache de pacotes APK
+# ✅ COPY mais eficiente de node_modules
+# ✅ Remoção agressiva de arquivos desnecessários
+# ✅ Otimização de layers com merge estratégico
+# ✅ pnpm store compartilhado entre stages
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Stage 1: Base - Node.js with pnpm (pinned version)
+# -----------------------------------------------------------------------------
+FROM node:22-alpine AS base
+
+# Enable BuildKit inline cache (permite cache remoto via registry)
+ARG BUILDKIT_INLINE_CACHE=1
+
+# Install build dependencies with cache mount (evita redownload)
+RUN --mount=type=cache,target=/var/cache/apk \
+    apk add --no-cache \
+    dumb-init \
+    && corepack enable \
+    && corepack prepare pnpm@9.15.1 --activate
+
+# Set working directory
+WORKDIR /app
+
+# Configure pnpm to use shared store (melhor cache)
+RUN pnpm config set store-dir /root/.local/share/pnpm/store
+
+# -----------------------------------------------------------------------------
+# Stage 2: Dependencies - Install all dependencies (with cache optimization)
+# -----------------------------------------------------------------------------
+FROM base AS dependencies
+
+# Copy ONLY dependency manifests first (maximizes cache hits)
+# Merge root configs em uma única layer
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
+
+# Copy all package.json files in a single optimized layer
+# Usando COPY com paths explícitos (mais eficiente que wildcards)
+COPY apps/calendario/package.json ./apps/calendario/package.json
+COPY apps/escolas/package.json ./apps/escolas/package.json
+COPY apps/home/package.json ./apps/home/package.json
+COPY apps/login/package.json ./apps/login/package.json
+COPY apps/loja-admin/package.json ./apps/loja-admin/package.json
+COPY apps/loja/package.json ./apps/loja/package.json
+COPY apps/planejamento/package.json ./apps/planejamento/package.json
+COPY apps/turmas/package.json ./apps/turmas/package.json
+COPY apps/usuarios/package.json ./apps/usuarios/package.json
+COPY services/api/package.json ./services/api/package.json
+COPY packages/components/package.json ./packages/components/package.json
+COPY packages/config/package.json ./packages/config/package.json
+COPY packages/db/package.json ./packages/db/package.json
+COPY packages/lib/package.json ./packages/lib/package.json
+COPY packages/shared/package.json ./packages/shared/package.json
+COPY packages/tailwind-config/package.json ./packages/tailwind-config/package.json
+COPY packages/ui/package.json ./packages/ui/package.json
+
+# Install ALL dependencies with maximum cache efficiency
+# - Cache mount para pnpm store (reutiliza downloads)
+# - --prefer-offline (usa cache quando possível)
+# - --frozen-lockfile (garante reprodutibilidade)
+RUN --mount=type=cache,target=/root/.local/share/pnpm/store,id=pnpm-store \
+    pnpm install --frozen-lockfile --prefer-offline
+
+# -----------------------------------------------------------------------------
+# Stage 3: Builder - Build all apps and services
+# -----------------------------------------------------------------------------
+FROM base AS builder
+
+# Copy pnpm store from dependencies (reutiliza cache)
+COPY --from=dependencies /root/.local/share/pnpm/store /root/.local/share/pnpm/store
+
+# Copy installed node_modules (mais eficiente que wildcards)
+COPY --from=dependencies /app/node_modules ./node_modules
+COPY --from=dependencies /app/apps/calendario/node_modules ./apps/calendario/node_modules
+COPY --from=dependencies /app/apps/escolas/node_modules ./apps/escolas/node_modules
+COPY --from=dependencies /app/apps/home/node_modules ./apps/home/node_modules
+COPY --from=dependencies /app/apps/login/node_modules ./apps/login/node_modules
+COPY --from=dependencies /app/apps/loja-admin/node_modules ./apps/loja-admin/node_modules
+COPY --from=dependencies /app/apps/loja/node_modules ./apps/loja/node_modules
+COPY --from=dependencies /app/apps/planejamento/node_modules ./apps/planejamento/node_modules
+COPY --from=dependencies /app/apps/turmas/node_modules ./apps/turmas/node_modules
+COPY --from=dependencies /app/apps/usuarios/node_modules ./apps/usuarios/node_modules
+COPY --from=dependencies /app/services/api/node_modules ./services/api/node_modules
+COPY --from=dependencies /app/packages/components/node_modules ./packages/components/node_modules
+COPY --from=dependencies /app/packages/config/node_modules ./packages/config/node_modules
+COPY --from=dependencies /app/packages/db/node_modules ./packages/db/node_modules
+COPY --from=dependencies /app/packages/lib/node_modules ./packages/lib/node_modules
+COPY --from=dependencies /app/packages/shared/node_modules ./packages/shared/node_modules
+COPY --from=dependencies /app/packages/tailwind-config/node_modules ./packages/tailwind-config/node_modules
+COPY --from=dependencies /app/packages/ui/node_modules ./packages/ui/node_modules
+
+# Copy dependency manifests and root config files (single layer)
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json tsconfig.json ./
+
+# Copy package.json files (needed for pnpm workspace)
+COPY apps/calendario/package.json ./apps/calendario/
+COPY apps/escolas/package.json ./apps/escolas/
+COPY apps/home/package.json ./apps/home/
+COPY apps/login/package.json ./apps/login/
+COPY apps/loja-admin/package.json ./apps/loja-admin/
+COPY apps/loja/package.json ./apps/loja/
+COPY apps/planejamento/package.json ./apps/planejamento/
+COPY apps/turmas/package.json ./apps/turmas/
+COPY apps/usuarios/package.json ./apps/usuarios/
+COPY services/api/package.json ./services/api/
+COPY packages/components/package.json ./packages/components/
+COPY packages/config/package.json ./packages/config/
+COPY packages/db/package.json ./packages/db/
+COPY packages/lib/package.json ./packages/lib/
+COPY packages/shared/package.json ./packages/shared/
+COPY packages/tailwind-config/package.json ./packages/tailwind-config/
+COPY packages/ui/package.json ./packages/ui/
+
+# Copy all source code (invalidates cache only when code changes)
+COPY apps ./apps
+COPY services ./services
+COPY packages ./packages
+
+# Create empty public folders for apps that don't have them (evita erros)
+RUN mkdir -p apps/loja/public
+
+# Build all apps and services using Turbo (parallelized)
+# - Cache mount para Turborepo cache (reutiliza builds)
+# - NODE_OPTIONS para otimizar memória do Node.js
+ENV NODE_ENV=production
+ENV NODE_OPTIONS="--max-old-space-size=4096"
+
+RUN --mount=type=cache,target=/app/.turbo,id=turbo-cache \
+    pnpm turbo build
+
+# Limpar arquivos desnecessários após build (reduz tamanho final)
+# - Remover arquivos de teste
+# - Remover source maps (opcional - remover se não precisar de debug)
+# - Remover .turbo cache local
+RUN find . -type f -name "*.test.ts" -delete && \
+    find . -type f -name "*.test.tsx" -delete && \
+    find . -type f -name "*.spec.ts" -delete && \
+    find . -type f -name "*.spec.tsx" -delete && \
+    find . -type d -name "__tests__" -exec rm -rf {} + 2>/dev/null || true && \
+    find . -type d -name "__mocks__" -exec rm -rf {} + 2>/dev/null || true && \
+    rm -rf .turbo
+
+# -----------------------------------------------------------------------------
+# Stage 4: Production - Minimal runtime image (production dependencies only)
+# -----------------------------------------------------------------------------
+FROM base AS production
+
+# Create user BEFORE copying files (otimização: evita chown lento)
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nodejs -u 1001
+
+# Copy everything from builder with correct ownership (evita chown -R)
+# Usar --link quando possível (Docker BuildKit optimization)
+COPY --from=builder --chown=nodejs:nodejs --link /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml /app/turbo.json ./
+
+# Copy apenas os arquivos necessários (exclui arquivos de dev)
+COPY --from=builder --chown=nodejs:nodejs --link /app/node_modules ./node_modules
+COPY --from=builder --chown=nodejs:nodejs --link /app/apps ./apps
+COPY --from=builder --chown=nodejs:nodejs --link /app/services ./services
+COPY --from=builder --chown=nodejs:nodejs --link /app/packages ./packages
+
+# Remove devDependencies to reduce image size (mantém estrutura workspace)
+# Usar pnpm prune com --prod para remover dependências de desenvolvimento
+RUN pnpm prune --prod
+
+# Remover arquivos desnecessários adicionais
+RUN find . -type f -name "*.md" ! -name "package.json" -delete && \
+    find . -type f -name "*.map" -delete && \
+    find . -type f -name "tsconfig*.json" -delete && \
+    find . -type d -name ".next/cache" -exec rm -rf {} + 2>/dev/null || true
+
+# Set production environment variables
+ENV NODE_ENV=production \
+    NODE_OPTIONS="--max-old-space-size=2048" \
+    NEXT_TELEMETRY_DISABLED=1
+
+# Expose all service ports (configurável via docker-compose)
+EXPOSE 3000 3002 3003 3004 3005 3006 3007 3008 3010 3011
+
+# Switch to non-root user
+USER nodejs
+
+# Use dumb-init to handle signals properly (previne zombie processes)
+ENTRYPOINT ["dumb-init", "--"]
+
+# Default command (pode ser sobrescrito pelo docker-compose)
+# Cada serviço em docker-compose.prod.yml sobrescreve com filtro específico
+CMD ["node", "--version"]
+
+# Health check (opcional - pode ser habilitado no docker-compose)
+HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
+    CMD node -e "require('http').get('http://localhost:' + process.env.PORT + '/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})" || exit 1

@@ -1,4 +1,5 @@
 import { Injectable } from "@nestjs/common";
+import { DatabaseService } from "../../common/database/database.service";
 
 /**
  * TarefasService
@@ -11,6 +12,8 @@ import { Injectable } from "@nestjs/common";
  */
 @Injectable()
 export class TarefasService {
+  constructor(private readonly db: DatabaseService) {}
+
   // Métodos serão implementados nas próximas tasks
   // Task 7: CRUD básico (criar, buscar, listar, atualizar, concluir, cancelar)
   // Task 8: Validações de permissões e acesso

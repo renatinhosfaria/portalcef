@@ -11,7 +11,7 @@ import { useEffect } from "react";
 
 import { CalendarView } from "@/features/calendar/components/calendar-view";
 
-// Roles de gestão com acesso ao calendário
+// Todos os usuários autenticados têm acesso ao calendário (visualização)
 const VIEW_ROLES = [
   "master",
   "diretora_geral",
@@ -24,6 +24,9 @@ const VIEW_ROLES = [
   "coordenadora_fundamental_ii",
   "coordenadora_medio",
   "analista_pedagogico",
+  "professora",
+  "auxiliar_administrativo",
+  "auxiliar_sala",
 ] as const;
 
 // Roles que podem criar/editar eventos

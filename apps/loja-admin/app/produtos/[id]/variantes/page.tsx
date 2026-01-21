@@ -9,6 +9,8 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 
+import { apiFetch } from '../../../../lib/api';
+
 interface Variant {
     id: string;
     size: string;
@@ -48,7 +50,7 @@ export default function VariantesPage() {
     const loadProduct = useCallback(async () => {
         try {
             setLoading(true);
-            const response = await fetch(`/api/shop/admin/products/${productId}/variants`);
+            const response = await apiFetch(`/api/shop/admin/products/${productId}/variants`);
 
             if (!response.ok) {
                 console.warn('Produto não encontrado:', response.status);
@@ -133,12 +135,12 @@ export default function VariantesPage() {
             };
 
             const isEditing = !!variantToEdit;
-            const url = isEditing
+            const path = isEditing
                 ? `/api/shop/admin/variants/${variantToEdit.id}`
                 : '/api/shop/admin/variants';
             const method = isEditing ? 'PATCH' : 'POST';
 
-            const res = await fetch(url, {
+            const res = await apiFetch(path, {
                 method,
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
@@ -169,7 +171,7 @@ export default function VariantesPage() {
         if (!confirmed) return;
 
         try {
-            const res = await fetch(`/api/shop/admin/variants/${variantId}`, {
+            const res = await apiFetch(`/api/shop/admin/variants/${variantId}`, {
                 method: 'DELETE',
             });
 

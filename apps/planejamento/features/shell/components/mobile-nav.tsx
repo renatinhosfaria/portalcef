@@ -1,14 +1,21 @@
 "use client";
 
 import { useTenant } from "@essencia/shared/providers/tenant";
-import { ClipboardList, Home, List, PlusCircle } from "lucide-react";
+import {
+  ClipboardList,
+  FileSearch,
+  Home,
+  LayoutDashboard,
+  List,
+} from "lucide-react";
 import Link from "next/link";
 
 import {
   getDashboardForRole,
+  isAnalystRole,
+  isCoordinatorRole,
   isCreatorRole,
   isManagerRole,
-  isReviewerRole,
 } from "../../../lib/role-groups";
 
 export function MobileNav() {
@@ -37,36 +44,47 @@ export function MobileNav() {
         <span className="text-xs font-medium">Inicio</span>
       </Link>
 
-      {/* New Planning - Only for creators (professora, auxiliar_sala) */}
+      {/* Planejamentos - For creators (professora, auxiliar_sala) */}
       {isCreatorRole(role) && (
-        <Link
-          href="/planejamentos/novo"
-          className="flex flex-col items-center justify-center gap-1 text-primary hover:text-primary/80 transition-colors"
-        >
-          <PlusCircle className="h-8 w-8" />
-          <span className="text-xs font-medium">Novo</span>
-        </Link>
-      )}
-
-      {/* Regencia - Only for reviewers (coordenadoras, analista) */}
-      {isReviewerRole(role) && (
-        <Link
-          href="/regencia"
-          className="flex flex-col items-center justify-center gap-1 text-primary hover:text-primary/80 transition-colors"
-        >
-          <ClipboardList className="h-8 w-8" />
-          <span className="text-xs font-medium">Regencia</span>
-        </Link>
-      )}
-
-      {/* List/History - For creators and managers */}
-      {(isCreatorRole(role) || isManagerRole(role)) && (
         <Link
           href="/planejamentos"
           className="flex flex-col items-center justify-center gap-1 text-muted-foreground hover:text-primary transition-colors"
         >
           <List className="h-6 w-6" />
-          <span className="text-xs font-medium">Lista</span>
+          <span className="text-xs font-medium">Quinzenas</span>
+        </Link>
+      )}
+
+      {/* Analise - For analysts */}
+      {isAnalystRole(role) && (
+        <Link
+          href="/analise"
+          className="flex flex-col items-center justify-center gap-1 text-primary hover:text-primary/80 transition-colors"
+        >
+          <FileSearch className="h-8 w-8" />
+          <span className="text-xs font-medium">Analise</span>
+        </Link>
+      )}
+
+      {/* Coordenacao - For coordinators */}
+      {isCoordinatorRole(role) && (
+        <Link
+          href="/coordenacao"
+          className="flex flex-col items-center justify-center gap-1 text-primary hover:text-primary/80 transition-colors"
+        >
+          <ClipboardList className="h-8 w-8" />
+          <span className="text-xs font-medium">Coordenacao</span>
+        </Link>
+      )}
+
+      {/* Gestao - For managers */}
+      {isManagerRole(role) && (
+        <Link
+          href="/gestao"
+          className="flex flex-col items-center justify-center gap-1 text-primary hover:text-primary/80 transition-colors"
+        >
+          <LayoutDashboard className="h-8 w-8" />
+          <span className="text-xs font-medium">Gestao</span>
         </Link>
       )}
     </nav>

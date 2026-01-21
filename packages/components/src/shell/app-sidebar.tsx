@@ -14,10 +14,54 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { usePathname } from "next/navigation";
 
 import { useTenant } from "@essencia/shared/providers/tenant";
 
 type ActivePage = "home" | "usuarios" | "escolas" | "turmas" | "planejamento" | "calendario" | "loja-admin";
+
+// Regras de acesso por módulo
+const MODULE_ACCESS_RULES = {
+  home: "ALL", // Todos os usuários
+  usuarios: ["master", "diretora_geral", "gerente_unidade", "gerente_financeiro"],
+  escolas: ["master"],
+  turmas: ["master", "diretora_geral", "gerente_unidade", "gerente_financeiro"],
+  planejamento: "ALL", // Todos os perfis pedagógicos
+  calendario: "ALL", // Todos os usuários
+  lojaAdmin: ["master", "diretora_geral", "gerente_unidade", "gerente_financeiro", "auxiliar_administrativo"],
+} as const;
+
+type ModuleKey = keyof typeof MODULE_ACCESS_RULES;
+
+/**
+ * Verifica se o usuário tem acesso a um módulo específico
+ * @param userRole - Role do usuário atual
+ * @param moduleKey - Chave do módulo a verificar
+ * @returns true se o usuário tem acesso ao módulo
+ */
+function hasModuleAccess(userRole: string, moduleKey: ModuleKey): boolean {
+  const allowedRoles = MODULE_ACCESS_RULES[moduleKey];
+
+  // Se for "ALL", todos têm acesso
+  if (allowedRoles === "ALL") return true;
+
+  // Verificar se o role do usuário está na lista
+  return (allowedRoles as readonly string[]).includes(userRole);
+}
+
+function getActivePageFromPath(pathname: string): ActivePage | null {
+  const normalizedPath = pathname.replace(/\/+$/, "");
+
+  if (normalizedPath === "" || normalizedPath === "/") return "home";
+  if (normalizedPath.startsWith("/usuarios")) return "usuarios";
+  if (normalizedPath.startsWith("/escolas")) return "escolas";
+  if (normalizedPath.startsWith("/turmas")) return "turmas";
+  if (normalizedPath.startsWith("/planejamento")) return "planejamento";
+  if (normalizedPath.startsWith("/calendario")) return "calendario";
+  if (normalizedPath.startsWith("/loja-admin")) return "loja-admin";
+
+  return null;
+}
 
 interface SidebarItemProps {
   icon: LucideIcon;
@@ -48,7 +92,8 @@ function SidebarItem({ icon: Icon, label, href, active }: SidebarItemProps) {
 
 export function AppSidebar() {
   const { role, name, schoolId, unitId, email } = useTenant();
-  const [activePage, setActivePage] = useState<ActivePage>("usuarios");
+  const pathname = usePathname();
+  const [activePage, setActivePage] = useState<ActivePage | null>(null);
 
   // Build a portable payload so other apps can hydrate tenant context
   // Memoized to avoid recalculating on every render
@@ -60,26 +105,87 @@ export function AppSidebar() {
     [schoolId, unitId, role, name, email],
   );
 
+  // Configuração de itens do menu
+  const menuItems = useMemo(() => [
+    {
+      key: "home" as ModuleKey,
+      icon: LayoutDashboard,
+      label: "Visão Geral",
+      href: `https://www.portalcef.com.br/?data=${tenantPayload}`,
+      activePage: "home" as ActivePage,
+    },
+    {
+      key: "usuarios" as ModuleKey,
+      icon: Users,
+      label: "Usuários",
+      href: `https://www.portalcef.com.br/usuarios?data=${tenantPayload}`,
+      activePage: "usuarios" as ActivePage,
+    },
+    {
+      key: "escolas" as ModuleKey,
+      icon: School,
+      label: "Gestão Escolar",
+      href: `https://www.portalcef.com.br/escolas?data=${tenantPayload}`,
+      activePage: "escolas" as ActivePage,
+    },
+    {
+      key: "turmas" as ModuleKey,
+      icon: GraduationCap,
+      label: "Turmas",
+      href: `https://www.portalcef.com.br/turmas?data=${tenantPayload}`,
+      activePage: "turmas" as ActivePage,
+    },
+    {
+      key: "planejamento" as ModuleKey,
+      icon: BookOpen,
+      label: "Planejamento",
+      href: `https://www.portalcef.com.br/planejamento?data=${tenantPayload}`,
+      activePage: "planejamento" as ActivePage,
+    },
+    {
+      key: "calendario" as ModuleKey,
+      icon: Calendar,
+      label: "Calendário",
+      href: `https://www.portalcef.com.br/calendario?data=${tenantPayload}`,
+      activePage: "calendario" as ActivePage,
+    },
+    {
+      key: "lojaAdmin" as ModuleKey,
+      icon: ShoppingBag,
+      label: "Loja",
+      href: `https://www.portalcef.com.br/loja-admin?data=${tenantPayload}`,
+      activePage: "loja-admin" as ActivePage,
+    },
+  ], [tenantPayload]);
+
+  // Filtrar itens do menu baseado nas permissões do usuário
+  const visibleMenuItems = useMemo(() => {
+    if (!role) return [];
+
+    return menuItems.filter(item => hasModuleAccess(role, item.key));
+  }, [role, menuItems]);
+
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const port = window.location.port;
-      if (port === "3000") {
-        setActivePage("home");
-      } else if (port === "3004") {
-        setActivePage("usuarios");
-      } else if (port === "3005") {
-        setActivePage("escolas");
-      } else if (port === "3006") {
-        setActivePage("turmas");
-      } else if (port === "3007") {
-        setActivePage("planejamento");
-      } else if (port === "3002") {
-        setActivePage("calendario");
-      } else if (port === "3011") {
-        setActivePage("loja-admin");
-      }
+    if (typeof window === "undefined") return;
+
+    const currentPath = window.location.pathname || pathname || "";
+    const activeFromPath = getActivePageFromPath(currentPath);
+    if (activeFromPath) {
+      setActivePage(activeFromPath);
+      return;
     }
-  }, []);
+
+    const port = window.location.port;
+    if (port === "3000") return setActivePage("home");
+    if (port === "3004") return setActivePage("usuarios");
+    if (port === "3005") return setActivePage("escolas");
+    if (port === "3006") return setActivePage("turmas");
+    if (port === "3007") return setActivePage("planejamento");
+    if (port === "3008") return setActivePage("calendario");
+    if (port === "3011") return setActivePage("loja-admin");
+
+    setActivePage(null);
+  }, [pathname]);
 
   const handleLogout = async () => {
     try {
@@ -106,50 +212,15 @@ export function AppSidebar() {
       </div>
 
       <nav className="flex flex-col gap-2 w-full px-4">
-        <SidebarItem
-          icon={LayoutDashboard}
-          label="Visão Geral"
-          href={`https://www.portalcef.com.br/?data=${tenantPayload}`}
-          active={activePage === "home"}
-        />
-        <SidebarItem
-          icon={Users}
-          label="Usuários"
-          href={`https://www.portalcef.com.br/usuarios?data=${tenantPayload}`}
-          active={activePage === "usuarios"}
-        />
-        {role === "master" && (
+        {visibleMenuItems.map((item) => (
           <SidebarItem
-            icon={School}
-            label="Gestão Escolar"
-            href={`https://www.portalcef.com.br/escolas?data=${tenantPayload}`}
-            active={activePage === "escolas"}
+            key={item.key}
+            icon={item.icon}
+            label={item.label}
+            href={item.href}
+            active={activePage === item.activePage}
           />
-        )}
-        <SidebarItem
-          icon={GraduationCap}
-          label="Turmas"
-          href={`https://www.portalcef.com.br/turmas?data=${tenantPayload}`}
-          active={activePage === "turmas"}
-        />
-        <SidebarItem
-          icon={BookOpen}
-          label="Planejamento"
-          href={`https://www.portalcef.com.br/planejamento?data=${tenantPayload}`}
-          active={activePage === "planejamento"}
-        />
-        <SidebarItem
-          icon={Calendar}
-          label="Calendário"
-          href={`https://www.portalcef.com.br/calendario?data=${tenantPayload}`}
-          active={activePage === "calendario"}
-        />
-        <SidebarItem
-          icon={ShoppingBag}
-          label="Loja"
-          href={`https://www.portalcef.com.br/loja-admin?data=${tenantPayload}`}
-          active={activePage === "loja-admin"}
-        />
+        ))}
       </nav>
 
       <div className="mt-auto flex flex-col gap-4 w-full px-6">

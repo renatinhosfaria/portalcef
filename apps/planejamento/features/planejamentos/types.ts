@@ -7,6 +7,7 @@ export interface Quinzena {
   startDate: Date;
   endDate: Date;
   deadline: Date;
+  semester: 1 | 2;
   status: QuinzenaStatus;
   deadlineStatus: DeadlineStatus;
   userParams?: {

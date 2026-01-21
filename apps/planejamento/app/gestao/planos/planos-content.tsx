@@ -53,7 +53,7 @@ import {
  * Segmentos disponiveis para filtro
  */
 const SEGMENTOS_OPTIONS = [
-  { value: "", label: "Todos os Segmentos" },
+  { value: "todos", label: "Todos os Segmentos" },
   { value: "BERCARIO", label: "Bercario" },
   { value: "INFANTIL", label: "Infantil" },
   { value: "FUNDAMENTAL_I", label: "Fundamental I" },
@@ -130,13 +130,13 @@ export function PlanosContent({
 
   // Estados de filtros
   const [status, setStatus] = useState(initialStatus);
-  const [segmento, setSegmento] = useState(initialSegmento || "");
+  const [segmento, setSegmento] = useState(initialSegmento || "todos");
   const [professora, setProfessora] = useState(initialProfessora || "");
   const [professoraInput, setProfessoraInput] = useState(initialProfessora || "");
   const [page, setPage] = useState(initialPage);
 
   // Hook de listagem
-  const { planos, pagination, isLoading, error, fetchPlanos } = useGestaoPlanos();
+  const { planos = [], pagination, isLoading, error, fetchPlanos } = useGestaoPlanos();
 
   /**
    * Busca planos com os filtros atuais
@@ -145,7 +145,7 @@ export function PlanosContent({
     fetchPlanos({
       status,
       quinzenaId: initialQuinzena,
-      segmentoId: segmento || undefined,
+      segmentoId: segmento === "todos" ? undefined : segmento,
       professora: professora || undefined,
       page,
       limit: 20,
@@ -178,7 +178,7 @@ export function PlanosContent({
       }
 
       if (novosFiltros.segmento !== undefined) {
-        if (novosFiltros.segmento === "") {
+        if (novosFiltros.segmento === "todos" || novosFiltros.segmento === "") {
           params.delete("segmento");
         } else {
           params.set("segmento", novosFiltros.segmento);
@@ -230,7 +230,7 @@ export function PlanosContent({
 
   const handleLimparFiltros = () => {
     setStatus("todos");
-    setSegmento("");
+    setSegmento("todos");
     setProfessora("");
     setProfessoraInput("");
     setPage(1);

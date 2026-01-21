@@ -1,11 +1,12 @@
 'use client';
 
-import { jsPDF } from 'jspdf';
+import { pdf } from '@react-pdf/renderer';
 import Link from 'next/link';
 import { use, useEffect, useState } from 'react';
 
 import { LoadingSpinner } from '@/components/Loading';
 import { OrderItemCard } from '@/components/OrderItemCard';
+import { VoucherPDF } from './VoucherPDF';
 
 interface OrderItem {
   id: string;
@@ -103,7 +104,7 @@ export default function VoucherPage({
             status: orderData.status,
             totalAmount: orderData.totalAmount,
             createdAt: orderData.createdAt,
-            expiresAt: orderData.expiresAt || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+            expiresAt: orderData.expiresAt || new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString(),
             customerName: orderData.customerName,
             customerPhone: orderData.customerPhone,
             pickupInstructions: 'Retire seu pedido na secretaria da unidade, de segunda a sexta, das 7h às 18h. Apresente o código de 6 dígitos acima.',
@@ -149,76 +150,17 @@ export default function VoucherPage({
     }
   };
 
+  const generatePdfBlob = async (): Promise<Blob> => {
+    if (!order) throw new Error('Order not loaded');
+    return await pdf(<VoucherPDF order={order} />).toBlob();
+  };
+
   const handleShareWhatsApp = async () => {
     if (!order || typeof window === 'undefined') return;
 
     setCopying(true);
     try {
-      // Gerar PDF em memória
-      const doc = new jsPDF();
-
-      // Header com gradiente azul
-      doc.setFillColor(59, 130, 246);
-      doc.rect(0, 0, 210, 45, 'F');
-      doc.setTextColor(255, 255, 255);
-      doc.setFontSize(22);
-      doc.text('VOUCHER DE RETIRADA', 105, 20, { align: 'center' });
-      doc.setFontSize(14);
-      doc.text(`Código: ${order.orderNumber}`, 105, 32, { align: 'center' });
-
-      // Informações do cliente
-      doc.setTextColor(0, 0, 0);
-      doc.setFontSize(11);
-      let y = 55;
-      doc.text(`Responsável: ${order.customerName}`, 20, y);
-      doc.text(`Telefone: ${order.customerPhone}`, 120, y);
-      y += 8;
-      doc.text(`Data: ${new Date(order.createdAt).toLocaleDateString('pt-BR')}`, 20, y);
-      doc.text(`Validade: ${new Date(order.expiresAt).toLocaleDateString('pt-BR')}`, 120, y);
-
-      // Código grande no centro
-      y += 15;
-      doc.setDrawColor(59, 130, 246);
-      doc.setLineWidth(2);
-      doc.roundedRect(50, y, 110, 25, 3, 3);
-      doc.setFontSize(28);
-      doc.setTextColor(59, 130, 246);
-      doc.text(order.orderNumber, 105, y + 17, { align: 'center' });
-
-      // Instruções
-      y += 35;
-      doc.setFontSize(10);
-      doc.setTextColor(100, 100, 100);
-      doc.text('Apresente este código na secretaria da unidade para retirar seus produtos.', 105, y, { align: 'center' });
-
-      // Itens do pedido
-      y += 15;
-      doc.setFontSize(12);
-      doc.setTextColor(0, 0, 0);
-      doc.text('Itens do Pedido:', 20, y);
-      y += 8;
-
-      doc.setFontSize(10);
-      order.items.forEach((item) => {
-        const itemText = `${item.quantity}x ${item.productName} (${item.variantSize}) - Aluno: ${item.studentName}`;
-        doc.text(itemText, 20, y);
-        const priceText = `R$ ${item.unitPrice.toFixed(2)}`;
-        doc.text(priceText, 180, y, { align: 'right' });
-        y += 7;
-      });
-
-      // Total
-      y += 5;
-      doc.setDrawColor(200, 200, 200);
-      doc.line(20, y, 190, y);
-      y += 8;
-      doc.setFontSize(14);
-      doc.setTextColor(59, 130, 246);
-      const totalReais = order.totalAmount / 100;
-      doc.text(`TOTAL: R$ ${totalReais.toFixed(2)}`, 180, y, { align: 'right' });
-
-      // Gerar blob do PDF
-      const pdfBlob = doc.output('blob');
+      const pdfBlob = await generatePdfBlob();
       const pdfFile = new File([pdfBlob], `voucher-${order.orderNumber}.pdf`, { type: 'application/pdf' });
 
       // Tentar usar Web Share API para compartilhar o arquivo (mobile)
@@ -230,7 +172,14 @@ export default function VoucherPage({
         });
       } else {
         // Desktop/WhatsApp Web: baixar o PDF e abrir WhatsApp com mensagem completa
-        doc.save(`voucher-${order.orderNumber}.pdf`);
+        const url = URL.createObjectURL(pdfBlob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `voucher-${order.orderNumber}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
 
         const link = `${window.location.origin}/pedido/${orderNumber}?phone=${phone}`;
         const totalFormatted = (order.totalAmount / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -275,60 +224,23 @@ _Válido até ${new Date(order.expiresAt).toLocaleDateString('pt-BR')}_`;
     }
   };
 
-  const handleDownloadPDF = () => {
+  const handleDownloadPDF = async () => {
     if (!order) return;
 
-    const doc = new jsPDF();
-
-    // Header
-    doc.setFillColor(59, 130, 246); // Blue
-    doc.rect(0, 0, 210, 40, 'F');
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(24);
-    doc.text('Voucher de Retirada', 105, 25, { align: 'center' });
-
-    // Order Info
-    doc.setTextColor(0, 0, 0);
-    doc.setFontSize(12);
-    doc.text(`Pedido #${order.orderNumber}`, 20, 60);
-    doc.text(`Status: ${order.status}`, 20, 70);
-    doc.text(`Total: R$ ${(order.totalAmount / 100).toFixed(2)}`, 20, 80);
-
-    // Customer
-    doc.text(`Responsável: ${order.customerName}`, 120, 60);
-    doc.text(`Telefone: ${order.customerPhone}`, 120, 70);
-    doc.text(`Data: ${new Date(order.createdAt).toLocaleDateString('pt-BR')}`, 120, 80);
-
-    // Code Box
-    doc.setDrawColor(0, 0, 0);
-    doc.rect(50, 95, 110, 30);
-    doc.setFontSize(30);
-    doc.setTextColor(59, 130, 246);
-    doc.text(order.orderNumber, 105, 115, { align: 'center' });
-
-    // Instructions
-    doc.setFontSize(10);
-    doc.setTextColor(100, 100, 100);
-    const splitInstructions = doc.splitTextToSize(order.pickupInstructions, 170);
-    doc.text(splitInstructions, 20, 140);
-
-    // Items
-    let y = 160;
-    doc.setFontSize(12);
-    doc.setTextColor(0, 0, 0);
-    doc.text('Itens do Pedido:', 20, y);
-    y += 10;
-
-    order.items.forEach((item) => {
-      const itemText = `${item.quantity}x ${item.productName} (${item.variantSize}) - Aluno: ${item.studentName}`;
-      doc.setFontSize(10);
-      doc.text(itemText, 20, y);
-      const priceText = `R$ ${item.unitPrice.toFixed(2)}`;
-      doc.text(priceText, 180, y, { align: 'right' });
-      y += 8;
-    });
-
-    doc.save(`voucher-${order.orderNumber}.pdf`);
+    try {
+      const blob = await generatePdfBlob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `voucher-${order.orderNumber}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Error generating PDF:', err);
+      window.alert('Erro ao gerar PDF para download.');
+    }
   };
 
   const handlePrint = () => {
@@ -473,7 +385,7 @@ _Válido até ${new Date(order.expiresAt).toLocaleDateString('pt-BR')}_`;
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 text-sm text-slate-600 no-print">
           <p className="font-semibold text-slate-800 mb-2">Importante:</p>
           <ul className="list-disc list-inside space-y-1">
-            <li>Este voucher é válido por 7 dias a partir da data do pedido</li>
+            <li>Este voucher é válido por 5 dias a partir da data do pedido</li>
             <li>Traga um documento de identificação com foto</li>
             <li>A retirada pode ser feita por qualquer responsável cadastrado</li>
             <li>Em caso de dúvidas, entre em contato com a secretaria da unidade</li>

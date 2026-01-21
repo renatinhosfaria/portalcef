@@ -12,9 +12,11 @@ import {
   shopProductVariants,
   shopProductImages,
   shopInventory,
+  shopOrderItems,
   eq,
   and,
   asc,
+  inArray,
 } from "@essencia/db";
 import type {
   CreateProductDto,
@@ -44,7 +46,7 @@ export class ShopProductsService {
     @Optional()
     @Inject(StorageService)
     private readonly storageService?: StorageService,
-  ) {}
+  ) { }
 
   /**
    * GET /shop/catalog/:schoolId/:unitId
@@ -312,7 +314,7 @@ export class ShopProductsService {
   /**
    * DELETE /shop/admin/products/:id
    *
-   * Remove produto permanentemente do banco de dados
+   * Hard delete - remove produto permanentemente se não houver pedidos
    */
   async deleteProduct(id: string, _userId: string) {
     const db = getDb();
@@ -320,6 +322,9 @@ export class ShopProductsService {
     // Check if product exists
     const existing = await db.query.shopProducts.findFirst({
       where: eq(shopProducts.id, id),
+      with: {
+        variants: true,
+      },
     });
 
     if (!existing) {
@@ -329,7 +334,23 @@ export class ShopProductsService {
       });
     }
 
-    // Hard delete - remove permanentemente
+    // Check for existing orders
+    const variantIds = existing.variants.map((v: { id: string }) => v.id);
+    if (variantIds.length > 0) {
+      const existingOrders = await db.query.shopOrderItems.findFirst({
+        where: inArray(shopOrderItems.variantId, variantIds),
+      });
+
+      if (existingOrders) {
+        throw new BadRequestException({
+          code: "PRODUCT_HAS_ORDERS",
+          message:
+            "Não é possível excluir este produto pois ele possui pedidos associados. Desative-o em vez de excluir.",
+        });
+      }
+    }
+
+    // Hard delete (cascade will handle variants, images, inventory)
     await db.delete(shopProducts).where(eq(shopProducts.id, id));
   }
 

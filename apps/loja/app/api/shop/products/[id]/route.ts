@@ -12,7 +12,7 @@ export async function GET(
 ) {
     try {
         const { id } = await params;
-        const url = `${API_URL}/shop/products/${id}`;
+        const url = `${API_URL}/api/shop/products/${id}`;
 
         const response = await fetch(url, {
             method: "GET",

@@ -1,0 +1,1 @@
+ALTER TABLE "shop_interest_requests" ADD COLUMN "status" text DEFAULT 'PENDENTE' NOT NULL;

@@ -16,31 +16,51 @@ export class ShopSettingsService {
    * Se não existir, cria com valores padrão
    */
   async getSettings(unitId: string) {
-    const db = getDb();
-    this.logger.log(`Fetching settings for unit: ${unitId}`);
+    try {
+      this.logger.log(`[DEBUG] getSettings called for unitId: ${unitId}`);
+      const db = getDb();
 
-    let settings = await db.query.shopSettings.findFirst({
-      where: eq(shopSettings.unitId, unitId),
-    });
+      let settings = await db.query.shopSettings.findFirst({
+        where: eq(shopSettings.unitId, unitId),
+      });
 
-    // Se não existe, criar com defaults
-    if (!settings) {
-      this.logger.log(`Creating default settings for unit: ${unitId}`);
-      const [newSettings] = await db
-        .insert(shopSettings)
-        .values({
-          unitId,
-          maxInstallments: 1,
-          isShopEnabled: true,
-          pickupInstructions:
-            "Retirada na secretaria, de segunda a sexta, das 8h às 17h.",
-        })
-        .returning();
+      this.logger.log(`[DEBUG] Existing settings found? ${!!settings}`);
 
-      settings = newSettings;
+      // Se não existe, criar com defaults
+      if (!settings) {
+        try {
+          this.logger.log(`[DEBUG] Attempting to insert default settings...`);
+          const [newSettings] = await db
+            .insert(shopSettings)
+            .values({
+              unitId,
+              maxInstallments: 1,
+              isShopEnabled: true,
+              pickupInstructions:
+                "Retirada na secretaria, de segunda a sexta, das 8h às 17h.",
+            })
+            .returning();
+
+          this.logger.log(`[DEBUG] Insert successful`);
+          settings = newSettings;
+        } catch (error) {
+          this.logger.error(
+            `[DEBUG] Insert failed: ${error}`,
+            (error as Error).stack
+          );
+          // Tentar buscar novamente em caso de race condition
+          settings = await db.query.shopSettings.findFirst({
+            where: eq(shopSettings.unitId, unitId),
+          });
+          this.logger.log(`[DEBUG] Fallback fetch result: ${!!settings}`);
+        }
+      }
+
+      return settings;
+    } catch (e) {
+      this.logger.error(`[CRITICAL] Error in getSettings: ${e}`, (e as Error).stack);
+      throw e;
     }
-
-    return settings;
   }
 
   /**

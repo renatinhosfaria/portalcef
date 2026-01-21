@@ -1,13 +1,24 @@
 
 # =============================================================================
 # Docker Compose for PRODUCTION
-# Portal Essencia Feliz - Production Deployment with Traefik
+# Portal Essencia Feliz - Production Deployment with Nginx
 # =============================================================================
+# IMPORTANT: Enable BuildKit for optimal cache performance:
+#   export DOCKER_BUILDKIT=1
+#   export COMPOSE_DOCKER_CLI_BUILD=1
+#
 # Setup:   Ensure .env.docker exists with production secrets
 # Start:   docker compose -f docker-compose.prod.yml up -d
 # Logs:    docker compose -f docker-compose.prod.yml logs -f
 # Stop:    docker compose -f docker-compose.prod.yml down
-# Rebuild: docker compose -f docker-compose.prod.yml build --no-cache
+#
+# Build (incremental - uses cache):
+#   docker compose -f docker-compose.prod.yml build
+#
+# Build (complete - ignores cache):
+#   docker compose -f docker-compose.prod.yml build --no-cache
+#
+# See docs/DOCKER_CACHE.md for cache optimization details
 # =============================================================================
 
 services:
@@ -269,7 +280,7 @@ services:
       NODE_ENV: production
       PORT: 3010
       API_INTERNAL_URL: http://api:3002
-      NEXT_PUBLIC_API_URL: https://www.portalcef.com.br/api
+      NEXT_PUBLIC_API_URL: https://loja.portalcef.com.br/api
     networks:
       - essencia-prod
     restart: unless-stopped
@@ -342,6 +353,7 @@ services:
       MINIO_ENDPOINT: http://minio:9000
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      MINIO_PUBLIC_ENDPOINT: https://www.portalcef.com.br/storage
       MINIO_BUCKET: ${MINIO_BUCKET}
       # API Config
       API_PORT: 3002

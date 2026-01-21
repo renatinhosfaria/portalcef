@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { use, useCallback, useEffect, useState } from 'react';
 
 import { FilterSidebar } from '@/components/FilterSidebar';
@@ -165,17 +166,28 @@ export default function CatalogPage({
   }
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC]">
+    <div className="min-h-screen bg-stone-50">
       <ShopHeader />
 
-      <main className="pt-24 pb-12 px-4 lg:px-6 max-w-7xl mx-auto">
+      <main className="pt-28 pb-16 px-4 lg:px-8 max-w-7xl mx-auto">
         {/* Banner Hero */}
         <ShopHero />
 
-        <div className="flex flex-col lg:flex-row gap-8">
+        {/* Breadcrumbs */}
+        <nav className="mb-8 flex items-center gap-2 text-sm animate-fade-in">
+          <Link href="/" className="text-stone-500 hover:text-[#A3D154] font-medium transition-colors duration-200">
+            Início
+          </Link>
+          <svg className="w-4 h-4 text-stone-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+          <span className="text-stone-800 font-semibold">Catálogo</span>
+        </nav>
+
+        <div className="flex flex-col lg:flex-row gap-10">
           {/* Sidebar Filters - Desktop Sticky */}
-          <div className="w-full lg:w-64 flex-shrink-0">
-            <div className="lg:sticky lg:top-28">
+          <div className="w-full lg:w-72 flex-shrink-0">
+            <div className="lg:sticky lg:top-32">
               <FilterSidebar
                 activeCategory={categoryFilter}
                 onCategoryChange={setCategoryFilter}
@@ -186,50 +198,57 @@ export default function CatalogPage({
           </div>
 
           {/* Product Grid */}
-          <div className="flex-1">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold tracking-tight text-slate-800">
+          <div className="flex-1 product-grid-section">
+            <div className="flex items-center justify-between mb-8">
+              <h2 className="font-display text-2xl font-bold tracking-tight text-stone-800">
                 {categoryFilter ? (
                   <span className="flex items-center gap-2">
-                    Resultados para <span className="text-[#5a7a1f]">{categoryFilter.replace(/_/g, ' ')}</span>
+                    <span className="text-stone-600">Resultados para</span>
+                    <span className="text-gradient-brand">{categoryFilter.replace(/_/g, ' ')}</span>
                   </span>
                 ) : (
-                  'Produtos em Destaque'
+                  <>
+                    Produtos em{' '}
+                    <span className="text-gradient-brand">Destaque</span>
+                  </>
                 )}
               </h2>
-              <span className="text-sm text-slate-500 font-medium tabular-nums">
-                {products.length} produtos encontrados
-              </span>
+              <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white border-2 border-stone-200">
+                <span className="text-sm text-stone-500 font-medium">Total:</span>
+                <span className="text-lg font-display font-bold text-[#A3D154] tabular-nums">
+                  {products.length}
+                </span>
+              </div>
             </div>
 
             {products.length === 0 ? (
-              <div className="bg-white rounded-xl p-12 text-center border border-dashed border-slate-300">
-                <div className="w-16 h-16 rounded-xl bg-slate-100 flex items-center justify-center mx-auto mb-4">
-                  <svg className="w-8 h-8 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <div className="bg-white rounded-2xl p-16 text-center border-2 border-dashed border-stone-300 animate-fade-in">
+                <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-stone-100 to-stone-200 flex items-center justify-center mx-auto mb-6">
+                  <svg className="w-10 h-10 text-stone-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                   </svg>
                 </div>
-                <h3 className="text-lg font-semibold tracking-tight text-slate-800 mb-2">Nenhum produto encontrado</h3>
-                <p className="text-slate-500 mb-6 max-w-md mx-auto">
-                  Não encontramos produtos com os filtros selecionados. Tente limpar os filtros para ver tudo.
+                <h3 className="font-display text-2xl font-bold tracking-tight text-stone-800 mb-3">Nenhum produto encontrado</h3>
+                <p className="text-stone-500 mb-8 max-w-md mx-auto leading-relaxed">
+                  Não encontramos produtos com os filtros selecionados. Tente ajustar os filtros ou limpar para ver todos os produtos.
                 </p>
                 <button
                   onClick={() => {
                     setCategoryFilter('');
                     setSizeFilter('');
                   }}
-                  className="px-6 py-2.5 bg-slate-100 text-slate-700 font-medium rounded-lg hover:bg-slate-200 transition-colors duration-150"
+                  className="btn-primary"
                 >
-                  Limpar Filtros
+                  Limpar Todos os Filtros
                 </button>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
                 {products.map((product, index) => (
                   <div
                     key={product.id}
                     className="animate-fade-in-up"
-                    style={{ animationDelay: `${index * 50}ms` }}
+                    style={{ animationDelay: `${Math.min(index * 75, 500)}ms` }}
                   >
                     <ProductCard
                       schoolId={schoolId}

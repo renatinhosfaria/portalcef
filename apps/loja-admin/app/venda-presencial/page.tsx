@@ -3,6 +3,8 @@
 import { Plus, Trash2, ShoppingCart, CheckCircle, AlertCircle } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
+import { apiFetch } from '../../lib/api';
+
 interface Variant {
     id: string;
     size: string;
@@ -36,6 +38,7 @@ export default function VendaPresencialPage() {
     const [quantity, setQuantity] = useState(1);
     const [customerName, setCustomerName] = useState('');
     const [customerPhone, setCustomerPhone] = useState('');
+    const [paymentMethod, setPaymentMethod] = useState<'DINHEIRO' | 'PIX' | 'CARTAO_CREDITO' | 'CARTAO_DEBITO'>('DINHEIRO');
     const [submitting, setSubmitting] = useState(false);
     const [success, setSuccess] = useState(false);
 
@@ -43,7 +46,7 @@ export default function VendaPresencialPage() {
     useEffect(() => {
         async function fetchProducts() {
             try {
-                const res = await fetch('/api/shop/admin/products');
+                const res = await apiFetch('/api/shop/admin/products');
                 if (res.ok) {
                     const data = await res.json();
                     setProducts(data.data || []);
@@ -106,7 +109,7 @@ export default function VendaPresencialPage() {
             const payload = {
                 customerName,
                 customerPhone: customerPhone.replace(/\D/g, ''), // Send digits only
-                paymentMethod: 'DINHEIRO', // TODO: Allow selecting method (PIX, DEBIT, CREDIT)
+                paymentMethod,
                 items: items.map(item => ({
                     variantId: item.variantId,
                     quantity: item.quantity,
@@ -114,7 +117,7 @@ export default function VendaPresencialPage() {
                 }))
             };
 
-            const res = await fetch('/api/shop/admin/orders/presencial', {
+            const res = await apiFetch('/api/shop/admin/orders/presencial', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
@@ -130,6 +133,7 @@ export default function VendaPresencialPage() {
             setStudentName('');
             setCustomerName('');
             setCustomerPhone('');
+            setPaymentMethod('DINHEIRO');
             window.scrollTo(0, 0);
             setTimeout(() => setSuccess(false), 5000);
         } catch (error: unknown) {
@@ -311,6 +315,21 @@ export default function VendaPresencialPage() {
                                             placeholder="(00) 00000-0000"
                                             required
                                         />
+                                    </div>
+
+                                    <div>
+                                        <label className="form-label">Forma de Pagamento *</label>
+                                        <select
+                                            value={paymentMethod}
+                                            onChange={(e) => setPaymentMethod(e.target.value as typeof paymentMethod)}
+                                            className="form-select"
+                                            required
+                                        >
+                                            <option value="DINHEIRO">Dinheiro</option>
+                                            <option value="PIX">PIX</option>
+                                            <option value="CARTAO_DEBITO">Cartão de Débito</option>
+                                            <option value="CARTAO_CREDITO">Cartão de Crédito</option>
+                                        </select>
                                     </div>
 
                                     <div className="bg-amber-50 p-4 rounded-lg flex gap-3 text-sm text-amber-800">

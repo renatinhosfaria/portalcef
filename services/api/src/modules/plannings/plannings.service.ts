@@ -18,6 +18,7 @@ import {
   formatQuinzenaDateRange,
 } from "@essencia/shared/config/quinzenas";
 import { ForbiddenException, Injectable } from "@nestjs/common";
+import { CalendarService } from "../calendar/calendar.service";
 
 /**
  * Representação de um arquivo anexado ao planejamento
@@ -82,6 +83,7 @@ export interface SaveDraftResult {
   success: boolean;
   data?: Planning;
   error?: string;
+  warning?: string; // Aviso sobre dias letivos (não bloqueia)
 }
 
 export interface SubmitPlanningInput {
@@ -133,12 +135,31 @@ const normalizeStageCode = (value: string): EducationStageCode | null => {
 
 @Injectable()
 export class PlanningsService {
+  constructor(private readonly calendarService: CalendarService) {}
+
   /**
    * Salva ou atualiza um rascunho de planejamento.
    * UPSERT baseado na chave única (userId, turmaId, quinzena).
+   * Retorna warning se a quinzena não tiver dias letivos (mas não bloqueia).
    */
-  async saveDraft(input: SaveDraftInput): Promise<SaveDraftResult> {
+  async saveDraft(
+    input: SaveDraftInput,
+    unitId?: string,
+  ): Promise<SaveDraftResult> {
     const db = getDb();
+
+    // Validar dias letivos da quinzena (apenas warning, não bloqueia)
+    let schoolDaysWarning: string | undefined;
+    if (input.quinzena && unitId) {
+      const validation =
+        await this.calendarService.validateQuinzenaSchoolDays(
+          unitId,
+          input.quinzena,
+        );
+      if (!validation.isValid) {
+        schoolDaysWarning = validation.message;
+      }
+    }
 
     try {
       const result = await db.transaction(async (tx: DbTransaction) => {
@@ -203,7 +224,7 @@ export class PlanningsService {
         return planning;
       });
 
-      return { success: true, data: result };
+      return { success: true, data: result, warning: schoolDaysWarning };
     } catch (error) {
       console.error("saveDraft error:", error);
       return { success: false, error: "Erro interno ao salvar rascunho" };
@@ -213,11 +234,28 @@ export class PlanningsService {
   /**
    * Submete o planejamento para coordenação.
    * Atualiza status para PENDENTE e registra submitted_at.
+   * BLOQUEIA se a quinzena não tiver dias letivos.
    * Story 3.5 - Envio para Coordenação
    */
   async submitPlanning(
     input: SubmitPlanningInput,
+    unitId?: string,
   ): Promise<SubmitPlanningResult> {
+    // BLOQUEIA se a quinzena não tiver dias letivos
+    if (input.quinzena && unitId) {
+      const validation =
+        await this.calendarService.validateQuinzenaSchoolDays(
+          unitId,
+          input.quinzena,
+        );
+      if (!validation.isValid) {
+        return {
+          success: false,
+          error: `Não é possível submeter planejamento: ${validation.message}`,
+        };
+      }
+    }
+
     console.log(
       "[submitPlanning] Iniciando submissão:",
       JSON.stringify(input, null, 2),
@@ -803,8 +841,9 @@ export class PlanningsService {
    *
    * Retorna as próximas 4 quinzenas baseadas no calendário escolar.
    * Durante férias de julho, retorna as quinzenas do 2º semestre.
+   * Inclui contagem de dias letivos quando unitId é fornecido.
    */
-  async getQuinzenas(): Promise<{
+  async getQuinzenas(unitId?: string): Promise<{
     success: boolean;
     data?: Array<{
       id: string;
@@ -812,45 +851,50 @@ export class PlanningsService {
       isCurrent: boolean;
       startDate: string;
       endDate: string;
+      deadline: string;
+      semester: 1 | 2;
+      schoolDaysCount?: number;
+      hasSchoolDays?: boolean;
     }>;
     isVacation?: boolean;
     error?: string;
   }> {
     try {
       const now = new Date();
+      const currentQuinzenaId = this.getCurrentQuinzena();
+      const isVacation = isInVacationPeriod(now);
 
-      // Verifica se está no período de férias
-      if (isInVacationPeriod(now)) {
-        // Durante férias, retorna as primeiras quinzenas do 2º semestre
-        const quinzenas2Sem = QUINZENAS_2026.filter(
-          (q) => q.semester === 2,
-        ).slice(0, 4);
-        return {
-          success: true,
-          isVacation: true,
-          data: quinzenas2Sem.map((q, index) => ({
+      // Retorna TODAS as quinzenas do ano
+      const enrichedQuinzenas = await Promise.all(
+        QUINZENAS_2026.map(async (q) => {
+          let schoolDaysCount: number | undefined;
+          let hasSchoolDays: boolean | undefined;
+
+          if (unitId) {
+            const validation =
+              await this.calendarService.validateQuinzenaSchoolDays(
+                unitId,
+                q.id,
+              );
+            schoolDaysCount = validation.schoolDays;
+            hasSchoolDays = validation.isValid;
+          }
+
+          return {
             id: q.id,
             label: `${q.label} (${formatQuinzenaDateRange(q)})`,
-            isCurrent: index === 0,
+            isCurrent: q.id === currentQuinzenaId,
             startDate: q.startDate,
             endDate: q.endDate,
-          })),
-        };
-      }
+            deadline: q.deadline,
+            semester: q.semester,
+            schoolDaysCount,
+            hasSchoolDays,
+          };
+        }),
+      );
 
-      // Obtém as próximas 4 quinzenas
-      const upcomingQuinzenas = getUpcomingQuinzenas(4, now);
-      const currentQuinzenaId = this.getCurrentQuinzena();
-
-      const quinzenas = upcomingQuinzenas.map((q) => ({
-        id: q.id,
-        label: `${q.label} (${formatQuinzenaDateRange(q)})`,
-        isCurrent: q.id === currentQuinzenaId,
-        startDate: q.startDate,
-        endDate: q.endDate,
-      }));
-
-      return { success: true, data: quinzenas };
+      return { success: true, data: enrichedQuinzenas, isVacation };
     } catch (error) {
       console.error("getQuinzenas error:", error);
       return { success: false, error: "Erro ao buscar quinzenas" };

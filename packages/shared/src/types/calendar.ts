@@ -10,55 +10,61 @@ export interface EventTypeConfig {
 }
 
 export const eventTypeConfig: Record<CalendarEventType, EventTypeConfig> = {
+  // 🔵 Azul - Início/Término do semestre
   INICIO_SEMESTRE: {
     label: "Início de Semestre",
     color: "blue",
-    bgColor: "bg-blue-100",
-    textColor: "text-blue-700",
-    borderColor: "border-blue-300",
+    bgColor: "bg-blue-500",
+    textColor: "text-white",
+    borderColor: "border-blue-600",
   },
   TERMINO_SEMESTRE: {
     label: "Término de Semestre",
     color: "blue",
-    bgColor: "bg-blue-100",
-    textColor: "text-blue-700",
-    borderColor: "border-blue-300",
+    bgColor: "bg-blue-500",
+    textColor: "text-white",
+    borderColor: "border-blue-600",
   },
+  // 🟣 Roxo - Feriados e Recessos
   FERIADO: {
     label: "Feriado",
-    color: "red",
-    bgColor: "bg-red-100",
-    textColor: "text-red-700",
-    borderColor: "border-red-300",
+    color: "purple",
+    bgColor: "bg-purple-500",
+    textColor: "text-white",
+    borderColor: "border-purple-600",
   },
   RECESSO: {
     label: "Recesso",
-    color: "orange",
-    bgColor: "bg-orange-100",
-    textColor: "text-orange-700",
-    borderColor: "border-orange-300",
+    color: "purple",
+    bgColor: "bg-purple-500",
+    textColor: "text-white",
+    borderColor: "border-purple-600",
   },
+  // 🟡 Amarelo - Férias e recesso dos professores
   FERIAS_PROFESSORES: {
     label: "Férias dos Professores",
-    color: "gray",
-    bgColor: "bg-gray-100",
-    textColor: "text-gray-700",
-    borderColor: "border-gray-300",
+    color: "yellow",
+    bgColor: "bg-yellow-400",
+    textColor: "text-yellow-900",
+    borderColor: "border-yellow-500",
   },
+  // 🟠 Laranja - Sábados Letivos
   SABADO_LETIVO: {
     label: "Sábado Letivo",
-    color: "yellow",
-    bgColor: "bg-yellow-100",
-    textColor: "text-yellow-800",
-    borderColor: "border-yellow-300",
+    color: "orange",
+    bgColor: "bg-orange-500",
+    textColor: "text-white",
+    borderColor: "border-orange-600",
   },
+  // 🔷 Azul Escuro - Semana de Provas
   SEMANA_PROVAS: {
     label: "Semana de Provas",
-    color: "purple",
-    bgColor: "bg-purple-100",
-    textColor: "text-purple-700",
-    borderColor: "border-purple-300",
+    color: "indigo",
+    bgColor: "bg-indigo-700",
+    textColor: "text-white",
+    borderColor: "border-indigo-800",
   },
+  // ⬜ Branco - Dia Letivo (sem marcação especial)
   DIA_LETIVO: {
     label: "Dia Letivo",
     color: "slate",
@@ -66,19 +72,21 @@ export const eventTypeConfig: Record<CalendarEventType, EventTypeConfig> = {
     textColor: "text-slate-700",
     borderColor: "border-slate-200",
   },
+  // 🟢 Verde - Dia Escolar (planejamento/reuniões)
   REUNIAO_PEDAGOGICA: {
-    label: "Reunião Pedagógica",
-    color: "teal",
-    bgColor: "bg-teal-100",
-    textColor: "text-teal-700",
-    borderColor: "border-teal-300",
+    label: "Dia Escolar",
+    color: "green",
+    bgColor: "bg-green-500",
+    textColor: "text-white",
+    borderColor: "border-green-600",
   },
+  // Rosa - Evento Especial
   EVENTO_ESPECIAL: {
     label: "Evento Especial",
     color: "pink",
-    bgColor: "bg-pink-100",
-    textColor: "text-pink-700",
-    borderColor: "border-pink-300",
+    bgColor: "bg-pink-500",
+    textColor: "text-white",
+    borderColor: "border-pink-600",
   },
 };
 

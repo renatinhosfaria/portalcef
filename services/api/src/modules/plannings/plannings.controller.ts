@@ -56,39 +56,48 @@ export class PlanningsController {
   @Post("draft")
   @UseGuards(AuthGuard)
   async saveDraft(
-    @Req() req: { user: { userId: string; stageId: string | null } },
+    @Req()
+    req: { user: { userId: string; stageId: string | null; unitId: string | null } },
     @Body() dto: SaveDraftDto,
   ): Promise<SaveDraftResult> {
-    return this.planningsService.saveDraft({
-      userId: req.user.userId,
-      stageId: req.user.stageId,
-      turma: dto.turma,
-      quinzena: dto.quinzena,
-      objetivos: dto.objetivos,
-      metodologia: dto.metodologia,
-      recursos: dto.recursos,
-    });
+    return this.planningsService.saveDraft(
+      {
+        userId: req.user.userId,
+        stageId: req.user.stageId,
+        turma: dto.turma,
+        quinzena: dto.quinzena,
+        objetivos: dto.objetivos,
+        metodologia: dto.metodologia,
+        recursos: dto.recursos,
+      },
+      req.user.unitId ?? undefined, // Passar unitId para validação de dias letivos
+    );
   }
 
   /**
    * Submete o planejamento para coordenação.
    * Story 3.5 - Envio para Coordenação
+   * BLOQUEIA se a quinzena não tiver dias letivos.
    */
   @Post("submit")
   @UseGuards(AuthGuard)
   async submitPlanning(
-    @Req() req: { user: { userId: string; stageId: string | null } },
+    @Req()
+    req: { user: { userId: string; stageId: string | null; unitId: string | null } },
     @Body() dto: SubmitPlanningDto,
   ): Promise<SubmitPlanningResult> {
-    return this.planningsService.submitPlanning({
-      userId: req.user.userId,
-      stageId: req.user.stageId,
-      turma: dto.turma,
-      quinzena: dto.quinzena,
-      objetivos: dto.objetivos,
-      metodologia: dto.metodologia,
-      recursos: dto.recursos,
-    });
+    return this.planningsService.submitPlanning(
+      {
+        userId: req.user.userId,
+        stageId: req.user.stageId,
+        turma: dto.turma,
+        quinzena: dto.quinzena,
+        objetivos: dto.objetivos,
+        metodologia: dto.metodologia,
+        recursos: dto.recursos,
+      },
+      req.user.unitId ?? undefined, // Passar unitId para validação de dias letivos
+    );
   }
 
   /**
@@ -153,13 +162,14 @@ export class PlanningsController {
   /**
    * Lista quinzenas disponíveis.
    * Task 7 - Quinzenas dinâmicas para o wizard
+   * Inclui informação de dias letivos quando unitId está disponível.
    * Acesso: Professoras e auxiliares
    */
   @Get("quinzenas")
   @UseGuards(AuthGuard, RolesGuard)
   @Roles("professora", "auxiliar_sala")
-  async getQuinzenas() {
-    return this.planningsService.getQuinzenas();
+  async getQuinzenas(@Req() req: { user: UserContext }) {
+    return this.planningsService.getQuinzenas(req.user.unitId ?? undefined);
   }
 
   /**

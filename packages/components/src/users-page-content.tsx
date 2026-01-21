@@ -98,7 +98,7 @@ export function UsersPageContent({ users }: UsersPageContentProps) {
 
       // Recarregar a página para atualizar a lista
       window.location.reload();
-    } catch (error) {
+    } catch {
       toast.error("Erro ao excluir", {
         description: "Não foi possível excluir o usuário. Tente novamente.",
       });

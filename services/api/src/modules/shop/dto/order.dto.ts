@@ -113,14 +113,11 @@ export class ListOrdersDto {
 /**
  * DTO para venda presencial
  * POST /shop/admin/orders/presencial
+ *
+ * NOTA: schoolId e unitId são extraídos da sessão do usuário (req.user)
+ * seguindo o padrão de Tenant Context
  */
 export class CreatePresentialSaleDto {
-  @IsUUID()
-  schoolId!: string;
-
-  @IsUUID()
-  unitId!: string;
-
   @IsString()
   customerName!: string;
 

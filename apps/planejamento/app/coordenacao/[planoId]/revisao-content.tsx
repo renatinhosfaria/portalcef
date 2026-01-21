@@ -148,9 +148,10 @@ export function RevisaoContent({
     }
 
     // Comentario geral (associado ao primeiro documento se existir)
-    if (comentarioGeral.trim() && currentPlano.documentos.length > 0) {
+    const primeiroDocumento = currentPlano.documentos[0];
+    if (comentarioGeral.trim() && primeiroDocumento) {
       result.push({
-        documentoId: currentPlano.documentos[0].id,
+        documentoId: primeiroDocumento.id,
         comentario: `[Comentario Geral] ${comentarioGeral.trim()}`,
       });
     }

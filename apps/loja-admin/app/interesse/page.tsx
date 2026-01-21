@@ -3,6 +3,8 @@
 import { Phone, Mail, Check, Sparkles, Users, Clock } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
+import { apiFetch } from '../../lib/api';
+
 interface InterestRequest {
     id: string;
     customerName: string;
@@ -24,21 +26,21 @@ export default function InteressePage() {
     const loadRequests = useCallback(async () => {
         try {
             setLoading(true);
-            
+
             const params = new URLSearchParams();
             if (statusFilter !== 'TODOS') {
                 params.set('status', statusFilter);
             }
-            
+
             // TODO: Implementar API /api/shop/admin/interest no backend
-            const response = await fetch(`/api/shop/admin/interest?${params.toString()}`);
-            
+            const response = await apiFetch(`/api/shop/admin/interest?${params.toString()}`);
+
             if (!response.ok) {
                 console.warn('API de interesse não disponível:', response.status);
                 setRequests([]);
                 return;
             }
-            
+
             const result = await response.json();
             setRequests(result.data || []);
         } catch (err) {
@@ -80,7 +82,7 @@ export default function InteressePage() {
 
             {/* Stats */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <button 
+                <button
                     onClick={() => setStatusFilter('TODOS')}
                     className={`stat-card text-left ${statusFilter === 'TODOS' ? 'ring-2 ring-[#A3D154]' : ''}`}
                 >
@@ -94,7 +96,7 @@ export default function InteressePage() {
                         </div>
                     </div>
                 </button>
-                <button 
+                <button
                     onClick={() => setStatusFilter('PENDENTE')}
                     className={`stat-card text-left ${statusFilter === 'PENDENTE' ? 'ring-2 ring-[#A3D154]' : ''}`}
                 >
@@ -108,7 +110,7 @@ export default function InteressePage() {
                         </div>
                     </div>
                 </button>
-                <button 
+                <button
                     onClick={() => setStatusFilter('CONTATADO')}
                     className={`stat-card text-left ${statusFilter === 'CONTATADO' ? 'ring-2 ring-[#A3D154]' : ''}`}
                 >

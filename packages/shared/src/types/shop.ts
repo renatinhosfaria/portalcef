@@ -3,8 +3,9 @@
 // ============================================
 
 export type ProductCategory =
-  | "UNIFORME_DIARIO"
-  | "UNIFORME_EDUCACAO_FISICA"
+  | "UNIFORME_FEMININO"
+  | "UNIFORME_MASCULINO"
+  | "UNIFORME_UNISSEX"
   | "ACESSORIO";
 export type OrderStatus =
   | "AGUARDANDO_PAGAMENTO"

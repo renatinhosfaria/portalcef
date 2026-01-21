@@ -1,10 +1,8 @@
 'use client';
 
-import { AlertCircle, ShoppingBag } from 'lucide-react';
+import { AlertCircle, Sparkles } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
-
-import { useCart } from '@/lib/useCart';
 
 import { ProductCardCarousel } from './ProductCardCarousel';
 
@@ -31,93 +29,96 @@ export function ProductCard({
   category,
   availableStock,
 }: ProductCardProps) {
-  const { addItem } = useCart();
   const [isHovered, setIsHovered] = useState(false);
 
   const isLowStock = availableStock > 0 && availableStock < 5;
   const isOutOfStock = availableStock === 0;
 
-  const handleAddToCart = (e: React.MouseEvent) => {
-    e.preventDefault();
-    if (!isOutOfStock) {
-      addItem({
-        variantId: id,
-        productId: id,
-        productName: name,
-        variantSize: 'UN',
-        quantity: 1,
-        unitPrice: price,
-        studentName: 'Aluno',
-        availableStock,
-        imageUrl: imageUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=f0fdf4&color=166534&size=400&font-size=0.33`
-      });
-    }
-  };
-
   return (
     <Link
       href={`/${schoolId}/${unitId}/produto/${id}`}
-      className="group block bg-white rounded-lg border border-slate-200 overflow-hidden hover:border-slate-300 hover:shadow-md transition-all duration-200"
+      className="group block relative"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      {/* Image Container */}
-      <div className="relative aspect-[4/5] overflow-hidden bg-slate-50">
-        <ProductCardCarousel
-          images={images || []}
-          fallbackImage={imageUrl}
-          productName={name}
-        />
+      {/* Card Container com efeito glow */}
+      <div className="shop-card-featured h-full flex flex-col">
+        {/* Glow effect no hover */}
+        <div className="absolute -inset-1 bg-gradient-to-r from-[#A3D154] to-[#F59E0B] rounded-2xl opacity-0 group-hover:opacity-20 blur-xl transition-opacity duration-500" />
 
-        {/* Status Badges */}
-        <div className="absolute top-2 left-2 flex flex-col gap-1.5 z-10">
-          {isOutOfStock && (
-            <span className="px-2 py-0.5 bg-slate-800 text-white text-xs font-medium rounded">
-              Esgotado
-            </span>
-          )}
-          {isLowStock && (
-            <span className="px-2 py-0.5 bg-amber-500 text-white text-xs font-medium rounded flex items-center gap-1">
-              <AlertCircle className="w-3 h-3" />
-              Restam {availableStock}
-            </span>
-          )}
-        </div>
+        {/* Image Container */}
+        <div className="relative aspect-[4/5] overflow-hidden bg-stone-100 rounded-t-xl">
+          <ProductCardCarousel
+            images={images || []}
+            fallbackImage={imageUrl}
+            productName={name}
+          />
 
-        {/* Quick Add Button */}
-        {!isOutOfStock && (
-          <div
-            className={`absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/60 to-transparent transition-opacity duration-200 ${
-              isHovered ? 'opacity-100' : 'opacity-0'
-            }`}
-          >
-            <button
-              onClick={handleAddToCart}
-              className="w-full bg-white text-slate-800 font-medium py-2 rounded-lg hover:bg-slate-50 transition-colors duration-150 flex items-center justify-center gap-2 text-sm"
-            >
-              <ShoppingBag className="w-4 h-4" />
-              Adicionar
-            </button>
+          {/* Gradient overlay no hover */}
+          <div className={`absolute inset-0 bg-gradient-to-t from-black/60 via-black/0 to-transparent transition-opacity duration-300 ${isHovered ? 'opacity-100' : 'opacity-0'
+            }`} />
+
+          {/* Status Badges */}
+          <div className="absolute top-3 left-3 flex flex-col gap-2 z-10">
+            {isOutOfStock && (
+              <span className="badge badge-danger animate-fade-in-down shadow-lg">
+                Esgotado
+              </span>
+            )}
+            {isLowStock && (
+              <span className="badge badge-warning animate-fade-in-down flex items-center gap-1 shadow-lg">
+                <AlertCircle className="w-3 h-3" />
+                Restam {availableStock}
+              </span>
+            )}
           </div>
-        )}
-      </div>
 
-      {/* Product Info */}
-      <div className="p-4">
-        <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">
-          {category.replace(/_/g, ' ')}
-        </span>
-        <h3 className="font-medium text-slate-800 mt-1 line-clamp-2 min-h-[2.5rem] text-sm leading-tight">
-          {name}
-        </h3>
-        <div className="mt-3 flex items-baseline justify-between">
-          <span className="text-lg font-semibold text-slate-800 tabular-nums">
-            R$ {price.toFixed(2).replace('.', ',')}
-          </span>
-          {isOutOfStock && (
-            <span className="text-xs text-slate-400">Indisponível</span>
+          {/* Promoção badge (exemplo) */}
+          {availableStock > 10 && (
+            <div className="absolute top-3 right-3 z-10">
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#F59E0B] text-white text-xs font-bold shadow-lg animate-glow-pulse">
+                <Sparkles className="w-3 h-3" />
+                Em Estoque
+              </span>
+            </div>
           )}
         </div>
+
+        {/* Product Info */}
+        <div className="p-5 flex-1 flex flex-col">
+          {/* Category */}
+          <span className="text-xs font-bold text-[#F59E0B] uppercase tracking-wider mb-2">
+            {category.replace(/_/g, ' ')}
+          </span>
+
+          {/* Product Name */}
+          <h3 className="font-display font-semibold text-stone-800 text-base leading-tight mb-3 line-clamp-2 min-h-[2.5rem] group-hover:text-[#5a7a1f] transition-colors duration-200">
+            {name}
+          </h3>
+
+          {/* Price and Stock Info */}
+          <div className="mt-auto flex items-end justify-between">
+            <div className="flex flex-col">
+              <span className="text-xs text-stone-500 font-medium mb-0.5">A partir de</span>
+              <span className="font-display text-2xl font-bold text-stone-900 tabular-nums">
+                R$ {price.toFixed(2).replace('.', ',')}
+              </span>
+            </div>
+
+            {isOutOfStock ? (
+              <span className="text-xs text-red-500 font-semibold">Indisponível</span>
+            ) : (
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#F0FDF4] border border-[#A3D154]/20">
+                <div className="w-2 h-2 rounded-full bg-[#A3D154] animate-pulse" />
+                <span className="text-xs text-[#5a7a1f] font-semibold">Disponível</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Hover accent line */}
+        <div className={`absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-[#A3D154] to-[#F59E0B] transform origin-left transition-transform duration-300 ease-out ${isHovered ? 'scale-x-100' : 'scale-x-0'
+          }`} />
       </div>
     </Link>
   );

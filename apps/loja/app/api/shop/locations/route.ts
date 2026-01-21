@@ -8,7 +8,7 @@ const API_URL = process.env.API_INTERNAL_URL || "http://localhost:3001";
  */
 export async function GET(_request: NextRequest) {
   try {
-    const url = `${API_URL}/shop/locations`;
+    const url = `${API_URL}/api/shop/locations`;
 
     const response = await fetch(url, {
       method: "GET",

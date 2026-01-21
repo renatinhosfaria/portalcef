@@ -6,7 +6,7 @@
 import {
   formatQuinzenaDateRange,
   getQuinzenaById,
-} from "@essencia/shared/config/quinzenas-2026";
+} from "@essencia/shared/config/quinzenas";
 import { serverApi } from "@essencia/shared/fetchers/server";
 import { ArrowLeft, Calendar, CheckCircle2, FileText, User } from "lucide-react";
 import { cookies } from "next/headers";

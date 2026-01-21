@@ -51,10 +51,15 @@ export class StorageService {
       );
 
       // Construct public URL
-      // In dev, usually http://localhost:9000/bucket/key
-      // But we might want to proxy it or return a signed URL.
-      // For now, let's return the direct MinIO URL which is accessible if ports are mapped.
-      const endpoint = this.configService.get<string>("MINIO_ENDPOINT");
+      // Use MINIO_PUBLIC_ENDPOINT if available, otherwise fallback to internal endpoint
+      const publicEndpoint = this.configService.get<string>(
+        "MINIO_PUBLIC_ENDPOINT",
+      );
+      const endpoint =
+        publicEndpoint || this.configService.get<string>("MINIO_ENDPOINT");
+
+      // Ensure no double slashes if endpoint has trailing slash or if we just concat
+      // But typically config values are without trailing slash
       const url = `${endpoint}/${this.bucketName}/${key}`;
 
       this.logger.log(`File uploaded successfully: ${key}`);

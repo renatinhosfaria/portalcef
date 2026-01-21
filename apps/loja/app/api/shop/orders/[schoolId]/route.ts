@@ -14,7 +14,7 @@ export async function POST(
         const { schoolId } = await params;
         const body = await request.json();
 
-        const url = `${API_URL}/shop/orders`;
+        const url = `${API_URL}/api/shop/orders`;
         const payload = { ...body, schoolId };
 
         const response = await fetch(url, {

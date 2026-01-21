@@ -9,7 +9,7 @@
 import {
   formatQuinzenaDateRange,
   getQuinzenaById,
-} from "@essencia/shared/config/quinzenas-2026";
+} from "@essencia/shared/config/quinzenas";
 import { Alert, AlertDescription, AlertTitle } from "@essencia/ui/components/alert";
 import { Button } from "@essencia/ui/components/button";
 import {

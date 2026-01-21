@@ -35,7 +35,9 @@
     "format": "prettier --write \"**/*.{ts,tsx,md,json}\"",
     "typecheck": "tsc --noEmit",
     "reset": "tsx src/reset.ts",
-    "update-master-password": "tsx src/update-master-password.ts"
+    "update-master-password": "tsx src/update-master-password.ts",
+    "seed:shop": "tsx seeds/shop-seed.ts",
+    "seed:calendario": "tsx seeds/calendar-seed-2026.ts"
   },
   "dependencies": {
     "drizzle-orm": "^0.38.2",

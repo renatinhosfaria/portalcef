@@ -15,6 +15,27 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 - **docker-compose.dev.yml**: Mapeamento incorreto de portas (home na 3006 ao invés de 3000)
 - **shop_interest_requests.status**: Campo `status` usado em `shop-interest.service.ts` mas não existe no schema
 
+### ⚡ Otimizações
+
+#### Docker Build Cache
+
+- **BuildKit cache mounts** para Turborepo e pnpm
+  - Preserva `.turbo/` entre builds
+  - Preserva `~/.local/share/pnpm/store` para dependências
+  - **Performance**: Build incremental ~75-87% mais rápido
+  - Mudança em 1 app: 8 min → 1.5 min
+- Documentação completa em [docs/DOCKER_CACHE.md](./DOCKER_CACHE.md)
+- Instruções no header do [docker-compose.prod.yml](../docker-compose.prod.yml)
+
+### ✨ Adicionado
+
+#### Loja Admin
+
+- Funcionalidade de **exclusão definitiva de pedidos** (hard delete)
+  - Apenas para pedidos com status: Ag. Pagamento, Cancelado, Expirado
+  - Libera reserva de estoque automaticamente (se Ag. Pagamento)
+  - Modal de confirmação com alerta de irreversibilidade
+
 ---
 
 ## [0.1.0] - 2026-01-14

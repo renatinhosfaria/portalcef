@@ -18,7 +18,32 @@ export async function GET(request: Request) {
 
     const data = await res.json();
 
-    return NextResponse.json(data, { status: res.status });
+    console.log('[Orders Route] Backend response status:', res.status);
+    console.log('[Orders Route] Backend data keys:', Object.keys(data || {}));
+    console.log('[Orders Route] data.data length:', data?.data?.length);
+    if (data?.data?.[0]) {
+      console.log('[Orders Route] First order keys:', Object.keys(data.data[0]));
+      console.log('[Orders Route] First order customer:', data.data[0].customer);
+    }
+
+    // Mapear dados do customer para os campos planos que o frontend espera
+    let orders = data?.data || [];
+    if (Array.isArray(orders)) {
+      orders = orders.map((order: {
+        customer?: { name?: string; phone?: string; email?: string };
+        customerName?: string;
+        customerPhone?: string;
+        customerEmail?: string;
+        [key: string]: unknown;
+      }) => ({
+        ...order,
+        customerName: order.customer?.name || order.customerName || '',
+        customerPhone: order.customer?.phone || order.customerPhone || '',
+        customerEmail: order.customer?.email || order.customerEmail || null,
+      }));
+    }
+
+    return NextResponse.json({ ...data, data: orders }, { status: res.status });
   } catch (error) {
     console.error("Erro ao buscar pedidos:", error);
     return NextResponse.json(

@@ -472,6 +472,11 @@ Query: `status`, `orderSource`, `search`, `page`, `limit`.
 
 #### PATCH `/shop/admin/orders/:id/pickup`
 
+#### DELETE `/shop/admin/orders/:id`
+
+Exclui permanentemente um pedido. Apenas pedidos `AGUARDANDO_PAGAMENTO`, `CANCELADO` ou `EXPIRADO`.
+Retorna 204 (sem body).
+
 #### GET `/shop/admin/interest`
 
 Query: `status`, `search`, `page`, `limit`.

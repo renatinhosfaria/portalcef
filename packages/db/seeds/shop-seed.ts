@@ -1,8 +1,8 @@
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { config } from "dotenv";
-import { fileURLToPath } from "url";
-import { dirname, join } from "path";
+
+import { join } from "path";
 import { eq } from "drizzle-orm";
 
 import {
@@ -13,8 +13,7 @@ import {
 } from "../src/schema/shop.js";
 import { schools, units } from "../src/schema/index.js";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+
 
 // Load environment variables
 config({ path: join(__dirname, "../../../.env") });
@@ -65,7 +64,7 @@ async function seedShopData() {
         name: "Camiseta Uniforme Diário",
         description: "Camiseta polo branca com logotipo da escola bordado",
         basePrice: 4500, // R$ 45,00
-        category: "UNIFORME_DIARIO",
+        category: "UNIFORME_MASCULINO",
         isActive: true,
       })
       .returning();
@@ -78,7 +77,7 @@ async function seedShopData() {
         name: "Bermuda Uniforme Diário",
         description: "Bermuda azul marinho em tactel",
         basePrice: 5500, // R$ 55,00
-        category: "UNIFORME_DIARIO",
+        category: "UNIFORME_FEMININO",
         isActive: true,
       })
       .returning();
@@ -91,7 +90,7 @@ async function seedShopData() {
         name: "Camiseta Educação Física",
         description: "Camiseta dry-fit amarela para aulas de educação física",
         basePrice: 4000, // R$ 40,00
-        category: "UNIFORME_EDUCACAO_FISICA",
+        category: "UNIFORME_FEMININO",
         isActive: true,
       })
       .returning();
@@ -104,7 +103,7 @@ async function seedShopData() {
         name: "Short Educação Física",
         description: "Short azul royal em tactel para educação física",
         basePrice: 4500, // R$ 45,00
-        category: "UNIFORME_EDUCACAO_FISICA",
+        category: "UNIFORME_MASCULINO",
         isActive: true,
       })
       .returning();

@@ -2,7 +2,7 @@
 const nextConfig = {
     transpilePackages: ["@essencia/ui", "@essencia/components", "@essencia/shared"],
 
-    // Configuração de imagens para MinIO
+    // Configuração de imagens para MinIO e Storage
     images: {
         remotePatterns: [
             {
@@ -15,6 +15,11 @@ const nextConfig = {
                 protocol: 'https',
                 hostname: 'minio.essencia.edu.br',
                 pathname: '/essencia-uploads/**',
+            },
+            {
+                protocol: 'https',
+                hostname: 'www.portalcef.com.br',
+                pathname: '/storage/**',
             },
         ],
     },

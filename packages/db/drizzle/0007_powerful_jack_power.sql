@@ -1,0 +1,1 @@
+ALTER TABLE "shop_inventory_ledger" ALTER COLUMN "reference_id" SET DATA TYPE text;

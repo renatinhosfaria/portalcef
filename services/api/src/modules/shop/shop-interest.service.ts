@@ -101,7 +101,7 @@ export class ShopInterestService {
    * Lista requisições de interesse com filtros (admin)
    */
   async getInterestRequests(
-    unitId: string,
+    unitId: string | null,
     filters: InterestFiltersDto = {} as InterestFiltersDto,
   ) {
     const db = getDb();
@@ -110,7 +110,11 @@ export class ShopInterestService {
     const offset = (page - 1) * limit;
 
     // Build where conditions
-    const conditions = [eq(shopInterestRequests.unitId, unitId)];
+    const conditions: any[] = [];
+
+    if (unitId) {
+      conditions.push(eq(shopInterestRequests.unitId, unitId));
+    }
 
     if (status !== "TODOS") {
       conditions.push(eq(shopInterestRequests.status, status));
@@ -128,7 +132,7 @@ export class ShopInterestService {
 
     // Fetch requests with items
     const requests = await db.query.shopInterestRequests.findMany({
-      where: and(...conditions),
+      where: conditions.length > 0 ? and(...conditions) : undefined,
       with: {
         items: {
           with: {
@@ -155,7 +159,7 @@ export class ShopInterestService {
     const [{ count }] = await db
       .select({ count: sql<number>`count(*)` })
       .from(shopInterestRequests)
-      .where(and(...conditions));
+      .where(conditions.length > 0 ? and(...conditions) : undefined);
 
     const totalPages = Math.ceil(count / limit);
 
@@ -210,11 +214,18 @@ export class ShopInterestService {
   /**
    * Retorna resumo de interesse para a unidade (admin)
    */
-  async getInterestSummary(unitId: string) {
+  async getInterestSummary(unitId: string | null) {
     const db = getDb();
     // Buscar variantes mais procuradas (últimos 30 dias)
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const topVariantsConditions: any[] = [
+      sql`${shopInterestRequests.createdAt} >= ${thirtyDaysAgo}`,
+    ];
+    if (unitId) {
+      topVariantsConditions.push(eq(shopInterestRequests.unitId, unitId));
+    }
 
     const topVariants = await db
       .select({
@@ -237,12 +248,7 @@ export class ShopInterestService {
         shopProducts,
         eq(shopProductVariants.productId, shopProducts.id),
       )
-      .where(
-        and(
-          eq(shopInterestRequests.unitId, unitId),
-          sql`${shopInterestRequests.createdAt} >= ${thirtyDaysAgo}`,
-        ),
-      )
+      .where(and(...topVariantsConditions))
       .groupBy(
         shopInterestItems.variantId,
         shopProducts.name,
@@ -252,13 +258,20 @@ export class ShopInterestService {
       .limit(10);
 
     // Contar requisições por status
+    const statusConditions: any[] = [];
+    if (unitId) {
+      statusConditions.push(eq(shopInterestRequests.unitId, unitId));
+    }
+
     const statusCounts = await db
       .select({
         status: shopInterestRequests.status,
         count: sql<number>`count(*)`,
       })
       .from(shopInterestRequests)
-      .where(eq(shopInterestRequests.unitId, unitId))
+      .where(
+        statusConditions.length > 0 ? and(...statusConditions) : undefined,
+      )
       .groupBy(shopInterestRequests.status);
 
     type StatusCountRow = (typeof statusCounts)[number];

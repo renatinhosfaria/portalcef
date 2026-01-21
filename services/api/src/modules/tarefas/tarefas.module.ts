@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 
 import { AuthModule } from "../auth/auth.module";
+import { DatabaseModule } from "../../common/database/database.module";
 import { TarefasController } from "./tarefas.controller";
 import { TarefasService } from "./tarefas.service";
 
@@ -14,7 +15,7 @@ import { TarefasService } from "./tarefas.service";
  * - Integração com workflow de planejamento
  */
 @Module({
-  imports: [AuthModule],
+  imports: [AuthModule, DatabaseModule],
   controllers: [TarefasController],
   providers: [TarefasService],
   exports: [TarefasService],

@@ -50,7 +50,9 @@ COPY packages/tailwind-config/package.json ./packages/tailwind-config/
 COPY packages/ui/package.json ./packages/ui/
 
 # Install ALL dependencies (dev + prod) - this layer is cached unless lock file changes
-RUN pnpm install --frozen-lockfile
+# Use BuildKit cache mount to preserve pnpm store between builds
+RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
+    pnpm install --frozen-lockfile
 
 # -----------------------------------------------------------------------------
 # Stage 3: Builder - Build all apps and services
@@ -78,8 +80,10 @@ COPY packages ./packages
 RUN mkdir -p apps/loja/public
 
 # Build all apps and services using Turbo (parallelized)
+# Use BuildKit cache mount to preserve Turborepo cache between builds
 ENV NODE_ENV=production
-RUN pnpm turbo build
+RUN --mount=type=cache,target=/app/.turbo \
+    pnpm turbo build
 
 # -----------------------------------------------------------------------------
 # Stage 4: Production - Minimal runtime image (production dependencies only)

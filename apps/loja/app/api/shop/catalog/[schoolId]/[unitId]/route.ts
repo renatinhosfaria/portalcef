@@ -16,7 +16,7 @@ export async function GET(
 
         // Build query string
         const queryString = searchParams.toString();
-        const url = `${API_URL}/shop/catalog/${schoolId}/${unitId}${queryString ? `?${queryString}` : ''}`;
+        const url = `${API_URL}/api/shop/catalog/${schoolId}/${unitId}${queryString ? `?${queryString}` : ''}`;
 
         const response = await fetch(url, {
             method: "GET",

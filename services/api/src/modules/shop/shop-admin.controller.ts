@@ -185,11 +185,9 @@ export class ShopAdminController {
     });
 
     // Transform to expected format (flatten images array + add variantsCount)
-    const formattedProducts = products.map((p: any) => ({
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const formattedProducts = products.map((p: typeof products[0]) => ({
       ...p,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      images: p.images.map((img: any) => img.imageUrl),
+      images: p.images.map((img: { imageUrl: string }) => img.imageUrl),
       variantsCount: p.variants?.length || 0,
     }));
 
@@ -223,7 +221,7 @@ export class ShopAdminController {
    * Roles: master, diretora_geral, gerente_unidade
    */
   @Post("products")
-  @Roles("master", "diretora_geral", "gerente_unidade")
+  @Roles("master", "diretora_geral", "gerente_unidade", "auxiliar_administrativo")
   @HttpCode(HttpStatus.CREATED)
   async createProduct(
     @Req() req: { user: UserContext },
@@ -247,7 +245,7 @@ export class ShopAdminController {
    * Roles: master, diretora_geral, gerente_unidade
    */
   @Patch("products/:id")
-  @Roles("master", "diretora_geral", "gerente_unidade")
+  @Roles("master", "diretora_geral", "gerente_unidade", "auxiliar_administrativo")
   async updateProduct(
     @Req() req: { user: UserContext },
     @Param("id") id: string,
@@ -272,7 +270,7 @@ export class ShopAdminController {
    * Roles: master, diretora_geral
    */
   @Delete("products/:id")
-  @Roles("master", "diretora_geral", "gerente_unidade")
+  @Roles("master", "diretora_geral", "gerente_unidade", "auxiliar_administrativo")
   @HttpCode(HttpStatus.NO_CONTENT)
   async deleteProduct(
     @Req() req: { user: UserContext },
@@ -290,7 +288,7 @@ export class ShopAdminController {
    * Roles: master, diretora_geral, gerente_unidade
    */
   @Post("variants")
-  @Roles("master", "diretora_geral", "gerente_unidade")
+  @Roles("master", "diretora_geral", "gerente_unidade", "auxiliar_administrativo")
   @HttpCode(HttpStatus.CREATED)
   async createVariant(
     @Req() req: { user: UserContext },
@@ -321,7 +319,7 @@ export class ShopAdminController {
    * Roles: master, diretora_geral, gerente_unidade
    */
   @Patch("variants/:id")
-  @Roles("master", "diretora_geral", "gerente_unidade")
+  @Roles("master", "diretora_geral", "gerente_unidade", "auxiliar_administrativo")
   async updateVariant(
     @Req() req: { user: UserContext },
     @Param("id") id: string,
@@ -352,7 +350,7 @@ export class ShopAdminController {
    * Roles: master, diretora_geral, gerente_unidade
    */
   @Delete("variants/:id")
-  @Roles("master", "diretora_geral", "gerente_unidade")
+  @Roles("master", "diretora_geral", "gerente_unidade", "auxiliar_administrativo")
   @HttpCode(HttpStatus.NO_CONTENT)
   async deleteVariant(
     @Req() req: { user: UserContext },
@@ -458,7 +456,7 @@ export class ShopAdminController {
    * Roles: master, diretora_geral, gerente_unidade
    */
   @Post("inventory/entry")
-  @Roles("master", "diretora_geral", "gerente_unidade")
+  @Roles("master", "diretora_geral", "gerente_unidade", "auxiliar_administrativo")
   @HttpCode(HttpStatus.CREATED)
   async addInventory(
     @Req() req: { user: UserContext },
@@ -485,7 +483,7 @@ export class ShopAdminController {
    * Roles: master, diretora_geral, gerente_unidade
    */
   @Post("inventory/adjust")
-  @Roles("master", "diretora_geral", "gerente_unidade")
+  @Roles("master", "diretora_geral", "gerente_unidade", "auxiliar_administrativo")
   @HttpCode(HttpStatus.CREATED)
   async adjustInventory(
     @Req() req: { user: UserContext },
@@ -584,6 +582,7 @@ export class ShopAdminController {
    * POST /shop/admin/orders/presencial
    *
    * Cria venda presencial (baixa estoque DIRETO, sem reserva)
+   * schoolId e unitId são extraídos da sessão do usuário (tenant context)
    * Roles: master, diretora_geral, gerente_unidade, gerente_financeiro, auxiliar_administrativo
    */
   @Post("orders/presencial")
@@ -593,9 +592,18 @@ export class ShopAdminController {
     @Req() req: { user: UserContext },
     @Body() dto: CreatePresentialSaleDto,
   ) {
+    // Extrair tenant context da sessão (seguindo Regras Invioláveis)
+    const { schoolId, unitId, userId } = req.user;
+
+    if (!unitId) {
+      throw new Error("Usuário sem unidade associada");
+    }
+
     const order = await this.ordersService.createPresentialSale(
       dto,
-      req.user.userId,
+      schoolId,
+      unitId,
+      userId,
     );
 
     return {
@@ -611,7 +619,7 @@ export class ShopAdminController {
    * Roles: master, diretora_geral, gerente_unidade
    */
   @Patch("orders/:id/cancel")
-  @Roles("master", "diretora_geral", "gerente_unidade")
+  @Roles("master", "diretora_geral", "gerente_unidade", "auxiliar_administrativo")
   async cancelOrder(
     @Req() req: { user: UserContext },
     @Param("id") id: string,
@@ -672,6 +680,24 @@ export class ShopAdminController {
     };
   }
 
+  /**
+   * DELETE /shop/admin/orders/:id
+   *
+   * Exclui permanentemente um pedido (hard delete)
+   * Apenas pedidos AGUARDANDO_PAGAMENTO, CANCELADO ou EXPIRADO podem ser excluídos
+   *
+   * Roles: master, diretora_geral, gerente_unidade
+   */
+  @Delete("orders/:id")
+  @Roles("master", "diretora_geral", "gerente_unidade", "auxiliar_administrativo")
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async deleteOrder(
+    @Req() req: { user: UserContext },
+    @Param("id") id: string,
+  ) {
+    await this.ordersService.deleteOrder(id, req.user.userId);
+  }
+
   // ==================== LISTA DE INTERESSE ====================
 
   /**
@@ -688,7 +714,7 @@ export class ShopAdminController {
     @Req() req: { user: UserContext },
     @Query() filters: InterestFiltersDto,
   ) {
-    const unitId = req.user.unitId!;
+    const unitId = req.user.unitId;
     const result = await this.interestService.getInterestRequests(
       unitId,
       filters,
@@ -713,7 +739,7 @@ export class ShopAdminController {
   @Get("interest/summary")
   @Roles("master", "diretora_geral", "gerente_unidade", "gerente_financeiro", "auxiliar_administrativo")
   async getInterestSummary(@Req() req: { user: UserContext }) {
-    const unitId = req.user.unitId!;
+    const unitId = req.user.unitId;
     const result = await this.interestService.getInterestSummary(unitId);
 
     return {
@@ -773,7 +799,7 @@ export class ShopAdminController {
    * Roles: master, diretora_geral, gerente_unidade
    */
   @Patch("settings/:unitId")
-  @Roles("master", "diretora_geral", "gerente_unidade")
+  @Roles("master", "diretora_geral", "gerente_unidade", "auxiliar_administrativo")
   async updateSettings(
     @Req() req: { user: UserContext },
     @Param("unitId") unitId: string,

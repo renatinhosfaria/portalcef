@@ -1,11 +1,23 @@
 import { Toaster } from "@essencia/ui/components/toaster";
 import "@essencia/ui/globals.css";
 import type { Metadata, Viewport } from "next";
-import { Inter } from "next/font/google";
+import { Outfit, DM_Sans } from "next/font/google";
 
 import "./globals.css";
 
-const inter = Inter({ subsets: ["latin"] });
+// Fonte display para títulos e destaques - moderna e distintiva
+const outfit = Outfit({
+  subsets: ["latin"],
+  variable: "--font-display",
+  display: "swap",
+});
+
+// Fonte body para texto corrido - clean e legível
+const dmSans = DM_Sans({
+  subsets: ["latin"],
+  variable: "--font-body",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "Portal CEF Store",
@@ -29,8 +41,8 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="pt-BR">
-      <body className={inter.className}>
-        <main className="min-h-screen bg-[#F8FAFC]">{children}</main>
+      <body className={`${outfit.variable} ${dmSans.variable} font-body antialiased`}>
+        <main className="min-h-screen bg-stone-50">{children}</main>
         <Toaster position="bottom-right" />
       </body>
     </html>

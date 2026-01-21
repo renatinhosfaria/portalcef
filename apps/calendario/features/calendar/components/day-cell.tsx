@@ -14,6 +14,7 @@ import {
   isSameMonth,
   isToday,
   isWeekend,
+  parseISO,
 } from "date-fns";
 
 import { cn } from "@essencia/ui/lib/utils";
@@ -49,6 +50,7 @@ const FULL_DAY_EVENT_TYPES: CalendarEventType[] = [
   "TERMINO_SEMESTRE",
   "SEMANA_PROVAS",
   "SABADO_LETIVO",
+  "REUNIAO_PEDAGOGICA",
 ];
 
 export function DayCell({
@@ -62,11 +64,31 @@ export function DayCell({
   const isTodayDate = isToday(date);
   const isWeekendDay = isWeekend(date);
   const dayNumber = format(date, "d");
+  const dayOfWeek = getDay(date);
+
+  // Helper para converter data sem problemas de timezone
+  // Extrai ano/mês/dia diretamente da string ISO para evitar conversão UTC
+  const toLocalDate = (dateInput: string | Date): Date => {
+    let dateStr: string;
+    if (typeof dateInput === "string") {
+      dateStr = dateInput;
+    } else {
+      // Se é Date, converter para ISO string
+      dateStr = dateInput.toISOString();
+    }
+    // Extrair apenas "YYYY-MM-DD" da string (ignorar hora e timezone)
+    const datePart = dateStr.split("T")[0] ?? dateStr; // "2026-02-02"
+    const parts = datePart.split("-").map(Number);
+    const year = parts[0] ?? 2026;
+    const month = parts[1] ?? 1;
+    const day = parts[2] ?? 1;
+    return new Date(year, month - 1, day); // month é 0-indexed no JS
+  };
 
   // Get events for this specific day
   const dayEvents = events.filter((event) => {
-    const eventStart = new Date(event.startDate);
-    const eventEnd = new Date(event.endDate);
+    const eventStart = toLocalDate(event.startDate);
+    const eventEnd = toLocalDate(event.endDate);
     return (
       isSameDay(date, eventStart) ||
       isSameDay(date, eventEnd) ||
@@ -83,18 +105,28 @@ export function DayCell({
     FULL_DAY_EVENT_TYPES.includes(event.eventType),
   );
 
-  // Get day of week for display
-  const dayOfWeek = getDay(date);
+  // Verifica se é sábado letivo (tem evento SABADO_LETIVO)
+  const hasSabadoLetivo = dayEvents.some(
+    (event) => event.eventType === "SABADO_LETIVO",
+  );
+
+  // Domingo (0) = sempre vermelho | Sábado (6) sem sábado letivo = vermelho
+  const isDomingo = dayOfWeek === 0;
+  const isSabadoNaoLetivo = dayOfWeek === 6 && !hasSabadoLetivo;
+  const isNonSchoolWeekend = isDomingo || isSabadoNaoLetivo;
+
   const dayNames = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 
-  // Determine background color based on primary event
+  // Determine background color based on primary event or weekend
   const getDayBackground = () => {
     if (!isCurrentMonth) return "bg-slate-100/50";
+    // Evento tem prioridade sobre cor de fim de semana
     if (primaryEvent) {
       const config = eventTypeConfig[primaryEvent.eventType];
       return config.bgColor;
     }
-    if (isWeekendDay) return "bg-slate-50";
+    // 🔴 Vermelho para domingos e sábados não letivos
+    if (isNonSchoolWeekend) return "bg-red-500";
     return "bg-white";
   };
 
@@ -106,7 +138,8 @@ export function DayCell({
       const config = eventTypeConfig[primaryEvent.eventType];
       return config.textColor;
     }
-    if (isWeekendDay) return "text-slate-500";
+    // 🔴 Texto branco para domingos e sábados não letivos
+    if (isNonSchoolWeekend) return "text-white";
     return "text-slate-900";
   };
 
@@ -137,7 +170,9 @@ export function DayCell({
               "text-[10px]",
               primaryEvent
                 ? eventTypeConfig[primaryEvent.eventType].textColor
-                : "text-slate-400",
+                : isNonSchoolWeekend
+                  ? "text-white/80"
+                  : "text-slate-400",
             )}
           >
             {dayNames[dayOfWeek]}

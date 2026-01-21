@@ -9,6 +9,7 @@ import type {
   UpdateCalendarEventInput,
   QueryCalendarEventsInput,
 } from "@essencia/shared/schemas";
+import { getQuinzenaById } from "@essencia/shared/config/quinzenas";
 
 interface UserContext {
   userId: string;
@@ -210,6 +211,288 @@ export class CalendarService {
       year,
       totalSchoolDays,
       monthlyStats,
+    };
+  }
+
+  // =====================================================
+  // MÉTODOS DE INTEGRAÇÃO COM PLANEJAMENTO
+  // =====================================================
+
+  /**
+   * Converte string ISO ou Date para Date local (evita problemas de timezone)
+   */
+  private toLocalDate(dateInput: string | Date): Date {
+    const dateStr =
+      typeof dateInput === "string" ? dateInput : dateInput.toISOString();
+    const datePart = dateStr.split("T")[0] ?? dateStr;
+    const parts = datePart.split("-").map(Number);
+    const year = parts[0] ?? 2026;
+    const month = parts[1] ?? 1;
+    const day = parts[2] ?? 1;
+    return new Date(year, month - 1, day);
+  }
+
+  /**
+   * Formata Date para string YYYY-MM-DD
+   */
+  private formatDateKey(date: Date): string {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+
+  /**
+   * Retorna todos os dias letivos em um intervalo de datas para uma unidade.
+   * Considera:
+   * - Eventos com isSchoolDay=false como bloqueio
+   * - Domingos sempre bloqueados
+   * - Sábados bloqueados exceto se houver SABADO_LETIVO
+   * - Se não houver eventos, assume seg-sex como letivos (fallback)
+   */
+  async getSchoolDaysInRange(
+    unitId: string,
+    startDate: Date,
+    endDate: Date,
+  ): Promise<Date[]> {
+    const db = getDb();
+    const start = this.toLocalDate(startDate);
+    const end = this.toLocalDate(endDate);
+
+    // Buscar TODOS os eventos do calendário para o período
+    const events = await db.query.calendarEvents.findMany({
+      where: and(
+        eq(calendarEvents.unitId, unitId),
+        sql`${calendarEvents.startDate} <= ${this.formatDateKey(end)}`,
+        sql`${calendarEvents.endDate} >= ${this.formatDateKey(start)}`,
+      ),
+    });
+
+    const nonSchoolDaysSet = new Set<string>(); // Dias bloqueados (feriados, férias, recessos)
+    const sabadosLetivosSet = new Set<string>(); // Sábados que têm aula
+
+    // Processar eventos
+    for (const event of events) {
+      const eventStart = this.toLocalDate(event.startDate);
+      const eventEnd = this.toLocalDate(event.endDate);
+
+      for (
+        let d = new Date(eventStart);
+        d <= eventEnd;
+        d.setDate(d.getDate() + 1)
+      ) {
+        const dateKey = this.formatDateKey(d);
+
+        // Se o evento marca como não-letivo, adiciona ao set de bloqueio
+        if (!event.isSchoolDay) {
+          nonSchoolDaysSet.add(dateKey);
+        }
+
+        // SABADO_LETIVO adiciona o dia como letivo mesmo sendo sábado
+        if (event.eventType === "SABADO_LETIVO") {
+          sabadosLetivosSet.add(dateKey);
+        }
+      }
+    }
+
+    const schoolDays: Date[] = [];
+
+    // Iterar sobre todos os dias do intervalo
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      const dateKey = this.formatDateKey(d);
+      const dayOfWeek = d.getDay(); // 0=Domingo, 6=Sábado
+
+      // Pular domingos sempre
+      if (dayOfWeek === 0) continue;
+
+      // Sábados são letivos apenas se houver SABADO_LETIVO
+      if (dayOfWeek === 6 && !sabadosLetivosSet.has(dateKey)) continue;
+
+      // Pular dias marcados como não-letivos (feriados, férias, recessos)
+      if (nonSchoolDaysSet.has(dateKey)) continue;
+
+      schoolDays.push(new Date(d));
+    }
+
+    return schoolDays;
+  }
+
+  /**
+   * Verifica se uma data específica é dia letivo para a unidade.
+   */
+  async isDateSchoolDay(unitId: string, date: Date): Promise<boolean> {
+    const schoolDays = await this.getSchoolDaysInRange(unitId, date, date);
+    return schoolDays.length > 0;
+  }
+
+  /**
+   * Retorna dias não-letivos em um intervalo com o motivo do bloqueio.
+   */
+  async getNonSchoolDaysInRange(
+    unitId: string,
+    startDate: Date,
+    endDate: Date,
+  ): Promise<
+    Array<{
+      date: Date;
+      reason: string;
+      eventType: string | null;
+    }>
+  > {
+    const db = getDb();
+    const start = this.toLocalDate(startDate);
+    const end = this.toLocalDate(endDate);
+
+    // Buscar eventos de bloqueio (isSchoolDay = false)
+    const blockingEvents = await db.query.calendarEvents.findMany({
+      where: and(
+        eq(calendarEvents.unitId, unitId),
+        sql`${calendarEvents.startDate} <= ${this.formatDateKey(end)}`,
+        sql`${calendarEvents.endDate} >= ${this.formatDateKey(start)}`,
+        eq(calendarEvents.isSchoolDay, false),
+      ),
+    });
+
+    // Buscar sábados letivos
+    const sabadosLetivos = await db.query.calendarEvents.findMany({
+      where: and(
+        eq(calendarEvents.unitId, unitId),
+        eq(calendarEvents.eventType, "SABADO_LETIVO"),
+        sql`${calendarEvents.startDate} <= ${this.formatDateKey(end)}`,
+        sql`${calendarEvents.endDate} >= ${this.formatDateKey(start)}`,
+      ),
+    });
+
+    const sabadosLetivosSet = new Set<string>();
+    for (const event of sabadosLetivos) {
+      const eventStart = this.toLocalDate(event.startDate);
+      const eventEnd = this.toLocalDate(event.endDate);
+      for (
+        let d = new Date(eventStart);
+        d <= eventEnd;
+        d.setDate(d.getDate() + 1)
+      ) {
+        sabadosLetivosSet.add(this.formatDateKey(d));
+      }
+    }
+
+    const nonSchoolDays: Array<{
+      date: Date;
+      reason: string;
+      eventType: string | null;
+    }> = [];
+    const processedDates = new Set<string>();
+
+    // Adicionar eventos de bloqueio
+    for (const event of blockingEvents) {
+      const eventStart = this.toLocalDate(event.startDate);
+      const eventEnd = this.toLocalDate(event.endDate);
+
+      for (
+        let d = new Date(eventStart);
+        d <= eventEnd;
+        d.setDate(d.getDate() + 1)
+      ) {
+        if (d >= start && d <= end) {
+          const dateKey = this.formatDateKey(d);
+          if (!processedDates.has(dateKey)) {
+            processedDates.add(dateKey);
+            nonSchoolDays.push({
+              date: new Date(d),
+              reason: event.title,
+              eventType: event.eventType,
+            });
+          }
+        }
+      }
+    }
+
+    // Adicionar finais de semana (exceto sábados letivos)
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      const dateKey = this.formatDateKey(d);
+      const dayOfWeek = d.getDay();
+
+      if (processedDates.has(dateKey)) continue;
+
+      if (dayOfWeek === 0) {
+        nonSchoolDays.push({
+          date: new Date(d),
+          reason: "Domingo",
+          eventType: null,
+        });
+        processedDates.add(dateKey);
+      } else if (dayOfWeek === 6 && !sabadosLetivosSet.has(dateKey)) {
+        nonSchoolDays.push({
+          date: new Date(d),
+          reason: "Sábado (não letivo)",
+          eventType: null,
+        });
+        processedDates.add(dateKey);
+      }
+    }
+
+    return nonSchoolDays.sort((a, b) => a.date.getTime() - b.date.getTime());
+  }
+
+  /**
+   * Valida se uma quinzena tem dias letivos suficientes.
+   * Retorna objeto com validação e detalhes.
+   */
+  async validateQuinzenaSchoolDays(
+    unitId: string,
+    quinzenaId: string,
+  ): Promise<{
+    isValid: boolean;
+    totalDays: number;
+    schoolDays: number;
+    nonSchoolDays: Array<{ date: string; reason: string }>;
+    message: string;
+  }> {
+    const quinzena = getQuinzenaById(quinzenaId);
+    if (!quinzena) {
+      return {
+        isValid: false,
+        totalDays: 0,
+        schoolDays: 0,
+        nonSchoolDays: [],
+        message: "Quinzena não encontrada",
+      };
+    }
+
+    const startDate = this.toLocalDate(quinzena.startDate);
+    const endDate = this.toLocalDate(quinzena.endDate);
+
+    const schoolDays = await this.getSchoolDaysInRange(
+      unitId,
+      startDate,
+      endDate,
+    );
+    const nonSchoolDaysList = await this.getNonSchoolDaysInRange(
+      unitId,
+      startDate,
+      endDate,
+    );
+
+    const totalDays =
+      Math.ceil(
+        (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24),
+      ) + 1;
+
+    // Formatar datas para resposta
+    const formattedNonSchoolDays = nonSchoolDaysList.map((d) => ({
+      date: this.formatDateKey(d.date),
+      reason: d.reason,
+    }));
+
+    return {
+      isValid: schoolDays.length > 0,
+      totalDays,
+      schoolDays: schoolDays.length,
+      nonSchoolDays: formattedNonSchoolDays,
+      message:
+        schoolDays.length === 0
+          ? "Esta quinzena não possui dias letivos. Verifique o calendário escolar."
+          : `${schoolDays.length} dias letivos nesta quinzena.`,
     };
   }
 }

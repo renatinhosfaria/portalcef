@@ -377,16 +377,6 @@ export function PlanoContent({
             )}
 
             <div className="flex gap-3">
-              {/* Botao Salvar Rascunho - somente para status RASCUNHO */}
-              {plano.status === "RASCUNHO" && (
-                <Button
-                  variant="outline"
-                  disabled={actionLoading || submitting}
-                >
-                  Salvar Rascunho
-                </Button>
-              )}
-
               {/* Botao Enviar para Analise */}
               <Button
                 onClick={handleSubmit}

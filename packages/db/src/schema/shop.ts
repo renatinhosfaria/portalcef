@@ -19,8 +19,9 @@ import { users } from "./users.js";
 // Product Category Enum
 // ============================================
 export const productCategoryEnum = [
-  "UNIFORME_DIARIO",
-  "UNIFORME_EDUCACAO_FISICA",
+  "UNIFORME_FEMININO",
+  "UNIFORME_MASCULINO",
+  "UNIFORME_UNISSEX",
   "ACESSORIO",
 ] as const;
 export type ProductCategory = (typeof productCategoryEnum)[number];
@@ -341,6 +342,7 @@ export const shopInterestRequests = pgTable(
     studentName: varchar("student_name", { length: 200 }).notNull(),
     studentClass: varchar("student_class", { length: 50 }),
     notes: text("notes"),
+    status: text("status").notNull().default("PENDENTE"),
     contactedAt: timestamp("contacted_at", { withTimezone: true }),
     contactedBy: uuid("contacted_by").references(() => users.id, {
       onDelete: "set null",

@@ -9,7 +9,6 @@ import { useTenant } from "@essencia/shared/providers/tenant";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
-import { GestaoPanel } from "../features/dashboard";
 import { getDashboardForRole } from "../lib/role-groups";
 
 export default function HomePage() {
@@ -21,22 +20,32 @@ export default function HomePage() {
 
     const dashboardType = getDashboardForRole(role);
 
-    // Creators go to /planejamentos
+    // Professoras e auxiliares -> /planejamentos
     if (dashboardType === "professora") {
-      // Force hard redirect to avoid routing issues
-      window.location.href = "/planejamentos";
+      window.location.href = "/planejamento/planejamentos";
       return;
     }
 
-    // Reviewers go to /regencia
-    if (dashboardType === "regencia") {
-      router.replace("/regencia");
+    // Analista -> /analise
+    if (dashboardType === "analise") {
+      router.replace("/analise");
       return;
     }
 
-    // No access roles go to home
+    // Coordenadoras -> /coordenacao
+    if (dashboardType === "coordenacao") {
+      router.replace("/coordenacao");
+      return;
+    }
+
+    // Gestao (diretora, master, gerentes) -> /gestao
+    if (dashboardType === "gestao") {
+      router.replace("/gestao");
+      return;
+    }
+
+    // Sem acesso -> portal principal
     if (dashboardType === "no-access") {
-      // Redirect to the main portal
       const homeUrl =
         typeof window !== "undefined" &&
         window.location.hostname === "localhost"
@@ -54,31 +63,20 @@ export default function HomePage() {
 
   const dashboardType = getDashboardForRole(role);
 
-  // GRUPO 1: Creators - Redirect handled by useEffect
-  if (dashboardType === "professora") {
+  // Show loading while redirecting
+  if (
+    dashboardType === "professora" ||
+    dashboardType === "analise" ||
+    dashboardType === "coordenacao" ||
+    dashboardType === "gestao" ||
+    dashboardType === "no-access"
+  ) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen gap-4">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-        <p className="text-muted-foreground">
-          Redirecionando para o novo painel...
-        </p>
+        <p className="text-muted-foreground">Redirecionando...</p>
       </div>
     );
-  }
-
-  // GRUPO 2: Reviewers - Redirect handled by useEffect
-  if (dashboardType === "regencia") {
-    return <LoadingSkeleton />;
-  }
-
-  // GRUPO 3: Managers - Management Dashboard
-  if (dashboardType === "gestao") {
-    return <GestaoPanel />;
-  }
-
-  // GRUPO 4: No access - Redirect handled by useEffect
-  if (dashboardType === "no-access") {
-    return <LoadingSkeleton />;
   }
 
   // Unknown role - Access denied

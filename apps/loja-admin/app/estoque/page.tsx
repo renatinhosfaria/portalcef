@@ -3,6 +3,8 @@
 import { Search, Plus, Settings, History, Package, AlertTriangle, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
+import { apiFetch } from '../../lib/api';
+
 interface InventoryItem {
     variantId: string;
     productName: string;
@@ -27,7 +29,7 @@ export default function EstoquePage() {
     const loadInventory = async () => {
         try {
             setLoading(true);
-            const response = await fetch('/api/shop/admin/inventory');
+            const response = await apiFetch('/api/shop/admin/inventory');
 
             if (!response.ok) {
                 console.warn('API de estoque não disponível:', response.status);
@@ -247,7 +249,7 @@ export default function EstoquePage() {
                                                 return;
                                             }
 
-                                            const res = await fetch('/api/shop/admin/inventory/entry', {
+                                            const res = await apiFetch('/api/shop/admin/inventory/entry', {
                                                 method: 'POST',
                                                 headers: { 'Content-Type': 'application/json' },
                                                 body: JSON.stringify({

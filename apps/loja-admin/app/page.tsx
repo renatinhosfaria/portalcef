@@ -14,6 +14,8 @@ import {
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 
+import { apiFetch } from '../lib/api';
+
 interface DashboardStats {
   pendingPickups: number;
   lowStockAlerts: number;
@@ -46,8 +48,8 @@ export default function DashboardPage() {
       setLoading(true);
 
       // TODO: Implementar API /api/shop/admin/dashboard no backend
-      const response = await fetch('/api/shop/admin/dashboard');
-      
+      const response = await apiFetch('/api/shop/admin/dashboard');
+
       if (!response.ok) {
         console.warn('API de dashboard não disponível:', response.status);
         setStats({
@@ -60,7 +62,7 @@ export default function DashboardPage() {
         setRecentOrders([]);
         return;
       }
-      
+
       const result = await response.json();
 
       setStats(result.data.stats || {

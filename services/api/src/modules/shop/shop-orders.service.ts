@@ -68,7 +68,7 @@ export class ShopOrdersService {
     private inventoryService: ShopInventoryService,
     @Inject(forwardRef(() => PaymentsService))
     private paymentsService: PaymentsService,
-  ) {}
+  ) { }
 
   /**
    * Gera número de pedido único de 6 dígitos
@@ -461,8 +461,14 @@ export class ShopOrdersService {
    * POST /shop/admin/orders/presential
    *
    * Venda presencial (confirma imediatamente, sem reserva)
+   * schoolId e unitId são injetados da sessão do usuário (tenant context)
    */
-  async createPresentialSale(dto: CreatePresentialSaleDto, userId: string) {
+  async createPresentialSale(
+    dto: CreatePresentialSaleDto,
+    schoolId: string,
+    unitId: string,
+    userId: string,
+  ) {
     const db = getDb();
 
     // 1. Validar itens
@@ -493,7 +499,8 @@ export class ShopOrdersService {
         with: { product: true },
       });
 
-      const itemPrice = variant!.product.price;
+      // Preço: usa priceOverride da variante ou basePrice do produto
+      const itemPrice = variant!.priceOverride || variant!.product.basePrice;
       const itemTotal = itemPrice * item.quantity;
       totalAmount += itemTotal;
 
@@ -516,13 +523,13 @@ export class ShopOrdersService {
       // Usa confirmSale com orderId temporário (será substituído)
       await this.inventoryService.confirmSale(
         item.variantId,
-        dto.unitId,
+        unitId,
         item.quantity,
         orderNumber,
       );
       salesConfirmed.push({
         variantId: item.variantId,
-        unitId: dto.unitId,
+        unitId: unitId,
         quantity: item.quantity,
       });
     }
@@ -534,8 +541,8 @@ export class ShopOrdersService {
       .insert(shopOrders)
       .values({
         orderNumber,
-        schoolId: dto.schoolId,
-        unitId: dto.unitId,
+        schoolId,
+        unitId,
         orderSource: "PRESENCIAL",
         status: "RETIRADO",
         totalAmount,
@@ -695,7 +702,7 @@ export class ShopOrdersService {
   async confirmPayment(
     orderId: string,
     paymentMethod: "DINHEIRO" | "PIX" | "CARTAO_CREDITO" | "CARTAO_DEBITO",
-    adminUserId: string,
+    _adminUserId: string,
   ) {
     const db = getDb();
 
@@ -753,6 +760,62 @@ export class ShopOrdersService {
       orderNumber: order.orderNumber,
       paymentMethod,
     };
+  }
+
+  /**
+   * DELETE /shop/admin/orders/:id
+   *
+   * Exclui permanentemente um pedido (hard delete)
+   * Apenas pedidos AGUARDANDO_PAGAMENTO, CANCELADO ou EXPIRADO podem ser excluídos
+   */
+  async deleteOrder(orderId: string, _userId: string) {
+    const db = getDb();
+
+    const order = await db.query.shopOrders.findFirst({
+      where: eq(shopOrders.id, orderId),
+      with: { items: true },
+    });
+
+    if (!order) {
+      throw new NotFoundException({
+        code: "RESOURCE_NOT_FOUND",
+        message: `Pedido ${orderId} não encontrado`,
+      });
+    }
+
+    // Validar status permite exclusão
+    const allowedStatuses = ["AGUARDANDO_PAGAMENTO", "CANCELADO", "EXPIRADO"];
+    if (!allowedStatuses.includes(order.status)) {
+      throw new BadRequestException({
+        code: "INVALID_STATUS",
+        message: `Apenas pedidos AGUARDANDO_PAGAMENTO, CANCELADO ou EXPIRADO podem ser excluídos. Status atual: ${order.status}`,
+      });
+    }
+
+    // Se AGUARDANDO_PAGAMENTO, liberar reservas antes de excluir
+    if (order.status === "AGUARDANDO_PAGAMENTO") {
+      for (const item of order.items) {
+        try {
+          await this.inventoryService.releaseReservation(
+            item.variantId,
+            order.unitId,
+            item.quantity,
+            order.id,
+          );
+        } catch (error) {
+          // Log mas continua (reserva pode já não existir)
+          console.warn(
+            `Erro ao liberar reserva do item ${item.id} do pedido ${order.orderNumber}:`,
+            error,
+          );
+        }
+      }
+    }
+
+    // Deletar pedido (itens são removidos automaticamente via CASCADE)
+    await db.delete(shopOrders).where(eq(shopOrders.id, orderId));
+
+    return { success: true, message: "Pedido excluído com sucesso" };
   }
 
   /**

@@ -1,16 +1,24 @@
 'use client';
 
-import { Search, Eye, Check, ChevronDown, ChevronRight, Globe, Store, CreditCard, X } from 'lucide-react';
+import { Search, Eye, Check, ChevronDown, ChevronRight, Globe, Store, CreditCard, X, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { Fragment, useCallback, useEffect, useState } from 'react';
 
+import { apiFetch } from '../../lib/api';
+
 interface OrderItem {
     id: string;
-    productName: string;
-    variantSize: string;
+    productName?: string;
+    variantSize?: string;
     studentName: string;
     quantity: number;
     unitPrice: number;
+    product?: {
+        name: string;
+    };
+    variant?: {
+        size: string;
+    };
 }
 
 interface Order {
@@ -21,6 +29,7 @@ interface Order {
     totalAmount: number;
     status: string;
     orderSource: string;
+    paymentMethod?: PaymentMethod;
     createdAt: string;
     items: OrderItem[];
 }
@@ -52,7 +61,7 @@ export default function PedidosPage() {
             if (search) params.set('search', search);
             if (statusFilter) params.set('status', statusFilter);
 
-            const response = await fetch(`/api/shop/admin/orders?${params.toString()}`);
+            const response = await apiFetch(`/api/shop/admin/orders?${params.toString()}`);
 
             if (!response.ok) {
                 console.warn('API de pedidos não disponível:', response.status);
@@ -126,7 +135,7 @@ export default function PedidosPage() {
         if (!confirm('Confirmar retirada deste pedido?')) return;
 
         try {
-            const res = await fetch(`/api/shop/admin/orders/${orderId}/pickup`, {
+            const res = await apiFetch(`/api/shop/admin/orders/${orderId}/pickup`, {
                 method: 'PATCH'
             });
 
@@ -160,7 +169,7 @@ export default function PedidosPage() {
         setConfirmingPayment(true);
 
         try {
-            const res = await fetch(`/api/shop/admin/orders/${confirmPaymentModal.orderId}/confirm-payment`, {
+            const res = await apiFetch(`/api/shop/admin/orders/${confirmPaymentModal.orderId}/confirm-payment`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ paymentMethod: selectedPaymentMethod }),
@@ -180,6 +189,53 @@ export default function PedidosPage() {
             alert(message);
         } finally {
             setConfirmingPayment(false);
+        }
+    };
+
+    // Estado para modal de exclusão
+    const [deleteOrderModal, setDeleteOrderModal] = useState<{
+        open: boolean;
+        orderId: string;
+        orderNumber: string;
+    } | null>(null);
+    const [deletingOrder, setDeletingOrder] = useState(false);
+
+    const openDeleteOrderModal = (order: Order) => {
+        setDeleteOrderModal({
+            open: true,
+            orderId: order.id,
+            orderNumber: order.orderNumber,
+        });
+    };
+
+    const closeDeleteOrderModal = () => {
+        setDeleteOrderModal(null);
+    };
+
+    const handleDeleteOrder = async () => {
+        if (!deleteOrderModal) return;
+
+        setDeletingOrder(true);
+
+        try {
+            const res = await apiFetch(`/api/shop/admin/orders/${deleteOrderModal.orderId}`, {
+                method: 'DELETE'
+            });
+
+            if (!res.ok) {
+                const errorData = await res.json();
+                throw new Error(errorData.error?.message || 'Falha ao excluir pedido');
+            }
+
+            closeDeleteOrderModal();
+            loadOrders();
+            alert('Pedido excluído com sucesso!');
+        } catch (err) {
+            console.error(err);
+            const message = err instanceof Error ? err.message : 'Erro ao excluir pedido';
+            alert(message);
+        } finally {
+            setDeletingOrder(false);
         }
     };
 
@@ -310,6 +366,15 @@ export default function PedidosPage() {
                                                             Retirar
                                                         </button>
                                                     )}
+                                                    {['AGUARDANDO_PAGAMENTO', 'CANCELADO', 'EXPIRADO'].includes(order.status) && (
+                                                        <button
+                                                            onClick={() => openDeleteOrderModal(order)}
+                                                            className="btn-admin btn-admin-ghost btn-admin-sm text-red-500 hover:text-red-700 hover:bg-red-50"
+                                                            title="Excluir Definitivamente"
+                                                        >
+                                                            <Trash2 className="w-4 h-4" />
+                                                        </button>
+                                                    )}
                                                 </div>
                                             </td>
                                         </tr>
@@ -321,9 +386,13 @@ export default function PedidosPage() {
                                                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                                             {order.items.map(item => (
                                                                 <div key={item.id} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                                                                    <p className="font-semibold text-slate-800">{item.productName}</p>
+                                                                    <p className="font-semibold text-slate-800">
+                                                                        {item.product?.name || item.productName || 'Produto'}
+                                                                    </p>
                                                                     <p className="text-sm text-slate-500 mt-1">
-                                                                        Tamanho: <span className="font-medium text-slate-700">{item.variantSize}</span> |
+                                                                        Tamanho: <span className="font-medium text-slate-700">
+                                                                            {item.variant?.size || item.variantSize || '-'}
+                                                                        </span> |
                                                                         Qtd: <span className="font-medium text-slate-700">{item.quantity}</span>
                                                                     </p>
                                                                     <p className="text-sm text-slate-500">
@@ -432,6 +501,74 @@ export default function PedidosPage() {
                                     </span>
                                 ) : (
                                     'Confirmar Pagamento'
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal de Exclusão de Pedido */}
+            {deleteOrderModal?.open && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                    {/* Backdrop */}
+                    <div
+                        className="absolute inset-0 bg-black/50"
+                        onClick={closeDeleteOrderModal}
+                    />
+
+                    {/* Modal */}
+                    <div className="relative bg-white rounded-xl shadow-xl max-w-md w-full p-6 space-y-6">
+                        {/* Header */}
+                        <div className="flex items-center justify-between">
+                            <h2 className="text-xl font-bold text-red-600 flex items-center gap-2">
+                                <Trash2 className="w-5 h-5" />
+                                Excluir Pedido
+                            </h2>
+                            <button
+                                onClick={closeDeleteOrderModal}
+                                className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                            >
+                                <X className="w-5 h-5 text-slate-500" />
+                            </button>
+                        </div>
+
+                        {/* Content */}
+                        <div className="space-y-4">
+                            <div className="bg-red-50 border border-red-100 rounded-lg p-4 text-red-800">
+                                <p className="font-semibold mb-1">Atenção: Ação Irreversível!</p>
+                                <p className="text-sm">
+                                    Você está prestes a excluir permanentemente o pedido <strong>#{deleteOrderModal.orderNumber}</strong>.
+                                    Todos os dados relacionados serão removidos do sistema.
+                                </p>
+                            </div>
+
+                            <p className="text-slate-600">
+                                Tem certeza que deseja prosseguir com a exclusão definitiva?
+                            </p>
+                        </div>
+
+                        {/* Actions */}
+                        <div className="flex gap-3 pt-2">
+                            <button
+                                onClick={closeDeleteOrderModal}
+                                className="flex-1 px-4 py-2.5 rounded-lg border border-slate-200 text-slate-600 font-medium hover:bg-slate-50 transition-colors"
+                                disabled={deletingOrder}
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={handleDeleteOrder}
+                                disabled={deletingOrder}
+                                className="flex-1 px-4 py-2.5 rounded-lg bg-red-600 text-white font-medium hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {deletingOrder ? (
+                                    <span className="flex items-center justify-center gap-2">
+                                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                        Excluindo...
+                                    </span>
+                                ) : (
+                                    'Sim, Excluir'
                                 )}
                             </button>
                         </div>

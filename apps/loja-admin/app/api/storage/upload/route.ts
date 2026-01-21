@@ -1,5 +1,6 @@
 import { cookies } from 'next/headers';
-import { NextRequest, NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
 
 const API_URL = process.env.INTERNAL_API_URL || 'http://localhost:3001';
 

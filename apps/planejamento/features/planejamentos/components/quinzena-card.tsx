@@ -89,5 +89,5 @@ export function QuinzenaCard({ quinzena }: QuinzenaCardProps) {
     return <div>{cardContent}</div>;
   }
 
-  return <Link href={`/planejamentos/${quinzena.id}`}>{cardContent}</Link>;
+  return <Link href={`/plano-aula/${quinzena.id}`}>{cardContent}</Link>;
 }

@@ -6,7 +6,7 @@
 import {
   formatQuinzenaDateRange,
   getQuinzenaById,
-} from "@essencia/shared/config/quinzenas-2026";
+} from "@essencia/shared/config/quinzenas";
 import { serverApi } from "@essencia/shared/fetchers/server";
 import { ArrowLeft, Calendar, Clock } from "lucide-react";
 import { cookies } from "next/headers";
@@ -30,12 +30,9 @@ interface UserData {
   stageId: string | null;
 }
 
-interface UserResponse {
-  success: boolean;
-  data?: {
-    user: UserData;
-  };
-  error?: string;
+// serverFetch já desempacota o ApiResponse, então recebemos o data diretamente
+interface UserApiData {
+  user: UserData;
 }
 
 interface Turma {
@@ -61,12 +58,13 @@ async function getCookieHeader(): Promise<string> {
 
 async function getCurrentUser(cookieHeader: string): Promise<UserData | null> {
   try {
-    const response = await serverApi.get<UserResponse>("/api/auth/me", {
+    // serverFetch já desempacota o ApiResponse, então response é { user: UserData }
+    const response = await serverApi.get<UserApiData>("/api/auth/me", {
       cookies: cookieHeader,
     });
 
-    if (response.success && response.data?.user) {
-      return response.data.user;
+    if (response?.user) {
+      return response.user;
     }
     return null;
   } catch (error) {

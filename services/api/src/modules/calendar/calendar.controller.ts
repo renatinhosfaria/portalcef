@@ -33,6 +33,7 @@ interface UserContext {
   unitId: string | null;
 }
 
+// Todos os usuários autenticados podem visualizar o calendário
 const VIEW_ROLES = [
   "master",
   "diretora_geral",
@@ -45,6 +46,9 @@ const VIEW_ROLES = [
   "coordenadora_fundamental_ii",
   "coordenadora_medio",
   "analista_pedagogico",
+  "professora",
+  "auxiliar_administrativo",
+  "auxiliar_sala",
 ] as const;
 
 const EDIT_ROLES = [
@@ -169,5 +173,37 @@ export class CalendarController {
       year ? parseInt(year, 10) : 2026,
     );
     return { success: true, data: stats };
+  }
+
+  /**
+   * Retorna informações de dias letivos para uma quinzena específica.
+   * Usado pelo módulo de planejamento para validar disponibilidade.
+   */
+  @Get("quinzena/:quinzenaId/school-days")
+  @Roles(...VIEW_ROLES)
+  async getQuinzenaSchoolDays(
+    @CurrentUser() user: UserContext,
+    @Param("quinzenaId") quinzenaId: string,
+    @Query("unitId") unitId?: string,
+  ) {
+    // Usar unitId do query ou da sessão
+    const targetUnitId = unitId || user.unitId;
+
+    if (!targetUnitId) {
+      return {
+        success: false,
+        error: {
+          code: "MISSING_UNIT",
+          message: "Unidade não especificada",
+        },
+      };
+    }
+
+    const result = await this.calendarService.validateQuinzenaSchoolDays(
+      targetUnitId,
+      quinzenaId,
+    );
+
+    return { success: true, data: result };
   }
 }

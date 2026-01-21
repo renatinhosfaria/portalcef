@@ -1,16 +1,17 @@
 'use client';
 
+import { useTenant } from '@essencia/shared/providers/tenant';
 import { Button } from '@essencia/ui/components/button';
 import { Input } from '@essencia/ui/components/input';
 import { Label } from '@essencia/ui/components/label';
 import { Sheet } from '@essencia/ui/components/sheet';
-import { useTenant } from '@essencia/shared/providers/tenant';
 import { AlertCircle, Check, Loader2, Package, Plus, Edit, Layers, ToggleLeft, ToggleRight, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 
 import { ImageUploader } from '../../components/ImageUploader';
+import { apiFetch } from '../../lib/api';
 
 interface Product {
     id: string;
@@ -25,23 +26,27 @@ interface Product {
 }
 
 const CATEGORY_OPTIONS = [
-    { value: 'UNIFORME_DIARIO', label: 'Uniforme Diário' },
-    { value: 'UNIFORME_EDUCACAO_FISICA', label: 'Educação Física' },
+    { value: 'UNIFORME_FEMININO', label: 'Uniforme Feminino' },
+    { value: 'UNIFORME_MASCULINO', label: 'Uniforme Masculino' },
+    { value: 'UNIFORME_UNISSEX', label: 'Uniforme Unissex' },
     { value: 'ACESSORIO', label: 'Acessório' },
 ];
 
 export default function ProdutosPage() {
     const router = useRouter();
-    const { schoolId } = useTenant();
+    const { schoolId, role } = useTenant();
     const [products, setProducts] = useState<Product[]>([]);
     const [loading, setLoading] = useState(true);
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [productToEdit, setProductToEdit] = useState<Product | null>(null);
 
+    // Permission check
+    const canManageProducts = ['master', 'diretora_geral', 'gerente_unidade', 'auxiliar_administrativo'].includes(role);
+
     // Form state
     const [formData, setFormData] = useState({
         name: '',
-        category: 'UNIFORME_DIARIO',
+        category: 'UNIFORME_FEMININO',
         basePrice: '',
         description: '',
         images: [] as string[],
@@ -53,7 +58,7 @@ export default function ProdutosPage() {
     const loadProducts = useCallback(async () => {
         try {
             setLoading(true);
-            const response = await fetch('/api/shop/admin/products');
+            const response = await apiFetch('/api/shop/admin/products');
 
             if (!response.ok) {
                 console.warn('API de produtos não disponível:', response.status);
@@ -88,7 +93,7 @@ export default function ProdutosPage() {
         setProductToEdit(null);
         setFormData({
             name: '',
-            category: 'UNIFORME_DIARIO',
+            category: 'UNIFORME_FEMININO',
             basePrice: '',
             description: '',
             images: [],
@@ -168,7 +173,7 @@ export default function ProdutosPage() {
                 : '/api/shop/admin/products';
             const method = isEditing ? 'PATCH' : 'POST';
 
-            const res = await fetch(url, {
+            const res = await apiFetch(url, {
                 method,
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
@@ -199,7 +204,7 @@ export default function ProdutosPage() {
         if (!product) return;
 
         try {
-            const res = await fetch(`/api/shop/admin/products/${productId}`, {
+            const res = await apiFetch(`/api/shop/admin/products/${productId}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ isActive: !product.isActive })
@@ -217,22 +222,32 @@ export default function ProdutosPage() {
     };
 
     const deleteProduct = async (productId: string, productName: string) => {
-        const confirmed = window.confirm(`Tem certeza que deseja excluir o produto "${productName}"?\n\nEsta ação não pode ser desfeita.`);
+        const confirmed = window.confirm(
+            `Tem certeza que deseja EXCLUIR PERMANENTEMENTE o produto "${productName}"?\n\n` +
+            `Isso excluirá também:\n` +
+            `- Todo o histórico de estoque\n` +
+            `- Todas as variantes/tamanhos\n\n` +
+            `ATENÇÃO: Se houver pedidos para este produto, a exclusão será bloqueada.\n` +
+            `Deseja continuar?`
+        );
         if (!confirmed) return;
 
         try {
-            const res = await fetch(`/api/shop/admin/products/${productId}`, {
+            const res = await apiFetch(`/api/shop/admin/products/${productId}`, {
                 method: 'DELETE',
             });
 
             if (!res.ok && res.status !== 204) {
-                throw new Error('Falha ao excluir');
+                const data = await res.json().catch(() => ({}));
+                const errorMessage = data.message || data.error?.message || 'Falha ao excluir produto';
+                throw new Error(errorMessage);
             }
 
             setProducts(products.filter(p => p.id !== productId));
+            alert('Produto excluído com sucesso!');
         } catch (err) {
             console.error(err);
-            alert('Erro ao excluir produto');
+            alert(err instanceof Error ? err.message : 'Erro ao excluir produto');
         }
     };
 
@@ -246,13 +261,15 @@ export default function ProdutosPage() {
                     <h1 className="text-3xl font-bold text-slate-800 tracking-tight">Gestão de Produtos</h1>
                     <p className="text-slate-500 mt-1">Gerencie o catálogo de uniformes</p>
                 </div>
-                <Button
-                    onClick={handleCreateClick}
-                    className="bg-[#A3D154] hover:bg-[#8ec33e] text-slate-900 font-bold"
-                >
-                    <Plus className="w-4 h-4 mr-2" />
-                    Novo Produto
-                </Button>
+                {canManageProducts && (
+                    <Button
+                        onClick={handleCreateClick}
+                        className="bg-[#A3D154] hover:bg-[#8ec33e] text-slate-900 font-bold"
+                    >
+                        <Plus className="w-4 h-4 mr-2" />
+                        Novo Produto
+                    </Button>
+                )}
             </div>
 
             {/* Products Table */}
@@ -264,7 +281,7 @@ export default function ProdutosPage() {
                                 <th>Produto</th>
                                 <th>Categoria</th>
                                 <th>Preço Base</th>
-                                <th>Variantes</th>
+                                <th>Tamanhos</th>
                                 <th>Status</th>
                                 <th>Ações</th>
                             </tr>
@@ -301,10 +318,12 @@ export default function ProdutosPage() {
                                         <td className="text-slate-600">{product.variantsCount} tamanhos</td>
                                         <td>
                                             <button
-                                                onClick={() => toggleActive(product.id)}
-                                                className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors cursor-pointer ${product.isActive
-                                                    ? 'bg-[#A3D154]/20 text-[#5a7a1f]'
-                                                    : 'bg-slate-100 text-slate-500'
+                                                onClick={() => canManageProducts && toggleActive(product.id)}
+                                                disabled={!canManageProducts}
+                                                className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${canManageProducts ? 'cursor-pointer' : 'cursor-not-allowed opacity-80'
+                                                    } ${product.isActive
+                                                        ? 'bg-[#A3D154]/20 text-[#5a7a1f]'
+                                                        : 'bg-slate-100 text-slate-500'
                                                     }`}
                                             >
                                                 {product.isActive ? (
@@ -316,26 +335,30 @@ export default function ProdutosPage() {
                                         </td>
                                         <td>
                                             <div className="flex gap-2">
-                                                <button
-                                                    onClick={() => handleEditClick(product)}
-                                                    className="btn-admin btn-admin-ghost btn-admin-sm"
-                                                >
-                                                    <Edit className="w-4 h-4" />
-                                                </button>
+                                                {canManageProducts && (
+                                                    <button
+                                                        onClick={() => handleEditClick(product)}
+                                                        className="btn-admin btn-admin-ghost btn-admin-sm"
+                                                    >
+                                                        <Edit className="w-4 h-4" />
+                                                    </button>
+                                                )}
                                                 <Link
                                                     href={`/produtos/${product.id}/variantes`}
                                                     className="btn-admin btn-admin-secondary btn-admin-sm"
                                                 >
                                                     <Layers className="w-4 h-4" />
-                                                    Variantes
+                                                    Tamanhos
                                                 </Link>
-                                                <button
-                                                    onClick={() => deleteProduct(product.id, product.name)}
-                                                    className="btn-admin btn-admin-ghost btn-admin-sm text-red-500 hover:text-red-700 hover:bg-red-50"
-                                                    title="Excluir produto"
-                                                >
-                                                    <Trash2 className="w-4 h-4" />
-                                                </button>
+                                                {canManageProducts && (
+                                                    <button
+                                                        onClick={() => deleteProduct(product.id, product.name)}
+                                                        className="btn-admin btn-admin-ghost btn-admin-sm text-red-500 hover:text-red-700 hover:bg-red-50"
+                                                        title="Excluir produto"
+                                                    >
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </button>
+                                                )}
                                             </div>
                                         </td>
                                     </tr>
@@ -468,6 +491,6 @@ export default function ProdutosPage() {
                     </div>
                 </form>
             </Sheet>
-        </div>
+        </div >
     );
 }

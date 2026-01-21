@@ -12,6 +12,7 @@ import { useCart } from '@/lib/useCart';
 interface ProductVariant {
   id: string;
   size: string;
+  priceOverride: number | null; // Price in cents
   // inventory is returned by backend, we calculate available_stock from it
   inventory?: { quantity: number; reservedQuantity: number }[];
   available_stock?: number; // Calculated on frontend
@@ -99,6 +100,7 @@ export default function ProductDetailPage({
 
             return {
               ...v,
+              priceOverride: v.priceOverride,
               available_stock: inventoryStock
             };
           })
@@ -140,7 +142,7 @@ export default function ProductDetailPage({
         productName: product!.name,
         variantSize: variant.size,
         quantity,
-        unitPrice: product!.basePrice / 100, // Use real price from backend (cents -> float)
+        unitPrice: (variant.priceOverride ?? product!.basePrice) / 100, // Use variant price if available, else base price
         studentName: studentName.trim(),
         imageUrl: product!.imageUrl,
         availableStock: availableStock,
@@ -182,6 +184,7 @@ export default function ProductDetailPage({
     );
   }
 
+  const selectedVariantData = product.variants.find((v) => v.id === selectedVariant);
   const allOutOfStock = product.variants.every((v) => v.available_stock === 0);
 
   return (
@@ -260,9 +263,20 @@ export default function ProductDetailPage({
                 <p className="text-sm text-slate-600">
                   Estoque disponível:{' '}
                   <span className="font-semibold tabular-nums">
-                    {product.variants.find((v) => v.id === selectedVariant)?.available_stock || 0} unidades
+                    {selectedVariantData?.available_stock || 0} unidades
                   </span>
                 </p>
+              )}
+
+              {/* Valor */}
+              {selectedVariant && (
+                <div className="flex items-baseline gap-2">
+                  <span className="text-3xl font-display font-bold text-slate-900 tabular-nums">
+                    {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
+                      ((selectedVariantData?.priceOverride ?? product.basePrice) / 100),
+                    )}
+                  </span>
+                </div>
               )}
 
               {/* Nome do Aluno */}
@@ -300,7 +314,7 @@ export default function ProductDetailPage({
                     value={quantity}
                     onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                       const val = parseInt(e.target.value) || 1;
-                      const maxStock = product.variants.find((v) => v.id === selectedVariant)?.available_stock || 1;
+                      const maxStock = selectedVariantData?.available_stock || 1;
                       setQuantity(Math.max(1, Math.min(val, maxStock)));
                     }}
                     className="input w-20 text-center"
@@ -309,13 +323,13 @@ export default function ProductDetailPage({
                   />
                   <button
                     onClick={() => {
-                      const maxStock = product.variants.find((v) => v.id === selectedVariant)?.available_stock || 1;
+                      const maxStock = selectedVariantData?.available_stock || 1;
                       setQuantity(Math.min(quantity + 1, maxStock));
                     }}
                     disabled={
                       allOutOfStock ||
                       !selectedVariant ||
-                      quantity >= (product.variants.find((v) => v.id === selectedVariant)?.available_stock || 0)
+                      quantity >= (selectedVariantData?.available_stock || 0)
                     }
                     className="w-10 h-10 rounded-lg border border-slate-300 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed font-semibold transition-colors duration-150"
                   >

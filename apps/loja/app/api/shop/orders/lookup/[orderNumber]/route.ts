@@ -22,7 +22,7 @@ export async function GET(
             );
         }
 
-        const url = `${API_URL}/shop/orders/${orderNumber}?phone=${encodeURIComponent(phone)}`;
+        const url = `${API_URL}/api/shop/orders/${orderNumber}?phone=${encodeURIComponent(phone)}`;
 
         const response = await fetch(url, {
             method: "GET",

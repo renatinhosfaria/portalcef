@@ -205,7 +205,7 @@ export function useAnalistaActions(): UseAnalistaActionsReturn {
     const result = await api.get<PlanoAulaSummary[]>(
       "/plano-aula/analista/pendentes",
     );
-    return result;
+    return result || [];
   }, []);
 
   const aprovar = useCallback(async (planoId: string): Promise<void> => {
@@ -262,7 +262,7 @@ export function useCoordenadoraActions(): UseCoordenadoraActionsReturn {
     const result = await api.get<PlanoAulaSummary[]>(
       "/plano-aula/coordenadora/pendentes",
     );
-    return result;
+    return result || [];
   }, []);
 
   const aprovar = useCallback(async (planoId: string): Promise<void> => {
@@ -530,7 +530,7 @@ export function useGestaoPlanos(): UseGestaoPlanosReturn {
           `/plano-aula/gestao/listar?${queryString}`,
         );
 
-        setPlanos(result.data);
+        setPlanos(result.data || []);
         setPagination(result.pagination);
       } catch (err) {
         const message =
