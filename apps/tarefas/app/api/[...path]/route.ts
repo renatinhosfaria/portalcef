@@ -4,9 +4,10 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { path: string[] } }
+  { params }: { params: Promise<{ path: string[] }> }
 ) {
-  const path = params.path.join("/");
+  const { path: pathArray } = await params;
+  const path = pathArray.join("/");
   const url = `${API_URL}/${path}`;
 
   try {
@@ -36,9 +37,10 @@ export async function GET(
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { path: string[] } }
+  { params }: { params: Promise<{ path: string[] }> }
 ) {
-  const path = params.path.join("/");
+  const { path: pathArray } = await params;
+  const path = pathArray.join("/");
   const url = `${API_URL}/${path}`;
 
   try {
@@ -72,9 +74,10 @@ export async function POST(
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { path: string[] } }
+  { params }: { params: Promise<{ path: string[] }> }
 ) {
-  const path = params.path.join("/");
+  const { path: pathArray } = await params;
+  const path = pathArray.join("/");
   const url = `${API_URL}/${path}`;
 
   try {
