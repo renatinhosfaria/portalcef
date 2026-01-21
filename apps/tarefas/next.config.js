@@ -1,6 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  transpilePackages: ["@essencia/ui", "@essencia/shared"],
+  basePath: "/tarefas",
+  transpilePackages: ["@essencia/ui", "@essencia/shared", "@essencia/components"],
   experimental: {
     serverActions: {
       bodySizeLimit: "10mb",
