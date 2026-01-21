@@ -18,11 +18,14 @@ import {
   documentoComentario,
   quinzenaConfig,
   turmas,
+  users,
   type PlanoAula,
   type PlanoDocumento,
   type DocumentoComentario,
   type PlanoAulaStatus,
 } from "@essencia/db";
+
+import { PlanoAulaHistoricoService } from "./plano-aula-historico.service";
 
 import {
   type CreatePlanoDto,
@@ -102,6 +105,10 @@ export interface QuinzenaDeadline {
  */
 @Injectable()
 export class PlanoAulaService {
+  constructor(
+    private readonly historicoService: PlanoAulaHistoricoService,
+  ) {}
+
   // ============================================
   // Métodos da Professora
   // ============================================
@@ -278,6 +285,8 @@ export class PlanoAulaService {
       novoStatus = "REVISAO_ANALISTA";
     }
 
+    const statusAnterior = plano.status;
+
     const [atualizado] = await db
       .update(planoAula)
       .set({
@@ -287,6 +296,18 @@ export class PlanoAulaService {
       })
       .where(eq(planoAula.id, planoId))
       .returning();
+
+    // Registrar no histórico
+    const userName = await this.getUserName(user.userId);
+    await this.historicoService.registrar({
+      planoId,
+      userId: user.userId,
+      userName,
+      userRole: user.role,
+      acao: "SUBMETIDO",
+      statusAnterior,
+      statusNovo: novoStatus,
+    });
 
     return atualizado;
   }
@@ -381,6 +402,8 @@ export class PlanoAulaService {
       );
     }
 
+    const statusAnterior = plano.status;
+
     const [atualizado] = await db
       .update(planoAula)
       .set({
@@ -389,6 +412,18 @@ export class PlanoAulaService {
       })
       .where(eq(planoAula.id, planoId))
       .returning();
+
+    // Registrar no histórico
+    const userName = await this.getUserName(user.userId);
+    await this.historicoService.registrar({
+      planoId,
+      userId: user.userId,
+      userName,
+      userRole: user.role,
+      acao: "APROVADO_ANALISTA",
+      statusAnterior,
+      statusNovo: "AGUARDANDO_COORDENADORA",
+    });
 
     return atualizado;
   }
@@ -427,6 +462,8 @@ export class PlanoAulaService {
       );
     }
 
+    const statusAnterior = plano.status;
+
     // Inserir comentários se fornecidos
     if (comentarios && comentarios.length > 0) {
       await this.inserirComentarios(user.userId, comentarios);
@@ -440,6 +477,19 @@ export class PlanoAulaService {
       })
       .where(eq(planoAula.id, planoId))
       .returning();
+
+    // Registrar no histórico
+    const userName = await this.getUserName(user.userId);
+    await this.historicoService.registrar({
+      planoId,
+      userId: user.userId,
+      userName,
+      userRole: user.role,
+      acao: "DEVOLVIDO_ANALISTA",
+      statusAnterior,
+      statusNovo: "DEVOLVIDO_ANALISTA",
+      detalhes: comentarios ? { comentariosCount: comentarios.length } : null,
+    });
 
     return atualizado;
   }
@@ -539,6 +589,8 @@ export class PlanoAulaService {
       );
     }
 
+    const statusAnterior = plano.status;
+
     const [atualizado] = await db
       .update(planoAula)
       .set({
@@ -548,6 +600,18 @@ export class PlanoAulaService {
       })
       .where(eq(planoAula.id, planoId))
       .returning();
+
+    // Registrar no histórico
+    const userName = await this.getUserName(user.userId);
+    await this.historicoService.registrar({
+      planoId,
+      userId: user.userId,
+      userName,
+      userRole: user.role,
+      acao: "APROVADO_COORDENADORA",
+      statusAnterior,
+      statusNovo: "APROVADO",
+    });
 
     return atualizado;
   }
@@ -600,6 +664,8 @@ export class PlanoAulaService {
       );
     }
 
+    const statusAnterior = plano.status;
+
     // Inserir comentários se fornecidos
     if (dto.comentarios && dto.comentarios.length > 0) {
       await this.inserirComentarios(user.userId, dto.comentarios);
@@ -619,6 +685,22 @@ export class PlanoAulaService {
       })
       .where(eq(planoAula.id, planoId))
       .returning();
+
+    // Registrar no histórico
+    const userName = await this.getUserName(user.userId);
+    await this.historicoService.registrar({
+      planoId,
+      userId: user.userId,
+      userName,
+      userRole: user.role,
+      acao: "DEVOLVIDO_COORDENADORA",
+      statusAnterior,
+      statusNovo: novoStatus,
+      detalhes: {
+        destino: dto.destino,
+        comentariosCount: dto.comentarios?.length || 0,
+      },
+    });
 
     return atualizado;
   }
@@ -941,6 +1023,17 @@ export class PlanoAulaService {
   // ============================================
   // Métodos Auxiliares
   // ============================================
+
+  /**
+   * Busca nome do usuário por ID
+   */
+  private async getUserName(userId: string): Promise<string> {
+    const db = getDb();
+    const user = await db.query.users.findFirst({
+      where: eq(users.id, userId),
+    });
+    return user?.name || "Usuário Desconhecido";
+  }
 
   /**
    * Adiciona comentário a um documento

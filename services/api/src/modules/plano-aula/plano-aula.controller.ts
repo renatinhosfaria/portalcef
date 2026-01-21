@@ -37,6 +37,7 @@ import {
   ANALISTA_ROLES,
   PROFESSORA_ROLES,
 } from "./dto/plano-aula.dto";
+import { PlanoAulaHistoricoService } from "./plano-aula-historico.service";
 import { PlanoAulaService, type UserContext } from "./plano-aula.service";
 
 // ============================================
@@ -101,6 +102,7 @@ export class PlanoAulaController {
   constructor(
     private readonly planoAulaService: PlanoAulaService,
     private readonly storageService: StorageService,
+    private readonly historicoService: PlanoAulaHistoricoService,
   ) { }
 
   // ============================================
@@ -168,6 +170,27 @@ export class PlanoAulaController {
     return {
       success: true,
       data: plano,
+    };
+  }
+
+  /**
+   * GET /plano-aula/:id/historico
+   * Busca histórico de ações do plano
+   */
+  @Get(":id/historico")
+  @Roles(...VISUALIZAR_ACCESS)
+  async getHistorico(
+    @Req() req: { user: UserContext },
+    @Param("id") id: string,
+  ) {
+    // Verificar se plano existe e usuário tem acesso
+    await this.planoAulaService.getPlanoById(req.user, id);
+
+    // Buscar histórico
+    const historico = await this.historicoService.buscarPorPlano(id);
+    return {
+      success: true,
+      data: historico,
     };
   }
 
@@ -565,7 +588,7 @@ export class PlanoAulaController {
 
     return {
       success: true,
-      ...result,
+      data: result,
     };
   }
 
