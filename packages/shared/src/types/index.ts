@@ -264,3 +264,9 @@ export * from "./turma-extended";
 
 // Shop types (CEF Shop module)
 export * from "./shop";
+
+// Histórico types (Plano Aula Histórico)
+export * from "./historico";
+
+// Tarefas types (Task Management)
+export * from "./tarefas";
