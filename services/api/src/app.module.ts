@@ -19,6 +19,7 @@ import { TurmasModule } from "./modules/turmas/turmas.module";
 import { UnitsModule } from "./modules/units/units.module";
 import { UsersModule } from "./modules/users/users.module";
 import { QuinzenaDocumentsModule } from "./modules/quinzena-documents/quinzena-documents.module";
+import { TarefasModule } from "./modules/tarefas/tarefas.module";
 
 @Module({
   imports: [
@@ -58,6 +59,8 @@ import { QuinzenaDocumentsModule } from "./modules/quinzena-documents/quinzena-d
     StorageModule.forRoot(),
     // Documentos de Quinzena (upload de planos de aula)
     QuinzenaDocumentsModule,
+    // Sistema de Tarefas
+    TarefasModule,
   ],
   providers: [
     {
