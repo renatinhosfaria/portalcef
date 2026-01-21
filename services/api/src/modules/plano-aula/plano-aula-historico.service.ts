@@ -48,6 +48,10 @@ export class PlanoAulaHistoricoService {
       })
       .returning();
 
+    if (!entry) {
+      throw new Error('Falha ao registrar histórico');
+    }
+
     return this.mapToHistoricoEntry(entry);
   }
 
