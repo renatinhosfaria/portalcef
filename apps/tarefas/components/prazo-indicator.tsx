@@ -1,6 +1,5 @@
 import { cn } from "@essencia/ui/lib/utils";
 import { format } from "date-fns";
-import { ptBR } from "date-fns/locale/pt-BR";
 import { Clock, AlertTriangle } from "lucide-react";
 
 import {
@@ -47,9 +46,7 @@ export function PrazoIndicator({ prazo, compact = false }: PrazoIndicatorProps) 
   }
 
   const prazoDate = new Date(prazo);
-  const prazoFormatado = format(prazoDate, "dd/MM/yyyy HH:mm", {
-    locale: ptBR,
-  });
+  const prazoFormatado = format(prazoDate, "dd/MM/yyyy HH:mm");
 
   return (
     <div className={cn("flex items-center gap-2", colorClass)}>

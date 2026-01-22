@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+
 import { PlanosContent } from "./planos-content";
 
 export const metadata: Metadata = {

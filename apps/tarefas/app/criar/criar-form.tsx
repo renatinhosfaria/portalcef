@@ -5,7 +5,6 @@ import { Button } from "@essencia/ui/components/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@essencia/ui/components/card";
 import { Input } from "@essencia/ui/components/input";
 import { Label } from "@essencia/ui/components/label";
-import { Textarea } from "@essencia/ui/components/textarea";
 import {
   Select,
   SelectContent,
@@ -13,6 +12,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@essencia/ui/components/select";
+import { Textarea } from "@essencia/ui/components/textarea";
+
 import { useCriarTarefa } from "@/features/criar-tarefa/hooks/use-criar-tarefa";
 
 export function CriarTarefaForm() {

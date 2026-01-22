@@ -13,7 +13,6 @@ import type { EducationStageCode } from "@essencia/shared/types";
 import {
   QUINZENAS_2026,
   getCurrentQuinzena2026,
-  getUpcomingQuinzenas,
   isInVacationPeriod,
   formatQuinzenaDateRange,
 } from "@essencia/shared/config/quinzenas";
@@ -135,7 +134,7 @@ const normalizeStageCode = (value: string): EducationStageCode | null => {
 
 @Injectable()
 export class PlanningsService {
-  constructor(private readonly calendarService: CalendarService) {}
+  constructor(private readonly calendarService: CalendarService) { }
 
   /**
    * Salva ou atualiza um rascunho de planejamento.

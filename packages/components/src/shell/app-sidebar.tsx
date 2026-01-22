@@ -17,7 +17,6 @@ import { useEffect, useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
 
 import { useTenant } from "@essencia/shared/providers/tenant";
-import { TarefaBadge } from "../../../../apps/tarefas/features/widgets/tarefa-badge";
 
 type ActivePage = "home" | "usuarios" | "escolas" | "turmas" | "planejamento" | "calendario" | "loja-admin";
 
@@ -225,11 +224,6 @@ export function AppSidebar() {
       </nav>
 
       <div className="mt-auto flex flex-col gap-4 w-full px-6">
-        {/* Badge de tarefas */}
-        <div className="flex justify-center lg:justify-start">
-          <TarefaBadge />
-        </div>
-
         <div className="flex flex-col gap-1 hidden lg:flex">
           <p className="text-sm font-bold text-slate-800">
             {name || "Usuário"}

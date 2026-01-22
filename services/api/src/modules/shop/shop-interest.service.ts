@@ -110,7 +110,7 @@ export class ShopInterestService {
     const offset = (page - 1) * limit;
 
     // Build where conditions
-    const conditions: any[] = [];
+    const conditions: ReturnType<typeof eq>[] = [];
 
     if (unitId) {
       conditions.push(eq(shopInterestRequests.unitId, unitId));
@@ -220,7 +220,7 @@ export class ShopInterestService {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-    const topVariantsConditions: any[] = [
+    const topVariantsConditions: ReturnType<typeof sql>[] = [
       sql`${shopInterestRequests.createdAt} >= ${thirtyDaysAgo}`,
     ];
     if (unitId) {
@@ -258,7 +258,7 @@ export class ShopInterestService {
       .limit(10);
 
     // Contar requisições por status
-    const statusConditions: any[] = [];
+    const statusConditions: ReturnType<typeof eq>[] = [];
     if (unitId) {
       statusConditions.push(eq(shopInterestRequests.unitId, unitId));
     }

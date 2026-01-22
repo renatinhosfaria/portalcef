@@ -2,7 +2,7 @@
 
 import { useTenant } from "@essencia/shared/providers/tenant";
 import { Save, Store, CreditCard, Settings2, Shield, Power } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import { apiFetch } from '../../lib/api';
 
@@ -31,13 +31,7 @@ export default function ConfiguracoesPage() {
     const [isShopEnabled, setIsShopEnabled] = useState(true);
     const [pickupInstructions, setPickupInstructions] = useState('');
 
-    useEffect(() => {
-        if (unitId) {
-            loadSettings();
-        }
-    }, [unitId]);
-
-    const loadSettings = async () => {
+    const loadSettings = useCallback(async () => {
         try {
             setLoading(true);
             setError(null);
@@ -69,7 +63,13 @@ export default function ConfiguracoesPage() {
         } finally {
             setLoading(false);
         }
-    };
+    }, [unitId]);
+
+    useEffect(() => {
+        if (unitId) {
+            loadSettings();
+        }
+    }, [unitId, loadSettings]);
 
     const handleSave = async () => {
         if (!unitId) return;

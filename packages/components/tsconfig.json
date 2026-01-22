@@ -1,14 +1,14 @@
 {
   "extends": "./node_modules/@essencia/config/typescript/next.json",
   "compilerOptions": {
+    "rootDir": "./src",
     "baseUrl": ".",
     "jsx": "react-jsx",
     "lib": ["dom", "dom.iterable", "esnext"],
     "paths": {
-      "@essencia/components/*": ["./src/*"],
-      "@/*": ["../../apps/tarefas/*"]
+      "@essencia/components/*": ["./src/*"]
     }
   },
-  "include": ["src/**/*", "../../apps/tarefas/features/**/*", "../../apps/tarefas/lib/**/*", "../../apps/tarefas/components/**/*"],
+  "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]
 }

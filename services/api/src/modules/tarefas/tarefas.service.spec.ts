@@ -3,7 +3,16 @@ import { DatabaseService } from "../../common/database/database.service";
 import { TarefasService } from "./tarefas.service";
 
 // Mock do @essencia/db
-const mockDb: any = {
+const mockDb: Record<string, unknown> & {
+  insert: jest.Mock;
+  values: jest.Mock;
+  returning: jest.Mock;
+  query: { tarefas: { findFirst: jest.Mock } };
+  update: jest.Mock;
+  set: jest.Mock;
+  where: jest.Mock;
+  transaction: jest.Mock;
+} = {
   insert: jest.fn().mockReturnThis(),
   values: jest.fn().mockReturnThis(),
   returning: jest.fn(),
@@ -19,7 +28,7 @@ const mockDb: any = {
 };
 
 // Configure transaction to execute callback with mockDb
-mockDb.transaction.mockImplementation((callback: any) => callback(mockDb));
+mockDb.transaction.mockImplementation((callback: (tx: typeof mockDb) => Promise<unknown>) => callback(mockDb));
 
 jest.mock("@essencia/db", () => ({
   tarefas: {},

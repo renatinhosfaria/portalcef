@@ -16,7 +16,6 @@ import type {
 import { DatabaseService } from "../../common/database/database.service";
 import {
   validarContextosPorRole,
-  calcularPrioridadeAutomatica,
 } from "./utils/validacoes";
 
 /**
@@ -51,7 +50,7 @@ export interface UserContext {
  */
 @Injectable()
 export class TarefasService {
-  constructor(private readonly db: DatabaseService) {}
+  constructor(private readonly db: DatabaseService) { }
 
   /**
    * Cria tarefa manual com validações de role e permissões

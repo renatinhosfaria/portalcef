@@ -13,7 +13,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@essencia/ui/components/card";
-
 import { Progress } from "@essencia/ui/components/progress";
 import { Skeleton } from "@essencia/ui/components/skeleton";
 import { cn } from "@essencia/ui/lib/utils";
@@ -32,7 +31,6 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useDashboard } from "../../features/plano-aula";
-import { TarefasPendentesWidget } from "../../../tarefas/features/widgets/tarefas-pendentes-widget";
 
 
 /**
@@ -386,10 +384,8 @@ export function DashboardContent() {
         />
       </div>
 
-      {/* Progress por Segmento e Resumo + Widget de Tarefas */}
-      <div className="grid gap-6 grid-cols-1 lg:grid-cols-3">
-        {/* KPIs existentes - 2 colunas */}
-        <div className="lg:col-span-2 grid gap-6 lg:grid-cols-2">
+      {/* Progress por Segmento e Resumo */}
+      <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
           {/* Progresso por Segmento */}
           <Card>
             <CardHeader>
@@ -486,12 +482,6 @@ export function DashboardContent() {
               </div>
             </CardContent>
           </Card>
-        </div>
-
-        {/* Widget de tarefas - 1 coluna */}
-        <div>
-          <TarefasPendentesWidget modulo="planejamento" />
-        </div>
       </div>
     </div >
   );

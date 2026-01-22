@@ -9,10 +9,10 @@ import {
 } from "@essencia/ui/components/card";
 import { Button } from "@essencia/ui/components/button";
 import { Badge } from "@essencia/ui/components/badge";
-import { useTarefas } from "@/features/tarefas-list/hooks/use-tarefas";
-import { PrioridadeBadge } from "@/components/prioridade-badge";
-import { PrazoIndicator } from "@/components/prazo-indicator";
-import { calcularDiasRestantes, isAtrasada } from "@/lib/prazo-utils";
+import { useTarefas } from "../tarefas-list/hooks/use-tarefas";
+import { PrioridadeBadge } from "../../components/prioridade-badge";
+import { PrazoIndicator } from "../../components/prazo-indicator";
+import { calcularDiasRestantes, isAtrasada } from "../../lib/prazo-utils";
 
 export interface TarefasPendentesWidgetProps {
   modulo?: string;
