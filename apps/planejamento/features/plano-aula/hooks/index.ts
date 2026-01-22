@@ -7,3 +7,4 @@ export {
   usePlanoDetalhe,
   useGestaoPlanos,
 } from "./use-plano-aula";
+export { useHistorico } from "./use-historico";
