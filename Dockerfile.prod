@@ -36,6 +36,7 @@ COPY apps/login/package.json ./apps/login/
 COPY apps/loja-admin/package.json ./apps/loja-admin/
 COPY apps/loja/package.json ./apps/loja/
 COPY apps/planejamento/package.json ./apps/planejamento/
+COPY apps/tarefas/package.json ./apps/tarefas/
 COPY apps/turmas/package.json ./apps/turmas/
 COPY apps/usuarios/package.json ./apps/usuarios/
 

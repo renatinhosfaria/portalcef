@@ -36,4 +36,5 @@ export {
   DocumentoList,
   DocumentoComentarios,
   PlanoStatusBadge,
+  HistoricoTimeline,
 } from "./components";
