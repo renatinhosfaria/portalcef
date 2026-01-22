@@ -33,6 +33,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import {
   DocumentoList,
+  HistoricoTimeline,
   useCoordenadoraActions,
   usePlanoDetalhe,
   type AddComentarioDto,
@@ -308,22 +309,32 @@ export function RevisaoContent({
         </Alert>
       )}
 
-      {/* Documentos */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-lg">
-            <FileText className="h-5 w-5" />
-            Documentos Anexados ({currentPlano.documentos.length})
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <DocumentoList
-            documentos={currentPlano.documentos}
-            showComments={true}
-            canDelete={false}
-          />
-        </CardContent>
-      </Card>
+      {/* Main Content Grid */}
+      <div className="grid gap-6 lg:grid-cols-3">
+        {/* Documentos - 2 colunas */}
+        <div className="lg:col-span-2">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <FileText className="h-5 w-5" />
+                Documentos Anexados ({currentPlano.documentos.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <DocumentoList
+                documentos={currentPlano.documentos}
+                showComments={true}
+                canDelete={false}
+              />
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Sidebar - 1 coluna */}
+        <div>
+          <HistoricoTimeline planoId={planoId} />
+        </div>
+      </div>
 
       {/* Acoes - somente se pode aprovar */}
       {canApprove && !isPlanoProcessado && (

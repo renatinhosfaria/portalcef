@@ -46,6 +46,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import {
   DocumentoList,
+  HistoricoTimeline,
   PlanoStatusBadge,
   useAnalistaActions,
   usePlanoDetalhe,
@@ -484,6 +485,9 @@ export function RevisaoContent({ planoId }: RevisaoContentProps) {
 
         {/* Sidebar - 1 coluna */}
         <div className="space-y-6">
+          {/* Historico */}
+          <HistoricoTimeline planoId={planoId} />
+
           {/* Adicionar Comentario */}
           {canPerformActions && plano.documentos.length > 0 && (
             <Card>

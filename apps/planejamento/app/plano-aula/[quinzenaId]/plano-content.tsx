@@ -9,9 +9,16 @@ import { Alert, AlertDescription, AlertTitle } from "@essencia/ui/components/ale
 import { Button } from "@essencia/ui/components/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@essencia/ui/components/card";
 import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@essencia/ui/components/tabs";
+import {
   AlertCircle,
   CheckCircle2,
   FileText,
+  History,
   Loader2,
   MessageSquare,
   Send,
@@ -21,6 +28,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   DocumentoUpload,
   DocumentoList,
+  HistoricoTimeline,
   PlanoStatusBadge,
   usePlanoAula,
   type PlanoAula,
@@ -336,31 +344,50 @@ export function PlanoContent({
         )}
       </Card>
 
-      {/* Documents Section */}
+      {/* Documents and History Section */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-lg">
             <FileText className="h-5 w-5" />
-            Documentos
+            Plano de Aula
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-6">
-          {/* Upload Area - somente se status permite edicao */}
-          {isEditable && (
-            <DocumentoUpload
-              onUpload={handleUpload}
-              onAddLink={handleAddLink}
-              disabled={actionLoading}
-            />
-          )}
+        <CardContent>
+          <Tabs defaultValue="documentos">
+            <TabsList>
+              <TabsTrigger value="documentos">
+                <FileText className="h-4 w-4 mr-2" />
+                Documentos
+              </TabsTrigger>
+              <TabsTrigger value="historico">
+                <History className="h-4 w-4 mr-2" />
+                Historico
+              </TabsTrigger>
+            </TabsList>
 
-          {/* Lista de Documentos */}
-          <DocumentoList
-            documentos={plano.documentos}
-            onDelete={handleDelete}
-            showComments={showFeedback}
-            canDelete={isEditable && !actionLoading}
-          />
+            <TabsContent value="documentos" className="space-y-6">
+              {/* Upload Area - somente se status permite edicao */}
+              {isEditable && (
+                <DocumentoUpload
+                  onUpload={handleUpload}
+                  onAddLink={handleAddLink}
+                  disabled={actionLoading}
+                />
+              )}
+
+              {/* Lista de Documentos */}
+              <DocumentoList
+                documentos={plano.documentos}
+                onDelete={handleDelete}
+                showComments={showFeedback}
+                canDelete={isEditable && !actionLoading}
+              />
+            </TabsContent>
+
+            <TabsContent value="historico">
+              <HistoricoTimeline planoId={plano.id} />
+            </TabsContent>
+          </Tabs>
         </CardContent>
       </Card>
 
