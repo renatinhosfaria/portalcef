@@ -533,3 +533,368 @@ curl -X POST http://localhost:3001/shop/orders \
     "items": [{ "variantId": "uuid-variante", "studentName": "Maria", "quantity": 2 }]
   }'
 ```
+
+---
+
+## Modulo de Tarefas
+
+Sistema de gerenciamento de tarefas com suporte a criacao automatica (via eventos) e manual.
+
+### Listar Tarefas
+
+**GET** `/api/tarefas`
+
+Lista tarefas do usuario autenticado.
+
+**Query Parameters:**
+
+| Parametro | Tipo | Obrigatorio | Descricao |
+|-----------|------|-------------|-----------|
+| `status` | string | Nao | Filtro por status: `PENDENTE`, `CONCLUIDA`, `CANCELADA` |
+| `prioridade` | string | Nao | Filtro por prioridade: `BAIXA`, `MEDIA`, `ALTA` |
+| `tipo` | string | Nao | Tipo de visualizacao: `criadas`, `atribuidas`, `todas` |
+| `modulo` | string | Nao | Filtro por modulo: `PLANEJAMENTO`, `CALENDARIO`, etc. |
+| `quinzenaId` | string | Nao | Filtro por quinzena especifica |
+
+**Resposta 200 OK:**
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "uuid-tarefa",
+      "schoolId": "uuid-escola",
+      "unitId": "uuid-unidade",
+      "titulo": "Revisar plano de aula da quinzena 2026-01",
+      "descricao": "Revisar e aprovar planos pendentes",
+      "status": "PENDENTE",
+      "prioridade": "ALTA",
+      "prazo": "2026-01-25T23:59:59.000Z",
+      "criadoPor": "uuid-user-criador",
+      "responsavel": "uuid-user-responsavel",
+      "tipoOrigem": "AUTOMATICA",
+      "createdAt": "2026-01-21T10:00:00.000Z",
+      "updatedAt": "2026-01-21T10:00:00.000Z",
+      "concluidaEm": null,
+      "contextos": [
+        {
+          "modulo": "PLANEJAMENTO",
+          "quinzenaId": "2026-01",
+          "etapaId": "uuid-etapa",
+          "turmaId": "uuid-turma",
+          "professoraId": "uuid-professora"
+        }
+      ]
+    }
+  ]
+}
+```
+
+**Exemplo cURL:**
+
+```bash
+curl http://localhost:3001/api/tarefas?status=PENDENTE&tipo=atribuidas \
+  -b cookies.txt
+```
+
+### Criar Tarefa Manual
+
+**POST** `/api/tarefas`
+
+Cria uma tarefa manualmente. Professoras so podem atribuir tarefas a si mesmas.
+
+**Body:**
+
+```json
+{
+  "titulo": "Revisar plano de aula",
+  "descricao": "Revisar e aprovar planos pendentes da quinzena",
+  "prioridade": "ALTA",
+  "prazo": "2026-12-31T23:59:59Z",
+  "responsavel": "uuid-user-responsavel",
+  "contextos": [
+    {
+      "modulo": "PLANEJAMENTO",
+      "quinzenaId": "quinzena-2026-01",
+      "etapaId": "uuid-etapa",
+      "turmaId": "uuid-turma",
+      "professoraId": "uuid-professora"
+    }
+  ]
+}
+```
+
+**Validacoes:**
+
+- `prazo` nao pode estar no passado
+- Professoras: `responsavel` deve ser igual ao `userId` da sessao
+- Gestores: devem fornecer todos os campos do contexto (`modulo`, `quinzenaId`, `etapaId`, `turmaId`, `professoraId`)
+
+**Resposta 201 Created:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid-tarefa",
+    "titulo": "Revisar plano de aula",
+    "status": "PENDENTE",
+    "prioridade": "ALTA",
+    "prazo": "2026-12-31T23:59:59.000Z",
+    "criadoPor": "uuid-user-criador",
+    "responsavel": "uuid-user-responsavel",
+    "tipoOrigem": "MANUAL",
+    "createdAt": "2026-01-21T10:00:00.000Z"
+  }
+}
+```
+
+**Erros:**
+
+| Codigo | Mensagem |
+|--------|----------|
+| 400 | Prazo nao pode estar no passado |
+| 403 | Professora so pode criar tarefas para si mesma |
+| 400 | Gestores devem fornecer modulo, quinzenaId, etapaId, turmaId e professoraId em todos os contextos |
+
+**Exemplo cURL:**
+
+```bash
+curl -X POST http://localhost:3001/api/tarefas \
+  -H "Content-Type: application/json" \
+  -b cookies.txt \
+  -d '{
+    "titulo": "Revisar plano",
+    "descricao": "Revisar planos pendentes",
+    "prioridade": "ALTA",
+    "prazo": "2026-12-31T23:59:59Z",
+    "responsavel": "uuid-user",
+    "contextos": [
+      {
+        "modulo": "PLANEJAMENTO",
+        "quinzenaId": "2026-01"
+      }
+    ]
+  }'
+```
+
+### Buscar Tarefa por ID
+
+**GET** `/api/tarefas/:id`
+
+Busca uma tarefa especifica por ID.
+
+**Path Parameters:**
+
+| Parametro | Tipo | Descricao |
+|-----------|------|-----------|
+| `id` | string (UUID) | ID da tarefa |
+
+**Resposta 200 OK:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid-tarefa",
+    "titulo": "Revisar plano de aula",
+    "descricao": "Revisar e aprovar planos pendentes",
+    "status": "PENDENTE",
+    "prioridade": "ALTA",
+    "prazo": "2026-01-25T23:59:59.000Z",
+    "criadoPor": "uuid-user-criador",
+    "responsavel": "uuid-user-responsavel",
+    "tipoOrigem": "AUTOMATICA",
+    "createdAt": "2026-01-21T10:00:00.000Z",
+    "updatedAt": "2026-01-21T10:00:00.000Z",
+    "concluidaEm": null,
+    "contextos": [...]
+  }
+}
+```
+
+**Resposta 404 Not Found:**
+
+```json
+{
+  "statusCode": 404,
+  "message": "Tarefa nao encontrada"
+}
+```
+
+### Concluir Tarefa
+
+**PATCH** `/api/tarefas/:id/concluir`
+
+Marca uma tarefa como concluida. Apenas o usuario responsavel pode concluir.
+
+**Path Parameters:**
+
+| Parametro | Tipo | Descricao |
+|-----------|------|-----------|
+| `id` | string (UUID) | ID da tarefa |
+
+**Resposta 200 OK:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid-tarefa",
+    "status": "CONCLUIDA",
+    "concluidaEm": "2026-01-22T14:30:00.000Z",
+    "updatedAt": "2026-01-22T14:30:00.000Z"
+  }
+}
+```
+
+**Erros:**
+
+| Codigo | Mensagem |
+|--------|----------|
+| 404 | Tarefa nao encontrada |
+| 403 | Usuario nao e responsavel pela tarefa |
+| 400 | Tarefa ja foi concluida |
+
+**Exemplo cURL:**
+
+```bash
+curl -X PATCH http://localhost:3001/api/tarefas/uuid-tarefa/concluir \
+  -b cookies.txt
+```
+
+### Estatisticas de Tarefas
+
+**GET** `/api/tarefas/stats/resumo`
+
+Retorna estatisticas agregadas das tarefas do usuario.
+
+**Resposta 200 OK:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "total": 25,
+    "pendentes": 8,
+    "concluidas": 15,
+    "canceladas": 2,
+    "atrasadas": 3,
+    "proximasVencer": 2
+  }
+}
+```
+
+**Exemplo cURL:**
+
+```bash
+curl http://localhost:3001/api/tarefas/stats/resumo \
+  -b cookies.txt
+```
+
+---
+
+## Modulo de Historico
+
+Sistema de rastreamento de acoes realizadas em planos de aula.
+
+### Buscar Historico de Plano de Aula
+
+**GET** `/api/plano-aula/:id/historico`
+
+Retorna historico completo de acoes de um plano de aula, ordenado por data (mais recente primeiro).
+
+**Path Parameters:**
+
+| Parametro | Tipo | Descricao |
+|-----------|------|-----------|
+| `id` | string (UUID) | ID do plano de aula |
+
+**Resposta 200 OK:**
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "uuid-historico-4",
+      "planoId": "uuid-plano",
+      "userId": "uuid-coordenadora",
+      "userName": "Ana Coordenadora",
+      "userRole": "coordenadora_geral",
+      "acao": "APROVADO_COORDENADORA",
+      "statusAnterior": "AGUARDANDO_COORDENADORA",
+      "statusNovo": "APROVADO",
+      "detalhes": null,
+      "createdAt": "2026-01-21T13:00:00.000Z"
+    },
+    {
+      "id": "uuid-historico-3",
+      "planoId": "uuid-plano",
+      "userId": "uuid-analista",
+      "userName": "Joao Analista",
+      "userRole": "analista_pedagogico",
+      "acao": "APROVADO_ANALISTA",
+      "statusAnterior": "AGUARDANDO_ANALISTA",
+      "statusNovo": "AGUARDANDO_COORDENADORA",
+      "detalhes": null,
+      "createdAt": "2026-01-21T12:00:00.000Z"
+    },
+    {
+      "id": "uuid-historico-2",
+      "planoId": "uuid-plano",
+      "userId": "uuid-professora",
+      "userName": "Maria Professora",
+      "userRole": "professora",
+      "acao": "SUBMETIDO",
+      "statusAnterior": "RASCUNHO",
+      "statusNovo": "AGUARDANDO_ANALISTA",
+      "detalhes": null,
+      "createdAt": "2026-01-21T11:00:00.000Z"
+    },
+    {
+      "id": "uuid-historico-1",
+      "planoId": "uuid-plano",
+      "userId": "uuid-professora",
+      "userName": "Maria Professora",
+      "userRole": "professora",
+      "acao": "CRIADO",
+      "statusAnterior": null,
+      "statusNovo": "RASCUNHO",
+      "detalhes": {
+        "observacao": "Plano criado pela professora"
+      },
+      "createdAt": "2026-01-21T10:00:00.000Z"
+    }
+  ]
+}
+```
+
+**Tipos de Acao:**
+
+| Acao | Descricao |
+|------|-----------|
+| `CRIADO` | Plano de aula criado |
+| `SUBMETIDO` | Plano submetido para revisao |
+| `APROVADO_ANALISTA` | Plano aprovado pela analista pedagogica |
+| `DEVOLVIDO_ANALISTA` | Plano devolvido pela analista para ajustes |
+| `APROVADO_COORDENADORA` | Plano aprovado pela coordenadora |
+| `DEVOLVIDO_COORDENADORA` | Plano devolvido pela coordenadora para ajustes |
+
+**Exemplo cURL:**
+
+```bash
+curl http://localhost:3001/api/plano-aula/uuid-plano/historico \
+  -b cookies.txt
+```
+
+---
+
+## Referencias
+
+Para mais informacoes sobre o sistema de tarefas e historico:
+
+- [Sistema de Tarefas e Historico](./SISTEMA_TAREFAS_HISTORICO.md)
+- [Design Document](./plans/2026-01-21-historico-tarefas-design.md)
+- [Implementation Plan](./plans/2026-01-21-historico-tarefas-implementation.md)
