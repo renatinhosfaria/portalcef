@@ -7,7 +7,7 @@ import type {
   TarefaStatus,
   TarefaPrioridade,
 } from "@essencia/shared/types";
-import { apiGet, apiPatch } from "@/lib/api";
+import { apiGet, apiPatch } from "../../../lib/api";
 
 export interface UseTarefasParams {
   status?: TarefaStatus;

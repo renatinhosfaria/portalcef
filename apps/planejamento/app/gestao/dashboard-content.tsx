@@ -32,6 +32,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useDashboard } from "../../features/plano-aula";
+import { TarefasPendentesWidget } from "../../../tarefas/features/widgets/tarefas-pendentes-widget";
 
 
 /**
@@ -385,104 +386,112 @@ export function DashboardContent() {
         />
       </div>
 
-      {/* Progress por Segmento e Resumo */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        {/* Progresso por Segmento */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Progresso por Segmento</CardTitle>
-            <CardDescription>
-              Percentual de planos aprovados em cada segmento
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {SEGMENTOS.map((segmento) => {
-              const segmentoData = estatisticas.porSegmento[segmento.code] || {
-                total: 0,
-                aprovados: 0,
-              };
-              return (
-                <SegmentProgressCard
-                  key={segmento.code}
-                  segmento={segmento}
-                  data={segmentoData}
+      {/* Progress por Segmento e Resumo + Widget de Tarefas */}
+      <div className="grid gap-6 grid-cols-1 lg:grid-cols-3">
+        {/* KPIs existentes - 2 colunas */}
+        <div className="lg:col-span-2 grid gap-6 lg:grid-cols-2">
+          {/* Progresso por Segmento */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Progresso por Segmento</CardTitle>
+              <CardDescription>
+                Percentual de planos aprovados em cada segmento
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {SEGMENTOS.map((segmento) => {
+                const segmentoData = estatisticas.porSegmento[segmento.code] || {
+                  total: 0,
+                  aprovados: 0,
+                };
+                return (
+                  <SegmentProgressCard
+                    key={segmento.code}
+                    segmento={segmento}
+                    data={segmentoData}
+                  />
+                );
+              })}
+
+              {/* Total Geral */}
+              <div className="pt-4 border-t">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-semibold">Total Geral</span>
+                  <span className="text-sm font-semibold text-muted-foreground">
+                    {estatisticas.aprovados}/{estatisticas.total} ({estatisticas.taxaAprovacao}%)
+                  </span>
+                </div>
+                <Progress value={estatisticas.taxaAprovacao} className="h-3" />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Resumo do Fluxo */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Resumo do Fluxo</CardTitle>
+              <CardDescription>
+                Distribuicao dos planos no pipeline de aprovacao
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {/* Grafico de barras simplificado */}
+                <FlowSummaryBar
+                  label="Em Rascunho"
+                  value={estatisticas.rascunho}
+                  total={estatisticas.total}
+                  color="bg-gray-400"
                 />
-              );
-            })}
-
-            {/* Total Geral */}
-            <div className="pt-4 border-t">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-semibold">Total Geral</span>
-                <span className="text-sm font-semibold text-muted-foreground">
-                  {estatisticas.aprovados}/{estatisticas.total} ({estatisticas.taxaAprovacao}%)
-                </span>
+                <FlowSummaryBar
+                  label="Aguardando Analise"
+                  value={estatisticas.aguardandoAnalista}
+                  total={estatisticas.total}
+                  color="bg-blue-500"
+                />
+                <FlowSummaryBar
+                  label="Aguardando Aprovacao"
+                  value={estatisticas.aguardandoCoordenadora}
+                  total={estatisticas.total}
+                  color="bg-purple-500"
+                />
+                <FlowSummaryBar
+                  label="Devolvidos"
+                  value={estatisticas.devolvidos}
+                  total={estatisticas.total}
+                  color="bg-yellow-500"
+                />
+                <FlowSummaryBar
+                  label="Aprovados"
+                  value={estatisticas.aprovados}
+                  total={estatisticas.total}
+                  color="bg-green-500"
+                />
               </div>
-              <Progress value={estatisticas.taxaAprovacao} className="h-3" />
-            </div>
-          </CardContent>
-        </Card>
 
-        {/* Resumo do Fluxo */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Resumo do Fluxo</CardTitle>
-            <CardDescription>
-              Distribuicao dos planos no pipeline de aprovacao
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {/* Grafico de barras simplificado */}
-              <FlowSummaryBar
-                label="Em Rascunho"
-                value={estatisticas.rascunho}
-                total={estatisticas.total}
-                color="bg-gray-400"
-              />
-              <FlowSummaryBar
-                label="Aguardando Analise"
-                value={estatisticas.aguardandoAnalista}
-                total={estatisticas.total}
-                color="bg-blue-500"
-              />
-              <FlowSummaryBar
-                label="Aguardando Aprovacao"
-                value={estatisticas.aguardandoCoordenadora}
-                total={estatisticas.total}
-                color="bg-purple-500"
-              />
-              <FlowSummaryBar
-                label="Devolvidos"
-                value={estatisticas.devolvidos}
-                total={estatisticas.total}
-                color="bg-yellow-500"
-              />
-              <FlowSummaryBar
-                label="Aprovados"
-                value={estatisticas.aprovados}
-                total={estatisticas.total}
-                color="bg-green-500"
-              />
-            </div>
+              {/* Metricas adicionais */}
+              <div className="mt-6 pt-4 border-t grid grid-cols-2 gap-4">
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-primary">
+                    {estatisticas.taxaAprovacao}%
+                  </p>
+                  <p className="text-xs text-muted-foreground">Taxa de Aprovacao</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-muted-foreground">
+                    {estatisticas.totalPendentes}
+                  </p>
+                  <p className="text-xs text-muted-foreground">Em Processamento</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
 
-            {/* Metricas adicionais */}
-            <div className="mt-6 pt-4 border-t grid grid-cols-2 gap-4">
-              <div className="text-center">
-                <p className="text-2xl font-bold text-primary">
-                  {estatisticas.taxaAprovacao}%
-                </p>
-                <p className="text-xs text-muted-foreground">Taxa de Aprovacao</p>
-              </div>
-              <div className="text-center">
-                <p className="text-2xl font-bold text-muted-foreground">
-                  {estatisticas.totalPendentes}
-                </p>
-                <p className="text-xs text-muted-foreground">Em Processamento</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        {/* Widget de tarefas - 1 coluna */}
+        <div>
+          <TarefasPendentesWidget modulo="planejamento" />
+        </div>
       </div>
     </div >
   );
