@@ -1,6 +1,6 @@
 import { cn } from "@essencia/ui/lib/utils";
 import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
+import { ptBR } from "date-fns/locale/pt-BR";
 import { Clock, AlertTriangle } from "lucide-react";
 
 import {
