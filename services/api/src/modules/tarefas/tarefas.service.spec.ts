@@ -332,4 +332,133 @@ describe("TarefasService", () => {
       ).rejects.toThrow("Tarefa já foi concluída");
     });
   });
+
+  describe("TarefasService - Validações", () => {
+    it("deve rejeitar tarefa com prazo no passado", async () => {
+      const dto = {
+        titulo: "Tarefa teste",
+        descricao: null,
+        prioridade: "ALTA" as const,
+        prazo: new Date("2020-01-01"), // Passado
+        responsavel: "user-uuid-1",
+        contextos: [],
+      };
+
+      const session = {
+        userId: "user-uuid-1",
+        role: "professora",
+        schoolId: "school-uuid-1",
+        unitId: "unit-uuid-1",
+        stageId: null,
+      };
+
+      await expect(service.criarManual(dto, session)).rejects.toThrow(
+        "Prazo não pode estar no passado"
+      );
+    });
+
+    it("deve rejeitar professora criando tarefa para outra pessoa", async () => {
+      const dto = {
+        titulo: "Tarefa teste",
+        descricao: null,
+        prioridade: "ALTA" as const,
+        prazo: new Date("2026-12-31"),
+        responsavel: "user-uuid-999", // Diferente do userId
+        contextos: [],
+      };
+
+      const session = {
+        userId: "user-uuid-1",
+        role: "professora",
+        schoolId: "school-uuid-1",
+        unitId: "unit-uuid-1",
+        stageId: null,
+      };
+
+      await expect(service.criarManual(dto, session)).rejects.toThrow(
+        "Professoras só podem criar tarefas para si mesmas"
+      );
+    });
+
+    it("deve aceitar coordenadora criando tarefa para outra pessoa", async () => {
+      const mockTarefaDb = {
+        id: "tarefa-uuid-1",
+        schoolId: "school-uuid-1",
+        unitId: "unit-uuid-1",
+        titulo: "Tarefa delegada",
+        descricao: "Tarefa criada por coordenadora",
+        status: "PENDENTE",
+        prioridade: "MEDIA",
+        prazo: new Date("2026-12-31"),
+        criadoPor: "user-uuid-coord",
+        responsavel: "user-uuid-prof",
+        tipoOrigem: "MANUAL",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        concluidaEm: null,
+      };
+
+      mockDb.returning.mockResolvedValue([mockTarefaDb]);
+
+      const dto = {
+        titulo: "Tarefa delegada",
+        descricao: "Tarefa criada por coordenadora",
+        prioridade: "MEDIA" as const,
+        prazo: new Date("2026-12-31"),
+        responsavel: "user-uuid-prof", // Diferente do userId
+        contextos: [
+          {
+            modulo: "PLANEJAMENTO" as const,
+            quinzenaId: "quinzena-123",
+            etapaId: "etapa-uuid-1",
+            turmaId: "turma-uuid-1",
+            professoraId: "user-uuid-prof",
+          },
+        ],
+      };
+
+      const session = {
+        userId: "user-uuid-coord",
+        role: "coordenadora_geral",
+        schoolId: "school-uuid-1",
+        unitId: "unit-uuid-1",
+        stageId: null,
+      };
+
+      const resultado = await service.criarManual(dto, session);
+
+      expect(resultado).toBeDefined();
+      expect(resultado.responsavel).toBe("user-uuid-prof");
+      expect(resultado.criadoPor).toBe("user-uuid-coord");
+    });
+
+    it("deve validar contextos completos para gestores", async () => {
+      const dto = {
+        titulo: "Tarefa com contexto incompleto",
+        descricao: null,
+        prioridade: "ALTA" as const,
+        prazo: new Date("2026-12-31"),
+        responsavel: "user-uuid-prof",
+        contextos: [
+          {
+            modulo: "PLANEJAMENTO" as const,
+            quinzenaId: "quinzena-123",
+            // Faltando etapaId, turmaId e professoraId
+          },
+        ],
+      };
+
+      const session = {
+        userId: "user-uuid-coord",
+        role: "coordenadora_geral",
+        schoolId: "school-uuid-1",
+        unitId: "unit-uuid-1",
+        stageId: null,
+      };
+
+      await expect(service.criarManual(dto, session)).rejects.toThrow(
+        "Gestores devem fornecer módulo, quinzenaId, etapaId, turmaId e professoraId em todos os contextos"
+      );
+    });
+  });
 });
