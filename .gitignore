@@ -37,3 +37,4 @@ tmpclaude-*
 # Environment variables reais
 .env
 worktrees/
+.worktrees/
