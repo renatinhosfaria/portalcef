@@ -37,6 +37,12 @@ export const documentoTipoEnum = ["ARQUIVO", "LINK_YOUTUBE"] as const;
 export type DocumentoTipo = (typeof documentoTipoEnum)[number];
 
 // ============================================
+// Documento Preview Status Enum
+// ============================================
+export const documentoPreviewStatusEnum = ["PENDENTE", "PRONTO", "ERRO"] as const;
+export type DocumentoPreviewStatus = (typeof documentoPreviewStatusEnum)[number];
+
+// ============================================
 // Table: plano_aula (Mestre)
 // ============================================
 export const planoAula = pgTable(
@@ -116,6 +122,13 @@ export const planoDocumento = pgTable(
     fileName: varchar("file_name", { length: 255 }), // Nome original do arquivo
     fileSize: integer("file_size"), // Tamanho em bytes
     mimeType: varchar("mime_type", { length: 100 }), // Tipo MIME do arquivo
+
+    // Preview (conversão assíncrona)
+    previewKey: varchar("preview_key", { length: 500 }), // Key do preview no storage (PDF)
+    previewUrl: varchar("preview_url", { length: 1000 }), // URL pública do preview
+    previewMimeType: varchar("preview_mime_type", { length: 100 }), // Tipo MIME do preview
+    previewStatus: text("preview_status", { enum: documentoPreviewStatusEnum }), // Status da conversão
+    previewError: text("preview_error"), // Mensagem de erro (se houver)
 
     // Timestamps
     createdAt: timestamp("created_at", { withTimezone: true })
