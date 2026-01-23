@@ -21,6 +21,11 @@ export type PlanoAulaStatus =
 export type DocumentoTipo = "ARQUIVO" | "LINK_YOUTUBE";
 
 /**
+ * Status da conversão de preview de documento
+ */
+export type DocumentoPreviewStatus = "PENDENTE" | "PRONTO" | "ERRO";
+
+/**
  * Comentário em um documento (feedback da analista/coordenadora)
  */
 export interface DocumentoComentario {
@@ -47,6 +52,12 @@ export interface PlanoDocumento {
   createdAt: string;
   updatedAt?: string;
   comentarios: DocumentoComentario[];
+  // Campos de preview (conversão assíncrona)
+  previewKey?: string;
+  previewUrl?: string;
+  previewMimeType?: string;
+  previewStatus?: DocumentoPreviewStatus;
+  previewError?: string;
 }
 
 /**
