@@ -6,9 +6,13 @@
  * Task 3.2: Criar componentes de upload e lista de documentos
  */
 
+import { useState } from "react";
+
 import { Button } from "@essencia/ui/components/button";
 import { cn } from "@essencia/ui/lib/utils";
 import {
+  ChevronDown,
+  ChevronUp,
   ExternalLink,
   FileSpreadsheet,
   FileText,
@@ -19,6 +23,7 @@ import {
 
 import type { PlanoDocumento } from "../types";
 import { DocumentoComentarios } from "./documento-comentarios";
+import { DocumentoPreview } from "./documento-preview";
 
 interface DocumentoListProps {
   documentos: PlanoDocumento[];
@@ -114,6 +119,20 @@ export function DocumentoList({
   showComments = false,
   canDelete = false,
 }: DocumentoListProps) {
+  const [expandedDocs, setExpandedDocs] = useState<Set<string>>(new Set());
+
+  const togglePreview = (docId: string) => {
+    setExpandedDocs((prev) => {
+      const next = new Set(prev);
+      if (next.has(docId)) {
+        next.delete(docId);
+      } else {
+        next.add(docId);
+      }
+      return next;
+    });
+  };
+
   if (documentos.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-12 text-center">
@@ -206,12 +225,42 @@ export function DocumentoList({
                         </span>
                       </>
                     )}
+                    {documento.previewStatus === "PENDENTE" && (
+                      <>
+                        <span>*</span>
+                        <span className="text-blue-600 font-medium">
+                          Convertendo...
+                        </span>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
 
-              {/* Delete Button */}
-              {canDelete && onDelete && (
+              {/* Actions */}
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {/* Preview Toggle Button */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 gap-1"
+                  onClick={() => togglePreview(documento.id)}
+                >
+                  {expandedDocs.has(documento.id) ? (
+                    <>
+                      <ChevronUp className="h-4 w-4" />
+                      Ocultar
+                    </>
+                  ) : (
+                    <>
+                      <ChevronDown className="h-4 w-4" />
+                      Ver Documento
+                    </>
+                  )}
+                </Button>
+
+                {/* Delete Button */}
+                {canDelete && onDelete && (
                 <Button
                   variant="ghost"
                   size="icon"
@@ -222,7 +271,18 @@ export function DocumentoList({
                   <Trash2 className="h-4 w-4" />
                 </Button>
               )}
+              </div>
             </div>
+
+            {/* Preview Section */}
+            {expandedDocs.has(documento.id) && (
+              <div className="border-t px-4 py-3 bg-muted/20">
+                <p className="text-xs text-muted-foreground mb-2 font-medium">
+                  Visualização do Documento
+                </p>
+                <DocumentoPreview documento={documento} />
+              </div>
+            )}
 
             {/* Comments Section */}
             {showComments && documento.comentarios.length > 0 && (

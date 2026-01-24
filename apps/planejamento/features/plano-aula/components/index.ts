@@ -5,6 +5,7 @@
 
 export { DocumentoUpload } from "./documento-upload";
 export { DocumentoList } from "./documento-list";
+export { DocumentoPreview } from "./documento-preview";
 export { DocumentoComentarios } from "./documento-comentarios";
 export { PlanoStatusBadge } from "./status-badge";
 export { HistoricoTimeline } from "./historico-timeline";
