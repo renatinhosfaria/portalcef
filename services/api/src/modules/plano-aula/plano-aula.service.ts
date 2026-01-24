@@ -1179,6 +1179,7 @@ export class PlanoAulaService {
       fileUrl: string;
       fileSize: number;
       mimeType: string;
+      previewStatus?: "PENDENTE" | "PRONTO" | "ERRO";
     },
   ): Promise<PlanoDocumento> {
     const db = getDb();
@@ -1202,6 +1203,7 @@ export class PlanoAulaService {
         fileUrl: dados.fileUrl,
         fileSize: dados.fileSize,
         mimeType: dados.mimeType,
+        ...(dados.previewStatus && { previewStatus: dados.previewStatus }),
       })
       .returning();
 

@@ -18,6 +18,7 @@ import { FastifyRequest } from "fastify";
 import { Roles } from "../../common/decorators/roles.decorator";
 import { AuthGuard } from "../../common/guards/auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
+import { DocumentosConversaoQueueService } from "../../common/queues/documentos-conversao.queue";
 import { StorageService } from "../../common/storage/storage.service";
 import {
   type AddComentarioDto,
@@ -103,6 +104,7 @@ export class PlanoAulaController {
     private readonly planoAulaService: PlanoAulaService,
     private readonly storageService: StorageService,
     private readonly historicoService: PlanoAulaHistoricoService,
+    private readonly documentosConversaoQueue: DocumentosConversaoQueueService,
   ) { }
 
   // ============================================
@@ -287,6 +289,12 @@ export class PlanoAulaController {
       // Upload para MinIO
       const uploadResult = await this.storageService.uploadFile(data);
 
+      // Verificar se precisa converter (DOC/DOCX)
+      const precisaConverter = [
+        "application/msword",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      ].includes(data.mimetype);
+
       // Salvar documento no banco via service
       const documento = await this.planoAulaService.adicionarDocumentoUpload(
         planoId,
@@ -297,8 +305,20 @@ export class PlanoAulaController {
           fileUrl: uploadResult.url,
           fileSize: buffer.length,
           mimeType: data.mimetype,
+          previewStatus: precisaConverter ? "PENDENTE" : undefined,
         },
       );
+
+      // Enfileirar conversão assíncrona se necessário
+      if (precisaConverter) {
+        await this.documentosConversaoQueue.enfileirar({
+          documentoId: documento.id,
+          planoId,
+          storageKey: uploadResult.key,
+          mimeType: data.mimetype,
+          fileName: uploadResult.name,
+        });
+      }
 
       return {
         success: true,
