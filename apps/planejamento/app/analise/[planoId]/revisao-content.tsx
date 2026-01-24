@@ -216,7 +216,7 @@ function ComentariosPendentes({
 
 export function RevisaoContent({ planoId }: RevisaoContentProps) {
   const router = useRouter();
-  const { loading: loadingPlano, plano, error, fetchPlano } = usePlanoDetalhe();
+  const { loading: loadingPlano, plano, error, fetchPlano, refetch } = usePlanoDetalhe();
   const { loading: loadingAction, aprovar, devolver } = useAnalistaActions();
 
   const [comentariosPendentes, setComentariosPendentes] = useState<
