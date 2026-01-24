@@ -1,6 +1,13 @@
 import { createServer } from "node:http";
 import { describe, expect, it, afterEach, beforeEach } from "vitest";
 
+interface HealthResponse {
+  status: string;
+  worker: string;
+  uptime: number;
+  timestamp: string;
+}
+
 describe("Worker Health Check", () => {
   let server: ReturnType<typeof createServer>;
   const port = 3999; // Porta de teste
@@ -41,7 +48,7 @@ describe("Worker Health Check", () => {
 
   it("deve retornar JSON com status ok", async () => {
     const response = await fetch(`http://localhost:${port}/health`);
-    const data = await response.json();
+    const data = (await response.json()) as HealthResponse;
 
     expect(data).toMatchObject({
       status: "ok",
@@ -59,7 +66,7 @@ describe("Worker Health Check", () => {
   it("deve incrementar uptime ao longo do tempo", async () => {
     // Primeira chamada
     const response1 = await fetch(`http://localhost:${port}/health`);
-    const data1 = await response1.json();
+    const data1 = (await response1.json()) as HealthResponse;
     const uptime1 = data1.uptime;
 
     // Aguardar 1 segundo
@@ -67,7 +74,7 @@ describe("Worker Health Check", () => {
 
     // Segunda chamada
     const response2 = await fetch(`http://localhost:${port}/health`);
-    const data2 = await response2.json();
+    const data2 = (await response2.json()) as HealthResponse;
     const uptime2 = data2.uptime;
 
     // Uptime deve ter aumentado
