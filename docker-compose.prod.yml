@@ -408,6 +408,7 @@ services:
       MINIO_PUBLIC_ENDPOINT: https://www.portalcef.com.br/storage
       MINIO_BUCKET: ${MINIO_BUCKET}
       HEALTH_PORT: 3100
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-2}
     depends_on:
       postgres:
         condition: service_healthy

@@ -18,6 +18,7 @@ interface ConversaoDocumentoJob {
 
 const redisUrl = process.env.REDIS_URL ?? "redis://localhost:6379";
 const healthPort = parseInt(process.env.HEALTH_PORT ?? "3100", 10);
+const concurrency = parseInt(process.env.WORKER_CONCURRENCY ?? "2", 10);
 
 const startTime = Date.now();
 
@@ -64,9 +65,11 @@ const worker = new Worker<ConversaoDocumentoJob>(
   },
   {
     connection: { url: redisUrl },
-    concurrency: 2,
+    concurrency,
   },
 );
+
+console.log(`[worker] Iniciado com concurrency: ${concurrency}`);
 
 worker.on("completed", (job) => {
   console.log(`[worker] Documento convertido: ${job.data.documentoId}`);
