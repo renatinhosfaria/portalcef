@@ -11,8 +11,7 @@ import { useState } from "react";
 import { Button } from "@essencia/ui/components/button";
 import { cn } from "@essencia/ui/lib/utils";
 import {
-  ChevronDown,
-  ChevronUp,
+  Eye,
   ExternalLink,
   FileSpreadsheet,
   FileText,
@@ -23,7 +22,7 @@ import {
 
 import type { PlanoDocumento } from "../types";
 import { DocumentoComentarios } from "./documento-comentarios";
-import { DocumentoPreview } from "./documento-preview";
+import { DocumentoPreviewModal } from "./documento-preview-modal";
 
 interface DocumentoListProps {
   documentos: PlanoDocumento[];
@@ -119,19 +118,7 @@ export function DocumentoList({
   showComments = false,
   canDelete = false,
 }: DocumentoListProps) {
-  const [expandedDocs, setExpandedDocs] = useState<Set<string>>(new Set());
-
-  const togglePreview = (docId: string) => {
-    setExpandedDocs((prev) => {
-      const next = new Set(prev);
-      if (next.has(docId)) {
-        next.delete(docId);
-      } else {
-        next.add(docId);
-      }
-      return next;
-    });
-  };
+  const [openDocId, setOpenDocId] = useState<string | null>(null);
 
   if (documentos.length === 0) {
     return (
@@ -239,24 +226,16 @@ export function DocumentoList({
 
               {/* Actions */}
               <div className="flex items-center gap-2 flex-shrink-0">
-                {/* Preview Toggle Button */}
+                {/* Preview Button */}
                 <Button
                   variant="ghost"
                   size="sm"
                   className="h-8 gap-1"
-                  onClick={() => togglePreview(documento.id)}
+                  onClick={() => setOpenDocId(documento.id)}
+                  disabled={documento.previewStatus === "PENDENTE"}
                 >
-                  {expandedDocs.has(documento.id) ? (
-                    <>
-                      <ChevronUp className="h-4 w-4" />
-                      Ocultar
-                    </>
-                  ) : (
-                    <>
-                      <ChevronDown className="h-4 w-4" />
-                      Ver Documento
-                    </>
-                  )}
+                  <Eye className="h-4 w-4" />
+                  Ver Documento
                 </Button>
 
                 {/* Delete Button */}
@@ -274,15 +253,12 @@ export function DocumentoList({
               </div>
             </div>
 
-            {/* Preview Section */}
-            {expandedDocs.has(documento.id) && (
-              <div className="border-t px-4 py-3 bg-muted/20">
-                <p className="text-xs text-muted-foreground mb-2 font-medium">
-                  Visualização do Documento
-                </p>
-                <DocumentoPreview documento={documento} />
-              </div>
-            )}
+            {/* Modal de Preview */}
+            <DocumentoPreviewModal
+              documento={documento}
+              open={openDocId === documento.id}
+              onOpenChange={(open) => setOpenDocId(open ? documento.id : null)}
+            />
 
             {/* Comments Section */}
             {showComments && documento.comentarios.length > 0 && (
