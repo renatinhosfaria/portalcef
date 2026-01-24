@@ -7,6 +7,7 @@ import { APP_GUARD } from "@nestjs/core";
 import { CorrelationIdMiddleware } from "./common/middleware/correlation-id.middleware";
 import { DatabaseModule } from "./common/database/database.module";
 import { StorageModule } from "./common/storage/storage.module";
+import { DocumentosConversaoModule } from "./common/queues/documentos-conversao.module";
 import { AuthModule } from "./modules/auth/auth.module";
 import { CalendarModule } from "./modules/calendar/calendar.module";
 import { HealthModule } from "./modules/health/health.module";
@@ -22,6 +23,7 @@ import { UnitsModule } from "./modules/units/units.module";
 import { UsersModule } from "./modules/users/users.module";
 import { QuinzenaDocumentsModule } from "./modules/quinzena-documents/quinzena-documents.module";
 import { TarefasModule } from "./modules/tarefas/tarefas.module";
+import { SecurityModule } from "./modules/security/security.module";
 
 @Module({
   imports: [
@@ -54,7 +56,10 @@ import { TarefasModule } from "./modules/tarefas/tarefas.module";
     ]),
     // Database (global module)
     DatabaseModule,
+    // Filas (BullMQ)
+    DocumentosConversaoModule,
     HealthModule,
+    SecurityModule,
     SetupModule,
     AuthModule,
     CalendarModule,
