@@ -400,7 +400,6 @@ services:
     environment:
       NODE_ENV: production
       # Database URL is loaded from .env.docker (already URL-encoded)
-      DATABASE_URL: ${DATABASE_URL}
       REDIS_URL: redis://redis:6379
       MINIO_ENDPOINT: http://minio:9000
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
