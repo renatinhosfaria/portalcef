@@ -407,6 +407,7 @@ services:
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
       MINIO_PUBLIC_ENDPOINT: https://www.portalcef.com.br/storage
       MINIO_BUCKET: ${MINIO_BUCKET}
+      HEALTH_PORT: 3100
     depends_on:
       postgres:
         condition: service_healthy
@@ -417,6 +418,12 @@ services:
     networks:
       - essencia-prod
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3100/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
     logging:
       driver: "json-file"
       options:

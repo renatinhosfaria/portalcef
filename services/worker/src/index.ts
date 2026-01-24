@@ -1,5 +1,6 @@
 import { Worker } from "bullmq";
 import { getDb, planoDocumento, eq } from "@essencia/db";
+import { createServer } from "node:http";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -16,6 +17,9 @@ interface ConversaoDocumentoJob {
 }
 
 const redisUrl = process.env.REDIS_URL ?? "redis://localhost:6379";
+const healthPort = parseInt(process.env.HEALTH_PORT ?? "3100", 10);
+
+const startTime = Date.now();
 
 const worker = new Worker<ConversaoDocumentoJob>(
   "documentos-conversao",
@@ -75,7 +79,36 @@ worker.on("failed", (job, err) => {
   );
 });
 
+/**
+ * Health check endpoint
+ * Retorna status do worker e metricas basicas
+ */
+const healthServer = createServer((req, res) => {
+  if (req.url === "/health" && req.method === "GET") {
+    const uptime = Math.floor((Date.now() - startTime) / 1000);
+
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(
+      JSON.stringify({
+        status: "ok",
+        worker: "documentos-conversao",
+        uptime,
+        timestamp: new Date().toISOString(),
+      }),
+    );
+  } else {
+    res.writeHead(404);
+    res.end();
+  }
+});
+
+healthServer.listen(healthPort, () => {
+  console.log(`[worker] Health check rodando na porta ${healthPort}`);
+});
+
 process.on("SIGTERM", async () => {
+  console.log("[worker] Recebido SIGTERM, encerrando gracefully...");
+  healthServer.close();
   await worker.close();
   process.exit(0);
 });
