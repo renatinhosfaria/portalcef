@@ -1,0 +1,29 @@
+{
+  "name": "@essencia/worker",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Worker de conversao de documentos",
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "lint": "eslint src/",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --globals"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.958.0",
+    "@essencia/db": "workspace:*",
+    "bullmq": "^5.28.4"
+  },
+  "devDependencies": {
+    "@essencia/config": "workspace:*",
+    "@typescript-eslint/eslint-plugin": "^8.18.1",
+    "@typescript-eslint/parser": "^8.18.1",
+    "@types/node": "^22.10.2",
+    "eslint": "^8.57.1",
+    "tsx": "^4.21.0",
+    "typescript": "^5.7.2",
+    "vitest": "^4.0.16"
+  }
+}

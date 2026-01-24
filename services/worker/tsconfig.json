@@ -1,0 +1,9 @@
+{
+  "extends": "@essencia/config/typescript/base",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "noEmit": false
+  },
+  "include": ["src/**/*"]
+}
