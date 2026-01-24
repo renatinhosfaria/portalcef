@@ -247,6 +247,42 @@ services:
         max-size: "50m"
         max-file: "5"
 
+  # ===========================================================================
+  # Worker - Conversão de documentos com BullMQ
+  # ===========================================================================
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    container_name: essencia-worker-dev
+    env_file:
+      - path: .env.docker
+        required: false
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://${POSTGRES_USER:-essencia}:${POSTGRES_PASSWORD:-essencia_dev}@postgres:5432/${POSTGRES_DB:-essencia_db}
+      REDIS_URL: redis://redis:6379
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_BUCKET: ${MINIO_BUCKET:-essencia-bucket}
+      MINIO_PUBLIC_ENDPOINT: http://localhost:9000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks:
+      - essencia-dev
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
 networks:
   essencia-dev:
     driver: bridge

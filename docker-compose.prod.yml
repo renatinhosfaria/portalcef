@@ -387,6 +387,40 @@ services:
         reservations:
           memory: 512M
 
+  # ===========================================================================
+  # Worker - Conversao de Documentos
+  # ===========================================================================
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    container_name: essencia-worker
+    env_file:
+      - .env.docker
+    environment:
+      NODE_ENV: production
+      REDIS_URL: redis://redis:6379
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      MINIO_PUBLIC_ENDPOINT: https://www.portalcef.com.br/storage
+      MINIO_BUCKET: ${MINIO_BUCKET}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks:
+      - essencia-prod
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
 networks:
   essencia-prod:
     driver: bridge
