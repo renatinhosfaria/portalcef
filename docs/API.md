@@ -891,6 +891,65 @@ curl http://localhost:3001/api/plano-aula/uuid-plano/historico \
 
 ---
 
+---
+
+## Preview de Documentos
+
+Sistema de conversão assíncrona de DOC/DOCX para PDF usando BullMQ.
+
+### Campos de Preview em PlanoDocumento
+
+Quando um documento DOC ou DOCX é enviado via `POST /api/plano-aula/:id/documentos/upload`, o sistema:
+
+1. Marca o documento com `previewStatus: "PENDENTE"`
+2. Enfileira job de conversão no BullMQ
+3. Worker processa conversão em background
+4. Atualiza documento com resultado
+
+**Campos Adicionais:**
+
+| Campo | Tipo | Descrição |
+|-------|------|-----------|
+| `previewKey` | string | Chave do PDF convertido no storage |
+| `previewUrl` | string | URL pública do preview |
+| `previewMimeType` | string | Tipo MIME do preview (application/pdf) |
+| `previewStatus` | enum | Status da conversão: PENDENTE, PRONTO, ERRO |
+| `previewError` | string | Mensagem de erro (se houver) |
+
+**Exemplo de Resposta com Preview:**
+
+```json
+{
+  "id": "uuid-doc",
+  "planoId": "uuid-plano",
+  "tipo": "ARQUIVO",
+  "fileName": "plano-aula.docx",
+  "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "url": "https://cdn/plano-aula.docx",
+  "previewStatus": "PRONTO",
+  "previewUrl": "https://cdn/preview-uuid.pdf",
+  "previewMimeType": "application/pdf",
+  "previewKey": "previews/uuid.pdf",
+  "previewError": null,
+  "createdAt": "2026-01-23T10:00:00.000Z"
+}
+```
+
+**Status de Conversão:**
+
+- **PENDENTE**: Documento na fila, aguardando conversão
+- **PRONTO**: Conversão concluída, preview disponível em `previewUrl`
+- **ERRO**: Falha na conversão, mensagem em `previewError`
+
+**Notas:**
+
+- Apenas DOC e DOCX são convertidos
+- PDF e imagens não possuem `previewStatus` (exibidos diretamente)
+- Worker processa até 2 conversões simultâneas
+- Tentativas: 3x com backoff exponencial
+
+---
+
 ## Referencias
 
 Para mais informacoes sobre o sistema de tarefas e historico:
