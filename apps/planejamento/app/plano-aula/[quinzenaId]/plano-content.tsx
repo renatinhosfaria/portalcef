@@ -216,6 +216,26 @@ export function PlanoContent({
     loadOrCreatePlano();
   }, [loadOrCreatePlano]);
 
+  /**
+   * Polling para atualizar preview de documentos em conversao
+   * Verifica a cada 3 segundos se ha documentos PENDENTE
+   */
+  useEffect(() => {
+    if (!plano?.documentos) return;
+
+    const temDocumentosPendentes = plano.documentos.some(
+      (doc) => doc.previewStatus === "PENDENTE",
+    );
+
+    if (!temDocumentosPendentes) return;
+
+    const interval = setInterval(() => {
+      refetchPlano();
+    }, 3000); // Poll a cada 3 segundos
+
+    return () => clearInterval(interval);
+  }, [plano?.documentos, refetchPlano]);
+
   // Estado de carregamento inicial
   if (initialLoading) {
     return (

@@ -231,6 +231,26 @@ export function RevisaoContent({ planoId }: RevisaoContentProps) {
   }, [planoId, fetchPlano]);
 
   /**
+   * Polling para atualizar preview de documentos em conversao
+   * Verifica a cada 3 segundos se ha documentos PENDENTE
+   */
+  useEffect(() => {
+    if (!plano?.documentos) return;
+
+    const temDocumentosPendentes = plano.documentos.some(
+      (doc) => doc.previewStatus === "PENDENTE",
+    );
+
+    if (!temDocumentosPendentes) return;
+
+    const interval = setInterval(() => {
+      refetch();
+    }, 3000); // Poll a cada 3 segundos
+
+    return () => clearInterval(interval);
+  }, [plano?.documentos, refetch]);
+
+  /**
    * Adiciona comentario a lista de pendentes
    */
   const handleAddComentario = useCallback((dto: AddComentarioDto) => {

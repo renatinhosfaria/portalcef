@@ -120,6 +120,26 @@ export function RevisaoContent({
   }, [plano]);
 
   /**
+   * Polling para atualizar preview de documentos em conversao
+   * Verifica a cada 3 segundos se ha documentos PENDENTE
+   */
+  useEffect(() => {
+    if (!currentPlano?.documentos) return;
+
+    const temDocumentosPendentes = currentPlano.documentos.some(
+      (doc) => doc.previewStatus === "PENDENTE",
+    );
+
+    if (!temDocumentosPendentes) return;
+
+    const interval = setInterval(() => {
+      refetch();
+    }, 3000); // Poll a cada 3 segundos
+
+    return () => clearInterval(interval);
+  }, [currentPlano?.documentos, refetch]);
+
+  /**
    * Handler para alterar comentario de um documento
    */
   const handleComentarioChange = useCallback(
