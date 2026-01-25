@@ -18,6 +18,20 @@ describe("DocumentoPreviewModal", () => {
     comentarios: [],
   };
 
+  const mockDocumentoComComentarios = {
+    ...mockDocumento,
+    comentarios: [
+      {
+        id: "c1",
+        comentario: "Revisar formatação",
+        resolved: false,
+        createdAt: "2026-01-25T10:00:00.000Z",
+        autorId: "user-1",
+        autorName: "Maria Coordenadora",
+      },
+    ],
+  };
+
   it("renderiza modal quando open é true", () => {
     render(
       <DocumentoPreviewModal
@@ -136,5 +150,74 @@ describe("DocumentoPreviewModal", () => {
     await user.click(botaoFechar);
 
     expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it("renderiza botão flutuante de comentários", () => {
+    render(
+      <DocumentoPreviewModal
+        documento={mockDocumentoComComentarios}
+        open={true}
+        onOpenChange={() => {}}
+      />,
+    );
+
+    const botaoComentarios = screen.getByRole("button", { name: /abrir comentários/i });
+    expect(botaoComentarios).toBeInTheDocument();
+  });
+
+  it("mostra badge com número de comentários pendentes", () => {
+    render(
+      <DocumentoPreviewModal
+        documento={mockDocumentoComComentarios}
+        open={true}
+        onOpenChange={() => {}}
+      />,
+    );
+
+    expect(screen.getByText("1")).toBeInTheDocument();
+  });
+
+  it("abre painel de comentários ao clicar no botão flutuante", async () => {
+    const user = userEvent.setup();
+    render(
+      <DocumentoPreviewModal
+        documento={mockDocumentoComComentarios}
+        open={true}
+        onOpenChange={() => {}}
+      />,
+    );
+
+    const botaoComentarios = screen.getByRole("button", { name: /abrir comentários/i });
+    await user.click(botaoComentarios);
+
+    expect(screen.getByRole("complementary")).toBeInTheDocument();
+  });
+
+  it("chama onAddComentario quando novo comentário é enviado", async () => {
+    const user = userEvent.setup();
+    const onAddComentario = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <DocumentoPreviewModal
+        documento={mockDocumentoComComentarios}
+        open={true}
+        onOpenChange={() => {}}
+        onAddComentario={onAddComentario}
+      />,
+    );
+
+    // Abrir painel
+    const botaoComentarios = screen.getByRole("button", { name: /abrir comentários/i });
+    await user.click(botaoComentarios);
+
+    // Digitar comentário
+    const textarea = screen.getByPlaceholderText(/digite seu comentário/i);
+    await user.type(textarea, "Novo comentário");
+
+    // Enviar
+    const botaoEnviar = screen.getByRole("button", { name: /adicionar comentário/i });
+    await user.click(botaoEnviar);
+
+    expect(onAddComentario).toHaveBeenCalledWith("doc-1", "Novo comentário");
   });
 });
