@@ -20,14 +20,6 @@ import {
   CardTitle,
 } from "@essencia/ui/components/card";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@essencia/ui/components/select";
-import { Textarea } from "@essencia/ui/components/textarea";
-import {
   AlertCircle,
   ArrowLeft,
   Calendar,
@@ -35,7 +27,6 @@ import {
   Clock,
   FileText,
   Loader2,
-  MessageSquare,
   RotateCcw,
   Send,
   User,
@@ -50,8 +41,6 @@ import {
   PlanoStatusBadge,
   useAnalistaActions,
   usePlanoDetalhe,
-  type AddComentarioDto,
-  type PlanoDocumento,
 } from "../../../features/plano-aula";
 
 interface RevisaoContentProps {
@@ -73,155 +62,12 @@ function formatarDataSubmissao(data?: string): string {
   });
 }
 
-/**
- * Componente para adicionar comentario a um documento
- */
-interface AddComentarioFormProps {
-  documentos: PlanoDocumento[];
-  onAddComentario: (dto: AddComentarioDto) => void;
-  disabled?: boolean;
-}
-
-function AddComentarioForm({
-  documentos,
-  onAddComentario,
-  disabled,
-}: AddComentarioFormProps) {
-  const [selectedDocId, setSelectedDocId] = useState<string>("");
-  const [comentario, setComentario] = useState("");
-
-  const handleSubmit = () => {
-    if (!selectedDocId || !comentario.trim()) return;
-
-    onAddComentario({
-      documentoId: selectedDocId,
-      comentario: comentario.trim(),
-    });
-
-    // Limpar formulario
-    setComentario("");
-    // Manter documento selecionado para facilitar adicao de mais comentarios
-  };
-
-  const canSubmit = selectedDocId && comentario.trim().length > 0 && !disabled;
-
-  return (
-    <div className="space-y-4">
-      {/* Selecao de Documento */}
-      <div className="space-y-2">
-        <label className="text-sm font-medium">Documento</label>
-        <Select value={selectedDocId} onValueChange={setSelectedDocId}>
-          <SelectTrigger disabled={disabled}>
-            <SelectValue placeholder="Selecione o documento para comentar" />
-          </SelectTrigger>
-          <SelectContent>
-            {documentos.map((doc) => (
-              <SelectItem key={doc.id} value={doc.id}>
-                {doc.tipo === "LINK_YOUTUBE"
-                  ? "Video do YouTube"
-                  : doc.fileName || "Documento sem nome"}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      {/* Campo de Comentario */}
-      <div className="space-y-2">
-        <label className="text-sm font-medium">Comentario</label>
-        <Textarea
-          placeholder="Digite seu comentario sobre o documento..."
-          value={comentario}
-          onChange={(e) => setComentario(e.target.value)}
-          disabled={disabled}
-          rows={3}
-          className="resize-none"
-        />
-      </div>
-
-      {/* Botao Adicionar */}
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        onClick={handleSubmit}
-        disabled={!canSubmit}
-        className="w-full"
-      >
-        <MessageSquare className="mr-2 h-4 w-4" />
-        Adicionar Comentario
-      </Button>
-    </div>
-  );
-}
-
-/**
- * Lista de comentarios pendentes de envio
- */
-interface ComentariosPendentesProps {
-  comentarios: AddComentarioDto[];
-  documentos: PlanoDocumento[];
-  onRemove: (index: number) => void;
-}
-
-function ComentariosPendentes({
-  comentarios,
-  documentos,
-  onRemove,
-}: ComentariosPendentesProps) {
-  if (comentarios.length === 0) {
-    return null;
-  }
-
-  const getDocumentoNome = (docId: string): string => {
-    const doc = documentos.find((d) => d.id === docId);
-    if (!doc) return "Documento desconhecido";
-    return doc.tipo === "LINK_YOUTUBE"
-      ? "Video do YouTube"
-      : doc.fileName || "Documento sem nome";
-  };
-
-  return (
-    <div className="mt-4 space-y-2">
-      <p className="text-sm font-medium text-muted-foreground">
-        Comentarios a enviar ({comentarios.length}):
-      </p>
-      <div className="space-y-2">
-        {comentarios.map((c, index) => (
-          <div
-            key={`${c.documentoId}-${index}`}
-            className="flex items-start justify-between gap-2 rounded-md border bg-muted/50 p-3 text-sm"
-          >
-            <div className="flex-1 min-w-0">
-              <p className="font-medium text-xs text-muted-foreground mb-1">
-                {getDocumentoNome(c.documentoId)}
-              </p>
-              <p className="text-foreground">{c.comentario}</p>
-            </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6 flex-shrink-0 text-muted-foreground hover:text-destructive"
-              onClick={() => onRemove(index)}
-              title="Remover comentario"
-            >
-              <RotateCcw className="h-3 w-3" />
-            </Button>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 export function RevisaoContent({ planoId }: RevisaoContentProps) {
   const router = useRouter();
   const { loading: loadingPlano, plano, error, fetchPlano, refetch } = usePlanoDetalhe();
   const { loading: loadingAction, aprovar, devolver } = useAnalistaActions();
 
-  const [comentariosPendentes, setComentariosPendentes] = useState<
-    AddComentarioDto[]
-  >([]);
   const [actionError, setActionError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
@@ -251,20 +97,6 @@ export function RevisaoContent({ planoId }: RevisaoContentProps) {
   }, [plano?.documentos, refetch]);
 
   /**
-   * Adiciona comentario a lista de pendentes
-   */
-  const handleAddComentario = useCallback((dto: AddComentarioDto) => {
-    setComentariosPendentes((prev) => [...prev, dto]);
-  }, []);
-
-  /**
-   * Remove comentario da lista de pendentes
-   */
-  const handleRemoveComentario = useCallback((index: number) => {
-    setComentariosPendentes((prev) => prev.filter((_, i) => i !== index));
-  }, []);
-
-  /**
    * Aprova o plano e envia para a coordenacao
    */
   const handleAprovar = useCallback(async () => {
@@ -286,23 +118,16 @@ export function RevisaoContent({ planoId }: RevisaoContentProps) {
   }, [planoId, aprovar, router]);
 
   /**
-   * Devolve o plano para a professora com comentarios
+   * Devolve o plano para a professora
+   * Os comentarios devem ser adicionados via painel flutuante antes de devolver
    */
   const handleDevolver = useCallback(async () => {
     setActionError(null);
     setSuccessMessage(null);
 
-    if (comentariosPendentes.length === 0) {
-      setActionError(
-        "E necessario adicionar pelo menos um comentario para devolver o plano.",
-      );
-      return;
-    }
-
     try {
-      await devolver(planoId, comentariosPendentes);
-      setSuccessMessage("Plano devolvido para a Professora com comentarios!");
-      setComentariosPendentes([]);
+      await devolver(planoId);
+      setSuccessMessage("Plano devolvido para a Professora!");
       // Redirecionar apos 2 segundos
       setTimeout(() => {
         router.push("/analise");
@@ -312,7 +137,7 @@ export function RevisaoContent({ planoId }: RevisaoContentProps) {
         err instanceof Error ? err.message : "Erro ao devolver plano";
       setActionError(message);
     }
-  }, [planoId, devolver, comentariosPendentes, router]);
+  }, [planoId, devolver, router]);
 
   // Estado de carregamento
   if (loadingPlano && !plano) {
@@ -508,34 +333,6 @@ export function RevisaoContent({ planoId }: RevisaoContentProps) {
           {/* Historico */}
           <HistoricoTimeline planoId={planoId} />
 
-          {/* Adicionar Comentario */}
-          {canPerformActions && plano.documentos.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-lg">
-                  <MessageSquare className="h-5 w-5" />
-                  Adicionar Comentario
-                </CardTitle>
-                <CardDescription>
-                  Adicione comentarios aos documentos para devolver o plano para
-                  ajustes.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <AddComentarioForm
-                  documentos={plano.documentos}
-                  onAddComentario={handleAddComentario}
-                  disabled={isLoading}
-                />
-                <ComentariosPendentes
-                  comentarios={comentariosPendentes}
-                  documentos={plano.documentos}
-                  onRemove={handleRemoveComentario}
-                />
-              </CardContent>
-            </Card>
-          )}
-
           {/* Acoes */}
           <Card>
             <CardHeader>
@@ -571,7 +368,7 @@ export function RevisaoContent({ planoId }: RevisaoContentProps) {
                   {/* Botao Devolver */}
                   <Button
                     onClick={handleDevolver}
-                    disabled={isLoading || comentariosPendentes.length === 0}
+                    disabled={isLoading}
                     variant="outline"
                     className="w-full border-yellow-400 bg-yellow-50 text-yellow-700 hover:bg-yellow-100 hover:text-yellow-800"
                   >
@@ -584,21 +381,15 @@ export function RevisaoContent({ planoId }: RevisaoContentProps) {
                       <>
                         <RotateCcw className="mr-2 h-4 w-4" />
                         Devolver para Professora
-                        {comentariosPendentes.length > 0 && (
-                          <span className="ml-1">
-                            ({comentariosPendentes.length})
-                          </span>
-                        )}
                       </>
                     )}
                   </Button>
 
-                  {/* Aviso se nao tem comentarios para devolver */}
-                  {comentariosPendentes.length === 0 && (
-                    <p className="text-xs text-muted-foreground text-center">
-                      Para devolver o plano, adicione pelo menos um comentario.
-                    </p>
-                  )}
+                  {/* Aviso sobre comentarios */}
+                  <p className="text-xs text-muted-foreground text-center">
+                    Adicione comentarios aos documentos via painel flutuante antes de
+                    devolver.
+                  </p>
                 </>
               ) : (
                 <Alert>
