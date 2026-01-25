@@ -25,10 +25,16 @@ interface ApiQuinzena {
   isCurrent?: boolean;
   schoolDaysCount?: number;
   hasSchoolDays?: boolean;
+  unlockedTurmaIds?: string[];
 }
 
 /**
  * Converte dados da API para o formato esperado pelo QuinzenasGrid
+ *
+ * Regra de liberação por aprovação:
+ * - Q01 (number === 1): sempre liberada
+ * - Q02+ (number > 1): liberada se tem pelo menos uma turma em unlockedTurmaIds
+ * - Quinzena passada (now > endDate): completed
  */
 function mapApiQuinzenaToGridQuinzena(apiQuinzena: ApiQuinzena): Quinzena {
   const now = new Date();
@@ -36,13 +42,23 @@ function mapApiQuinzenaToGridQuinzena(apiQuinzena: ApiQuinzena): Quinzena {
   const endDate = new Date(apiQuinzena.endDate + "T12:00:00");
   const deadline = new Date(apiQuinzena.deadline + "T12:00:00");
 
-  // Determinar status baseado nas datas
+  // Extrair número da quinzena do ID (ex: "2026-Q01" -> 1)
+  const match = apiQuinzena.id.match(/Q(\d+)/);
+  const number = match?.[1] ? parseInt(match[1], 10) : 1;
+
+  // Determinar status baseado na aprovação da quinzena anterior
   let status: QuinzenaStatus = "locked";
   if (now > endDate) {
+    // Quinzena já passou
     status = "completed";
-  } else if (now >= startDate && now <= endDate) {
+  } else if (number === 1) {
+    // Q01 sempre liberada
     status = "unlocked";
-  } else if (apiQuinzena.isCurrent) {
+  } else if (
+    apiQuinzena.unlockedTurmaIds &&
+    apiQuinzena.unlockedTurmaIds.length > 0
+  ) {
+    // Q02+: liberada se tem turmas com aprovação da quinzena anterior
     status = "unlocked";
   }
 
@@ -54,10 +70,6 @@ function mapApiQuinzenaToGridQuinzena(apiQuinzena: ApiQuinzena): Quinzena {
   if (diffDays < 0) deadlineStatus = "late";
   else if (diffDays <= 1) deadlineStatus = "urgent";
   else if (diffDays <= 3) deadlineStatus = "warning";
-
-  // Extrair número da quinzena do ID (ex: "2026-Q01" -> 1)
-  const match = apiQuinzena.id.match(/Q(\d+)/);
-  const number = match?.[1] ? parseInt(match[1], 10) : 1;
 
   return {
     id: apiQuinzena.id,

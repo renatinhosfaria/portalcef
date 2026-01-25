@@ -13,6 +13,7 @@ interface ApiQuinzena {
   isCurrent?: boolean;
   schoolDaysCount?: number;
   hasSchoolDays?: boolean;
+  unlockedTurmaIds?: string[];
 }
 
 interface UseQuinzenasReturn {

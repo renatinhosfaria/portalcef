@@ -169,7 +169,10 @@ export class PlanningsController {
   @UseGuards(AuthGuard, RolesGuard)
   @Roles("professora", "auxiliar_sala")
   async getQuinzenas(@Req() req: { user: UserContext }) {
-    return this.planningsService.getQuinzenas(req.user.unitId ?? undefined);
+    return this.planningsService.getQuinzenas(
+      req.user.unitId ?? undefined,
+      req.user.userId,
+    );
   }
 
   /**

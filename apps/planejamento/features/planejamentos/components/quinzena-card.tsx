@@ -63,9 +63,14 @@ export function QuinzenaCard({ quinzena }: QuinzenaCardProps) {
 
       <div className="mt-4">
         {isLocked ? (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Lock className="h-3 w-3" />
-            <span>Bloqueado</span>
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Lock className="h-3 w-3" />
+              <span>Bloqueado</span>
+            </div>
+            <p className="text-xs text-muted-foreground/80">
+              Aprove a quinzena anterior para liberar
+            </p>
           </div>
         ) : (
           <div className="flex items-center gap-2 text-sm font-medium">

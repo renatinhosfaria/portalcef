@@ -4,6 +4,7 @@ import {
   planningContents,
   planningReviews,
   plannings,
+  planoAula,
   turmas,
   users,
   type Planning,
@@ -841,8 +842,15 @@ export class PlanningsService {
    * Retorna as próximas 4 quinzenas baseadas no calendário escolar.
    * Durante férias de julho, retorna as quinzenas do 2º semestre.
    * Inclui contagem de dias letivos quando unitId é fornecido.
+   *
+   * Regra de liberação por aprovação:
+   * - Q01: sempre liberada para todas as turmas do usuário
+   * - Q02+: liberada apenas para turmas que tiveram Q(N-1) aprovada
    */
-  async getQuinzenas(unitId?: string): Promise<{
+  async getQuinzenas(
+    unitId?: string,
+    userId?: string,
+  ): Promise<{
     success: boolean;
     data?: Array<{
       id: string;
@@ -854,18 +862,53 @@ export class PlanningsService {
       semester: 1 | 2;
       schoolDaysCount?: number;
       hasSchoolDays?: boolean;
+      unlockedTurmaIds: string[];
     }>;
     isVacation?: boolean;
     error?: string;
   }> {
+    const db = getDb();
+
     try {
       const now = new Date();
       const currentQuinzenaId = this.getCurrentQuinzena();
       const isVacation = isInVacationPeriod(now);
 
-      // Retorna TODAS as quinzenas do ano
+      // Buscar todas as turmas do usuário (para Q01 que é sempre liberada)
+      let userTurmaIds: string[] = [];
+      if (userId) {
+        const userTurmas = await db.query.turmas.findMany({
+          where: eq(turmas.professoraId, userId),
+          columns: { id: true },
+        });
+        userTurmaIds = userTurmas.map((t: { id: string }) => t.id);
+      }
+
+      // Buscar todos os planos APROVADO do usuário (para calcular liberação)
+      const planosAprovadosPorQuinzena: Map<string, string[]> = new Map();
+      if (userId) {
+        const planosAprovados = await db.query.planoAula.findMany({
+          where: and(
+            eq(planoAula.userId, userId),
+            eq(planoAula.status, "APROVADO"),
+          ),
+          columns: {
+            quinzenaId: true,
+            turmaId: true,
+          },
+        });
+
+        // Agrupar turmas aprovadas por quinzena
+        for (const plano of planosAprovados) {
+          const turmas = planosAprovadosPorQuinzena.get(plano.quinzenaId) || [];
+          turmas.push(plano.turmaId);
+          planosAprovadosPorQuinzena.set(plano.quinzenaId, turmas);
+        }
+      }
+
+      // Retorna TODAS as quinzenas do ano com unlockedTurmaIds
       const enrichedQuinzenas = await Promise.all(
-        QUINZENAS_2026.map(async (q) => {
+        QUINZENAS_2026.map(async (q, index) => {
           let schoolDaysCount: number | undefined;
           let hasSchoolDays: boolean | undefined;
 
@@ -879,6 +922,18 @@ export class PlanningsService {
             hasSchoolDays = validation.isValid;
           }
 
+          // Calcular unlockedTurmaIds
+          let unlockedTurmaIds: string[] = [];
+          if (index === 0) {
+            // Q01: sempre liberada para todas as turmas do usuário
+            unlockedTurmaIds = userTurmaIds;
+          } else {
+            // Q02+: liberada apenas para turmas com Q(N-1) aprovada
+            const quinzenaAnteriorId = QUINZENAS_2026[index - 1].id;
+            unlockedTurmaIds =
+              planosAprovadosPorQuinzena.get(quinzenaAnteriorId) || [];
+          }
+
           return {
             id: q.id,
             label: `${q.label} (${formatQuinzenaDateRange(q)})`,
@@ -889,6 +944,7 @@ export class PlanningsService {
             semester: q.semester,
             schoolDaysCount,
             hasSchoolDays,
+            unlockedTurmaIds,
           };
         }),
       );
