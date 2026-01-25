@@ -1,29 +1,45 @@
 "use client";
 
+import { useState } from "react";
+
 import { Button } from "@essencia/ui/components/button";
 import {
   Dialog,
   DialogContent,
   DialogTitle,
 } from "@essencia/ui/components/dialog";
-import { Download, FileText, X } from "lucide-react";
+import { cn } from "@essencia/ui/lib/utils";
+import { Download, FileText, MessageSquare, X } from "lucide-react";
 
 import type { PlanoDocumento } from "../types";
+import { DocumentoComentariosPanel } from "./documento-comentarios-panel";
 
 interface DocumentoPreviewModalProps {
   documento: PlanoDocumento;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onAddComentario?: (documentoId: string, comentario: string) => Promise<void>;
 }
 
 export function DocumentoPreviewModal({
   documento,
   open,
   onOpenChange,
+  onAddComentario,
 }: DocumentoPreviewModalProps) {
   const isPronto = documento.previewStatus === "PRONTO";
   const isErro = documento.previewStatus === "ERRO";
   const previewUrl = documento.previewUrl;
+
+  const [comentarioPanelOpen, setComentarioPanelOpen] = useState(false);
+
+  const unresolvedCount = documento.comentarios?.filter((c) => !c.resolved).length ?? 0;
+
+  const handleAddComentario = async (comentario: string) => {
+    if (onAddComentario) {
+      await onAddComentario(documento.id, comentario);
+    }
+  };
 
   const handleDownloadPdf = () => {
     if (!previewUrl) return;
@@ -130,6 +146,41 @@ export function DocumentoPreviewModal({
               />
             ) : null}
           </div>
+
+            {/* Botão Flutuante de Comentários */}
+            <button
+              type="button"
+              aria-label={`Abrir comentários (${unresolvedCount} pendentes)`}
+              aria-expanded={comentarioPanelOpen}
+              aria-controls="comentarios-panel"
+              onClick={() => setComentarioPanelOpen(true)}
+              className={cn(
+                "fixed bottom-4 right-4 md:bottom-6 md:right-6 z-30",
+                "bg-primary text-primary-foreground",
+                "rounded-full shadow-lg",
+                "px-4 py-2 flex items-center gap-2",
+                "transition-all hover:scale-110 hover:shadow-xl",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              )}
+            >
+              <MessageSquare className="h-5 w-5" />
+              <span>Comentários</span>
+              {unresolvedCount > 0 && (
+                <span className="absolute -top-1 -right-1 bg-yellow-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                  {unresolvedCount}
+                </span>
+              )}
+            </button>
+
+            {/* Painel de Comentários */}
+            <DocumentoComentariosPanel
+              documentoId={documento.id}
+              documentoNome={documento.fileName || "Documento"}
+              comentarios={documento.comentarios || []}
+              isOpen={comentarioPanelOpen}
+              onClose={() => setComentarioPanelOpen(false)}
+              onAddComentario={handleAddComentario}
+            />
         </div>
       </DialogContent>
     </Dialog>
