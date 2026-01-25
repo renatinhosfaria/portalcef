@@ -154,4 +154,14 @@ describe("DocumentoComentariosPanel", () => {
 
     expect(onClose).toHaveBeenCalled();
   });
+
+  it("fecha ao pressionar ESC", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    render(<DocumentoComentariosPanel {...defaultProps} onClose={onClose} />);
+
+    await user.keyboard("{Escape}");
+
+    expect(onClose).toHaveBeenCalled();
+  });
 });

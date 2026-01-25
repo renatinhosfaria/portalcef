@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Button } from "@essencia/ui/components/button";
 import { Textarea } from "@essencia/ui/components/textarea";
@@ -30,6 +30,19 @@ export function DocumentoComentariosPanel({
 }: DocumentoComentariosPanelProps) {
   const [novoComentario, setNovoComentario] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onClose();
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener("keydown", handleKeyDown);
+      return () => document.removeEventListener("keydown", handleKeyDown);
+    }
+  }, [isOpen, onClose]);
 
   if (!isOpen) {
     return null;
