@@ -27,6 +27,7 @@ import { DocumentoPreviewModal } from "./documento-preview-modal";
 interface DocumentoListProps {
   documentos: PlanoDocumento[];
   onDelete?: (docId: string) => void;
+  onAddComentario?: (documentoId: string, comentario: string) => Promise<void>;
   showComments?: boolean;
   canDelete?: boolean;
 }
@@ -115,6 +116,7 @@ function getDocumentName(documento: PlanoDocumento): string {
 export function DocumentoList({
   documentos,
   onDelete,
+  onAddComentario,
   showComments = false,
   canDelete = false,
 }: DocumentoListProps) {
@@ -258,6 +260,7 @@ export function DocumentoList({
               documento={documento}
               open={openDocId === documento.id}
               onOpenChange={(open) => setOpenDocId(open ? documento.id : null)}
+              onAddComentario={onAddComentario}
             />
 
             {/* Comments Section */}
