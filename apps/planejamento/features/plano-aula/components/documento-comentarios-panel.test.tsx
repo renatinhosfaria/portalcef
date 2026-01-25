@@ -66,4 +66,81 @@ describe("DocumentoComentariosPanel", () => {
     const botaoEnviar = screen.getByRole("button", { name: /adicionar comentário/i });
     expect(botaoEnviar).toBeDisabled();
   });
+
+  it("habilita botão quando textarea tem texto", async () => {
+    const user = userEvent.setup();
+    render(<DocumentoComentariosPanel {...defaultProps} />);
+
+    const textarea = screen.getByPlaceholderText(/digite seu comentário/i);
+    await user.type(textarea, "Meu comentário");
+
+    const botaoEnviar = screen.getByRole("button", { name: /adicionar comentário/i });
+    expect(botaoEnviar).not.toBeDisabled();
+  });
+
+  it("chama onAddComentario e limpa textarea após sucesso", async () => {
+    const user = userEvent.setup();
+    const onAddComentario = vi.fn().mockResolvedValue(undefined);
+    render(<DocumentoComentariosPanel {...defaultProps} onAddComentario={onAddComentario} />);
+
+    const textarea = screen.getByPlaceholderText(/digite seu comentário/i);
+    await user.type(textarea, "Novo comentário");
+
+    const botaoEnviar = screen.getByRole("button", { name: /adicionar comentário/i });
+    await user.click(botaoEnviar);
+
+    expect(onAddComentario).toHaveBeenCalledWith("Novo comentário");
+    expect(textarea).toHaveValue("");
+  });
+
+  it("mostra loading durante submit", async () => {
+    const user = userEvent.setup();
+    let resolvePromise: () => void;
+    const onAddComentario = vi.fn().mockImplementation(() => {
+      return new Promise<void>((resolve) => {
+        resolvePromise = resolve;
+      });
+    });
+
+    render(<DocumentoComentariosPanel {...defaultProps} onAddComentario={onAddComentario} />);
+
+    const textarea = screen.getByPlaceholderText(/digite seu comentário/i);
+    await user.type(textarea, "Comentário");
+
+    const botaoEnviar = screen.getByRole("button", { name: /adicionar comentário/i });
+    await user.click(botaoEnviar);
+
+    expect(screen.getByRole("button", { name: /adicionar comentário/i })).toBeDisabled();
+
+    resolvePromise!();
+  });
+
+  it("chama onClose ao clicar no botão X", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    render(<DocumentoComentariosPanel {...defaultProps} onClose={onClose} />);
+
+    const botaoFechar = screen.getByRole("button", { name: /fechar painel/i });
+    await user.click(botaoFechar);
+
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it("mostra contador de caracteres", async () => {
+    const user = userEvent.setup();
+    render(<DocumentoComentariosPanel {...defaultProps} />);
+
+    expect(screen.getByText("0/1000")).toBeInTheDocument();
+
+    const textarea = screen.getByPlaceholderText(/digite seu comentário/i);
+    await user.type(textarea, "Teste");
+
+    expect(screen.getByText("5/1000")).toBeInTheDocument();
+  });
+
+  it("renderiza mensagem quando não há comentários", () => {
+    render(<DocumentoComentariosPanel {...defaultProps} comentarios={[]} />);
+
+    expect(screen.getByText(/nenhum comentário ainda/i)).toBeInTheDocument();
+  });
 });
