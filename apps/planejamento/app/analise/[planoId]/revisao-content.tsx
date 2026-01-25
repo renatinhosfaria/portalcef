@@ -10,6 +10,7 @@ import {
   formatQuinzenaDateRange,
   getQuinzenaById,
 } from "@essencia/shared/config/quinzenas";
+import { api } from "@essencia/shared/fetchers/client";
 import { Alert, AlertDescription, AlertTitle } from "@essencia/ui/components/alert";
 import { Button } from "@essencia/ui/components/button";
 import {
@@ -95,6 +96,28 @@ export function RevisaoContent({ planoId }: RevisaoContentProps) {
 
     return () => clearInterval(interval);
   }, [plano?.documentos, refetch]);
+
+  /**
+   * Adiciona comentario a um documento via API
+   */
+  const handleAddComentarioViaApi = useCallback(
+    async (documentoId: string, comentario: string) => {
+      try {
+        await api.post(`/plano-aula/documento/${documentoId}/comentario`, {
+          comentario,
+        });
+        // Recarregar plano para mostrar novo comentario
+        await refetch();
+      } catch (err) {
+        const message =
+          err instanceof Error
+            ? err.message
+            : "Erro ao adicionar comentario";
+        setActionError(message);
+      }
+    },
+    [refetch],
+  );
 
   /**
    * Aprova o plano e envia para a coordenacao
@@ -323,6 +346,7 @@ export function RevisaoContent({ planoId }: RevisaoContentProps) {
                 documentos={plano.documentos}
                 showComments={true}
                 canDelete={false}
+                onAddComentario={handleAddComentarioViaApi}
               />
             </CardContent>
           </Card>
