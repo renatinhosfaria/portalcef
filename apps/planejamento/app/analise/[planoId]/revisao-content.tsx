@@ -103,7 +103,8 @@ export function RevisaoContent({ planoId }: RevisaoContentProps) {
   const handleAddComentarioViaApi = useCallback(
     async (documentoId: string, comentario: string) => {
       try {
-        await api.post(`/plano-aula/documento/${documentoId}/comentario`, {
+        await api.post("/plano-aula/comentarios", {
+          documentoId,
           comentario,
         });
         // Recarregar plano para mostrar novo comentario
