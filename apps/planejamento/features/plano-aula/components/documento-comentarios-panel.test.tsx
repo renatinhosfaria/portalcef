@@ -143,4 +143,15 @@ describe("DocumentoComentariosPanel", () => {
 
     expect(screen.getByText(/nenhum comentário ainda/i)).toBeInTheDocument();
   });
+
+  it("fecha ao clicar no backdrop (mobile)", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    render(<DocumentoComentariosPanel {...defaultProps} onClose={onClose} />);
+
+    const backdrop = screen.getByTestId("comentarios-backdrop");
+    await user.click(backdrop);
+
+    expect(onClose).toHaveBeenCalled();
+  });
 });

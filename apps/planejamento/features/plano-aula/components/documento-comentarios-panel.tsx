@@ -52,16 +52,25 @@ export function DocumentoComentariosPanel({
     novoComentario.trim().length === 0 || isSubmitting || loading;
 
   return (
-    <aside
-      role="complementary"
-      aria-label="Painel de comentários do documento"
-      className={cn(
-        "fixed top-[65px] bottom-0 right-0 z-40",
-        "w-full sm:w-[350px] md:w-[400px]",
-        "bg-background border-l shadow-2xl",
-        "flex flex-col",
-      )}
-    >
+    <>
+      {/* Backdrop (mobile) */}
+      <div
+        data-testid="comentarios-backdrop"
+        className="fixed inset-0 bg-black/50 z-30 md:hidden"
+        onClick={onClose}
+        aria-hidden="true"
+      />
+
+      <aside
+        role="complementary"
+        aria-label="Painel de comentários do documento"
+        className={cn(
+          "fixed top-[65px] bottom-0 right-0 z-40",
+          "w-full sm:w-[350px] md:w-[400px]",
+          "bg-background border-l shadow-2xl",
+          "flex flex-col",
+        )}
+      >
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b">
         <div className="flex items-center gap-2">
@@ -108,5 +117,6 @@ export function DocumentoComentariosPanel({
         </div>
       </form>
     </aside>
+    </>
   );
 }
