@@ -12,6 +12,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 
+import { planoAulaPeriodo } from "./plano-aula-periodo.js";
 import { turmas } from "./turmas.js";
 import { units } from "./units.js";
 import { users } from "./users.js";
@@ -39,8 +40,13 @@ export type DocumentoTipo = (typeof documentoTipoEnum)[number];
 // ============================================
 // Documento Preview Status Enum
 // ============================================
-export const documentoPreviewStatusEnum = ["PENDENTE", "PRONTO", "ERRO"] as const;
-export type DocumentoPreviewStatus = (typeof documentoPreviewStatusEnum)[number];
+export const documentoPreviewStatusEnum = [
+  "PENDENTE",
+  "PRONTO",
+  "ERRO",
+] as const;
+export type DocumentoPreviewStatus =
+  (typeof documentoPreviewStatusEnum)[number];
 
 // ============================================
 // Table: plano_aula (Mestre)
@@ -60,6 +66,8 @@ export const planoAula = pgTable(
     unitId: uuid("unit_id")
       .notNull()
       .references(() => units.id, { onDelete: "cascade" }),
+    planoAulaPeriodoId: uuid("plano_aula_periodo_id")
+      .references(() => planoAulaPeriodo.id, { onDelete: "cascade" }),
 
     // Identificador da quinzena
     quinzenaId: varchar("quinzena_id", { length: 10 }).notNull(), // Ex: "2026-Q01"
@@ -87,6 +95,7 @@ export const planoAula = pgTable(
     quinzenaIdIdx: index("plano_aula_quinzena_id_idx").on(table.quinzenaId),
     unitIdIdx: index("plano_aula_unit_id_idx").on(table.unitId),
     userIdx: index("plano_aula_user_idx").on(table.userId),
+    periodoIdx: index("plano_aula_periodo_id_idx").on(table.planoAulaPeriodoId),
     // Constraint: um professor não pode ter 2 planos para mesma turma/quinzena
     uniquePlanoIdx: uniqueIndex("plano_aula_user_turma_quinzena_unique").on(
       table.userId,
@@ -129,6 +138,12 @@ export const planoDocumento = pgTable(
     previewMimeType: varchar("preview_mime_type", { length: 100 }), // Tipo MIME do preview
     previewStatus: text("preview_status", { enum: documentoPreviewStatusEnum }), // Status da conversão
     previewError: text("preview_error"), // Mensagem de erro (se houver)
+
+    // Aprovação pelo Analista Pedagógico
+    approvedBy: uuid("approved_by").references(() => users.id, {
+      onDelete: "set null",
+    }), // ID do analista que aprovou
+    approvedAt: timestamp("approved_at", { withTimezone: true }), // Data/hora da aprovação
 
     // Timestamps
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -221,10 +236,9 @@ export const quinzenaConfig = pgTable(
   },
   (table) => ({
     // Constraint: apenas uma config por unidade/quinzena
-    uniqueUnitQuinzenaIdx: uniqueIndex("quinzena_config_unit_quinzena_unique").on(
-      table.unitId,
-      table.quinzenaId,
-    ),
+    uniqueUnitQuinzenaIdx: uniqueIndex(
+      "quinzena_config_unit_quinzena_unique",
+    ).on(table.unitId, table.quinzenaId),
   }),
 );
 
@@ -248,6 +262,10 @@ export const planoAulaRelations = relations(planoAula, ({ one, many }) => ({
   unit: one(units, {
     fields: [planoAula.unitId],
     references: [units.id],
+  }),
+  periodo: one(planoAulaPeriodo, {
+    fields: [planoAula.planoAulaPeriodoId],
+    references: [planoAulaPeriodo.id],
   }),
   documentos: many(planoDocumento),
 }));
