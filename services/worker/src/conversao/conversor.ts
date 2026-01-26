@@ -26,10 +26,12 @@ export async function converterDocParaPdf(
   entrada: string,
   pastaSaida: string,
 ): Promise<string> {
+  // Usar writer_pdf_Export explicitamente para melhor fidelidade de conversão
+  // Isso resolve problemas de formatação como páginas em branco e espaçamento incorreto
   await execFileAsync("soffice", [
     "--headless",
     "--convert-to",
-    "pdf",
+    "pdf:writer_pdf_Export",
     "--outdir",
     pastaSaida,
     entrada,
