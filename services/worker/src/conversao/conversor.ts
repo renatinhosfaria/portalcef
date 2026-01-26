@@ -25,6 +25,11 @@ export async function converterDocParaPdf(
   // Usar Carbone API para conversão de documentos
   // Carbone é 57x mais rápido que LibreOffice direto e resolve problemas de formatação
   // Ref: https://github.com/carboneio/document-converter-benchmark
+  //
+  // Fluxo da API Carbone:
+  // 1. POST /template - fazer upload do template e obter templateId
+  // 2. POST /render/:templateId - fazer render com dados e obter renderId
+  // 3. GET /render/:renderId - baixar o PDF gerado
 
   const carboneUrl = process.env.CARBONE_URL || "http://carbone:4000";
   const caminhoPdf = caminhoSaidaPdf(entrada, pastaSaida);
@@ -33,30 +38,66 @@ export async function converterDocParaPdf(
     // Ler o arquivo de entrada
     const arquivoBuffer = await readFile(entrada);
 
-    // Preparar FormData para envio ao Carbone
-    const formData = new FormData();
+    // Passo 1: Upload do template
+    const uploadFormData = new FormData();
     const blob = new Blob([arquivoBuffer], {
       type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     });
-    formData.append("data", "{}"); // Dados vazios (não estamos usando templates)
-    formData.append("convertTo", "pdf");
-    formData.append("template", blob, basename(entrada));
+    uploadFormData.append("template", blob, basename(entrada));
 
-    // Fazer requisição ao Carbone
-    const response = await fetch(`${carboneUrl}/render`, {
+    const uploadResponse = await fetch(`${carboneUrl}/template`, {
       method: "POST",
-      body: formData,
+      body: uploadFormData,
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
+    if (!uploadResponse.ok) {
+      const errorText = await uploadResponse.text();
       throw new Error(
-        `Carbone API retornou erro ${response.status}: ${errorText}`
+        `Falha ao fazer upload do template: ${uploadResponse.status} - ${errorText}`
+      );
+    }
+
+    const uploadData = (await uploadResponse.json()) as { data: { templateId: string } };
+    const templateId = uploadData.data.templateId;
+
+    // Passo 2: Render do template com conversão para PDF
+    const renderBody = {
+      data: {}, // Dados vazios (documento sem variáveis)
+      convertTo: "pdf",
+    };
+
+    const renderResponse = await fetch(`${carboneUrl}/render/${templateId}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(renderBody),
+    });
+
+    if (!renderResponse.ok) {
+      const errorText = await renderResponse.text();
+      throw new Error(
+        `Falha ao renderizar template: ${renderResponse.status} - ${errorText}`
+      );
+    }
+
+    const renderData = (await renderResponse.json()) as { data: { renderId: string } };
+    const renderId = renderData.data.renderId;
+
+    // Passo 3: Download do PDF gerado
+    const downloadResponse = await fetch(`${carboneUrl}/render/${renderId}`, {
+      method: "GET",
+    });
+
+    if (!downloadResponse.ok) {
+      const errorText = await downloadResponse.text();
+      throw new Error(
+        `Falha ao baixar PDF: ${downloadResponse.status} - ${errorText}`
       );
     }
 
     // Salvar o PDF retornado
-    const pdfBuffer = await response.arrayBuffer();
+    const pdfBuffer = await downloadResponse.arrayBuffer();
     await writeFile(caminhoPdf, Buffer.from(pdfBuffer));
 
     // Verificar se o arquivo foi criado
