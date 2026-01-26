@@ -141,6 +141,26 @@ services:
       "
 
   # ===========================================================================
+  # Carbone - Document Conversion Service
+  # ===========================================================================
+  carbone:
+    image: carbone/carbone-ee:latest
+    container_name: essencia-carbone
+    environment:
+      # Carbone configuração
+      CARBONE_WORKERS: 4
+    networks:
+      - essencia-prod
+    restart: unless-stopped
+    # Healthcheck desabilitado temporariamente - container não tem curl/wget
+    # TODO: Adicionar healthcheck customizado ou usar exec para verificar porta
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ===========================================================================
   # Frontend Apps - Next.js
   # ===========================================================================
   home:
@@ -408,6 +428,8 @@ services:
       MINIO_BUCKET: ${MINIO_BUCKET}
       HEALTH_PORT: 3100
       WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-2}
+      # Carbone API URL
+      CARBONE_URL: http://carbone:4000
     depends_on:
       postgres:
         condition: service_healthy
@@ -415,6 +437,8 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+      carbone:
+        condition: service_started
     networks:
       - essencia-prod
     restart: unless-stopped
