@@ -9,10 +9,15 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 
 import { units } from "./units.js";
 import { users } from "./users.js";
 
+// ============================================
+// Table: plano_aula_periodo
+// Configuração de períodos de planejamento por unidade/etapa
+// ============================================
 export const planoAulaPeriodo = pgTable(
   "plano_aula_periodo",
   {
@@ -36,7 +41,7 @@ export const planoAulaPeriodo = pgTable(
   },
   (table) => ({
     periodoNumeroEtapaUnidadeIdx: uniqueIndex(
-      "idx_periodo_numero_etapa_unidade",
+      "plano_aula_periodo_unidade_etapa_numero_unique",
     ).on(table.unidadeId, table.etapa, table.numero),
     unidadeIdx: index("idx_plano_aula_periodo_unidade").on(table.unidadeId),
     etapaIdx: index("idx_plano_aula_periodo_etapa").on(table.etapa),
@@ -63,3 +68,9 @@ export const planoAulaPeriodoRelations = relations(
 
 export type PlanoAulaPeriodo = typeof planoAulaPeriodo.$inferSelect;
 export type NovoPlanoAulaPeriodo = typeof planoAulaPeriodo.$inferInsert;
+
+// ============================================
+// Zod Schemas (drizzle-zod)
+// ============================================
+export const insertPlanoAulaPeriodoSchema = createInsertSchema(planoAulaPeriodo);
+export const selectPlanoAulaPeriodoSchema = createSelectSchema(planoAulaPeriodo);
