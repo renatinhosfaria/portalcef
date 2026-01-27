@@ -1,12 +1,10 @@
-import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 
-import { PrazosContent } from "./prazos-content";
-
-export const metadata: Metadata = {
-  title: "Configuracao de Prazos | Essencia",
-  description: "Defina os prazos de entrega para cada quinzena.",
-};
-
+/**
+ * Redirect para a nova página de gestão de períodos
+ * A funcionalidade de configuração de prazos foi movida para /gestao/periodos
+ * que agora usa o sistema de períodos configuráveis dinâmicos
+ */
 export default function PrazosPage() {
-  return <PrazosContent />;
+  redirect("/gestao/periodos");
 }

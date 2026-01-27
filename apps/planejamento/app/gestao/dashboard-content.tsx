@@ -342,7 +342,7 @@ export function DashboardContent() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Link href="/configuracoes/prazos">
+          <Link href="/gestao/periodos">
             <Button variant="outline" className="gap-2">
               <CalendarClock className="h-4 w-4" />
               Configurar Prazos
