@@ -1,8 +1,13 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
+import { eq, and, asc, getDb } from '@essencia/db';
+import { planoAulaPeriodo, type PlanoAulaPeriodo } from '@essencia/db/schema';
 import { CriarPeriodoDto } from './dto/plano-aula-periodo.dto';
 
 @Injectable()
 export class PlanoAulaPeriodoService {
+  private get db() {
+    return getDb();
+  }
   async criarPeriodo(
     unidadeId: string,
     userId: string,
@@ -35,8 +40,34 @@ export class PlanoAulaPeriodoService {
       );
     }
 
-    // TODO: Implementar lógica de criação no banco
-    return null;
+    // Verificar sobreposição
+    const sobrepostos = await this.verificarSobreposicao(unidadeId, dto.etapa, dataInicio, dataFim);
+    if (sobrepostos.length > 0) {
+      throw new BadRequestException('As datas se sobrepõem a um período existente');
+    }
+
+    // Calcular número
+    const numero = await this.calcularProximoNumero(unidadeId, dto.etapa, dataInicio);
+
+    // Criar período
+    const [periodo] = await this.db
+      .insert(planoAulaPeriodo)
+      .values({
+        unidadeId,
+        etapa: dto.etapa,
+        numero,
+        descricao: dto.descricao,
+        dataInicio: dto.dataInicio,
+        dataFim: dto.dataFim,
+        dataMaximaEntrega: dto.dataMaximaEntrega,
+        criadoPor: userId,
+      })
+      .returning();
+
+    // Renumerar se necessário
+    await this.renumerarPeriodosSeNecessario(unidadeId, dto.etapa);
+
+    return periodo;
   }
 
   private async verificarSobreposicao(
@@ -47,7 +78,7 @@ export class PlanoAulaPeriodoService {
   ) {
     const periodos = await this.buscarPeriodosPorEtapa(unidadeId, etapa);
 
-    return periodos.filter((periodo) => {
+    return periodos.filter((periodo: PlanoAulaPeriodo) => {
       const inicio = new Date(periodo.dataInicio);
       const fim = new Date(periodo.dataFim);
 
@@ -59,9 +90,16 @@ export class PlanoAulaPeriodoService {
   private async buscarPeriodosPorEtapa(
     unidadeId: string,
     etapa: string
-  ): Promise<Array<{ id: string; numero: number; dataInicio: Date; dataFim: Date }>> {
-    // TODO: Implementar busca real no banco
-    return [];
+  ) {
+    return this.db
+      .select()
+      .from(planoAulaPeriodo)
+      .where(
+        and(
+          eq(planoAulaPeriodo.unidadeId, unidadeId),
+          eq(planoAulaPeriodo.etapa, etapa)
+        )
+      );
   }
 
   private async calcularProximoNumero(
@@ -76,7 +114,7 @@ export class PlanoAulaPeriodoService {
     }
 
     const periodosOrdenados = periodos.sort(
-      (a, b) => new Date(a.dataInicio).getTime() - new Date(b.dataInicio).getTime()
+      (a: PlanoAulaPeriodo, b: PlanoAulaPeriodo) => new Date(a.dataInicio).getTime() - new Date(b.dataInicio).getTime()
     );
 
     let posicao = 1;
@@ -88,5 +126,28 @@ export class PlanoAulaPeriodoService {
     }
 
     return posicao;
+  }
+
+  private async renumerarPeriodosSeNecessario(unidadeId: string, etapa: string) {
+    const periodos = await this.db
+      .select()
+      .from(planoAulaPeriodo)
+      .where(
+        and(
+          eq(planoAulaPeriodo.unidadeId, unidadeId),
+          eq(planoAulaPeriodo.etapa, etapa)
+        )
+      )
+      .orderBy(asc(planoAulaPeriodo.dataInicio));
+
+    for (let i = 0; i < periodos.length; i++) {
+      const numeroCorreto = i + 1;
+      if (periodos[i].numero !== numeroCorreto) {
+        await this.db
+          .update(planoAulaPeriodo)
+          .set({ numero: numeroCorreto, atualizadoEm: new Date() })
+          .where(eq(planoAulaPeriodo.id, periodos[i].id));
+      }
+    }
   }
 }
