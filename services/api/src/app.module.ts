@@ -12,6 +12,7 @@ import { AuthModule } from "./modules/auth/auth.module";
 import { CalendarModule } from "./modules/calendar/calendar.module";
 import { HealthModule } from "./modules/health/health.module";
 import { PlanoAulaModule } from "./modules/plano-aula/plano-aula.module";
+import { PlanoAulaPeriodoModule } from "./modules/plano-aula-periodo/plano-aula-periodo.module";
 import { PlanningsModule } from "./modules/plannings/plannings.module";
 import { SchoolsModule } from "./modules/schools/schools.module";
 import { SetupModule } from "./modules/setup/setup.module";
@@ -66,6 +67,7 @@ import { SecurityModule } from "./modules/security/security.module";
     PlanningsModule,
     // Novo workflow de Plano de Aula
     PlanoAulaModule,
+    PlanoAulaPeriodoModule,
     SchoolsModule,
     ShopModule,
     StagesModule,
