@@ -92,4 +92,45 @@ describe('PlanoAulaPeriodoService', () => {
       expect(result).toBe(null);
     });
   });
+
+  describe('verificarSobreposicao', () => {
+    it('deve retornar períodos sobrepostos quando houver conflito', async () => {
+      // Mock: assumir que já existe período de 01/03 a 15/03
+      jest.spyOn(service as any, 'buscarPeriodosPorEtapa').mockResolvedValue([
+        {
+          id: 'periodo-1',
+          dataInicio: new Date('2026-03-01'),
+          dataFim: new Date('2026-03-15'),
+        },
+      ]);
+
+      const resultado = await service['verificarSobreposicao'](
+        'unidade-id',
+        'INFANTIL',
+        new Date('2026-03-10'),
+        new Date('2026-03-20')
+      );
+
+      expect(resultado).toHaveLength(1);
+    });
+
+    it('deve retornar vazio quando não houver sobreposição', async () => {
+      jest.spyOn(service as any, 'buscarPeriodosPorEtapa').mockResolvedValue([
+        {
+          id: 'periodo-1',
+          dataInicio: new Date('2026-03-01'),
+          dataFim: new Date('2026-03-15'),
+        },
+      ]);
+
+      const resultado = await service['verificarSobreposicao'](
+        'unidade-id',
+        'INFANTIL',
+        new Date('2026-03-16'),
+        new Date('2026-03-30')
+      );
+
+      expect(resultado).toHaveLength(0);
+    });
+  });
 });

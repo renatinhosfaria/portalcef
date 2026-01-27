@@ -38,4 +38,29 @@ export class PlanoAulaPeriodoService {
     // TODO: Implementar lógica de criação no banco
     return null;
   }
+
+  private async verificarSobreposicao(
+    unidadeId: string,
+    etapa: string,
+    dataInicio: Date,
+    dataFim: Date
+  ) {
+    const periodos = await this.buscarPeriodosPorEtapa(unidadeId, etapa);
+
+    return periodos.filter((periodo) => {
+      const inicio = new Date(periodo.dataInicio);
+      const fim = new Date(periodo.dataFim);
+
+      // Verifica se há sobreposição
+      return dataInicio <= fim && dataFim >= inicio;
+    });
+  }
+
+  private async buscarPeriodosPorEtapa(
+    unidadeId: string,
+    etapa: string
+  ): Promise<Array<{ id: string; dataInicio: Date; dataFim: Date }>> {
+    // TODO: Implementar busca real no banco
+    return [];
+  }
 }
