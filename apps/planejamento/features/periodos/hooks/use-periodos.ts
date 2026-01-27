@@ -129,3 +129,56 @@ export function usePeriodos(): UsePeriodosReturn {
     excluirPeriodo,
   };
 }
+
+interface UsePeriodosDaTurmaReturn {
+  periodos: Periodo[];
+  isLoading: boolean;
+  error: string | null;
+  refetch: () => Promise<void>;
+}
+
+/**
+ * Hook para buscar períodos de uma turma específica
+ */
+export function usePeriodosDaTurma(turmaId: string): UsePeriodosDaTurmaReturn {
+  const [periodos, setPeriodos] = useState<Periodo[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchPeriodos = useCallback(async () => {
+    if (!turmaId) {
+      setIsLoading(false);
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const response = await api.get<Periodo[]>(`/plano-aula-periodo/turma/${turmaId}`);
+
+      if (Array.isArray(response)) {
+        setPeriodos(response);
+      } else {
+        setPeriodos([]);
+      }
+    } catch (err) {
+      console.error('Erro ao buscar períodos da turma:', err);
+      setError(err instanceof Error ? err.message : 'Erro ao buscar períodos');
+      setPeriodos([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [turmaId]);
+
+  useEffect(() => {
+    fetchPeriodos();
+  }, [fetchPeriodos]);
+
+  return {
+    periodos,
+    isLoading,
+    error,
+    refetch: fetchPeriodos,
+  };
+}
