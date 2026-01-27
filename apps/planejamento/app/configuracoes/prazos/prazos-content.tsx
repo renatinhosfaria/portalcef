@@ -4,9 +4,10 @@
  * PrazosContent Component
  * Client component para configuracao de prazos de entrega
  * Task 4.7: Permite que a Coordenadora Geral defina prazos para cada quinzena
+ *
+ * TODO: Refatorar para usar períodos dinâmicos da API /plano-aula-periodo
  */
 
-import { QUINZENAS_2026 } from "@essencia/shared/config/quinzenas";
 import { Button } from "@essencia/ui/components/button";
 import {
   Card,
@@ -115,9 +116,9 @@ export function PrazosContent() {
     return map;
   }, [deadlines]);
 
-  // Filtrar quinzenas por semestre
+  // TODO: Buscar períodos via API /plano-aula-periodo filtrados por semestre
   const quinzenasFiltradas = useMemo(() => {
-    return QUINZENAS_2026.filter((q) => q.semester === selectedSemester);
+    return []; // Vazio até implementar novo sistema
   }, [selectedSemester]);
 
   /**
@@ -322,7 +323,24 @@ export function PrazosContent() {
       )}
 
       {/* Lista de Quinzenas */}
-      {!isLoadingDeadlines && (
+      {!isLoadingDeadlines && quinzenasFiltradas.length === 0 && (
+        <Card className="border-yellow-400 bg-yellow-50">
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-3 text-yellow-800">
+              <AlertCircle className="h-5 w-5" />
+              <div>
+                <p className="font-medium">
+                  Sistema de períodos em migração
+                </p>
+                <p className="text-sm">
+                  A configuração de prazos será implementada com o novo sistema de períodos dinâmicos.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+      {!isLoadingDeadlines && quinzenasFiltradas.length > 0 && (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {quinzenasFiltradas.map((quinzena) => {
             const prazoAtual = obterPrazoAtual(quinzena.id, quinzena.deadline);

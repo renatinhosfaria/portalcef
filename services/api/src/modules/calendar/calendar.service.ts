@@ -9,7 +9,6 @@ import type {
   UpdateCalendarEventInput,
   QueryCalendarEventsInput,
 } from "@essencia/shared/schemas";
-import { getQuinzenaById } from "@essencia/shared/config/quinzenas";
 
 interface UserContext {
   userId: string;
@@ -435,12 +434,15 @@ export class CalendarService {
   }
 
   /**
+   * TODO: Refatorar para usar API de períodos dinâmicos
    * Valida se uma quinzena tem dias letivos suficientes.
    * Retorna objeto com validação e detalhes.
+   *
+   * TEMPORÁRIO: Retorna validação padrão até implementar novo sistema.
    */
   async validateQuinzenaSchoolDays(
-    unitId: string,
-    quinzenaId: string,
+    _unitId: string,
+    _quinzenaId: string,
   ): Promise<{
     isValid: boolean;
     totalDays: number;
@@ -448,51 +450,14 @@ export class CalendarService {
     nonSchoolDays: Array<{ date: string; reason: string }>;
     message: string;
   }> {
-    const quinzena = getQuinzenaById(quinzenaId);
-    if (!quinzena) {
-      return {
-        isValid: false,
-        totalDays: 0,
-        schoolDays: 0,
-        nonSchoolDays: [],
-        message: "Quinzena não encontrada",
-      };
-    }
-
-    const startDate = this.toLocalDate(quinzena.startDate);
-    const endDate = this.toLocalDate(quinzena.endDate);
-
-    const schoolDays = await this.getSchoolDaysInRange(
-      unitId,
-      startDate,
-      endDate,
-    );
-    const nonSchoolDaysList = await this.getNonSchoolDaysInRange(
-      unitId,
-      startDate,
-      endDate,
-    );
-
-    const totalDays =
-      Math.ceil(
-        (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24),
-      ) + 1;
-
-    // Formatar datas para resposta
-    const formattedNonSchoolDays = nonSchoolDaysList.map((d) => ({
-      date: this.formatDateKey(d.date),
-      reason: d.reason,
-    }));
-
+    // TODO: Buscar período via API /plano-aula-periodo
+    // Por enquanto retorna validação padrão para não quebrar sistema
     return {
-      isValid: schoolDays.length > 0,
-      totalDays,
-      schoolDays: schoolDays.length,
-      nonSchoolDays: formattedNonSchoolDays,
-      message:
-        schoolDays.length === 0
-          ? "Esta quinzena não possui dias letivos. Verifique o calendário escolar."
-          : `${schoolDays.length} dias letivos nesta quinzena.`,
+      isValid: true,
+      totalDays: 14,
+      schoolDays: 10,
+      nonSchoolDays: [],
+      message: "Validação temporária até migração para períodos dinâmicos",
     };
   }
 }

@@ -12,12 +12,6 @@ import {
   type Turma,
 } from "@essencia/db/schema";
 import type { EducationStageCode } from "@essencia/shared/types";
-import {
-  QUINZENAS_2026,
-  getCurrentQuinzena2026,
-  isInVacationPeriod,
-  formatQuinzenaDateRange,
-} from "@essencia/shared/config/quinzenas";
 import { BadRequestException, ForbiddenException, Injectable } from "@nestjs/common";
 import { CalendarService } from "../calendar/calendar.service";
 
@@ -559,36 +553,15 @@ export class PlanningsService {
   }
 
   /**
-   * Retorna o ID da quinzena atual baseada no calendário escolar 2026.
-   * Task 6 - Calcular Quinzena Dinamicamente
+   * TODO: Refatorar para usar API de períodos dinâmicos
+   * Retorna o ID da quinzena atual baseada no calendário escolar.
    *
-   * Baseado no Calendário Escolar 2026:
-   * - 1º Semestre: 02/02/2026 a 30/06/2026 (Q01-Q11)
-   * - Férias de Julho: 01/07/2026 a 31/07/2026 (sem quinzenas)
-   * - 2º Semestre: 03/08/2026 a 18/12/2026 (Q12-Q21)
+   * TEMPORÁRIO: Retorna string vazia até implementar novo sistema de períodos.
    */
   private getCurrentQuinzena(): string {
-    const now = new Date();
-
-    // Verifica se está no período de férias
-    if (isInVacationPeriod(now)) {
-      return "FERIAS";
-    }
-
-    const quinzenaAtual = getCurrentQuinzena2026(now);
-
-    // Se não encontrou quinzena (antes do início ou após o término do ano letivo)
-    if (!quinzenaAtual) {
-      // Retorna a primeira quinzena do ano letivo se for antes de fevereiro
-      const dateStr = now.toISOString().split("T")[0];
-      if (dateStr < "2026-02-02") {
-        return "2026-Q01";
-      }
-      // Retorna a última quinzena se for após dezembro
-      return "2026-Q21";
-    }
-
-    return quinzenaAtual.id;
+    // TODO: Implementar busca de período atual via API /plano-aula-periodo
+    // Por enquanto retorna vazio para não quebrar chamadas existentes
+    return "";
   }
 
   /**
@@ -847,8 +820,8 @@ export class PlanningsService {
    * - Q02+: liberada apenas para turmas que tiveram Q(N-1) aprovada
    */
   async getQuinzenas(
-    unitId?: string,
-    userId?: string,
+    _unitId?: string,
+    _userId?: string,
   ): Promise<{
     success: boolean;
     data?: Array<{
@@ -866,89 +839,14 @@ export class PlanningsService {
     isVacation?: boolean;
     error?: string;
   }> {
-    const db = getDb();
-
     try {
-      const now = new Date();
-      const currentQuinzenaId = this.getCurrentQuinzena();
-      const isVacation = isInVacationPeriod(now);
-
-      // Buscar todas as turmas do usuário (para Q01 que é sempre liberada)
-      let userTurmaIds: string[] = [];
-      if (userId) {
-        const userTurmas = await db.query.turmas.findMany({
-          where: eq(turmas.professoraId, userId),
-          columns: { id: true },
-        });
-        userTurmaIds = userTurmas.map((t: { id: string }) => t.id);
-      }
-
-      // Buscar todos os planos APROVADO do usuário (para calcular liberação)
-      const planosAprovadosPorQuinzena: Map<string, string[]> = new Map();
-      if (userId) {
-        const planosAprovados = await db.query.planoAula.findMany({
-          where: and(
-            eq(planoAula.userId, userId),
-            eq(planoAula.status, "APROVADO"),
-          ),
-          columns: {
-            quinzenaId: true,
-            turmaId: true,
-          },
-        });
-
-        // Agrupar turmas aprovadas por quinzena
-        for (const plano of planosAprovados) {
-          const turmas = planosAprovadosPorQuinzena.get(plano.quinzenaId) || [];
-          turmas.push(plano.turmaId);
-          planosAprovadosPorQuinzena.set(plano.quinzenaId, turmas);
-        }
-      }
-
-      // Retorna TODAS as quinzenas do ano com unlockedTurmaIds
-      const enrichedQuinzenas = await Promise.all(
-        QUINZENAS_2026.map(async (q, index) => {
-          let schoolDaysCount: number | undefined;
-          let hasSchoolDays: boolean | undefined;
-
-          if (unitId) {
-            const validation =
-              await this.calendarService.validateQuinzenaSchoolDays(
-                unitId,
-                q.id,
-              );
-            schoolDaysCount = validation.schoolDays;
-            hasSchoolDays = validation.isValid;
-          }
-
-          // Calcular unlockedTurmaIds
-          let unlockedTurmaIds: string[] = [];
-          if (index === 0) {
-            // Q01: sempre liberada para todas as turmas do usuário
-            unlockedTurmaIds = userTurmaIds;
-          } else {
-            // Q02+: liberada apenas para turmas com Q(N-1) aprovada
-            const quinzenaAnteriorId = QUINZENAS_2026[index - 1].id;
-            unlockedTurmaIds =
-              planosAprovadosPorQuinzena.get(quinzenaAnteriorId) || [];
-          }
-
-          return {
-            id: q.id,
-            label: `${q.label} (${formatQuinzenaDateRange(q)})`,
-            isCurrent: q.id === currentQuinzenaId,
-            startDate: q.startDate,
-            endDate: q.endDate,
-            deadline: q.deadline,
-            semester: q.semester,
-            schoolDaysCount,
-            hasSchoolDays,
-            unlockedTurmaIds,
-          };
-        }),
-      );
-
-      return { success: true, data: enrichedQuinzenas, isVacation };
+      // TODO: Refatorar para buscar períodos da API /plano-aula-periodo
+      // Sistema de quinzenas hardcoded removido
+      return {
+        success: true,
+        data: [], // Retorna vazio até implementar novo sistema
+        isVacation: false
+      };
     } catch (error) {
       console.error("getQuinzenas error:", error);
       return { success: false, error: "Erro ao buscar quinzenas" };

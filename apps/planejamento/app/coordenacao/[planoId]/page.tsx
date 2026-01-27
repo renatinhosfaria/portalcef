@@ -3,10 +3,6 @@
  * Task 4.5: Criar pagina onde a coordenadora faz a revisao final
  */
 
-import {
-  formatQuinzenaDateRange,
-  getQuinzenaById,
-} from "@essencia/shared/config/quinzenas";
 import { serverApi } from "@essencia/shared/fetchers/server";
 import {
   ArrowLeft,
@@ -126,13 +122,8 @@ export default async function CoordenacaoRevisaoPage({ params }: PageProps) {
   // Verificar se o plano esta aguardando coordenadora
   const isAguardandoAprovacao = plano.status === "AGUARDANDO_COORDENADORA";
 
-  // Buscar configuracao da quinzena
-  const quinzenaConfig = getQuinzenaById(plano.quinzenaId);
-
-  // Formatar periodo da quinzena
-  const periodoDisplay = quinzenaConfig
-    ? formatQuinzenaDateRange(quinzenaConfig)
-    : "Periodo nao encontrado";
+  // TODO: Buscar configuracao da quinzena via API /plano-aula-periodo
+  const periodoDisplay = "Periodo nao disponivel";
 
   // Formatar data de submissao
   const submissaoDisplay = plano.submittedAt
@@ -217,7 +208,7 @@ export default async function CoordenacaoRevisaoPage({ params }: PageProps) {
                   </span>
                 </div>
                 <p className="font-medium">
-                  {quinzenaConfig?.label || plano.quinzenaId}
+                  {plano.quinzenaId}
                 </p>
                 <p className="text-sm text-muted-foreground">
                   {periodoDisplay}

@@ -6,10 +6,6 @@
  * Task 4.3: Criar pagina onde a analista revisa e aprova/devolve um plano
  */
 
-import {
-  formatQuinzenaDateRange,
-  getQuinzenaById,
-} from "@essencia/shared/config/quinzenas";
 import { api } from "@essencia/shared/fetchers/client";
 import {
   Alert,
@@ -317,11 +313,8 @@ export function RevisaoContent({ planoId }: RevisaoContentProps) {
     );
   }
 
-  // Obter configuracao da quinzena
-  const quinzenaConfig = getQuinzenaById(plano.quinzenaId);
-  const periodoDisplay = quinzenaConfig
-    ? formatQuinzenaDateRange(quinzenaConfig)
-    : "Periodo nao encontrado";
+  // TODO: Buscar configuracao da quinzena via API /plano-aula-periodo
+  const periodoDisplay = "Periodo nao disponivel";
 
   const isLoading = loadingPlano || loadingAction;
   const canPerformActions =
@@ -370,8 +363,7 @@ export function RevisaoContent({ planoId }: RevisaoContentProps) {
                 <div className="flex items-center gap-1.5">
                   <Calendar className="h-4 w-4" />
                   <span>
-                    {quinzenaConfig?.label || plano.quinzenaId} -{" "}
-                    {periodoDisplay}
+                    {plano.quinzenaId} - {periodoDisplay}
                   </span>
                 </div>
                 <div className="flex items-center gap-1.5">
