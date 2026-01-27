@@ -2,7 +2,7 @@
 
 /**
  * PlanoContent - Client Component para gerenciamento do Plano de Aula
- * Task 4.1: Componente que gerencia upload de documentos, status e acoes
+ * Task 23: Atualizado para usar periodoId (UUID) ao invés de quinzenaId (número)
  */
 
 import {
@@ -45,7 +45,7 @@ import {
 } from "../../../features/plano-aula";
 
 interface PlanoContentProps {
-  quinzenaId: string;
+  periodoId: string; // UUID do período (não mais número hardcoded)
   turmaId: string | null;
   userId: string | null;
 }
@@ -81,7 +81,7 @@ function getFeedbackMessage(status: PlanoAulaStatus): string | null {
 }
 
 export function PlanoContent({
-  quinzenaId,
+  periodoId,
   turmaId,
   userId,
 }: PlanoContentProps) {
@@ -101,7 +101,7 @@ export function PlanoContent({
   } = usePlanoAula();
 
   /**
-   * Carrega ou cria o plano de aula para a quinzena
+   * Carrega ou cria o plano de aula para o período
    */
   const loadOrCreatePlano = useCallback(async () => {
     if (!turmaId || !userId) {
@@ -111,7 +111,8 @@ export function PlanoContent({
 
     try {
       // Primeiro, tenta criar o plano (a API retorna o existente se ja houver)
-      const result = await criarPlano(turmaId, quinzenaId);
+      // Agora usa periodoId (UUID) ao invés de quinzenaNumero
+      const result = await criarPlano(turmaId, periodoId);
 
       // Depois busca os detalhes completos
       const planoDetalhe = await getPlano(result.id);
@@ -127,7 +128,7 @@ export function PlanoContent({
     } finally {
       setInitialLoading(false);
     }
-  }, [turmaId, userId, quinzenaId, criarPlano, getPlano]);
+  }, [turmaId, userId, periodoId, criarPlano, getPlano]);
 
   /**
    * Recarrega os dados do plano
@@ -296,7 +297,7 @@ export function PlanoContent({
         <AlertCircle className="h-4 w-4" />
         <AlertTitle>Plano nao encontrado</AlertTitle>
         <AlertDescription>
-          Nao foi possivel criar ou carregar o plano de aula para esta quinzena.
+          Nao foi possivel criar ou carregar o plano de aula para este período.
         </AlertDescription>
       </Alert>
     );

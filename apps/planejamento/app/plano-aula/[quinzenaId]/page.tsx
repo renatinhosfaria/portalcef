@@ -1,12 +1,11 @@
 /**
- * Página da Professora - Detalhe da Quinzena para Plano de Aula
- * Task 4.1: Criar página onde a professora gerencia seu plano de aula
+ * Página da Professora - Detalhe do Período para Plano de Aula
+ * Task 23: Atualizar rota para usar periodoId (UUID)
+ *
+ * IMPORTANTE: O nome da pasta [quinzenaId] é mantido por compatibilidade,
+ * mas o parâmetro agora representa periodoId (UUID)
  */
 
-import {
-  formatQuinzenaDateRange,
-  getQuinzenaById,
-} from "@essencia/shared/config/quinzenas";
 import { serverApi } from "@essencia/shared/fetchers/server";
 import { ArrowLeft, Calendar, Clock } from "lucide-react";
 import { cookies } from "next/headers";
@@ -16,7 +15,7 @@ import { PlanoContent } from "./plano-content";
 
 interface PageProps {
   params: Promise<{
-    quinzenaId: string;
+    quinzenaId: string; // Na verdade é periodoId (UUID) agora
   }>;
 }
 
@@ -46,6 +45,16 @@ interface Stage {
   id: string;
   name: string;
   code: string;
+}
+
+interface PlanoAulaPeriodo {
+  id: string;
+  numero: number;
+  label: string;
+  dataInicio: string;
+  dataFim: string;
+  deadline: string;
+  liberado: boolean;
 }
 
 async function getCookieHeader(): Promise<string> {
@@ -105,18 +114,37 @@ async function getStages(cookieHeader: string): Promise<Stage[]> {
   }
 }
 
+async function getPeriodo(
+  periodoId: string,
+  cookieHeader: string,
+): Promise<PlanoAulaPeriodo | null> {
+  try {
+    const response = await serverApi.get<PlanoAulaPeriodo>(
+      `/api/plano-aula-periodo/${periodoId}`,
+      {
+        cookies: cookieHeader,
+      },
+    );
+
+    return response;
+  } catch (error) {
+    console.error("Erro ao buscar período:", error);
+    return null;
+  }
+}
+
 export default async function PlanoAulaPage({ params }: PageProps) {
   const { quinzenaId } = await params;
+  // Alias para clareza: quinzenaId na rota, mas é periodoId (UUID)
+  const periodoId = quinzenaId;
 
-  // Buscar configuracao da quinzena
-  const quinzenaConfig = getQuinzenaById(quinzenaId);
-
-  // Buscar dados do usuario logado e suas turmas
+  // Buscar dados do usuario logado, suas turmas e dados do período
   const cookieHeader = await getCookieHeader();
-  const [currentUser, userTurmas, stages] = await Promise.all([
+  const [currentUser, userTurmas, stages, periodoData] = await Promise.all([
     getCurrentUser(cookieHeader),
     getUserTurmas(cookieHeader),
     getStages(cookieHeader),
+    getPeriodo(periodoId, cookieHeader),
   ]);
 
   // Determinar turma e etapa do usuario
@@ -131,25 +159,22 @@ export default async function PlanoAulaPage({ params }: PageProps) {
     : "Nenhuma turma atribuida";
   const stageDisplay = userStage ? userStage.name : "Etapa nao definida";
 
-  // Formatar periodo da quinzena
-  const periodoDisplay = quinzenaConfig
-    ? formatQuinzenaDateRange(quinzenaConfig)
+  // Formatar periodo baseado nos dados do período
+  const periodoDisplay = periodoData
+    ? `${new Date(periodoData.dataInicio).toLocaleDateString("pt-BR")} - ${new Date(periodoData.dataFim).toLocaleDateString("pt-BR")}`
     : "Periodo nao encontrado";
 
   // Formatar deadline
-  const deadlineDisplay = quinzenaConfig
-    ? new Date(quinzenaConfig.deadline + "T12:00:00").toLocaleDateString(
-        "pt-BR",
-        {
-          day: "2-digit",
-          month: "long",
-          year: "numeric",
-        },
-      )
+  const deadlineDisplay = periodoData
+    ? new Date(periodoData.deadline).toLocaleDateString("pt-BR", {
+        day: "2-digit",
+        month: "long",
+        year: "numeric",
+      })
     : null;
 
-  // Validar se quinzena existe
-  if (!quinzenaConfig) {
+  // Validar se período existe
+  if (!periodoData) {
     return (
       <div className="container mx-auto max-w-7xl px-4 py-8">
         <div className="mb-6">
@@ -164,10 +189,9 @@ export default async function PlanoAulaPage({ params }: PageProps) {
 
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <Calendar className="h-16 w-16 text-muted-foreground/40 mb-4" />
-          <h1 className="text-2xl font-bold mb-2">Quinzena nao encontrada</h1>
+          <h1 className="text-2xl font-bold mb-2">Período nao encontrado</h1>
           <p className="text-muted-foreground">
-            A quinzena solicitada ({quinzenaId}) nao foi encontrada no
-            calendario escolar.
+            O período solicitado nao foi encontrado no sistema.
           </p>
         </div>
       </div>
@@ -197,7 +221,7 @@ export default async function PlanoAulaPage({ params }: PageProps) {
               </div>
               <div>
                 <h1 className="text-2xl font-bold tracking-tight">
-                  {quinzenaConfig.label}
+                  {periodoData.label}
                 </h1>
                 <p className="text-sm text-muted-foreground">
                   {periodoDisplay}
@@ -247,7 +271,7 @@ export default async function PlanoAulaPage({ params }: PageProps) {
 
       {/* Plano Content - Client Component */}
       <PlanoContent
-        quinzenaId={quinzenaId}
+        periodoId={periodoId}
         turmaId={primaryTurma?.id ?? null}
         userId={currentUser?.id ?? null}
       />
