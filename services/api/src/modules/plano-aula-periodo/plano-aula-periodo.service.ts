@@ -1,6 +1,6 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { eq, and, asc, getDb } from '@essencia/db';
-import { planoAulaPeriodo, type PlanoAulaPeriodo } from '@essencia/db/schema';
+import { planoAulaPeriodo, type PlanoAulaPeriodo, turmas } from '@essencia/db/schema';
 import { CriarPeriodoDto } from './dto/plano-aula-periodo.dto';
 
 @Injectable()
@@ -8,6 +8,55 @@ export class PlanoAulaPeriodoService {
   private get db() {
     return getDb();
   }
+
+  async listarPorUnidade(unidadeId: string) {
+    return this.db
+      .select()
+      .from(planoAulaPeriodo)
+      .where(eq(planoAulaPeriodo.unidadeId, unidadeId))
+      .orderBy(
+        asc(planoAulaPeriodo.etapa),
+        asc(planoAulaPeriodo.numero)
+      );
+  }
+
+  async buscarPorId(id: string) {
+    const [periodo] = await this.db
+      .select()
+      .from(planoAulaPeriodo)
+      .where(eq(planoAulaPeriodo.id, id));
+
+    if (!periodo) {
+      throw new BadRequestException('Período não encontrado');
+    }
+
+    return periodo;
+  }
+
+  async buscarPorTurma(turmaId: string) {
+    // 1. Buscar etapa da turma
+    const [turma] = await this.db
+      .select()
+      .from(turmas)
+      .where(eq(turmas.id, turmaId));
+
+    if (!turma) {
+      throw new BadRequestException('Turma não encontrada');
+    }
+
+    // 2. Buscar períodos da etapa da turma
+    return this.db
+      .select()
+      .from(planoAulaPeriodo)
+      .where(
+        and(
+          eq(planoAulaPeriodo.unidadeId, turma.unidadeId),
+          eq(planoAulaPeriodo.etapa, turma.etapa)
+        )
+      )
+      .orderBy(asc(planoAulaPeriodo.numero));
+  }
+
   async criarPeriodo(
     unidadeId: string,
     userId: string,

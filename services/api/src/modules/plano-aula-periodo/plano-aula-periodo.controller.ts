@@ -1,7 +1,9 @@
 import {
   Controller,
   Post,
+  Get,
   Body,
+  Param,
   UseGuards,
   ForbiddenException,
   BadRequestException,
@@ -18,6 +20,38 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 @UseGuards(AuthGuard, RolesGuard, TenantGuard)
 export class PlanoAulaPeriodoController {
   constructor(private readonly service: PlanoAulaPeriodoService) {}
+
+  @Get()
+  @Roles(
+    'diretora_geral',
+    'gerente_unidade',
+    'coordenadora_geral',
+    'coordenadora_infantil',
+    'coordenadora_fundamental_i',
+    'coordenadora_fundamental_ii',
+    'coordenadora_bercario',
+    'coordenadora_medio',
+    'analista_pedagogico',
+    'professora'
+  )
+  async listarPeriodos(@CurrentUser() session: { userId: string; role: string; schoolId: string | null; unitId: string | null; stageId: string | null }) {
+    if (!session.unitId) {
+      throw new BadRequestException('Sessão inválida: unitId ausente');
+    }
+    return this.service.listarPorUnidade(session.unitId);
+  }
+
+  @Get('turma/:turmaId')
+  @Roles('professora', 'coordenadora_geral', 'coordenadora_infantil')
+  async buscarPeriodosDaTurma(@Param('turmaId') turmaId: string) {
+    return this.service.buscarPorTurma(turmaId);
+  }
+
+  @Get(':id')
+  @Roles('diretora_geral', 'gerente_unidade', 'coordenadora_geral', 'coordenadora_infantil', 'professora')
+  async buscarPeriodo(@Param('id') id: string) {
+    return this.service.buscarPorId(id);
+  }
 
   @Post()
   @Roles(
