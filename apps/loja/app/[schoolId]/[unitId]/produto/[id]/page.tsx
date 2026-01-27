@@ -7,7 +7,7 @@ import { use, useEffect, useState } from 'react';
 import { LoadingSpinner } from '@/components/Loading';
 import { ProductDetailCarousel } from '@/components/ProductDetailCarousel';
 import { Toast, useToast } from '@/components/Toast';
-import { useCart } from '@/lib/useCart';
+import { useCart, MAX_QUANTITY_PER_STUDENT } from '@/lib/useCart';
 
 interface ProductVariant {
   id: string;
@@ -37,7 +37,7 @@ export default function ProductDetailPage({
   const resolvedParams = use(params);
   const { schoolId, unitId, id } = resolvedParams;
   const router = useRouter();
-  const { addItem, getTotalItems } = useCart();
+  const { addItem, getTotalItems, getQuantityForProductStudent } = useCart();
   const { toast, showToast } = useToast();
   const cartItemCount = getTotalItems();
 
@@ -136,7 +136,7 @@ export default function ProductDetailPage({
     try {
       await new Promise((resolve) => setTimeout(resolve, 300));
 
-      addItem({
+      const result = addItem({
         variantId: variant.id,
         productId: product!.id,
         productName: product!.name,
@@ -147,6 +147,11 @@ export default function ProductDetailPage({
         imageUrl: product!.imageUrl,
         availableStock: availableStock,
       });
+
+      if (!result.success) {
+        showToast({ message: result.message || 'Erro ao adicionar ao carrinho', type: 'error' });
+        return;
+      }
 
       showToast({ message: 'Produto adicionado ao carrinho!', type: 'success' });
       setStudentName('');
@@ -186,6 +191,16 @@ export default function ProductDetailPage({
 
   const selectedVariantData = product.variants.find((v) => v.id === selectedVariant);
   const allOutOfStock = product.variants.every((v) => v.available_stock === 0);
+
+  // Calcula quantidade máxima permitida considerando limite por aluno
+  const quantityInCart = product && studentName.trim()
+    ? getQuantityForProductStudent(product.id, studentName.trim())
+    : 0;
+  const remainingAllowed = MAX_QUANTITY_PER_STUDENT - quantityInCart;
+  const maxAllowedForStudent = Math.max(0, Math.min(
+    selectedVariantData?.available_stock || 0,
+    remainingAllowed
+  ));
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -303,7 +318,7 @@ export default function ProductDetailPage({
                 <div className="flex items-center gap-3">
                   <button
                     onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                    disabled={quantity <= 1 || allOutOfStock}
+                    disabled={quantity <= 1 || allOutOfStock || maxAllowedForStudent === 0}
                     className="w-10 h-10 rounded-lg border border-slate-300 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed font-semibold transition-colors duration-150"
                   >
                     −
@@ -314,28 +329,42 @@ export default function ProductDetailPage({
                     value={quantity}
                     onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                       const val = parseInt(e.target.value) || 1;
-                      const maxStock = selectedVariantData?.available_stock || 1;
-                      setQuantity(Math.max(1, Math.min(val, maxStock)));
+                      setQuantity(Math.max(1, Math.min(val, maxAllowedForStudent || 1)));
                     }}
                     className="input w-20 text-center"
                     min="1"
-                    disabled={allOutOfStock}
+                    max={maxAllowedForStudent}
+                    disabled={allOutOfStock || maxAllowedForStudent === 0}
                   />
                   <button
                     onClick={() => {
-                      const maxStock = selectedVariantData?.available_stock || 1;
-                      setQuantity(Math.min(quantity + 1, maxStock));
+                      setQuantity(Math.min(quantity + 1, maxAllowedForStudent || 1));
                     }}
                     disabled={
                       allOutOfStock ||
                       !selectedVariant ||
-                      quantity >= (selectedVariantData?.available_stock || 0)
+                      quantity >= maxAllowedForStudent
                     }
                     className="w-10 h-10 rounded-lg border border-slate-300 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed font-semibold transition-colors duration-150"
                   >
                     +
                   </button>
                 </div>
+
+                {/* Aviso de limite por aluno */}
+                {studentName.trim() && selectedVariant && quantityInCart > 0 && (
+                  <p className="text-xs text-amber-600 mt-2">
+                    Este aluno já possui {quantityInCart} unidade(s) deste produto no carrinho.
+                    {remainingAllowed > 0
+                      ? ` Pode adicionar mais ${remainingAllowed}.`
+                      : ' Limite atingido.'}
+                  </p>
+                )}
+
+                {/* Aviso informativo sobre limite */}
+                <p className="text-xs text-slate-400 mt-2">
+                  Máximo de {MAX_QUANTITY_PER_STUDENT} unidades por produto por aluno
+                </p>
               </div>
 
               {/* Botões */}

@@ -32,7 +32,8 @@ describe("DocumentosConversaoQueueService", () => {
       documentoId: "doc-1",
       planoId: "plano-1",
       storageKey: "planos/doc-1.docx",
-      mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      mimeType:
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
       fileName: "plano.docx",
     });
 
@@ -40,7 +41,8 @@ describe("DocumentosConversaoQueueService", () => {
       documentoId: "doc-1",
       planoId: "plano-1",
       storageKey: "planos/doc-1.docx",
-      mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      mimeType:
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
       fileName: "plano.docx",
     });
   });

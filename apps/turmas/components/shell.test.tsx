@@ -23,5 +23,7 @@ describe("Shell layout assets", () => {
     expect(shellSource).toContain('alt="Logo da escola"');
     expect(shellSource).toContain('className="h-12 w-auto object-contain"');
     expect(sidebarSource).toContain("Portal CEF");
+    expect(sidebarSource).toContain('label: "Tarefas"');
+    expect(sidebarSource).toContain("/tarefas?data=");
   });
 });

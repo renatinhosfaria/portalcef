@@ -24,13 +24,7 @@ export function PlanoStatusBadge({ status, className }: PlanoStatusBadgeProps) {
   return (
     <Badge
       variant="outline"
-      className={cn(
-        colors.bg,
-        colors.text,
-        colors.border,
-        "border",
-        className,
-      )}
+      className={cn(colors.bg, colors.text, colors.border, "border", className)}
     >
       {label}
     </Badge>

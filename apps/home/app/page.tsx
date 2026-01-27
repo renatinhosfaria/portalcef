@@ -12,7 +12,6 @@ import {
   School,
   Users,
 } from "lucide-react";
-import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { AnnouncementBanner } from "../components/announcement-banner";
@@ -139,14 +138,15 @@ function ModuleLink({
   color: string;
 }) {
   return (
-    <Link
+    <a
       href={href}
+      rel="external"
       className="flex flex-col items-center justify-center gap-2 bg-white/5 rounded-xl p-3 hover:bg-white/15 transition-colors group"
     >
       <Icon
         className={`w-6 h-6 ${color} group-hover:scale-110 transition-transform`}
       />
       <span className="text-xs font-semibold opacity-80">{label}</span>
-    </Link>
+    </a>
   );
 }

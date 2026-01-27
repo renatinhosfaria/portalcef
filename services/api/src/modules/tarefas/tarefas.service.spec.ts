@@ -28,7 +28,9 @@ const mockDb: Record<string, unknown> & {
 };
 
 // Configure transaction to execute callback with mockDb
-mockDb.transaction.mockImplementation((callback: (tx: typeof mockDb) => Promise<unknown>) => callback(mockDb));
+mockDb.transaction.mockImplementation(
+  (callback: (tx: typeof mockDb) => Promise<unknown>) => callback(mockDb),
+);
 
 jest.mock("@essencia/db", () => ({
   tarefas: {},
@@ -187,7 +189,7 @@ describe("TarefasService", () => {
       };
 
       await expect(service.create(params)).rejects.toThrow(
-        "Falha ao criar tarefa"
+        "Falha ao criar tarefa",
       );
     });
   });
@@ -228,7 +230,9 @@ describe("TarefasService", () => {
     it("deve retornar null se tarefa não existir", async () => {
       mockDb.query.tarefas.findFirst.mockResolvedValue(null);
 
-      const resultado = await service.findById("00000000-0000-0000-0000-999999999999");
+      const resultado = await service.findById(
+        "00000000-0000-0000-0000-999999999999",
+      );
 
       expect(resultado).toBeNull();
     });
@@ -287,7 +291,7 @@ describe("TarefasService", () => {
       mockDb.query.tarefas.findFirst.mockResolvedValue(null);
 
       await expect(
-        service.concluir("00000000-0000-0000-0000-999999999999", "user-uuid-1")
+        service.concluir("00000000-0000-0000-0000-999999999999", "user-uuid-1"),
       ).rejects.toThrow("Tarefa não encontrada");
     });
 
@@ -312,7 +316,7 @@ describe("TarefasService", () => {
       mockDb.query.tarefas.findFirst.mockResolvedValue(mockTarefaDb);
 
       await expect(
-        service.concluir("tarefa-uuid-1", "user-uuid-999")
+        service.concluir("tarefa-uuid-1", "user-uuid-999"),
       ).rejects.toThrow("Usuário não é responsável pela tarefa");
     });
 
@@ -337,7 +341,7 @@ describe("TarefasService", () => {
       mockDb.query.tarefas.findFirst.mockResolvedValue(mockTarefaDb);
 
       await expect(
-        service.concluir("tarefa-uuid-1", "user-uuid-2")
+        service.concluir("tarefa-uuid-1", "user-uuid-2"),
       ).rejects.toThrow("Tarefa já foi concluída");
     });
   });
@@ -362,7 +366,7 @@ describe("TarefasService", () => {
       };
 
       await expect(service.criarManual(dto, session)).rejects.toThrow(
-        "Prazo não pode estar no passado"
+        "Prazo não pode estar no passado",
       );
     });
 
@@ -385,7 +389,7 @@ describe("TarefasService", () => {
       };
 
       await expect(service.criarManual(dto, session)).rejects.toThrow(
-        "Professoras só podem criar tarefas para si mesmas"
+        "Professoras só podem criar tarefas para si mesmas",
       );
     });
 
@@ -466,7 +470,7 @@ describe("TarefasService", () => {
       };
 
       await expect(service.criarManual(dto, session)).rejects.toThrow(
-        "Gestores devem fornecer módulo, quinzenaId, etapaId, turmaId e professoraId em todos os contextos"
+        "Gestores devem fornecer módulo, quinzenaId, etapaId, turmaId e professoraId em todos os contextos",
       );
     });
   });

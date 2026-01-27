@@ -24,8 +24,17 @@ export class CreateProductDto {
   @IsString()
   description?: string;
 
-  @IsEnum(["UNIFORME_FEMININO", "UNIFORME_MASCULINO", "UNIFORME_UNISSEX", "ACESSORIO"])
-  category!: "UNIFORME_FEMININO" | "UNIFORME_MASCULINO" | "UNIFORME_UNISSEX" | "ACESSORIO";
+  @IsEnum([
+    "UNIFORME_FEMININO",
+    "UNIFORME_MASCULINO",
+    "UNIFORME_UNISSEX",
+    "ACESSORIO",
+  ])
+  category!:
+    | "UNIFORME_FEMININO"
+    | "UNIFORME_MASCULINO"
+    | "UNIFORME_UNISSEX"
+    | "ACESSORIO";
 
   @IsInt()
   @Min(0)
@@ -59,8 +68,17 @@ export class UpdateProductDto {
   description?: string;
 
   @IsOptional()
-  @IsEnum(["UNIFORME_FEMININO", "UNIFORME_MASCULINO", "UNIFORME_UNISSEX", "ACESSORIO"])
-  category?: "UNIFORME_FEMININO" | "UNIFORME_MASCULINO" | "UNIFORME_UNISSEX" | "ACESSORIO";
+  @IsEnum([
+    "UNIFORME_FEMININO",
+    "UNIFORME_MASCULINO",
+    "UNIFORME_UNISSEX",
+    "ACESSORIO",
+  ])
+  category?:
+    | "UNIFORME_FEMININO"
+    | "UNIFORME_MASCULINO"
+    | "UNIFORME_UNISSEX"
+    | "ACESSORIO";
 
   @IsOptional()
   @IsInt()
@@ -87,8 +105,17 @@ export class UpdateProductDto {
  */
 export class CatalogFiltersDto {
   @IsOptional()
-  @IsEnum(["UNIFORME_FEMININO", "UNIFORME_MASCULINO", "UNIFORME_UNISSEX", "ACESSORIO"])
-  category?: "UNIFORME_FEMININO" | "UNIFORME_MASCULINO" | "UNIFORME_UNISSEX" | "ACESSORIO";
+  @IsEnum([
+    "UNIFORME_FEMININO",
+    "UNIFORME_MASCULINO",
+    "UNIFORME_UNISSEX",
+    "ACESSORIO",
+  ])
+  category?:
+    | "UNIFORME_FEMININO"
+    | "UNIFORME_MASCULINO"
+    | "UNIFORME_UNISSEX"
+    | "ACESSORIO";
 
   @IsOptional()
   @IsString()

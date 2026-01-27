@@ -12,6 +12,7 @@ import type { FastifyPluginCallback } from "fastify";
 import { AppModule } from "./app.module";
 import { ApiExceptionFilter } from "./common/filters/api-exception.filter";
 import { LoggingInterceptor } from "./common/interceptors/logging.interceptor";
+import { obterOrigensCors } from "./config/cors";
 
 async function bootstrap() {
   const app = await NestFactory.create<NestFastifyApplication>(
@@ -68,14 +69,7 @@ async function bootstrap() {
 
   // Enable CORS for the frontend apps
   app.enableCors({
-    origin: [
-      "http://localhost:3000", // home
-      "http://localhost:3003", // login
-      "http://localhost:3004", // usuarios
-      "http://localhost:3005", // escolas
-      "http://localhost:3006", // turmas
-      "http://localhost:3007", // planejamento
-    ],
+    origin: obterOrigensCors(),
     credentials: true, // Allow cookies
   });
 

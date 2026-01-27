@@ -6,7 +6,12 @@
  * Task 4.2: Exibe lista de planos pendentes com filtro por segmento
  */
 
-import { Card, CardContent, CardHeader, CardTitle } from "@essencia/ui/components/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@essencia/ui/components/card";
 import { Skeleton } from "@essencia/ui/components/skeleton";
 import {
   Table,
@@ -84,7 +89,9 @@ export function AnaliseContent() {
       setPlanos(resultado);
     } catch (err) {
       const mensagem =
-        err instanceof Error ? err.message : "Erro ao carregar planos pendentes";
+        err instanceof Error
+          ? err.message
+          : "Erro ao carregar planos pendentes";
       setError(mensagem);
     } finally {
       setIsLoading(false);

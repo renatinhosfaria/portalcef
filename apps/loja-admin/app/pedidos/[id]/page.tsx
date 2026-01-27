@@ -9,25 +9,47 @@ import { apiFetch } from '../../../lib/api';
 
 interface OrderItem {
     id: string;
-    productName: string;
-    variantSize: string;
+    variantId: string;
     studentName: string;
     quantity: number;
     unitPrice: number;
+    subtotal: number;
+    product: {
+        id: string;
+        name: string;
+        category: string;
+        imageUrl?: string;
+    };
+    variant: {
+        size: string;
+        sku: string;
+    };
 }
 
 interface Order {
     id: string;
     orderNumber: string;
-    customerName: string;
-    customerPhone: string;
-    totalAmount: number;
-    status: string;
+    schoolId: string;
+    unitId: string;
     orderSource: string;
-    paymentMethod?: 'DINHEIRO' | 'PIX' | 'CARTAO_CREDITO' | 'CARTAO_DEBITO';
-    createdAt: string;
+    status: string;
+    totalAmount: number;
+    customer: {
+        name: string;
+        phone: string;
+        email?: string;
+    };
     items: OrderItem[];
-    // Add other fields if returned by API
+    paymentMethod?: 'DINHEIRO' | 'PIX' | 'CARTAO_CREDITO' | 'CARTAO_DEBITO';
+    paidAt?: string;
+    expiresAt?: string;
+    pickedUpAt?: string;
+    pickedUpBy?: string;
+    cancelledAt?: string;
+    cancelledBy?: string;
+    cancellationReason?: string;
+    createdAt: string;
+    updatedAt: string;
 }
 
 export default function OrderDetailsPage() {
@@ -182,9 +204,9 @@ export default function OrderDetailsPage() {
                             {order.items.map((item) => (
                                 <div key={item.id} className="p-4 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 hover:bg-slate-50 transition-colors">
                                     <div>
-                                        <p className="font-semibold text-slate-800 text-lg">{item.productName}</p>
+                                        <p className="font-semibold text-slate-800 text-lg">{item.product.name}</p>
                                         <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1 text-sm text-slate-500">
-                                            <span>Tamanho: <strong className="text-slate-700">{item.variantSize}</strong></span>
+                                            <span>Tamanho: <strong className="text-slate-700">{item.variant.size}</strong></span>
                                             <span>Aluno: <strong className="text-slate-700">{item.studentName}</strong></span>
                                         </div>
                                     </div>
@@ -196,7 +218,7 @@ export default function OrderDetailsPage() {
                                         <div className="text-right min-w-[100px]">
                                             <p className="text-xs text-slate-400 uppercase font-medium">Total</p>
                                             <p className="font-bold text-[#A3D154] text-lg">
-                                                {formatCurrency(item.unitPrice * item.quantity)}
+                                                {formatCurrency(item.subtotal)}
                                             </p>
                                         </div>
                                     </div>
@@ -223,16 +245,16 @@ export default function OrderDetailsPage() {
                         <div className="p-5 space-y-4">
                             <div>
                                 <p className="text-xs text-slate-400 uppercase font-medium mb-1">Nome</p>
-                                <p className="font-medium text-slate-800">{order.customerName}</p>
+                                <p className="font-medium text-slate-800">{order.customer.name || '-'}</p>
                             </div>
                             <div className="flex items-start gap-3">
                                 <Phone className="w-5 h-5 text-slate-400 mt-0.5" />
                                 <div>
                                     <p className="text-xs text-slate-400 uppercase font-medium mb-1">Telefone / WhatsApp</p>
-                                    <p className="font-mono text-slate-700">{formatPhone(order.customerPhone)}</p>
-                                    {order.customerPhone && order.customerPhone.length >= 10 && (
+                                    <p className="font-mono text-slate-700">{formatPhone(order.customer.phone)}</p>
+                                    {order.customer.phone && order.customer.phone.length >= 10 && (
                                         <a
-                                            href={`https://wa.me/55${order.customerPhone.replace(/\D/g, '')}`}
+                                            href={`https://wa.me/55${order.customer.phone.replace(/\D/g, '')}`}
                                             target="_blank"
                                             rel="noreferrer"
                                             className="text-xs text-[#A3D154] hover:underline mt-1 inline-block"
@@ -242,6 +264,12 @@ export default function OrderDetailsPage() {
                                     )}
                                 </div>
                             </div>
+                            {order.customer.email && (
+                                <div>
+                                    <p className="text-xs text-slate-400 uppercase font-medium mb-1">E-mail</p>
+                                    <p className="font-medium text-slate-700">{order.customer.email}</p>
+                                </div>
+                            )}
                         </div>
                     </div>
 

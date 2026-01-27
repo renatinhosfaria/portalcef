@@ -19,13 +19,7 @@ import { z } from "zod";
  * Vincula tarefa a elementos do sistema
  */
 export const tarefaContextoSchema = z.object({
-  modulo: z.enum([
-    "PLANEJAMENTO",
-    "CALENDARIO",
-    "USUARIOS",
-    "TURMAS",
-    "LOJA",
-  ]),
+  modulo: z.enum(["PLANEJAMENTO", "CALENDARIO", "USUARIOS", "TURMAS", "LOJA"]),
   quinzenaId: z.string().optional(),
   etapaId: z.string().uuid().optional(),
   turmaId: z.string().uuid().optional(),
@@ -48,9 +42,7 @@ export const criarTarefaSchema = z.object({
     .optional(),
   prioridade: z.enum(["ALTA", "MEDIA", "BAIXA"]),
   prazo: z.string().datetime("Prazo deve ser uma data/hora ISO válida"),
-  responsavel: z
-    .string()
-    .uuid("Responsável deve ser um UUID válido"),
+  responsavel: z.string().uuid("Responsável deve ser um UUID válido"),
   tipoOrigem: z.enum(["AUTOMATICA", "MANUAL"]),
   contextos: z.array(tarefaContextoSchema).optional(),
 });
@@ -71,7 +63,10 @@ export const atualizarTarefaSchema = z.object({
     .max(1000, "Descrição não pode exceder 1000 caracteres")
     .optional(),
   prioridade: z.enum(["ALTA", "MEDIA", "BAIXA"]).optional(),
-  prazo: z.string().datetime("Prazo deve ser uma data/hora ISO válida").optional(),
+  prazo: z
+    .string()
+    .datetime("Prazo deve ser uma data/hora ISO válida")
+    .optional(),
   responsavel: z
     .string()
     .uuid("Responsável deve ser um UUID válido")

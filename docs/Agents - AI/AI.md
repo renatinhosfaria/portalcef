@@ -18,6 +18,85 @@ Convenções de código (useState, useEffect, onClick, etc.)
 
 ---
 
+## 🚀 Superpowers - Sistema de Skills para Agentes
+
+Este projeto está equipado com o **[Superpowers](https://github.com/obra/superpowers)**, um sistema completo de skills para desenvolvimento de software com agentes de IA.
+
+### 📦 Instalação
+
+**Status**: ✅ Instalado e configurado completamente
+
+```
+.agent/
+├── skills/      # 14 skills (carregadas automaticamente)
+├── commands/    # 3 comandos customizados
+├── agents/      # 1 agent especializado (code-reviewer)
+└── README.md    # Documentação completa
+```
+
+**Documentação completa**: [.agent/README.md](.agent/README.md)
+
+### 🎯 Como Funciona
+
+As skills são **ativadas automaticamente** pelo Claude Agent SDK baseado no contexto da tarefa:
+
+- **Implementação** → `test-driven-development` ativado
+- **Bug** → `systematic-debugging` ativado
+- **Nova feature** → `brainstorming` + `writing-plans` ativados
+- **PR/Review** → `finishing-a-development-branch` ativado
+
+**Não é necessário invocar manualmente**. O sistema detecta o contexto e aplica as skills apropriadas.
+
+### 📚 Skills Disponíveis (14)
+
+#### Testing & Debugging
+- **test-driven-development** - Ciclo RED-GREEN-REFACTOR obrigatório
+- **systematic-debugging** - Processo de 4 fases para análise de causa raiz
+- **verification-before-completion** - Confirma que correções funcionam antes de prosseguir
+
+#### Collaboration & Development
+- **brainstorming** - Refinamento de design através de perguntas socráticas
+- **writing-plans** - Planos de implementação detalhados com tarefas pequenas
+- **executing-plans** - Execução em lote com checkpoints humanos
+- **dispatching-parallel-agents** - Workflows com subagents concorrentes
+- **requesting-code-review** - Checklist pré-revisão e avaliação de severidade
+- **receiving-code-review** - Guia de resposta a feedback
+- **using-git-worktrees** - Gerenciamento de branches paralelas
+- **finishing-a-development-branch** - Workflow de decisão merge/PR
+- **subagent-driven-development** - Revisão em 2 estágios (conformidade spec + qualidade código)
+
+#### Meta Skills
+- **writing-skills** - Framework para criar novas skills
+- **using-superpowers** - Introdução ao sistema
+
+### 🧠 Filosofia
+
+> **"IF A SKILL APPLIES TO YOUR TASK, YOU DO NOT HAVE A CHOICE. YOU MUST USE IT."**
+
+As skills não são sugestões opcionais. São workflows obrigatórios que garantem:
+
+- ✅ **Test-Driven Development** - Sempre escrever testes primeiro
+- ✅ **Systematic over ad-hoc** - Processos ao invés de palpites
+- ✅ **Complexity reduction** - Simplicidade como objetivo primário
+- ✅ **Evidence over claims** - Verificar antes de declarar sucesso
+
+### ⚠️ Regras Invioláveis do TDD
+
+1. **NUNCA** escrever código de produção antes do teste
+2. **SEMPRE** verificar que o teste falha antes de implementar
+3. Se escreveu código antes do teste → **DELETE** e recomece
+4. Teste passando imediatamente = teste inválido (não prova nada)
+
+### 📖 Recursos
+
+- **Documentação local**: [.agent/README.md](.agent/README.md)
+- **Repositório oficial**: https://github.com/obra/superpowers
+- **Claude Agent SDK**: https://platform.claude.com/docs/en/agent-sdk/overview
+
+---
+
+---
+
 ## 🎯 TL;DR - Comandos Essenciais
 
 ```bash
@@ -423,5 +502,3 @@ docker system prune -a --volumes -f
 <div align="center">
 
 **Portal Digital Colégio Essência Feliz** 
-
-</div>

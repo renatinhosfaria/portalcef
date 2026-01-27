@@ -1330,7 +1330,13 @@ export class PlanningsService {
     }
 
     // Atualizar apenas os campos fornecidos
-    const updateData: any = { atualizadoEm: new Date() };
+    const updateData: {
+      atualizadoEm: Date;
+      descricao?: string;
+      dataInicio?: string;
+      dataFim?: string;
+      dataMaximaEntrega?: string;
+    } = { atualizadoEm: new Date() };
     if (dto.descricao !== undefined) updateData.descricao = dto.descricao;
     if (dto.dataInicio) updateData.dataInicio = dto.dataInicio;
     if (dto.dataFim) updateData.dataFim = dto.dataFim;

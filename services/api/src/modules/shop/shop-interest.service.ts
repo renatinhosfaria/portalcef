@@ -269,9 +269,7 @@ export class ShopInterestService {
         count: sql<number>`count(*)`,
       })
       .from(shopInterestRequests)
-      .where(
-        statusConditions.length > 0 ? and(...statusConditions) : undefined,
-      )
+      .where(statusConditions.length > 0 ? and(...statusConditions) : undefined)
       .groupBy(shopInterestRequests.status);
 
     type StatusCountRow = (typeof statusCounts)[number];

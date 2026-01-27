@@ -8,7 +8,12 @@
 
 import { QUINZENAS_2026 } from "@essencia/shared/config/quinzenas";
 import { Button } from "@essencia/ui/components/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@essencia/ui/components/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@essencia/ui/components/card";
 import { Input } from "@essencia/ui/components/input";
 import { Skeleton } from "@essencia/ui/components/skeleton";
 import { cn } from "@essencia/ui/lib/utils";
@@ -79,14 +84,22 @@ function extrairDataIso(datetimeLocal: string): string {
 }
 
 export function PrazosContent() {
-  const { deadlines, loading: isLoadingDeadlines, error: deadlinesError, fetchDeadlines, setDeadline } = useDeadlines();
+  const {
+    deadlines,
+    loading: isLoadingDeadlines,
+    error: deadlinesError,
+    fetchDeadlines,
+    setDeadline,
+  } = useDeadlines();
   const [selectedSemester, setSelectedSemester] = useState<1 | 2>(() => {
     const currentMonth = new Date().getMonth() + 1;
     return currentMonth >= 7 ? 2 : 1;
   });
 
   // Estado para controlar edicao de prazos
-  const [editStates, setEditStates] = useState<Record<string, PrazoEditState>>({});
+  const [editStates, setEditStates] = useState<Record<string, PrazoEditState>>(
+    {},
+  );
 
   // Carregar prazos ao montar
   useEffect(() => {
@@ -110,33 +123,39 @@ export function PrazosContent() {
   /**
    * Inicia edicao de um prazo
    */
-  const iniciarEdicao = useCallback((quinzenaId: string, deadlineAtual: string) => {
-    setEditStates((prev) => ({
-      ...prev,
-      [quinzenaId]: {
-        quinzenaId,
-        deadline: formatarParaInput(deadlineAtual),
-        isSaving: false,
-        success: false,
-        error: null,
-      },
-    }));
-  }, []);
+  const iniciarEdicao = useCallback(
+    (quinzenaId: string, deadlineAtual: string) => {
+      setEditStates((prev) => ({
+        ...prev,
+        [quinzenaId]: {
+          quinzenaId,
+          deadline: formatarParaInput(deadlineAtual),
+          isSaving: false,
+          success: false,
+          error: null,
+        },
+      }));
+    },
+    [],
+  );
 
   /**
    * Atualiza valor do prazo em edicao
    */
-  const atualizarEdicao = useCallback((quinzenaId: string, novoValor: string) => {
-    setEditStates((prev) => ({
-      ...prev,
-      [quinzenaId]: {
-        ...prev[quinzenaId]!,
-        deadline: novoValor,
-        success: false,
-        error: null,
-      },
-    }));
-  }, []);
+  const atualizarEdicao = useCallback(
+    (quinzenaId: string, novoValor: string) => {
+      setEditStates((prev) => ({
+        ...prev,
+        [quinzenaId]: {
+          ...prev[quinzenaId]!,
+          deadline: novoValor,
+          success: false,
+          error: null,
+        },
+      }));
+    },
+    [],
+  );
 
   /**
    * Cancela edicao de um prazo
@@ -169,7 +188,11 @@ export function PrazosContent() {
 
         setEditStates((prev) => ({
           ...prev,
-          [quinzenaId]: { ...prev[quinzenaId]!, isSaving: false, success: true },
+          [quinzenaId]: {
+            ...prev[quinzenaId]!,
+            isSaving: false,
+            success: true,
+          },
         }));
 
         // Remover estado de edicao apos 2 segundos
@@ -177,10 +200,15 @@ export function PrazosContent() {
           cancelarEdicao(quinzenaId);
         }, 2000);
       } catch (err) {
-        const mensagem = err instanceof Error ? err.message : "Erro ao salvar prazo";
+        const mensagem =
+          err instanceof Error ? err.message : "Erro ao salvar prazo";
         setEditStates((prev) => ({
           ...prev,
-          [quinzenaId]: { ...prev[quinzenaId]!, isSaving: false, error: mensagem },
+          [quinzenaId]: {
+            ...prev[quinzenaId]!,
+            isSaving: false,
+            error: mensagem,
+          },
         }));
       }
     },
@@ -266,7 +294,9 @@ export function PrazosContent() {
             <div className="flex items-center gap-3 text-destructive">
               <AlertCircle className="h-5 w-5" />
               <div>
-                <p className="font-medium">Erro ao carregar prazos configurados</p>
+                <p className="font-medium">
+                  Erro ao carregar prazos configurados
+                </p>
                 <p className="text-sm">{deadlinesError}</p>
               </div>
             </div>
@@ -358,7 +388,9 @@ export function PrazosContent() {
                         <Input
                           type="datetime-local"
                           value={editState.deadline}
-                          onChange={(e) => atualizarEdicao(quinzena.id, e.target.value)}
+                          onChange={(e) =>
+                            atualizarEdicao(quinzena.id, e.target.value)
+                          }
                           disabled={editState.isSaving}
                           className="mt-1"
                         />
@@ -421,9 +453,9 @@ export function PrazosContent() {
             <div>
               <h3 className="font-medium mb-1">Sobre os prazos padrao</h3>
               <p className="text-sm text-muted-foreground">
-                Por padrao, o prazo de entrega de cada quinzena e 5 dias uteis antes
-                do inicio do periodo. Voce pode personalizar esse prazo para cada
-                quinzena individualmente.
+                Por padrao, o prazo de entrega de cada quinzena e 5 dias uteis
+                antes do inicio do periodo. Voce pode personalizar esse prazo
+                para cada quinzena individualmente.
               </p>
             </div>
           </div>

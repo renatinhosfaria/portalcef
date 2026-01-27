@@ -58,6 +58,9 @@ export interface PlanoDocumento {
   previewMimeType?: string;
   previewStatus?: DocumentoPreviewStatus;
   previewError?: string;
+  // Campos de aprovação individual (analista_pedagogico)
+  approvedBy?: string;
+  approvedAt?: string;
 }
 
 /**

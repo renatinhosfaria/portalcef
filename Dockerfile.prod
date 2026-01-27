@@ -41,6 +41,7 @@ COPY apps/turmas/package.json ./apps/turmas/
 COPY apps/usuarios/package.json ./apps/usuarios/
 
 COPY services/api/package.json ./services/api/
+COPY services/worker/package.json ./services/worker/
 
 COPY packages/components/package.json ./packages/components/
 COPY packages/config/package.json ./packages/config/

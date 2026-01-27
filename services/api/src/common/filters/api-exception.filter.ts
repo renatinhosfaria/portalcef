@@ -53,6 +53,7 @@ export class ApiExceptionFilter implements ExceptionFilter {
   catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<FastifyReply>();
+    const request = ctx.getRequest();
 
     const fallbackMessage = "Erro interno do servidor";
     let status = HttpStatus.INTERNAL_SERVER_ERROR;
@@ -78,9 +79,34 @@ export class ApiExceptionFilter implements ExceptionFilter {
         message = normalizeMessage(exception.message, fallbackMessage);
         code = statusToErrorCode(status);
       }
+    } else if (
+      exception &&
+      typeof exception === "object" &&
+      "statusCode" in exception
+    ) {
+      // Erros do Fastify (ex: body vazio com Content-Type json)
+      const fastifyError = exception as {
+        statusCode: number;
+        message?: string;
+        code?: string;
+      };
+      status = fastifyError.statusCode;
+      message = normalizeMessage(fastifyError.message, fallbackMessage);
+      code = normalizeErrorCode(fastifyError.code, status);
     } else if (exception instanceof Error) {
       message = normalizeMessage(exception.message, fallbackMessage);
       code = statusToErrorCode(status);
+    }
+
+    // Log de erros 500 para debugging
+    if (status >= 500) {
+      console.error("[ApiExceptionFilter] Erro 500:", {
+        url: request.url,
+        method: request.method,
+        code,
+        message,
+        stack: exception instanceof Error ? exception.stack : "N/A",
+      });
     }
 
     const errorBody = {

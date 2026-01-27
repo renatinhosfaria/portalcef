@@ -199,7 +199,9 @@ export default async function PlanoAulaPage({ params }: PageProps) {
                 <h1 className="text-2xl font-bold tracking-tight">
                   {quinzenaConfig.label}
                 </h1>
-                <p className="text-sm text-muted-foreground">{periodoDisplay}</p>
+                <p className="text-sm text-muted-foreground">
+                  {periodoDisplay}
+                </p>
               </div>
             </div>
             <div className="mt-3 space-y-1 text-sm text-muted-foreground">

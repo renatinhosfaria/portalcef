@@ -35,13 +35,13 @@ const mockCalendarService = {
   validateQuinzenaSchoolDays: jest.fn(),
 };
 
+// Importar CalendarService dinamicamente antes dos testes
+import { CalendarService } from "../calendar/calendar.service";
+
 describe("PlanningsService - Edição e Exclusão de Períodos", () => {
   let service: PlanningsService;
 
   beforeEach(async () => {
-    // Importar CalendarService para usar como token
-    const { CalendarService } = require("../calendar/calendar.service");
-
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         PlanningsService,
@@ -64,7 +64,9 @@ describe("PlanningsService - Edição e Exclusão de Períodos", () => {
       };
 
       // Mockar buscarPorId e contarPlanosVinculados
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       jest.spyOn(service, "buscarPorId").mockResolvedValue(periodoMock as any);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       jest.spyOn(service as any, "contarPlanosVinculados").mockResolvedValue(5);
 
       // O método deve completar sem lançar erro
@@ -79,7 +81,9 @@ describe("PlanningsService - Edição e Exclusão de Períodos", () => {
         dataMaximaEntrega: new Date("2025-01-01"), // Prazo no passado
       };
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       jest.spyOn(service, "buscarPorId").mockResolvedValue(periodoMock as any);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       jest.spyOn(service as any, "contarPlanosVinculados").mockResolvedValue(5);
 
       await expect(
@@ -99,7 +103,9 @@ describe("PlanningsService - Edição e Exclusão de Períodos", () => {
         dataMaximaEntrega: new Date("2099-12-31"), // Prazo no futuro
       };
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       jest.spyOn(service, "buscarPorId").mockResolvedValue(periodoMock as any);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       jest.spyOn(service as any, "contarPlanosVinculados").mockResolvedValue(5);
 
       await expect(
@@ -113,7 +119,9 @@ describe("PlanningsService - Edição e Exclusão de Períodos", () => {
         dataMaximaEntrega: new Date("2025-01-01"), // Prazo no passado
       };
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       jest.spyOn(service, "buscarPorId").mockResolvedValue(periodoMock as any);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       jest.spyOn(service as any, "contarPlanosVinculados").mockResolvedValue(0); // Sem planos vinculados
 
       await expect(
@@ -124,6 +132,7 @@ describe("PlanningsService - Edição e Exclusão de Períodos", () => {
 
   describe("excluirPeriodo", () => {
     it("deve bloquear exclusão se houver planos vinculados", async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       jest.spyOn(service as any, "contarPlanosVinculados").mockResolvedValue(3);
 
       await expect(service.excluirPeriodo("periodo-id")).rejects.toThrow(
@@ -136,15 +145,17 @@ describe("PlanningsService - Edição e Exclusão de Períodos", () => {
     });
 
     it("deve permitir exclusão se não houver planos vinculados", async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       jest.spyOn(service as any, "contarPlanosVinculados").mockResolvedValue(0);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       jest.spyOn(service, "buscarPorId").mockResolvedValue({
         id: "periodo-id",
         unidadeId: "unidade-id",
         etapa: "INFANTIL",
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any);
-      jest
-        .spyOn(service as any, "renumerarPeriodosSeNecessario")
-        .mockResolvedValue(undefined);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      jest.spyOn(service as any, "renumerarPeriodosSeNecessario").mockResolvedValue(undefined);
 
       await expect(
         service.excluirPeriodo("periodo-id"),

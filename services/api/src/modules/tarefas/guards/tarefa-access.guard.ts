@@ -99,10 +99,7 @@ export class TarefaAccessGuard implements CanActivate {
     }
 
     // 4. Gerentes (unidade/financeiro): Acesso a todas as tarefas da unidade
-    if (
-      user.role === "gerente_unidade" ||
-      user.role === "gerente_financeiro"
-    ) {
+    if (user.role === "gerente_unidade" || user.role === "gerente_financeiro") {
       // Validar que gerente tem unitId e que tarefa é da mesma unidade
       if (user.unitId && tarefa.unitId === user.unitId) {
         return true;
@@ -110,7 +107,10 @@ export class TarefaAccessGuard implements CanActivate {
     }
 
     // 5. Criador ou Responsável: Acesso às suas tarefas
-    if (tarefa.criadoPor === user.userId || tarefa.responsavel === user.userId) {
+    if (
+      tarefa.criadoPor === user.userId ||
+      tarefa.responsavel === user.userId
+    ) {
       return true;
     }
 

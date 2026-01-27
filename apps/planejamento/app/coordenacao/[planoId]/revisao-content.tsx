@@ -11,11 +11,23 @@
  * - Devolve para Professora ou Analista (com comentarios obrigatorios)
  */
 
-import { Alert, AlertDescription, AlertTitle } from "@essencia/ui/components/alert";
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from "@essencia/ui/components/alert";
 import { Button } from "@essencia/ui/components/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@essencia/ui/components/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@essencia/ui/components/card";
 import { Label } from "@essencia/ui/components/label";
-import { RadioGroup, RadioGroupItem } from "@essencia/ui/components/radio-group";
+import {
+  RadioGroup,
+  RadioGroupItem,
+} from "@essencia/ui/components/radio-group";
 import { Textarea } from "@essencia/ui/components/textarea";
 import { cn } from "@essencia/ui/lib/utils";
 import {
@@ -68,7 +80,10 @@ function ComentarioInput({
 }: ComentarioInputProps) {
   return (
     <div className="space-y-2">
-      <Label htmlFor={`comentario-${documentoId}`} className="text-sm font-medium">
+      <Label
+        htmlFor={`comentario-${documentoId}`}
+        className="text-sm font-medium"
+      >
         Comentario para: {documentoNome}
       </Label>
       <Textarea
@@ -96,7 +111,8 @@ export function RevisaoContent({
 
   // Estado da acao
   const [modoAcao, setModoAcao] = useState<ModoAcao>("idle");
-  const [destinoDevolver, setDestinoDevolver] = useState<DestinoDevolver>("PROFESSORA");
+  const [destinoDevolver, setDestinoDevolver] =
+    useState<DestinoDevolver>("PROFESSORA");
   const [comentarios, setComentarios] = useState<Record<string, string>>({});
   const [comentarioGeral, setComentarioGeral] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -142,15 +158,12 @@ export function RevisaoContent({
   /**
    * Handler para alterar comentario de um documento
    */
-  const handleComentarioChange = useCallback(
-    (docId: string, valor: string) => {
-      setComentarios((prev) => ({
-        ...prev,
-        [docId]: valor,
-      }));
-    },
-    [],
-  );
+  const handleComentarioChange = useCallback((docId: string, valor: string) => {
+    setComentarios((prev) => ({
+      ...prev,
+      [docId]: valor,
+    }));
+  }, []);
 
   /**
    * Montar lista de comentarios para enviar
@@ -207,7 +220,9 @@ export function RevisaoContent({
     } catch (err) {
       console.error("Erro ao aprovar plano:", err);
       setError(
-        err instanceof Error ? err.message : "Erro ao aprovar plano. Tente novamente.",
+        err instanceof Error
+          ? err.message
+          : "Erro ao aprovar plano. Tente novamente.",
       );
     }
   }, [planoId, aprovar, refetch, router]);
@@ -242,7 +257,9 @@ export function RevisaoContent({
     } catch (err) {
       console.error("Erro ao devolver plano:", err);
       setError(
-        err instanceof Error ? err.message : "Erro ao devolver plano. Tente novamente.",
+        err instanceof Error
+          ? err.message
+          : "Erro ao devolver plano. Tente novamente.",
       );
     }
   }, [
@@ -407,7 +424,10 @@ export function RevisaoContent({
 
                 {/* Comentario opcional para aprovacao */}
                 <div className="space-y-2">
-                  <Label htmlFor="comentario-aprovacao" className="text-sm font-medium">
+                  <Label
+                    htmlFor="comentario-aprovacao"
+                    className="text-sm font-medium"
+                  >
                     Comentario (opcional)
                   </Label>
                   <Textarea
@@ -474,12 +494,17 @@ export function RevisaoContent({
                     className="space-y-2"
                   >
                     <div className="flex items-center space-x-3 rounded-lg border p-3 hover:bg-muted/50">
-                      <RadioGroupItem value="PROFESSORA" id="destino-professora" />
+                      <RadioGroupItem
+                        value="PROFESSORA"
+                        id="destino-professora"
+                      />
                       <Label
                         htmlFor="destino-professora"
                         className="flex-1 cursor-pointer"
                       >
-                        <span className="font-medium">Devolver para Professora</span>
+                        <span className="font-medium">
+                          Devolver para Professora
+                        </span>
                         <p className="text-sm text-muted-foreground">
                           A professora fara os ajustes e reenviara para analise
                         </p>
@@ -505,7 +530,10 @@ export function RevisaoContent({
 
                 {/* Comentario Geral - Obrigatorio */}
                 <div className="space-y-2">
-                  <Label htmlFor="comentario-geral" className="text-sm font-medium">
+                  <Label
+                    htmlFor="comentario-geral"
+                    className="text-sm font-medium"
+                  >
                     Motivo da devolucao{" "}
                     <span className="text-destructive">*</span>
                   </Label>
@@ -536,7 +564,9 @@ export function RevisaoContent({
                         <ComentarioInput
                           key={doc.id}
                           documentoId={doc.id}
-                          documentoNome={doc.fileName || `Documento ${doc.tipo}`}
+                          documentoNome={
+                            doc.fileName || `Documento ${doc.tipo}`
+                          }
                           valor={comentarios[doc.id] || ""}
                           onChange={handleComentarioChange}
                         />
@@ -596,7 +626,9 @@ export function RevisaoContent({
           <AlertDescription>
             Este plano nao esta aguardando aprovacao da coordenadora. Status
             atual:{" "}
-            <strong>{currentPlano.status.replace(/_/g, " ").toLowerCase()}</strong>
+            <strong>
+              {currentPlano.status.replace(/_/g, " ").toLowerCase()}
+            </strong>
           </AlertDescription>
         </Alert>
       )}

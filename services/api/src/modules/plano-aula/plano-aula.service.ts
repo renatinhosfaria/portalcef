@@ -105,9 +105,7 @@ export interface QuinzenaDeadline {
  */
 @Injectable()
 export class PlanoAulaService {
-  constructor(
-    private readonly historicoService: PlanoAulaHistoricoService,
-  ) {}
+  constructor(private readonly historicoService: PlanoAulaHistoricoService) {}
 
   // ============================================
   // Métodos da Professora
@@ -253,9 +251,7 @@ export class PlanoAulaService {
     }
 
     if (plano.userId !== user.userId) {
-      throw new ForbiddenException(
-        "Apenas o autor pode submeter o plano",
-      );
+      throw new ForbiddenException("Apenas o autor pode submeter o plano");
     }
 
     // Verificar se tem documentos anexados
@@ -278,12 +274,9 @@ export class PlanoAulaService {
     }
 
     // Determinar próximo status
-    // Se foi devolvido pelo analista, volta para REVISAO_ANALISTA
-    // Se foi devolvido pela coordenadora, volta para AGUARDANDO_ANALISTA ou AGUARDANDO_COORDENADORA
-    let novoStatus: PlanoAulaStatus = "AGUARDANDO_ANALISTA";
-    if (plano.status === "DEVOLVIDO_ANALISTA") {
-      novoStatus = "REVISAO_ANALISTA";
-    }
+    // Quando a professora resubmete, sempre volta para AGUARDANDO_ANALISTA
+    // O status anterior garante que ela passou pela devolução
+    const novoStatus: PlanoAulaStatus = "AGUARDANDO_ANALISTA";
 
     const statusAnterior = plano.status;
 
@@ -319,10 +312,16 @@ export class PlanoAulaService {
   /**
    * Interface para resumo de planos pendentes
    */
-  private mapToPlanoSummary(plano: PlanoAula & {
-    user?: { name: string } | null;
-    turma?: { name: string; code: string; stage?: { name: string; code: string } | null } | null;
-  }) {
+  private mapToPlanoSummary(
+    plano: PlanoAula & {
+      user?: { name: string } | null;
+      turma?: {
+        name: string;
+        code: string;
+        stage?: { name: string; code: string } | null;
+      } | null;
+    },
+  ) {
     return {
       id: plano.id,
       quinzenaId: plano.quinzenaId,
@@ -366,7 +365,9 @@ export class PlanoAulaService {
       orderBy: [desc(planoAula.submittedAt)],
     });
 
-    return planos.map((p: typeof planos[number]) => this.mapToPlanoSummary(p));
+    return planos.map((p: (typeof planos)[number]) =>
+      this.mapToPlanoSummary(p),
+    );
   }
 
   /**
@@ -540,7 +541,9 @@ export class PlanoAulaService {
       });
     }
 
-    return planosFiltrados.map((p: typeof planosFiltrados[number]) => this.mapToPlanoSummary(p));
+    return planosFiltrados.map((p: (typeof planosFiltrados)[number]) =>
+      this.mapToPlanoSummary(p),
+    );
   }
 
   /**
@@ -836,13 +839,17 @@ export class PlanoAulaService {
     }
 
     // Construir condições de filtro
-    const conditions: ReturnType<typeof eq>[] = [eq(planoAula.unitId, targetUnitId)];
+    const conditions: ReturnType<typeof eq>[] = [
+      eq(planoAula.unitId, targetUnitId),
+    ];
 
     // Filtro por status
     if (dto.status && dto.status !== "todos") {
       const statusDb = STATUS_URL_MAP[dto.status];
       if (statusDb && statusDb.length > 0) {
-        conditions.push(inArray(planoAula.status, statusDb as PlanoAulaStatus[]));
+        conditions.push(
+          inArray(planoAula.status, statusDb as PlanoAulaStatus[]),
+        );
       }
     }
 
@@ -1074,6 +1081,118 @@ export class PlanoAulaService {
   }
 
   /**
+   * Edita um comentário existente
+   * Apenas o autor pode editar
+   */
+  async editarComentario(
+    user: UserContext,
+    comentarioId: string,
+    novoTexto: string,
+  ): Promise<DocumentoComentario> {
+    const db = getDb();
+
+    // Buscar comentário
+    const comentario = await db.query.documentoComentario.findFirst({
+      where: eq(documentoComentario.id, comentarioId),
+    });
+
+    if (!comentario) {
+      throw new NotFoundException("Comentário não encontrado");
+    }
+
+    // Verificar se usuário é o autor
+    if (comentario.autorId !== user.userId) {
+      throw new ForbiddenException(
+        "Você não tem permissão para editar este comentário",
+      );
+    }
+
+    // Atualizar comentário
+    const [comentarioAtualizado] = await db
+      .update(documentoComentario)
+      .set({
+        comentario: novoTexto,
+      })
+      .where(eq(documentoComentario.id, comentarioId))
+      .returning();
+
+    return comentarioAtualizado;
+  }
+
+  /**
+   * Deleta um comentário
+   * Apenas o autor pode deletar
+   */
+  async deletarComentario(
+    user: UserContext,
+    comentarioId: string,
+  ): Promise<void> {
+    const db = getDb();
+
+    // Buscar comentário
+    const comentario = await db.query.documentoComentario.findFirst({
+      where: eq(documentoComentario.id, comentarioId),
+    });
+
+    if (!comentario) {
+      throw new NotFoundException("Comentário não encontrado");
+    }
+
+    // Verificar se usuário é o autor
+    if (comentario.autorId !== user.userId) {
+      throw new ForbiddenException(
+        "Você não tem permissão para deletar este comentário",
+      );
+    }
+
+    // Deletar comentário
+    await db
+      .delete(documentoComentario)
+      .where(eq(documentoComentario.id, comentarioId));
+  }
+
+  /**
+   * Aprova um documento individualmente
+   * Apenas analista_pedagogico pode aprovar
+   */
+  async aprovarDocumento(
+    user: UserContext,
+    documentoId: string,
+  ): Promise<PlanoDocumento> {
+    const db = getDb();
+
+    // Verificar se documento existe e usuário tem acesso
+    const documento = await db.query.planoDocumento.findFirst({
+      where: eq(planoDocumento.id, documentoId),
+      with: { plano: true },
+    });
+
+    if (!documento) {
+      throw new NotFoundException("Documento não encontrado");
+    }
+
+    // Verificar acesso ao plano
+    if (documento.plano.unitId !== user.unitId) {
+      throw new ForbiddenException(
+        "Você não tem permissão para aprovar este documento",
+      );
+    }
+
+    // Atualizar documento com aprovação
+    const [documentoAtualizado] = await db
+      .update(planoDocumento)
+      .set({
+        approvedBy: user.userId,
+        approvedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(planoDocumento.id, documentoId))
+      .returning();
+
+    return documentoAtualizado;
+  }
+
+  /**
    * Insere múltiplos comentários (usado ao devolver plano)
    */
   private async inserirComentarios(
@@ -1094,19 +1213,27 @@ export class PlanoAulaService {
   /**
    * Formata resposta do plano com documentos
    */
-  private formatPlanoResponse(plano: PlanoAula & {
-    user: { id: string; name: string };
-    turma: { id: string; name: string; code: string };
-    documentos?: Array<PlanoDocumento & {
-      comentarios?: Array<DocumentoComentario & {
-        autor: { id: string; name: string };
-      }>;
-    }>;
-  }): PlanoComDocumentos {
+  private formatPlanoResponse(
+    plano: PlanoAula & {
+      user: { id: string; name: string };
+      turma: { id: string; name: string; code: string };
+      documentos?: Array<
+        PlanoDocumento & {
+          comentarios?: Array<
+            DocumentoComentario & {
+              autor: { id: string; name: string };
+            }
+          >;
+        }
+      >;
+    },
+  ): PlanoComDocumentos {
     type DocType = PlanoDocumento & {
-      comentarios?: Array<DocumentoComentario & {
-        autor: { id: string; name: string };
-      }>;
+      comentarios?: Array<
+        DocumentoComentario & {
+          autor: { id: string; name: string };
+        }
+      >;
     };
     type ComentarioType = DocumentoComentario & {
       autor: { id: string; name: string };
@@ -1199,8 +1326,8 @@ export class PlanoAulaService {
         planoId,
         tipo: dados.tipo,
         fileName: dados.fileName,
-        fileKey: dados.fileKey,
-        fileUrl: dados.fileUrl,
+        storageKey: dados.fileKey,
+        url: dados.fileUrl,
         fileSize: dados.fileSize,
         mimeType: dados.mimeType,
         ...(dados.previewStatus && { previewStatus: dados.previewStatus }),
@@ -1237,8 +1364,8 @@ export class PlanoAulaService {
       .values({
         planoId,
         tipo: dados.tipo,
-        linkUrl: dados.url,
-        titulo: dados.titulo,
+        url: dados.url,
+        fileName: dados.titulo,
       })
       .returning();
 

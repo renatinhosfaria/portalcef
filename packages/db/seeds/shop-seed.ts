@@ -13,8 +13,6 @@ import {
 } from "../src/schema/shop.js";
 import { schools, units } from "../src/schema/index.js";
 
-
-
 // Load environment variables
 config({ path: join(__dirname, "../../../.env") });
 

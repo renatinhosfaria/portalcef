@@ -36,9 +36,7 @@ export function useQuinzenas(): UseQuinzenasReturn {
         setIsLoading(true);
         setError(null);
 
-        const response = await api.get<ApiQuinzena[]>(
-          "/plannings/quinzenas"
-        );
+        const response = await api.get<ApiQuinzena[]>("/plannings/quinzenas");
 
         if (Array.isArray(response)) {
           setQuinzenas(response);
@@ -48,7 +46,7 @@ export function useQuinzenas(): UseQuinzenasReturn {
       } catch (err) {
         console.error("Erro ao buscar quinzenas:", err);
         setError(
-          err instanceof Error ? err : new Error("Erro ao buscar quinzenas")
+          err instanceof Error ? err : new Error("Erro ao buscar quinzenas"),
         );
       } finally {
         setIsLoading(false);

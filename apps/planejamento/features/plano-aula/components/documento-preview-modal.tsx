@@ -19,6 +19,9 @@ interface DocumentoPreviewModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onAddComentario?: (documentoId: string, comentario: string) => Promise<void>;
+  onEditComentario?: (comentarioId: string, novoTexto: string) => Promise<void>;
+  onDeleteComentario?: (comentarioId: string) => Promise<void>;
+  currentUserId?: string;
 }
 
 export function DocumentoPreviewModal({
@@ -26,6 +29,9 @@ export function DocumentoPreviewModal({
   open,
   onOpenChange,
   onAddComentario,
+  onEditComentario,
+  onDeleteComentario,
+  currentUserId,
 }: DocumentoPreviewModalProps) {
   const isPronto = documento.previewStatus === "PRONTO";
   const isErro = documento.previewStatus === "ERRO";
@@ -33,7 +39,8 @@ export function DocumentoPreviewModal({
 
   const [comentarioPanelOpen, setComentarioPanelOpen] = useState(false);
 
-  const unresolvedCount = documento.comentarios?.filter((c) => !c.resolved).length ?? 0;
+  const unresolvedCount =
+    documento.comentarios?.filter((c) => !c.resolved).length ?? 0;
 
   const handleAddComentario = async (comentario: string) => {
     if (onAddComentario) {
@@ -97,7 +104,8 @@ export function DocumentoPreviewModal({
                 disabled={!documento.url}
               >
                 <Download className="h-4 w-4 mr-2" />
-                Baixar Original (.{documento.fileName?.split(".").pop() || "docx"})
+                Baixar Original (.
+                {documento.fileName?.split(".").pop() || "docx"})
               </Button>
 
               <Button
@@ -128,7 +136,8 @@ export function DocumentoPreviewModal({
                     </p>
                   )}
                   <p className="text-sm text-muted-foreground mt-4">
-                    Você ainda pode baixar o arquivo original usando o botão acima.
+                    Você ainda pode baixar o arquivo original usando o botão
+                    acima.
                   </p>
                 </div>
               </div>
@@ -147,40 +156,43 @@ export function DocumentoPreviewModal({
             ) : null}
           </div>
 
-            {/* Botão Flutuante de Comentários */}
-            <button
-              type="button"
-              aria-label={`Abrir comentários (${unresolvedCount} pendentes)`}
-              aria-expanded={comentarioPanelOpen}
-              aria-controls="comentarios-panel"
-              onClick={() => setComentarioPanelOpen(true)}
-              className={cn(
-                "fixed bottom-4 right-4 md:bottom-6 md:right-6 z-30",
-                "bg-primary text-primary-foreground",
-                "rounded-full shadow-lg",
-                "px-4 py-2 flex items-center gap-2",
-                "transition-all hover:scale-110 hover:shadow-xl",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              )}
-            >
-              <MessageSquare className="h-5 w-5" />
-              <span>Comentários</span>
-              {unresolvedCount > 0 && (
-                <span className="absolute -top-1 -right-1 bg-yellow-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
-                  {unresolvedCount}
-                </span>
-              )}
-            </button>
+          {/* Botão Flutuante de Comentários */}
+          <button
+            type="button"
+            aria-label={`Abrir comentários (${unresolvedCount} pendentes)`}
+            aria-expanded={comentarioPanelOpen}
+            aria-controls="comentarios-panel"
+            onClick={() => setComentarioPanelOpen(true)}
+            className={cn(
+              "fixed bottom-4 right-4 md:bottom-6 md:right-6 z-30",
+              "bg-primary text-primary-foreground",
+              "rounded-full shadow-lg",
+              "px-4 py-2 flex items-center gap-2",
+              "transition-all hover:scale-110 hover:shadow-xl",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            )}
+          >
+            <MessageSquare className="h-5 w-5" />
+            <span>Comentários</span>
+            {unresolvedCount > 0 && (
+              <span className="absolute -top-1 -right-1 bg-yellow-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                {unresolvedCount}
+              </span>
+            )}
+          </button>
 
-            {/* Painel de Comentários */}
-            <DocumentoComentariosPanel
-              documentoId={documento.id}
-              documentoNome={documento.fileName || "Documento"}
-              comentarios={documento.comentarios || []}
-              isOpen={comentarioPanelOpen}
-              onClose={() => setComentarioPanelOpen(false)}
-              onAddComentario={handleAddComentario}
-            />
+          {/* Painel de Comentários */}
+          <DocumentoComentariosPanel
+            documentoId={documento.id}
+            documentoNome={documento.fileName || "Documento"}
+            comentarios={documento.comentarios || []}
+            isOpen={comentarioPanelOpen}
+            onClose={() => setComentarioPanelOpen(false)}
+            onAddComentario={handleAddComentario}
+            onEditComentario={onEditComentario}
+            onDeleteComentario={onDeleteComentario}
+            currentUserId={currentUserId}
+          />
         </div>
       </DialogContent>
     </Dialog>

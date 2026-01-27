@@ -54,7 +54,9 @@ export const quinzenaDocuments = pgTable(
     ),
     userIdIdx: index("quinzena_documents_user_id_idx").on(table.userId),
     unitIdIdx: index("quinzena_documents_unit_id_idx").on(table.unitId),
-    createdAtIdx: index("quinzena_documents_created_at_idx").on(table.createdAt),
+    createdAtIdx: index("quinzena_documents_created_at_idx").on(
+      table.createdAt,
+    ),
   }),
 );
 

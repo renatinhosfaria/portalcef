@@ -11,7 +11,11 @@ import {
   getQuinzenaById,
 } from "@essencia/shared/config/quinzenas";
 import { api } from "@essencia/shared/fetchers/client";
-import { Alert, AlertDescription, AlertTitle } from "@essencia/ui/components/alert";
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from "@essencia/ui/components/alert";
 import { Button } from "@essencia/ui/components/button";
 import {
   Card,
@@ -41,6 +45,7 @@ import {
   HistoricoTimeline,
   PlanoStatusBadge,
   useAnalistaActions,
+  usePlanoAula,
   usePlanoDetalhe,
 } from "../../../features/plano-aula";
 
@@ -63,14 +68,35 @@ function formatarDataSubmissao(data?: string): string {
   });
 }
 
-
 export function RevisaoContent({ planoId }: RevisaoContentProps) {
   const router = useRouter();
-  const { loading: loadingPlano, plano, error, fetchPlano, refetch } = usePlanoDetalhe();
+  const {
+    loading: loadingPlano,
+    plano,
+    error,
+    fetchPlano,
+    refetch,
+  } = usePlanoDetalhe();
   const { loading: loadingAction, aprovar, devolver } = useAnalistaActions();
+  const { aprovarDocumento, editarComentario, deletarComentario } =
+    usePlanoAula();
 
   const [actionError, setActionError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | undefined>();
+
+  // Carrega o usuario atual
+  useEffect(() => {
+    const fetchCurrentUser = async () => {
+      try {
+        const response = await api.get<{ user: { id: string } }>("/auth/me");
+        setCurrentUserId(response.user.id);
+      } catch (err) {
+        console.error("Erro ao buscar usuario atual:", err);
+      }
+    };
+    fetchCurrentUser();
+  }, []);
 
   // Carrega o plano na montagem
   useEffect(() => {
@@ -111,13 +137,71 @@ export function RevisaoContent({ planoId }: RevisaoContentProps) {
         await refetch();
       } catch (err) {
         const message =
-          err instanceof Error
-            ? err.message
-            : "Erro ao adicionar comentario";
+          err instanceof Error ? err.message : "Erro ao adicionar comentario";
         setActionError(message);
       }
     },
     [refetch],
+  );
+
+  /**
+   * Edita um comentario existente
+   */
+  const handleEditComentario = useCallback(
+    async (comentarioId: string, novoTexto: string) => {
+      try {
+        await editarComentario(comentarioId, novoTexto);
+        // Recarregar plano para mostrar comentario atualizado
+        await refetch();
+        setSuccessMessage("Comentário editado com sucesso!");
+        setTimeout(() => setSuccessMessage(null), 3000);
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "Erro ao editar comentário";
+        setActionError(message);
+      }
+    },
+    [editarComentario, refetch],
+  );
+
+  /**
+   * Deleta um comentario
+   */
+  const handleDeleteComentario = useCallback(
+    async (comentarioId: string) => {
+      try {
+        await deletarComentario(comentarioId);
+        // Recarregar plano para atualizar lista de comentarios
+        await refetch();
+        setSuccessMessage("Comentário deletado com sucesso!");
+        setTimeout(() => setSuccessMessage(null), 3000);
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "Erro ao deletar comentário";
+        setActionError(message);
+      }
+    },
+    [deletarComentario, refetch],
+  );
+
+  /**
+   * Aprova um documento individualmente
+   */
+  const handleAprovarDocumento = useCallback(
+    async (documentoId: string) => {
+      try {
+        await aprovarDocumento(documentoId);
+        // Recarregar plano para mostrar aprovacao
+        await refetch();
+        setSuccessMessage("Documento aprovado com sucesso!");
+        setTimeout(() => setSuccessMessage(null), 3000);
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "Erro ao aprovar documento";
+        setActionError(message);
+      }
+    },
+    [aprovarDocumento, refetch],
   );
 
   /**
@@ -347,7 +431,12 @@ export function RevisaoContent({ planoId }: RevisaoContentProps) {
                 documentos={plano.documentos}
                 showComments={true}
                 canDelete={false}
+                canAprovar={true}
                 onAddComentario={handleAddComentarioViaApi}
+                onEditComentario={handleEditComentario}
+                onDeleteComentario={handleDeleteComentario}
+                onAprovar={handleAprovarDocumento}
+                currentUserId={currentUserId}
               />
             </CardContent>
           </Card>
@@ -412,16 +501,16 @@ export function RevisaoContent({ planoId }: RevisaoContentProps) {
 
                   {/* Aviso sobre comentarios */}
                   <p className="text-xs text-muted-foreground text-center">
-                    Adicione comentarios aos documentos via painel flutuante antes de
-                    devolver.
+                    Adicione comentarios aos documentos via painel flutuante
+                    antes de devolver.
                   </p>
                 </>
               ) : (
                 <Alert>
                   <AlertCircle className="h-4 w-4" />
                   <AlertDescription>
-                    Este plano nao esta no status &quot;Aguardando Analise&quot;.
-                    Nenhuma acao disponivel.
+                    Este plano nao esta no status &quot;Aguardando
+                    Analise&quot;. Nenhuma acao disponivel.
                   </AlertDescription>
                 </Alert>
               )}

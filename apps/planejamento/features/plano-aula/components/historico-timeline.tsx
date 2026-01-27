@@ -126,10 +126,17 @@ function getRoleLabel(role: string): string {
 /**
  * User info component
  */
-function UserInfo({ userName, userRole }: { userName: string; userRole: string }) {
+function UserInfo({
+  userName,
+  userRole,
+}: {
+  userName: string;
+  userRole: string;
+}) {
   return (
     <div className="text-sm text-muted-foreground">
-      Por <span className="font-medium">{userName}</span> ({getRoleLabel(userRole)})
+      Por <span className="font-medium">{userName}</span> (
+      {getRoleLabel(userRole)})
     </div>
   );
 }
@@ -170,7 +177,9 @@ function TimelineItem({ entry }: { entry: HistoricoEntry }) {
 
         {entry.statusAnterior ? (
           <div className="flex items-center gap-2 text-xs pt-2">
-            <PlanoStatusBadge status={entry.statusAnterior as PlanoAulaStatus} />
+            <PlanoStatusBadge
+              status={entry.statusAnterior as PlanoAulaStatus}
+            />
             <ArrowRight className="h-3 w-3" />
             <PlanoStatusBadge status={entry.statusNovo as PlanoAulaStatus} />
           </div>

@@ -294,7 +294,11 @@ export function DirectorGeneralForm({
             <Input
               id="director-general-password"
               type="password"
-              placeholder={isEditing ? "Deixe em branco para manter" : "Mínimo 6 caracteres"}
+              placeholder={
+                isEditing
+                  ? "Deixe em branco para manter"
+                  : "Mínimo 6 caracteres"
+              }
               required={!isEditing}
               className="pl-10"
               value={formData.password}

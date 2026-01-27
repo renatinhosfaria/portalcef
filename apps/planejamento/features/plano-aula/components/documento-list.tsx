@@ -11,6 +11,7 @@ import { useState } from "react";
 import { Button } from "@essencia/ui/components/button";
 import { cn } from "@essencia/ui/lib/utils";
 import {
+  CheckCircle,
   Eye,
   ExternalLink,
   FileSpreadsheet,
@@ -28,8 +29,13 @@ interface DocumentoListProps {
   documentos: PlanoDocumento[];
   onDelete?: (docId: string) => void;
   onAddComentario?: (documentoId: string, comentario: string) => Promise<void>;
+  onEditComentario?: (comentarioId: string, novoTexto: string) => Promise<void>;
+  onDeleteComentario?: (comentarioId: string) => Promise<void>;
+  onAprovar?: (docId: string) => Promise<void>;
   showComments?: boolean;
   canDelete?: boolean;
+  canAprovar?: boolean;
+  currentUserId?: string;
 }
 
 function formatFileSize(bytes: number | null | undefined): string {
@@ -117,10 +123,28 @@ export function DocumentoList({
   documentos,
   onDelete,
   onAddComentario,
+  onEditComentario,
+  onDeleteComentario,
+  onAprovar,
   showComments = false,
   canDelete = false,
+  canAprovar = false,
+  currentUserId,
 }: DocumentoListProps) {
   const [openDocId, setOpenDocId] = useState<string | null>(null);
+  const [aprovandoId, setAprovandoId] = useState<string | null>(null);
+
+  const handleAprovar = async (docId: string) => {
+    if (!onAprovar) return;
+    try {
+      setAprovandoId(docId);
+      await onAprovar(docId);
+    } catch (error) {
+      console.error("Erro ao aprovar documento:", error);
+    } finally {
+      setAprovandoId(null);
+    }
+  };
 
   if (documentos.length === 0) {
     return (
@@ -206,6 +230,23 @@ export function DocumentoList({
                         <span>{formatFileSize(documento.fileSize)}</span>
                       </>
                     )}
+                    {documento.createdAt && (
+                      <>
+                        <span>*</span>
+                        <span title="Data de envio">
+                          {new Date(documento.createdAt).toLocaleString(
+                            "pt-BR",
+                            {
+                              day: "2-digit",
+                              month: "2-digit",
+                              year: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            },
+                          )}
+                        </span>
+                      </>
+                    )}
                     {hasUnresolvedComments && (
                       <>
                         <span>*</span>
@@ -219,6 +260,14 @@ export function DocumentoList({
                         <span>*</span>
                         <span className="text-blue-600 font-medium">
                           Convertendo...
+                        </span>
+                      </>
+                    )}
+                    {documento.approvedBy && documento.approvedAt && (
+                      <>
+                        <span>*</span>
+                        <span className="text-green-600 font-medium">
+                          Aprovado
                         </span>
                       </>
                     )}
@@ -240,18 +289,36 @@ export function DocumentoList({
                   Ver Documento
                 </Button>
 
+                {/* Aprovar Button - apenas para analista_pedagogico */}
+                {canAprovar && onAprovar && !documento.approvedBy && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 gap-1 text-green-600 hover:text-green-700 hover:bg-green-50"
+                    onClick={() => handleAprovar(documento.id)}
+                    disabled={
+                      aprovandoId === documento.id ||
+                      documento.previewStatus === "PENDENTE"
+                    }
+                    title="Aprovar documento"
+                  >
+                    <CheckCircle className="h-4 w-4" />
+                    {aprovandoId === documento.id ? "Aprovando..." : "Aprovar"}
+                  </Button>
+                )}
+
                 {/* Delete Button */}
                 {canDelete && onDelete && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 flex-shrink-0 text-muted-foreground hover:text-destructive"
-                  onClick={() => onDelete(documento.id)}
-                  title="Excluir documento"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              )}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 flex-shrink-0 text-muted-foreground hover:text-destructive"
+                    onClick={() => onDelete(documento.id)}
+                    title="Excluir documento"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                )}
               </div>
             </div>
 
@@ -261,6 +328,9 @@ export function DocumentoList({
               open={openDocId === documento.id}
               onOpenChange={(open) => setOpenDocId(open ? documento.id : null)}
               onAddComentario={onAddComentario}
+              onEditComentario={onEditComentario}
+              onDeleteComentario={onDeleteComentario}
+              currentUserId={currentUserId}
             />
 
             {/* Comments Section */}

@@ -8,6 +8,7 @@ import {
   InternalServerErrorException,
   Logger,
   Param,
+  Patch,
   Post,
   Query,
   Req,
@@ -62,10 +63,7 @@ const PROFESSORA_ACCESS = [...PROFESSORA_ROLES] as const;
 const ANALISTA_ACCESS = [...ANALISTA_ROLES] as const;
 
 /** Todas as roles que podem acessar endpoints de coordenadora */
-const COORDENADORA_ACCESS = [
-  ...GESTAO_ROLES,
-  ...COORDENADORA_ROLES,
-] as const;
+const COORDENADORA_ACCESS = [...GESTAO_ROLES, ...COORDENADORA_ROLES] as const;
 
 /** Todas as roles que podem acessar endpoints de gestão/config */
 const GESTAO_ACCESS = [...GESTAO_ROLES] as const;
@@ -105,7 +103,7 @@ export class PlanoAulaController {
     private readonly storageService: StorageService,
     private readonly historicoService: PlanoAulaHistoricoService,
     private readonly documentosConversaoQueue: DocumentosConversaoQueueService,
-  ) { }
+  ) {}
 
   // ============================================
   // Endpoints da Professora
@@ -271,7 +269,8 @@ export class PlanoAulaController {
     if (!allowedMimeTypes.includes(data.mimetype)) {
       throw new BadRequestException({
         code: "INVALID_FILE_TYPE",
-        message: "Tipo de arquivo não permitido. Use PDF, DOC, DOCX, PNG ou JPG",
+        message:
+          "Tipo de arquivo não permitido. Use PDF, DOC, DOCX, PNG ou JPG",
       });
     }
 
@@ -429,7 +428,9 @@ export class PlanoAulaController {
   @Get("analista/pendentes")
   @Roles(...ANALISTA_ACCESS)
   async listarPendentesAnalista(@Req() req: { user: UserContext }) {
-    const planos = await this.planoAulaService.listarPendentesAnalista(req.user);
+    const planos = await this.planoAulaService.listarPendentesAnalista(
+      req.user,
+    );
     return {
       success: true,
       data: planos,
@@ -462,7 +463,8 @@ export class PlanoAulaController {
   async devolverComoAnalista(
     @Req() req: { user: UserContext },
     @Param("id") id: string,
-    @Body() body: { comentarios?: Array<{ documentoId: string; comentario: string }> },
+    @Body()
+    body: { comentarios?: Array<{ documentoId: string; comentario: string }> },
   ) {
     const plano = await this.planoAulaService.devolverComoAnalista(
       req.user,
@@ -684,6 +686,69 @@ export class PlanoAulaController {
     return {
       success: true,
       data: comentario,
+    };
+  }
+
+  /**
+   * PATCH /plano-aula/comentarios/:id
+   * Edita um comentário (apenas autor)
+   */
+  @Patch("comentarios/:id")
+  @Roles(...ANALISTA_ACCESS, ...COORDENADORA_ACCESS)
+  async editarComentario(
+    @Req() req: { user: UserContext },
+    @Param("id") comentarioId: string,
+    @Body() body: { comentario: string },
+  ) {
+    if (!body.comentario || body.comentario.trim().length === 0) {
+      throw new BadRequestException("Comentário não pode estar vazio");
+    }
+
+    const comentario = await this.planoAulaService.editarComentario(
+      req.user,
+      comentarioId,
+      body.comentario,
+    );
+    return {
+      success: true,
+      data: comentario,
+    };
+  }
+
+  /**
+   * DELETE /plano-aula/comentarios/:id
+   * Deleta um comentário (apenas autor)
+   */
+  @Delete("comentarios/:id")
+  @Roles(...ANALISTA_ACCESS, ...COORDENADORA_ACCESS)
+  async deletarComentario(
+    @Req() req: { user: UserContext },
+    @Param("id") comentarioId: string,
+  ) {
+    await this.planoAulaService.deletarComentario(req.user, comentarioId);
+    return {
+      success: true,
+      message: "Comentário deletado com sucesso",
+    };
+  }
+
+  /**
+   * POST /plano-aula/documentos/:id/aprovar
+   * Aprova um documento individualmente (apenas analista_pedagogico)
+   */
+  @Post("documentos/:id/aprovar")
+  @Roles("analista_pedagogico")
+  async aprovarDocumento(
+    @Req() req: { user: UserContext },
+    @Param("id") documentoId: string,
+  ) {
+    const documento = await this.planoAulaService.aprovarDocumento(
+      req.user,
+      documentoId,
+    );
+    return {
+      success: true,
+      data: documento,
     };
   }
 }

@@ -7,6 +7,7 @@ const config: Config = {
     "./features/**/*.{js,ts,jsx,tsx,mdx}",
     "./components/**/*.{js,ts,jsx,tsx,mdx}",
     "../../packages/ui/src/**/*.{js,ts,jsx,tsx,mdx}",
+    "../../packages/components/src/**/*.{js,ts,jsx,tsx,mdx}",
   ],
   presets: [sharedConfig],
 };

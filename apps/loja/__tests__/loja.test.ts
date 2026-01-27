@@ -80,6 +80,33 @@ describe('useCart Hook', () => {
         });
     });
 
+    describe('quantity limit per student', () => {
+        it('should allow up to 2 units per product per student', () => {
+            const item1 = { variantId: 'v1', productId: 'p1', studentName: 'João', quantity: 2, unitPrice: 100 };
+            cart.addItem(item1);
+            expect(cart.items.length).toBe(1);
+        });
+
+        it('should allow 2 units across different variants of same product', () => {
+            const item1 = { variantId: 'v1', productId: 'p1', studentName: 'João', quantity: 1, unitPrice: 100 };
+            const item2 = { variantId: 'v2', productId: 'p1', studentName: 'João', quantity: 1, unitPrice: 100 };
+
+            cart.addItem(item1);
+            cart.addItem(item2);
+            expect(cart.items.length).toBe(2);
+        });
+
+        it('should allow same product for different students', () => {
+            const item1 = { variantId: 'v1', productId: 'p1', studentName: 'João', quantity: 2, unitPrice: 100 };
+            const item2 = { variantId: 'v1', productId: 'p1', studentName: 'Maria', quantity: 2, unitPrice: 100 };
+
+            cart.addItem(item1);
+            cart.addItem(item2);
+            // Each student can have 2 units
+            expect(cart.items.length).toBe(2);
+        });
+    });
+
     describe('removeItem', () => {
         it('should remove item by variantId and studentName', () => {
             const item = { variantId: 'v1', studentName: 'João', quantity: 1, unitPrice: 100 };

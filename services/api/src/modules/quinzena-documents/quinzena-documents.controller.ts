@@ -123,7 +123,8 @@ export class QuinzenaDocumentsController {
     if (!allowedMimeTypes.includes(data.mimetype)) {
       throw new BadRequestException({
         code: "INVALID_FILE_TYPE",
-        message: "Tipo de arquivo não permitido. Use PDF, DOC, DOCX, PNG ou JPG",
+        message:
+          "Tipo de arquivo não permitido. Use PDF, DOC, DOCX, PNG ou JPG",
       });
     }
 
@@ -204,10 +205,7 @@ export class QuinzenaDocumentsController {
    */
   @Delete(":id")
   @Roles(...UPLOAD_ROLES)
-  async delete(
-    @Param("id") id: string,
-    @Req() req: { user: UserContext },
-  ) {
+  async delete(@Param("id") id: string, @Req() req: { user: UserContext }) {
     await this.documentsService.delete(id, req.user.userId);
 
     return {

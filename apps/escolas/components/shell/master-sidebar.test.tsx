@@ -9,4 +9,13 @@ describe("MasterSidebar", () => {
 
     expect(screen.getByText("Portal CEF")).toBeInTheDocument();
   });
+
+  it("marca link externo para voltar aos apps", () => {
+    render(<MasterSidebar />);
+
+    const link = screen.getByRole("link", { name: /Voltar aos Apps/i });
+
+    expect(link).toHaveAttribute("href", "https://www.portalcef.com.br/");
+    expect(link).toHaveAttribute("rel", "external");
+  });
 });

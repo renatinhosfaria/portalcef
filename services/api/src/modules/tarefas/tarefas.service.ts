@@ -5,7 +5,7 @@ import {
   ConflictException,
   BadRequestException,
 } from "@nestjs/common";
-import { eq } from "@essencia/db";
+import { eq, and, or, desc, sql } from "@essencia/db";
 import { tarefas, tarefaContextos } from "@essencia/db";
 import type {
   Tarefa,
@@ -14,9 +14,7 @@ import type {
   TarefaContextoModulo,
 } from "@essencia/shared/types";
 import { DatabaseService } from "../../common/database/database.service";
-import {
-  validarContextosPorRole,
-} from "./utils/validacoes";
+import { validarContextosPorRole } from "./utils/validacoes";
 
 /**
  * Tipos auxiliares para transações do Drizzle
@@ -27,6 +25,7 @@ type DbTransaction = Parameters<Db["transaction"]>[0] extends (
 ) => Promise<unknown>
   ? T
   : never;
+type TarefaDb = typeof tarefas.$inferSelect;
 
 /**
  * Interface de contexto do usuário (da sessão)
@@ -50,7 +49,7 @@ export interface UserContext {
  */
 @Injectable()
 export class TarefasService {
-  constructor(private readonly db: DatabaseService) { }
+  constructor(private readonly db: DatabaseService) {}
 
   /**
    * Cria tarefa manual com validações de role e permissões
@@ -267,9 +266,7 @@ export class TarefasService {
 
       // Validar que usuário é responsável
       if (tarefaDb.responsavel !== userId) {
-        throw new ForbiddenException(
-          "Usuário não é responsável pela tarefa",
-        );
+        throw new ForbiddenException("Usuário não é responsável pela tarefa");
       }
 
       // Validar que tarefa não está concluída
@@ -297,27 +294,187 @@ export class TarefasService {
   }
 
   /**
+   * Lista tarefas com filtros e paginação
+   *
+   * @param session Contexto do usuário
+   * @param filtros Filtros de busca
+   * @returns Lista paginada de tarefas
+   */
+  async listar(
+    session: UserContext,
+    filtros: {
+      status?: "PENDENTE" | "CONCLUIDA" | "CANCELADA";
+      prioridade?: "ALTA" | "MEDIA" | "BAIXA";
+      modulo?: string;
+      quinzenaId?: string;
+      tipo?: "criadas" | "atribuidas" | "todas";
+      page?: number;
+      limit?: number;
+    },
+  ): Promise<{
+    data: Tarefa[];
+    pagination: {
+      total: number;
+      page: number;
+      limit: number;
+      totalPages: number;
+    };
+  }> {
+    const db = this.db.db;
+    const page = filtros.page || 1;
+    const limit = Math.min(filtros.limit || 20, 100); // Max 100 por página
+    const offset = (page - 1) * limit;
+
+    // Construir condições de filtro
+    const conditions: ReturnType<typeof eq>[] = [
+      eq(tarefas.schoolId, session.schoolId),
+    ];
+
+    // Filtro por tipo (criadas/atribuidas/todas)
+    if (filtros.tipo === "criadas") {
+      conditions.push(eq(tarefas.criadoPor, session.userId));
+    } else if (filtros.tipo === "atribuidas") {
+      conditions.push(eq(tarefas.responsavel, session.userId));
+    } else {
+      // "todas" - criadas OU atribuidas
+      const todasCondicoes = or(
+        eq(tarefas.criadoPor, session.userId),
+        eq(tarefas.responsavel, session.userId),
+      );
+      if (todasCondicoes) {
+        conditions.push(todasCondicoes);
+      }
+    }
+
+    // Filtro por status
+    if (filtros.status) {
+      conditions.push(eq(tarefas.status, filtros.status));
+    }
+
+    // Filtro por prioridade
+    if (filtros.prioridade) {
+      conditions.push(eq(tarefas.prioridade, filtros.prioridade));
+    }
+
+    // Buscar tarefas com paginação
+    const tarefasDb: TarefaDb[] = await db
+      .select()
+      .from(tarefas)
+      .where(and(...conditions))
+      .orderBy(desc(tarefas.prazo))
+      .limit(limit)
+      .offset(offset);
+
+    // Contar total (para paginação)
+    const [{ count }] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(tarefas)
+      .where(and(...conditions));
+
+    const totalPages = Math.ceil(count / limit);
+
+    return {
+      data: tarefasDb.map((t) => this.mapTarefaToDto(t)),
+      pagination: {
+        total: count,
+        page,
+        limit,
+        totalPages,
+      },
+    };
+  }
+
+  /**
+   * Retorna estatísticas de tarefas do usuário
+   *
+   * @param userId ID do usuário
+   * @param schoolId ID da escola (isolamento de tenant)
+   * @returns Estatísticas de tarefas
+   */
+  async getStats(
+    userId: string,
+    schoolId: string,
+  ): Promise<{
+    pendentes: number;
+    atrasadas: number;
+    concluidasHoje: number;
+    concluidasSemana: number;
+  }> {
+    const db = this.db.db;
+    const agora = new Date();
+    const inicioHoje = new Date(
+      agora.getFullYear(),
+      agora.getMonth(),
+      agora.getDate(),
+    );
+    const inicioDaSemana = new Date(agora.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+    // Query para tarefas pendentes
+    const [{ pendentes }] = await db
+      .select({ pendentes: sql<number>`count(*)::int` })
+      .from(tarefas)
+      .where(
+        and(
+          eq(tarefas.schoolId, schoolId),
+          eq(tarefas.responsavel, userId),
+          eq(tarefas.status, "PENDENTE"),
+        ),
+      );
+
+    // Query para tarefas atrasadas (pendentes com prazo < hoje)
+    const [{ atrasadas }] = await db
+      .select({ atrasadas: sql<number>`count(*)::int` })
+      .from(tarefas)
+      .where(
+        and(
+          eq(tarefas.schoolId, schoolId),
+          eq(tarefas.responsavel, userId),
+          eq(tarefas.status, "PENDENTE"),
+          sql`${tarefas.prazo} < ${agora.toISOString()}`,
+        ),
+      );
+
+    // Query para tarefas concluídas hoje
+    const [{ concluidasHoje }] = await db
+      .select({ concluidasHoje: sql<number>`count(*)::int` })
+      .from(tarefas)
+      .where(
+        and(
+          eq(tarefas.schoolId, schoolId),
+          eq(tarefas.responsavel, userId),
+          eq(tarefas.status, "CONCLUIDA"),
+          sql`${tarefas.concluidaEm} >= ${inicioHoje.toISOString()}`,
+        ),
+      );
+
+    // Query para tarefas concluídas na última semana
+    const [{ concluidasSemana }] = await db
+      .select({ concluidasSemana: sql<number>`count(*)::int` })
+      .from(tarefas)
+      .where(
+        and(
+          eq(tarefas.schoolId, schoolId),
+          eq(tarefas.responsavel, userId),
+          eq(tarefas.status, "CONCLUIDA"),
+          sql`${tarefas.concluidaEm} >= ${inicioDaSemana.toISOString()}`,
+        ),
+      );
+
+    return {
+      pendentes,
+      atrasadas,
+      concluidasHoje,
+      concluidasSemana,
+    };
+  }
+
+  /**
    * Mapeia tarefa do banco para DTO
    *
    * @param tarefa Tarefa do banco
    * @returns Tarefa formatada (com ISO strings)
    */
-  private mapTarefaToDto(tarefa: {
-    id: string;
-    schoolId: string;
-    unitId: string | null;
-    titulo: string;
-    descricao: string | null;
-    status: string;
-    prioridade: string;
-    prazo: Date;
-    criadoPor: string;
-    responsavel: string;
-    tipoOrigem: string;
-    createdAt: Date;
-    updatedAt: Date;
-    concluidaEm: Date | null;
-  }): Tarefa {
+  private mapTarefaToDto(tarefa: TarefaDb): Tarefa {
     return {
       id: tarefa.id,
       schoolId: tarefa.schoolId,

@@ -25,7 +25,10 @@ export const createPlanoSchema = z.object({
   turmaId: z.string().uuid("turmaId deve ser um UUID válido"),
   quinzenaId: z
     .string()
-    .regex(/^\d{4}-Q\d{2}$/, "quinzenaId deve seguir o formato YYYY-QNN (ex: 2026-Q01)"),
+    .regex(
+      /^\d{4}-Q\d{2}$/,
+      "quinzenaId deve seguir o formato YYYY-QNN (ex: 2026-Q01)",
+    ),
 });
 
 export type CreatePlanoDto = z.infer<typeof createPlanoSchema>;
@@ -69,7 +72,10 @@ export type DevolverPlanoDto = z.infer<typeof devolverPlanoSchema>;
 export const setDeadlineSchema = z.object({
   quinzenaId: z
     .string()
-    .regex(/^\d{4}-Q\d{2}$/, "quinzenaId deve seguir o formato YYYY-QNN (ex: 2026-Q01)"),
+    .regex(
+      /^\d{4}-Q\d{2}$/,
+      "quinzenaId deve seguir o formato YYYY-QNN (ex: 2026-Q01)",
+    ),
   deadline: z.string().datetime("deadline deve ser uma data/hora ISO válida"),
 });
 

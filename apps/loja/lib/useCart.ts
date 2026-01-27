@@ -14,6 +14,8 @@ export interface CartItem {
   availableStock: number;
 }
 
+export const MAX_QUANTITY_PER_STUDENT = 2;
+
 const CART_STORAGE_KEY = 'cef_shop_cart';
 
 export function useCart() {
@@ -45,11 +47,28 @@ export function useCart() {
     }
   }, [items, isLoaded]);
 
-  const addItem = (item: CartItem) => {
+  // Retorna quantidade total de um produto para um aluno (todas as variantes)
+  const getQuantityForProductStudent = (productId: string, studentName: string) => {
+    return items
+      .filter((i) => i.productId === productId && i.studentName.toLowerCase() === studentName.toLowerCase())
+      .reduce((sum, i) => sum + i.quantity, 0);
+  };
+
+  const addItem = (item: CartItem): { success: boolean; message?: string } => {
+    const currentQty = getQuantityForProductStudent(item.productId, item.studentName);
+    const newTotal = currentQty + item.quantity;
+
+    if (newTotal > MAX_QUANTITY_PER_STUDENT) {
+      return {
+        success: false,
+        message: `Limite de ${MAX_QUANTITY_PER_STUDENT} unidades por produto por aluno atingido`,
+      };
+    }
+
     setItems((current) => {
       // Check if item already exists (same variant + student)
       const existingIndex = current.findIndex(
-        (i) => i.variantId === item.variantId && i.studentName === item.studentName
+        (i) => i.variantId === item.variantId && i.studentName.toLowerCase() === item.studentName.toLowerCase()
       );
 
       if (existingIndex >= 0) {
@@ -62,6 +81,8 @@ export function useCart() {
       // Add new item
       return [...current, item];
     });
+
+    return { success: true };
   };
 
   const removeItem = (variantId: string, studentName: string) => {
@@ -108,6 +129,7 @@ export function useCart() {
     clearCart,
     getTotalAmount,
     getTotalItems,
+    getQuantityForProductStudent,
     isLoaded,
   };
 }

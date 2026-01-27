@@ -126,8 +126,6 @@ export class TarefasController {
   /**
    * GET /tarefas
    * Lista tarefas com filtros e paginação
-   *
-   * TODO: Implementar listagem com filtros na próxima task
    */
   @Get()
   @Roles(...VISUALIZAR_ACCESS)
@@ -145,17 +143,11 @@ export class TarefasController {
       });
     }
 
-    // TODO: Implementar listagem no service
-    // Por enquanto, retornar estrutura vazia
+    const result = await this.tarefasService.listar(req.user, parsed.data);
+
     return {
       success: true,
-      data: [],
-      pagination: {
-        total: 0,
-        page: parsed.data.page,
-        limit: parsed.data.limit,
-        totalPages: 0,
-      },
+      ...result,
     };
   }
 
@@ -165,35 +157,23 @@ export class TarefasController {
 
   /**
    * GET /tarefas/stats/resumo
-   * Retorna estatísticas gerais de tarefas
-   *
-   * TODO: Implementar estatísticas na próxima task
+   * Retorna estatísticas de tarefas do usuário
    */
   @Get("stats/resumo")
-  @Roles(...GESTAO_ROLES)
-  async getResumoStats(@Req() _req: { user: UserContext }) {
-    // TODO: Implementar estatísticas no service
-    // Por enquanto, retornar estrutura vazia
+  @Roles(...VISUALIZAR_ACCESS)
+  async getResumoStats(@Req() req: { user: UserContext }) {
+    if (!req.user.schoolId) {
+      throw new BadRequestException("Sessão inválida: schoolId é obrigatório");
+    }
+
+    const stats = await this.tarefasService.getStats(
+      req.user.userId,
+      req.user.schoolId,
+    );
+
     return {
       success: true,
-      data: {
-        total: 0,
-        pendentes: 0,
-        concluidas: 0,
-        atrasadas: 0,
-        porPrioridade: {
-          ALTA: 0,
-          MEDIA: 0,
-          BAIXA: 0,
-        },
-        porModulo: {
-          PLANEJAMENTO: 0,
-          CALENDARIO: 0,
-          USUARIOS: 0,
-          TURMAS: 0,
-          LOJA: 0,
-        },
-      },
+      data: stats,
     };
   }
 

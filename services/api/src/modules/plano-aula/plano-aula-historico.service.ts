@@ -49,7 +49,7 @@ export class PlanoAulaHistoricoService {
       .returning();
 
     if (!entry) {
-      throw new Error('Falha ao registrar histórico');
+      throw new Error("Falha ao registrar histórico");
     }
 
     return this.mapToHistoricoEntry(entry);
@@ -69,18 +69,20 @@ export class PlanoAulaHistoricoService {
       orderBy: [desc(planoAulaHistorico.createdAt)],
     });
 
-    return entries.map((entry: {
-      id: string;
-      planoId: string;
-      userId: string;
-      userName: string;
-      userRole: string;
-      acao: string;
-      statusAnterior: string | null;
-      statusNovo: string;
-      detalhes: unknown;
-      createdAt: Date;
-    }) => this.mapToHistoricoEntry(entry));
+    return entries.map(
+      (entry: {
+        id: string;
+        planoId: string;
+        userId: string;
+        userName: string;
+        userRole: string;
+        acao: string;
+        statusAnterior: string | null;
+        statusNovo: string;
+        detalhes: unknown;
+        createdAt: Date;
+      }) => this.mapToHistoricoEntry(entry),
+    );
   }
 
   /**

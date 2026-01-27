@@ -29,9 +29,7 @@ export function validarContextosPorRole(
   // Validação específica por role
   if (role === "professora") {
     // Professora precisa de modulo e quinzenaId
-    const camposFaltando = contextos.filter(
-      (c) => !c.modulo || !c.quinzenaId,
-    );
+    const camposFaltando = contextos.filter((c) => !c.modulo || !c.quinzenaId);
     if (camposFaltando.length > 0) {
       throw new BadRequestException(
         "Professoras devem fornecer módulo e quinzenaId em todos os contextos",

@@ -17,6 +17,9 @@ interface DocumentoComentariosPanelProps {
   isOpen: boolean;
   onClose: () => void;
   onAddComentario: (comentario: string) => Promise<void>;
+  onEditComentario?: (comentarioId: string, novoTexto: string) => Promise<void>;
+  onDeleteComentario?: (comentarioId: string) => Promise<void>;
+  currentUserId?: string;
   loading?: boolean;
 }
 
@@ -26,6 +29,9 @@ export function DocumentoComentariosPanel({
   isOpen,
   onClose,
   onAddComentario,
+  onEditComentario,
+  onDeleteComentario,
+  currentUserId,
   loading = false,
 }: DocumentoComentariosPanelProps) {
   const [novoComentario, setNovoComentario] = useState("");
@@ -84,52 +90,59 @@ export function DocumentoComentariosPanel({
           "flex flex-col",
         )}
       >
-      {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b">
-        <div className="flex items-center gap-2">
-          <MessageSquare className="h-5 w-5 text-muted-foreground" />
-          <span className="font-semibold">Comentários</span>
-        </div>
-        <Button variant="ghost" size="icon" onClick={onClose}>
-          <X className="h-4 w-4" />
-          <span className="sr-only">Fechar painel</span>
-        </Button>
-      </div>
-
-      {/* Histórico */}
-      <div className="flex-1 overflow-y-auto p-4">
-        {comentarios.length > 0 ? (
-          <DocumentoComentarios comentarios={comentarios} />
-        ) : (
-          <p className="text-sm text-muted-foreground text-center py-8">
-            Nenhum comentário ainda
-          </p>
-        )}
-      </div>
-
-      {/* Form */}
-      <form onSubmit={handleSubmit} className="p-4 border-t bg-muted/30">
-        <div className="space-y-3">
-          <Textarea
-            placeholder="Digite seu comentário..."
-            value={novoComentario}
-            onChange={(e) => setNovoComentario(e.target.value)}
-            rows={3}
-            maxLength={1000}
-            disabled={isSubmitting || loading}
-          />
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-muted-foreground">
-              {novoComentario.length}/1000
-            </span>
-            <Button type="submit" disabled={isDisabled}>
-              {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Adicionar Comentário
-            </Button>
+        {/* Header */}
+        <div className="flex items-center justify-between p-4 border-b">
+          <div className="flex items-center gap-2">
+            <MessageSquare className="h-5 w-5 text-muted-foreground" />
+            <span className="font-semibold">Comentários</span>
           </div>
+          <Button variant="ghost" size="icon" onClick={onClose}>
+            <X className="h-4 w-4" />
+            <span className="sr-only">Fechar painel</span>
+          </Button>
         </div>
-      </form>
-    </aside>
+
+        {/* Histórico */}
+        <div className="flex-1 overflow-y-auto p-4">
+          {comentarios.length > 0 ? (
+            <DocumentoComentarios
+              comentarios={comentarios}
+              currentUserId={currentUserId}
+              onEdit={onEditComentario}
+              onDelete={onDeleteComentario}
+            />
+          ) : (
+            <p className="text-sm text-muted-foreground text-center py-8">
+              Nenhum comentário ainda
+            </p>
+          )}
+        </div>
+
+        {/* Form */}
+        <form onSubmit={handleSubmit} className="p-4 border-t bg-muted/30">
+          <div className="space-y-3">
+            <Textarea
+              placeholder="Digite seu comentário..."
+              value={novoComentario}
+              onChange={(e) => setNovoComentario(e.target.value)}
+              rows={3}
+              maxLength={1000}
+              disabled={isSubmitting || loading}
+            />
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">
+                {novoComentario.length}/1000
+              </span>
+              <Button type="submit" disabled={isDisabled}>
+                {isSubmitting && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                )}
+                Adicionar Comentário
+              </Button>
+            </div>
+          </div>
+        </form>
+      </aside>
     </>
   );
 }

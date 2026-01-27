@@ -5,9 +5,18 @@
  * Task 4.1: Componente que gerencia upload de documentos, status e acoes
  */
 
-import { Alert, AlertDescription, AlertTitle } from "@essencia/ui/components/alert";
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from "@essencia/ui/components/alert";
 import { Button } from "@essencia/ui/components/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@essencia/ui/components/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@essencia/ui/components/card";
 import {
   Tabs,
   TabsContent,
@@ -45,11 +54,9 @@ interface PlanoContentProps {
  * Verifica se o status permite edicao (upload/delete de documentos)
  */
 function canEdit(status: PlanoAulaStatus): boolean {
-  return [
-    "RASCUNHO",
-    "DEVOLVIDO_ANALISTA",
-    "DEVOLVIDO_COORDENADORA",
-  ].includes(status);
+  return ["RASCUNHO", "DEVOLVIDO_ANALISTA", "DEVOLVIDO_COORDENADORA"].includes(
+    status,
+  );
 }
 
 /**

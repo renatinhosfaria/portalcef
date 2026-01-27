@@ -6,7 +6,12 @@
  * Task 4.4: Exibe lista de planos pendentes de aprovacao final com filtro por segmento
  */
 
-import { Card, CardContent, CardHeader, CardTitle } from "@essencia/ui/components/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@essencia/ui/components/card";
 import { Skeleton } from "@essencia/ui/components/skeleton";
 import {
   Table,
@@ -84,7 +89,9 @@ export function CoordenacaoContent() {
       setPlanos(resultado);
     } catch (err) {
       const mensagem =
-        err instanceof Error ? err.message : "Erro ao carregar planos pendentes";
+        err instanceof Error
+          ? err.message
+          : "Erro ao carregar planos pendentes";
       setError(mensagem);
     } finally {
       setIsLoading(false);
@@ -235,7 +242,9 @@ export function CoordenacaoContent() {
       {!isLoading && !error && planosFiltrados.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Planos Aguardando Aprovacao Final</CardTitle>
+            <CardTitle className="text-lg">
+              Planos Aguardando Aprovacao Final
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <Table>

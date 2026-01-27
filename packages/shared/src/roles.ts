@@ -23,7 +23,10 @@ export type RoleType = keyof typeof ROLE_HIERARCHY;
  * (currentRole tem privilégio maior = número menor)
  * @returns true se currentRole tem maior privilégio que targetRole
  */
-export function canManageRole(currentRole: string, targetRole: string): boolean {
+export function canManageRole(
+  currentRole: string,
+  targetRole: string,
+): boolean {
   const currentLevel = ROLE_HIERARCHY[currentRole] ?? 999;
   const targetLevel = ROLE_HIERARCHY[targetRole] ?? 999;
   return currentLevel < targetLevel; // Apenas MENOR privilégio

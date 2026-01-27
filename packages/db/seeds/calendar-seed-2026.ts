@@ -475,7 +475,9 @@ async function seedCalendario2026() {
     console.log("\n📅 Tipos de eventos criados:");
     console.log(`   🔵 Início/Término de Semestre: ${eventosSemestre.length}`);
     console.log(`   🟣 Feriados e Recessos: ${feriadosERecessos.length}`);
-    console.log(`   🟡 Férias dos Professores: ${feriasRecessoProfessores.length}`);
+    console.log(
+      `   🟡 Férias dos Professores: ${feriasRecessoProfessores.length}`,
+    );
     console.log(`   🟢 Dias Escolares: ${diasEscolares.length}`);
     console.log(`   🟠 Sábados Letivos: ${sabadosLetivos.length}`);
     console.log(`   🔷 Semanas de Provas: ${semanasProvas.length}`);

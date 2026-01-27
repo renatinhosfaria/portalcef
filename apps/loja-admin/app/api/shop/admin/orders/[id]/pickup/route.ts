@@ -24,7 +24,7 @@ export async function PATCH(
 
         // Tentar obter a resposta como texto primeiro
         const responseText = await res.text();
-        console.log(`[Pickup Route] Backend response body: ${responseText.substring(0, 500)}`);
+        console.log(`[Pickup Route] Backend response length: ${responseText.length}`);
 
         // Tentar fazer parse como JSON
         let data;
@@ -32,7 +32,7 @@ export async function PATCH(
             data = JSON.parse(responseText);
         } catch {
             // Se não for JSON válido, retornar erro com detalhes
-            console.error(`[Pickup Route] Erro ao parsear JSON. Status: ${res.status}, Body: ${responseText.substring(0, 200)}`);
+            console.error(`[Pickup Route] Erro ao parsear JSON. Status: ${res.status}, Tamanho: ${responseText.length}`);
             return NextResponse.json(
                 {
                     success: false,

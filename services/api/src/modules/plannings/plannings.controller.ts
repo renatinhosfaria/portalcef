@@ -57,7 +57,9 @@ export class PlanningsController {
   @UseGuards(AuthGuard)
   async saveDraft(
     @Req()
-    req: { user: { userId: string; stageId: string | null; unitId: string | null } },
+    req: {
+      user: { userId: string; stageId: string | null; unitId: string | null };
+    },
     @Body() dto: SaveDraftDto,
   ): Promise<SaveDraftResult> {
     return this.planningsService.saveDraft(
@@ -83,7 +85,9 @@ export class PlanningsController {
   @UseGuards(AuthGuard)
   async submitPlanning(
     @Req()
-    req: { user: { userId: string; stageId: string | null; unitId: string | null } },
+    req: {
+      user: { userId: string; stageId: string | null; unitId: string | null };
+    },
     @Body() dto: SubmitPlanningDto,
   ): Promise<SubmitPlanningResult> {
     return this.planningsService.submitPlanning(

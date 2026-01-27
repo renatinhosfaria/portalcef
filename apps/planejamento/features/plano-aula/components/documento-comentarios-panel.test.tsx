@@ -57,13 +57,17 @@ describe("DocumentoComentariosPanel", () => {
   it("renderiza textarea para novo comentário", () => {
     render(<DocumentoComentariosPanel {...defaultProps} />);
 
-    expect(screen.getByPlaceholderText(/digite seu comentário/i)).toBeInTheDocument();
+    expect(
+      screen.getByPlaceholderText(/digite seu comentário/i),
+    ).toBeInTheDocument();
   });
 
   it("botão submit está desabilitado quando textarea vazio", () => {
     render(<DocumentoComentariosPanel {...defaultProps} />);
 
-    const botaoEnviar = screen.getByRole("button", { name: /adicionar comentário/i });
+    const botaoEnviar = screen.getByRole("button", {
+      name: /adicionar comentário/i,
+    });
     expect(botaoEnviar).toBeDisabled();
   });
 
@@ -74,19 +78,28 @@ describe("DocumentoComentariosPanel", () => {
     const textarea = screen.getByPlaceholderText(/digite seu comentário/i);
     await user.type(textarea, "Meu comentário");
 
-    const botaoEnviar = screen.getByRole("button", { name: /adicionar comentário/i });
+    const botaoEnviar = screen.getByRole("button", {
+      name: /adicionar comentário/i,
+    });
     expect(botaoEnviar).not.toBeDisabled();
   });
 
   it("chama onAddComentario e limpa textarea após sucesso", async () => {
     const user = userEvent.setup();
     const onAddComentario = vi.fn().mockResolvedValue(undefined);
-    render(<DocumentoComentariosPanel {...defaultProps} onAddComentario={onAddComentario} />);
+    render(
+      <DocumentoComentariosPanel
+        {...defaultProps}
+        onAddComentario={onAddComentario}
+      />,
+    );
 
     const textarea = screen.getByPlaceholderText(/digite seu comentário/i);
     await user.type(textarea, "Novo comentário");
 
-    const botaoEnviar = screen.getByRole("button", { name: /adicionar comentário/i });
+    const botaoEnviar = screen.getByRole("button", {
+      name: /adicionar comentário/i,
+    });
     await user.click(botaoEnviar);
 
     expect(onAddComentario).toHaveBeenCalledWith("Novo comentário");
@@ -102,15 +115,24 @@ describe("DocumentoComentariosPanel", () => {
       });
     });
 
-    render(<DocumentoComentariosPanel {...defaultProps} onAddComentario={onAddComentario} />);
+    render(
+      <DocumentoComentariosPanel
+        {...defaultProps}
+        onAddComentario={onAddComentario}
+      />,
+    );
 
     const textarea = screen.getByPlaceholderText(/digite seu comentário/i);
     await user.type(textarea, "Comentário");
 
-    const botaoEnviar = screen.getByRole("button", { name: /adicionar comentário/i });
+    const botaoEnviar = screen.getByRole("button", {
+      name: /adicionar comentário/i,
+    });
     await user.click(botaoEnviar);
 
-    expect(screen.getByRole("button", { name: /adicionar comentário/i })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: /adicionar comentário/i }),
+    ).toBeDisabled();
 
     resolvePromise!();
   });

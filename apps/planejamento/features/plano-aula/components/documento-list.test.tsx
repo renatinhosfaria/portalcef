@@ -10,7 +10,8 @@ describe("DocumentoList", () => {
     planoId: "plano-1",
     tipo: "ARQUIVO" as const,
     fileName: "teste.docx",
-    mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    mimeType:
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     url: "https://cdn/teste.docx",
     previewUrl: "https://cdn/teste.pdf",
     previewStatus: "PRONTO" as const,

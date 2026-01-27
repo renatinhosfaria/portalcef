@@ -5,6 +5,7 @@ import { cn } from "@essencia/ui/lib/utils";
 import {
   BookOpen,
   Calendar,
+  CheckSquare,
   GraduationCap,
   LayoutDashboard,
   LogOut,
@@ -18,7 +19,15 @@ import { usePathname } from "next/navigation";
 
 import { useTenant } from "@essencia/shared/providers/tenant";
 
-type ActivePage = "home" | "usuarios" | "escolas" | "turmas" | "planejamento" | "calendario" | "loja-admin";
+type ActivePage =
+  | "home"
+  | "usuarios"
+  | "escolas"
+  | "turmas"
+  | "planejamento"
+  | "calendario"
+  | "tarefas"
+  | "loja-admin";
 
 // Regras de acesso por módulo
 const MODULE_ACCESS_RULES = {
@@ -28,6 +37,20 @@ const MODULE_ACCESS_RULES = {
   turmas: ["master", "diretora_geral", "gerente_unidade", "gerente_financeiro"],
   planejamento: "ALL", // Todos os perfis pedagógicos
   calendario: "ALL", // Todos os usuários
+  tarefas: [
+    "master",
+    "diretora_geral",
+    "gerente_unidade",
+    "coordenadora_geral",
+    "coordenadora_bercario",
+    "coordenadora_infantil",
+    "coordenadora_fundamental_i",
+    "coordenadora_fundamental_ii",
+    "coordenadora_medio",
+    "analista_pedagogico",
+    "professora",
+    "auxiliar_sala",
+  ],
   lojaAdmin: ["master", "diretora_geral", "gerente_unidade", "gerente_financeiro", "auxiliar_administrativo"],
 } as const;
 
@@ -58,6 +81,7 @@ function getActivePageFromPath(pathname: string): ActivePage | null {
   if (normalizedPath.startsWith("/turmas")) return "turmas";
   if (normalizedPath.startsWith("/planejamento")) return "planejamento";
   if (normalizedPath.startsWith("/calendario")) return "calendario";
+  if (normalizedPath.startsWith("/tarefas")) return "tarefas";
   if (normalizedPath.startsWith("/loja-admin")) return "loja-admin";
 
   return null;
@@ -90,7 +114,12 @@ function SidebarItem({ icon: Icon, label, href, active }: SidebarItemProps) {
   );
 }
 
-export function AppSidebar() {
+export interface AppSidebarProps {
+  /** Widget de tarefas (opcional) para exibir ao lado do item Tarefas */
+  tarefasBadge?: React.ReactNode;
+}
+
+export function AppSidebar({ tarefasBadge }: AppSidebarProps = {}) {
   const { role, name, schoolId, unitId, email } = useTenant();
   const pathname = usePathname();
   const [activePage, setActivePage] = useState<ActivePage | null>(null);
@@ -150,6 +179,13 @@ export function AppSidebar() {
       activePage: "calendario" as ActivePage,
     },
     {
+      key: "tarefas" as ModuleKey,
+      icon: CheckSquare,
+      label: "Tarefas",
+      href: `https://www.portalcef.com.br/tarefas?data=${tenantPayload}`,
+      activePage: "tarefas" as ActivePage,
+    },
+    {
       key: "lojaAdmin" as ModuleKey,
       icon: ShoppingBag,
       label: "Loja",
@@ -182,6 +218,7 @@ export function AppSidebar() {
     if (port === "3006") return setActivePage("turmas");
     if (port === "3007") return setActivePage("planejamento");
     if (port === "3008") return setActivePage("calendario");
+    if (port === "3012") return setActivePage("tarefas");
     if (port === "3011") return setActivePage("loja-admin");
 
     setActivePage(null);
@@ -213,13 +250,19 @@ export function AppSidebar() {
 
       <nav className="flex flex-col gap-2 w-full px-4">
         {visibleMenuItems.map((item) => (
-          <SidebarItem
-            key={item.key}
-            icon={item.icon}
-            label={item.label}
-            href={item.href}
-            active={activePage === item.activePage}
-          />
+          <div key={item.key} className="relative">
+            <SidebarItem
+              icon={item.icon}
+              label={item.label}
+              href={item.href}
+              active={activePage === item.activePage}
+            />
+            {item.key === "tarefas" && tarefasBadge && (
+              <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                {tarefasBadge}
+              </div>
+            )}
+          </div>
         ))}
       </nav>
 

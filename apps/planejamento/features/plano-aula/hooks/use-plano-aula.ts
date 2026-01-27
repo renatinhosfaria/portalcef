@@ -29,7 +29,10 @@ interface UsePlanoAulaReturn {
   uploadDocumento: (planoId: string, file: File) => Promise<PlanoDocumento>;
   addLink: (planoId: string, url: string) => Promise<PlanoDocumento>;
   deleteDocumento: (planoId: string, docId: string) => Promise<void>;
+  aprovarDocumento: (documentoId: string) => Promise<PlanoDocumento>;
   submeterPlano: (planoId: string) => Promise<{ success: boolean }>;
+  editarComentario: (comentarioId: string, comentario: string) => Promise<void>;
+  deletarComentario: (comentarioId: string) => Promise<void>;
 }
 
 /**
@@ -147,6 +150,28 @@ export function usePlanoAula(): UsePlanoAulaReturn {
     [],
   );
 
+  const aprovarDocumento = useCallback(
+    async (documentoId: string): Promise<PlanoDocumento> => {
+      setLoading(true);
+      setError(null);
+      try {
+        const result = await api.post<PlanoDocumento>(
+          `/plano-aula/documentos/${documentoId}/aprovar`,
+          {},
+        );
+        return result;
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "Erro ao aprovar documento";
+        setError(message);
+        throw err;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [],
+  );
+
   const submeterPlano = useCallback(
     async (planoId: string): Promise<{ success: boolean }> => {
       setLoading(true);
@@ -169,6 +194,44 @@ export function usePlanoAula(): UsePlanoAulaReturn {
     [],
   );
 
+  const editarComentario = useCallback(
+    async (comentarioId: string, comentario: string): Promise<void> => {
+      setLoading(true);
+      setError(null);
+      try {
+        await api.patch(`/plano-aula/comentarios/${comentarioId}`, {
+          comentario,
+        });
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "Erro ao editar comentário";
+        setError(message);
+        throw err;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [],
+  );
+
+  const deletarComentario = useCallback(
+    async (comentarioId: string): Promise<void> => {
+      setLoading(true);
+      setError(null);
+      try {
+        await api.delete(`/plano-aula/comentarios/${comentarioId}`);
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "Erro ao deletar comentário";
+        setError(message);
+        throw err;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [],
+  );
+
   return {
     loading,
     error,
@@ -177,7 +240,10 @@ export function usePlanoAula(): UsePlanoAulaReturn {
     uploadDocumento,
     addLink,
     deleteDocumento,
+    aprovarDocumento,
     submeterPlano,
+    editarComentario,
+    deletarComentario,
   };
 }
 
@@ -189,7 +255,10 @@ interface UseAnalistaActionsReturn {
   loading: boolean;
   listarPendentes: () => Promise<PlanoAulaSummary[]>;
   aprovar: (planoId: string) => Promise<void>;
-  devolver: (planoId: string, comentarios?: AddComentarioDto[]) => Promise<void>;
+  devolver: (
+    planoId: string,
+    comentarios?: AddComentarioDto[],
+  ) => Promise<void>;
 }
 
 /**
@@ -211,14 +280,17 @@ export function useAnalistaActions(): UseAnalistaActionsReturn {
   const aprovar = useCallback(async (planoId: string): Promise<void> => {
     setLoading(true);
     try {
-      await api.post(`/plano-aula/${planoId}/analista/aprovar`);
+      await api.post(`/plano-aula/${planoId}/analista/aprovar`, {});
     } finally {
       setLoading(false);
     }
   }, []);
 
   const devolver = useCallback(
-    async (planoId: string, comentarios?: AddComentarioDto[]): Promise<void> => {
+    async (
+      planoId: string,
+      comentarios?: AddComentarioDto[],
+    ): Promise<void> => {
       setLoading(true);
       try {
         await api.post(`/plano-aula/${planoId}/analista/devolver`, {
@@ -268,7 +340,7 @@ export function useCoordenadoraActions(): UseCoordenadoraActionsReturn {
   const aprovar = useCallback(async (planoId: string): Promise<void> => {
     setLoading(true);
     try {
-      await api.post(`/plano-aula/${planoId}/coordenadora/aprovar`);
+      await api.post(`/plano-aula/${planoId}/coordenadora/aprovar`, {});
     } finally {
       setLoading(false);
     }
@@ -317,27 +389,32 @@ export function useDashboard(): UseDashboardReturn {
   const [data, setData] = useState<DashboardData | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchDashboard = useCallback(async (quinzenaId?: string): Promise<void> => {
-    setLoading(true);
-    setError(null);
-    try {
-      const params = new URLSearchParams();
-      if (quinzenaId) {
-        params.append("quinzenaId", quinzenaId);
-      }
-      const queryString = params.toString() ? `?${params.toString()}` : "";
+  const fetchDashboard = useCallback(
+    async (quinzenaId?: string): Promise<void> => {
+      setLoading(true);
+      setError(null);
+      try {
+        const params = new URLSearchParams();
+        if (quinzenaId) {
+          params.append("quinzenaId", quinzenaId);
+        }
+        const queryString = params.toString() ? `?${params.toString()}` : "";
 
-      const result = await api.get<DashboardData>(`/plano-aula/dashboard${queryString}`);
-      setData(result);
-    } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Erro ao buscar dashboard";
-      setError(message);
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+        const result = await api.get<DashboardData>(
+          `/plano-aula/dashboard${queryString}`,
+        );
+        setData(result);
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "Erro ao buscar dashboard";
+        setError(message);
+        throw err;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [],
+  );
 
   return { loading, data, error, fetchDashboard };
 }

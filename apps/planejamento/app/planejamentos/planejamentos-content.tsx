@@ -90,15 +90,21 @@ export function PlanejamentosContent() {
   // Determina semestre inicial baseado na data atual
   const currentMonth = new Date().getMonth() + 1; // 1-12
   const defaultSemester = currentMonth >= 7 ? 2 : 1;
-  const [selectedSemester, setSelectedSemester] = useState<1 | 2>(defaultSemester as 1 | 2);
+  const [selectedSemester, setSelectedSemester] = useState<1 | 2>(
+    defaultSemester as 1 | 2,
+  );
 
   // Mapear dados da API para formato do Grid
   const quinzenas: Quinzena[] = Array.isArray(apiQuinzenas)
-    ? (apiQuinzenas as unknown as ApiQuinzena[]).map(mapApiQuinzenaToGridQuinzena)
+    ? (apiQuinzenas as unknown as ApiQuinzena[]).map(
+        mapApiQuinzenaToGridQuinzena,
+      )
     : [];
 
   // Filtrar quinzenas por semestre selecionado
-  const quinzenasFiltradas = quinzenas.filter(q => q.semester === selectedSemester);
+  const quinzenasFiltradas = quinzenas.filter(
+    (q) => q.semester === selectedSemester,
+  );
 
   return (
     <div className="container mx-auto max-w-7xl px-4 py-8">

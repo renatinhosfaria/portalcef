@@ -46,7 +46,7 @@ export class ShopProductsService {
     @Optional()
     @Inject(StorageService)
     private readonly storageService?: StorageService,
-  ) { }
+  ) {}
 
   /**
    * GET /shop/catalog/:schoolId/:unitId

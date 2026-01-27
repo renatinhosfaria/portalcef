@@ -97,7 +97,7 @@ function StatusBadge({ status }: { status: PlanoAulaStatus }) {
         "inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border",
         colors.bg,
         colors.text,
-        colors.border
+        colors.border,
       )}
     >
       {label}
@@ -132,11 +132,19 @@ export function PlanosContent({
   const [status, setStatus] = useState(initialStatus);
   const [segmento, setSegmento] = useState(initialSegmento || "todos");
   const [professora, setProfessora] = useState(initialProfessora || "");
-  const [professoraInput, setProfessoraInput] = useState(initialProfessora || "");
+  const [professoraInput, setProfessoraInput] = useState(
+    initialProfessora || "",
+  );
   const [page, setPage] = useState(initialPage);
 
   // Hook de listagem
-  const { planos = [], pagination, isLoading, error, fetchPlanos } = useGestaoPlanos();
+  const {
+    planos = [],
+    pagination,
+    isLoading,
+    error,
+    fetchPlanos,
+  } = useGestaoPlanos();
 
   /**
    * Busca planos com os filtros atuais
@@ -204,7 +212,7 @@ export function PlanosContent({
       const queryString = params.toString();
       router.push(`/gestao/planos${queryString ? `?${queryString}` : ""}`);
     },
-    [router, searchParams]
+    [router, searchParams],
   );
 
   /**
@@ -247,7 +255,8 @@ export function PlanosContent({
     STATUS_FILTER_OPTIONS.find((opt) => opt.value === status)?.label ||
     "Planos de Aula";
 
-  const temFiltrosAtivos = status !== "todos" || segmento !== "" || professora !== "";
+  const temFiltrosAtivos =
+    status !== "todos" || segmento !== "" || professora !== "";
 
   return (
     <div className="container mx-auto max-w-7xl px-4 py-8">
@@ -317,13 +326,17 @@ export function PlanosContent({
 
             {/* Professora */}
             <div className="flex-1 min-w-[200px]">
-              <label className="text-sm font-medium mb-1 block">Professora</label>
+              <label className="text-sm font-medium mb-1 block">
+                Professora
+              </label>
               <div className="flex gap-2">
                 <Input
                   placeholder="Buscar por nome..."
                   value={professoraInput}
                   onChange={(e) => setProfessoraInput(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleProfessoraSearch()}
+                  onKeyDown={(e) =>
+                    e.key === "Enter" && handleProfessoraSearch()
+                  }
                 />
                 <Button
                   variant="secondary"
@@ -449,7 +462,9 @@ export function PlanosContent({
                     </TableCell>
                     <TableCell>
                       {plano.submittedAt
-                        ? new Date(plano.submittedAt).toLocaleDateString("pt-BR")
+                        ? new Date(plano.submittedAt).toLocaleDateString(
+                            "pt-BR",
+                          )
                         : "-"}
                     </TableCell>
                     <TableCell className="text-center">

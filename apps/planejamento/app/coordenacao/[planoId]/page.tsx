@@ -8,7 +8,13 @@ import {
   getQuinzenaById,
 } from "@essencia/shared/config/quinzenas";
 import { serverApi } from "@essencia/shared/fetchers/server";
-import { ArrowLeft, Calendar, CheckCircle2, FileText, User } from "lucide-react";
+import {
+  ArrowLeft,
+  Calendar,
+  CheckCircle2,
+  FileText,
+  User,
+} from "lucide-react";
 import { cookies } from "next/headers";
 import Link from "next/link";
 
@@ -213,7 +219,9 @@ export default async function CoordenacaoRevisaoPage({ params }: PageProps) {
                 <p className="font-medium">
                   {quinzenaConfig?.label || plano.quinzenaId}
                 </p>
-                <p className="text-sm text-muted-foreground">{periodoDisplay}</p>
+                <p className="text-sm text-muted-foreground">
+                  {periodoDisplay}
+                </p>
               </div>
 
               {/* Data de Submissao */}

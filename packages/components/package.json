@@ -10,7 +10,8 @@
     "./user-form": "./src/user-form.tsx",
     "./dashboard-stats": "./src/dashboard-stats.tsx",
     "./users-page-content": "./src/users-page-content.tsx",
-    "./shell/shell": "./src/shell/shell.tsx"
+    "./shell/shell": "./src/shell/shell.tsx",
+    "./tarefas": "./src/tarefas/index.ts"
   },
   "scripts": {
     "lint": "eslint src/",
@@ -24,6 +25,7 @@
     "@essencia/lib": "workspace:*",
     "@essencia/shared": "workspace:*",
     "@essencia/ui": "workspace:*",
+    "date-fns": "^3.0.0",
     "framer-motion": "^12.23.26",
     "lucide-react": "^0.469.0",
     "next": "^15.1.0"

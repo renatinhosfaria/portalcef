@@ -10,7 +10,8 @@ describe("DocumentoPreviewModal", () => {
     planoId: "plano-1",
     tipo: "ARQUIVO" as const,
     fileName: "relatorio.docx",
-    mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    mimeType:
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     url: "https://cdn.example.com/relatorio.docx",
     previewUrl: "https://cdn.example.com/relatorio.pdf",
     previewStatus: "PRONTO" as const,
@@ -85,8 +86,12 @@ describe("DocumentoPreviewModal", () => {
       />,
     );
 
-    expect(screen.getByText(/erro ao converter documento/i)).toBeInTheDocument();
-    expect(screen.getByText(/falha na conversão do arquivo/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/erro ao converter documento/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/falha na conversão do arquivo/i),
+    ).toBeInTheDocument();
   });
 
   it("botão Baixar PDF está habilitado quando status é PRONTO", () => {
@@ -130,7 +135,9 @@ describe("DocumentoPreviewModal", () => {
       />,
     );
 
-    const botaoOriginal = screen.getByRole("button", { name: /baixar original/i });
+    const botaoOriginal = screen.getByRole("button", {
+      name: /baixar original/i,
+    });
     expect(botaoOriginal).not.toBeDisabled();
   });
 
@@ -161,7 +168,9 @@ describe("DocumentoPreviewModal", () => {
       />,
     );
 
-    const botaoComentarios = screen.getByRole("button", { name: /abrir comentários/i });
+    const botaoComentarios = screen.getByRole("button", {
+      name: /abrir comentários/i,
+    });
     expect(botaoComentarios).toBeInTheDocument();
   });
 
@@ -187,7 +196,9 @@ describe("DocumentoPreviewModal", () => {
       />,
     );
 
-    const botaoComentarios = screen.getByRole("button", { name: /abrir comentários/i });
+    const botaoComentarios = screen.getByRole("button", {
+      name: /abrir comentários/i,
+    });
     await user.click(botaoComentarios);
 
     expect(screen.getByRole("complementary")).toBeInTheDocument();
@@ -207,7 +218,9 @@ describe("DocumentoPreviewModal", () => {
     );
 
     // Abrir painel
-    const botaoComentarios = screen.getByRole("button", { name: /abrir comentários/i });
+    const botaoComentarios = screen.getByRole("button", {
+      name: /abrir comentários/i,
+    });
     await user.click(botaoComentarios);
 
     // Digitar comentário
@@ -215,7 +228,9 @@ describe("DocumentoPreviewModal", () => {
     await user.type(textarea, "Novo comentário");
 
     // Enviar
-    const botaoEnviar = screen.getByRole("button", { name: /adicionar comentário/i });
+    const botaoEnviar = screen.getByRole("button", {
+      name: /adicionar comentário/i,
+    });
     await user.click(botaoEnviar);
 
     expect(onAddComentario).toHaveBeenCalledWith("doc-1", "Novo comentário");

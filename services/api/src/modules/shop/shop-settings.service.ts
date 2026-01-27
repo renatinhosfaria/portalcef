@@ -46,7 +46,7 @@ export class ShopSettingsService {
         } catch (error) {
           this.logger.error(
             `[DEBUG] Insert failed: ${error}`,
-            (error as Error).stack
+            (error as Error).stack,
           );
           // Tentar buscar novamente em caso de race condition
           settings = await db.query.shopSettings.findFirst({
@@ -58,7 +58,10 @@ export class ShopSettingsService {
 
       return settings;
     } catch (e) {
-      this.logger.error(`[CRITICAL] Error in getSettings: ${e}`, (e as Error).stack);
+      this.logger.error(
+        `[CRITICAL] Error in getSettings: ${e}`,
+        (e as Error).stack,
+      );
       throw e;
     }
   }

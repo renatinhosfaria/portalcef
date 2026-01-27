@@ -1,6 +1,12 @@
 // Plano Aula Module - Workflow de aprovação de planos de aula
 export { PlanoAulaModule } from "./plano-aula.module";
-export { PlanoAulaService, type UserContext, type PlanoComDocumentos, type DashboardItem, type QuinzenaDeadline } from "./plano-aula.service";
+export {
+  PlanoAulaService,
+  type UserContext,
+  type PlanoComDocumentos,
+  type DashboardItem,
+  type QuinzenaDeadline,
+} from "./plano-aula.service";
 export {
   // DTOs
   type CreatePlanoDto,

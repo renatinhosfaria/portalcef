@@ -169,7 +169,9 @@ describe("PlanoAulaHistoricoService", () => {
         },
       ];
 
-      mockDb.query.planoAulaHistorico.findMany.mockResolvedValue(mockHistoricoEntries);
+      mockDb.query.planoAulaHistorico.findMany.mockResolvedValue(
+        mockHistoricoEntries,
+      );
 
       const historico = await service.buscarPorPlano("plano-uuid-1");
 
@@ -200,7 +202,9 @@ describe("PlanoAulaHistoricoService", () => {
     it("deve retornar array vazio para plano sem histórico", async () => {
       mockDb.query.planoAulaHistorico.findMany.mockResolvedValue([]);
 
-      const historico = await service.buscarPorPlano("00000000-0000-0000-0000-999999999999");
+      const historico = await service.buscarPorPlano(
+        "00000000-0000-0000-0000-999999999999",
+      );
 
       expect(historico).toBeDefined();
       expect(Array.isArray(historico)).toBe(true);
