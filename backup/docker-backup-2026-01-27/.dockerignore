@@ -1,0 +1,122 @@
+# =============================================================================
+# Docker Build Context Exclusions
+# Portal Essencia Feliz
+# =============================================================================
+
+# Dependencies (installed in container)
+node_modules
+.pnpm-store
+
+# Build outputs
+dist
+.next
+.turbo
+*.tsbuildinfo
+
+# Environment files
+.env
+.env.local
+.env.*.local
+.env.docker
+
+# Git (reduces build context significantly)
+.git
+.gitignore
+.gitattributes
+
+# IDE and local configs
+.vscode
+.idea
+.claude
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Testing
+coverage
+*.coverage
+.nyc_output
+
+# Docker
+.docker
+docker-compose.override.yml
+
+# Cache e arquivos temporários
+.cache
+*.cache
+.eslintcache
+tsconfig.tsbuildinfo
+*.tmp
+*.temp
+*~
+*.swp
+*.swo
+
+# Documentation (not needed in container)
+BMAD/
+docs/
+README.md
+*.md
+
+# Test files (excluded for smaller builds)
+**/*.test.ts
+**/*.spec.ts
+**/*.test.tsx
+**/*.spec.tsx
+**/__tests__/
+**/__mocks__/
+vitest.config.ts
+vitest.setup.ts
+
+# Misc
+*.pem
+*.key
+LICENSE
+CHANGELOG.md
+CONTRIBUTING.md
+
+# E2E tests (not needed in production image)
+e2e/
+playwright-report/
+test-results/
+
+# Scripts and CI/CD (not needed in container)
+scripts/
+.github/
+.gitlab-ci.yml
+
+# Nginx and deployment configs (mounted as volumes)
+nginx.conf
+nginx-temp.conf
+docker-compose*.yml
+Dockerfile*
+
+# Ferramentas de desenvolvimento
+.prettierrc*
+.eslintrc*
+.editorconfig
+.npmrc
+.nvmrc
+renovate.json
+.husky/
+.commitlintrc*
+
+# Storybook
+.storybook/
+storybook-static/
+
+# Backups e arquivos gerados
+*.bak
+*.backup
+*.orig
+dump.rdb
+
+# Agent e skills (não necessários em produção)
+.agent/
