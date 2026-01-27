@@ -1,7 +1,7 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { eq, and, asc, getDb } from '@essencia/db';
 import { planoAulaPeriodo, type PlanoAulaPeriodo, turmas, educationStages } from '@essencia/db/schema';
-import { CriarPeriodoDto } from './dto/plano-aula-periodo.dto';
+import { CriarPeriodoDto, EditarPeriodoDto } from './dto/plano-aula-periodo.dto';
 
 @Injectable()
 export class PlanoAulaPeriodoService {
@@ -130,15 +130,133 @@ export class PlanoAulaPeriodoService {
     return periodo;
   }
 
+  async editarPeriodo(id: string, dto: EditarPeriodoDto) {
+    // Buscar período existente
+    const [periodoExistente] = await this.db
+      .select()
+      .from(planoAulaPeriodo)
+      .where(eq(planoAulaPeriodo.id, id));
+
+    if (!periodoExistente) {
+      throw new BadRequestException('Período não encontrado');
+    }
+
+    // Validar datas se foram fornecidas
+    if (dto.dataInicio || dto.dataFim) {
+      const dataInicio = dto.dataInicio
+        ? new Date(dto.dataInicio)
+        : new Date(periodoExistente.dataInicio);
+
+      const dataFim = dto.dataFim
+        ? new Date(dto.dataFim)
+        : new Date(periodoExistente.dataFim);
+
+      if (isNaN(dataInicio.getTime())) {
+        throw new BadRequestException('Data de início inválida');
+      }
+      if (isNaN(dataFim.getTime())) {
+        throw new BadRequestException('Data de fim inválida');
+      }
+
+      if (dataInicio >= dataFim) {
+        throw new BadRequestException(
+          'Data de início deve ser anterior à data de fim'
+        );
+      }
+
+      // Verificar sobreposição (exceto com o próprio período)
+      const sobrepostos = await this.verificarSobreposicao(
+        periodoExistente.unidadeId,
+        periodoExistente.etapa,
+        dataInicio,
+        dataFim,
+        id // Excluir o próprio período da verificação
+      );
+
+      if (sobrepostos.length > 0) {
+        throw new BadRequestException('As datas se sobrepõem a um período existente');
+      }
+    }
+
+    // Validar dataMaximaEntrega se fornecida
+    if (dto.dataMaximaEntrega) {
+      const dataMaximaEntrega = new Date(dto.dataMaximaEntrega);
+      const dataInicio = dto.dataInicio
+        ? new Date(dto.dataInicio)
+        : new Date(periodoExistente.dataInicio);
+
+      if (isNaN(dataMaximaEntrega.getTime())) {
+        throw new BadRequestException('Data máxima de entrega inválida');
+      }
+
+      if (dataMaximaEntrega >= dataInicio) {
+        throw new BadRequestException(
+          'Data máxima de entrega deve ser anterior ao início do período'
+        );
+      }
+    }
+
+    // Atualizar período
+    const [periodoAtualizado] = await this.db
+      .update(planoAulaPeriodo)
+      .set({
+        ...dto,
+        atualizadoEm: new Date(),
+      })
+      .where(eq(planoAulaPeriodo.id, id))
+      .returning();
+
+    // Se as datas mudaram, renumerar
+    if (dto.dataInicio) {
+      await this.renumerarPeriodosSeNecessario(
+        periodoExistente.unidadeId,
+        periodoExistente.etapa
+      );
+    }
+
+    return periodoAtualizado;
+  }
+
+  async excluirPeriodo(id: string) {
+    // Buscar período
+    const [periodo] = await this.db
+      .select()
+      .from(planoAulaPeriodo)
+      .where(eq(planoAulaPeriodo.id, id));
+
+    if (!periodo) {
+      throw new BadRequestException('Período não encontrado');
+    }
+
+    // TODO: Verificar se há planos de aula vinculados
+    // Quando o schema plano_aula for atualizado com periodoId
+
+    // Excluir período
+    await this.db
+      .delete(planoAulaPeriodo)
+      .where(eq(planoAulaPeriodo.id, id));
+
+    // Renumerar períodos restantes
+    await this.renumerarPeriodosSeNecessario(periodo.unidadeId, periodo.etapa);
+
+    return { success: true, message: 'Período excluído com sucesso' };
+  }
+
   private async verificarSobreposicao(
     unidadeId: string,
     etapa: string,
     dataInicio: Date,
-    dataFim: Date
+    dataFim: Date,
+    idExcluir?: string
   ) {
     const periodos = await this.buscarPeriodosPorEtapa(unidadeId, etapa);
 
     return periodos.filter((periodo: PlanoAulaPeriodo) => {
+      // Excluir o próprio período da verificação
+      if (idExcluir && periodo.id === idExcluir) {
+        return false;
+      }
+
       const inicio = new Date(periodo.dataInicio);
       const fim = new Date(periodo.dataFim);
 

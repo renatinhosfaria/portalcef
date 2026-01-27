@@ -2,6 +2,8 @@ import {
   Controller,
   Post,
   Get,
+  Put,
+  Delete,
   Body,
   Param,
   UseGuards,
@@ -9,7 +11,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PlanoAulaPeriodoService } from './plano-aula-periodo.service';
-import { CriarPeriodoDto } from './dto/plano-aula-periodo.dto';
+import { CriarPeriodoDto, EditarPeriodoDto } from './dto/plano-aula-periodo.dto';
 import { AuthGuard } from '../../common/guards/auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { TenantGuard } from '../../common/guards/tenant.guard';
@@ -90,6 +92,67 @@ export class PlanoAulaPeriodoController {
     }
 
     return this.service.criarPeriodo(session.unitId, session.userId, dto);
+  }
+
+  @Put(':id')
+  @Roles(
+    'diretora_geral',
+    'gerente_unidade',
+    'coordenadora_geral',
+    'coordenadora_infantil',
+    'coordenadora_fundamental_i',
+    'coordenadora_fundamental_ii',
+    'coordenadora_bercario',
+    'coordenadora_medio'
+  )
+  async editarPeriodo(
+    @CurrentUser() session: { userId: string; role: string; schoolId: string | null; unitId: string | null; stageId: string | null },
+    @Param('id') id: string,
+    @Body() dto: EditarPeriodoDto
+  ) {
+    if (!session.unitId) {
+      throw new BadRequestException('Sessão inválida: unitId ausente');
+    }
+
+    // Buscar período e validar tenant (Task 12 corrigiu buscarPorId para receber unitId)
+    const periodo = await this.service.buscarPorId(id, session.unitId);
+
+    // Validar permissão por etapa (mesma lógica do POST)
+    if (!this.podeEditarEtapa(session.role, periodo.etapa)) {
+      throw new ForbiddenException('Sem permissão para editar períodos desta etapa');
+    }
+
+    return this.service.editarPeriodo(id, dto);
+  }
+
+  @Delete(':id')
+  @Roles(
+    'diretora_geral',
+    'gerente_unidade',
+    'coordenadora_geral',
+    'coordenadora_infantil',
+    'coordenadora_fundamental_i',
+    'coordenadora_fundamental_ii',
+    'coordenadora_bercario',
+    'coordenadora_medio'
+  )
+  async excluirPeriodo(
+    @CurrentUser() session: { userId: string; role: string; schoolId: string | null; unitId: string | null; stageId: string | null },
+    @Param('id') id: string
+  ) {
+    if (!session.unitId) {
+      throw new BadRequestException('Sessão inválida: unitId ausente');
+    }
+
+    // Buscar período e validar tenant
+    const periodo = await this.service.buscarPorId(id, session.unitId);
+
+    // Validar permissão por etapa
+    if (!this.podeEditarEtapa(session.role, periodo.etapa)) {
+      throw new ForbiddenException('Sem permissão para excluir períodos desta etapa');
+    }
+
+    return this.service.excluirPeriodo(id);
   }
 
   private podeEditarEtapa(role: string, etapa: string): boolean {
