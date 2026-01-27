@@ -29,7 +29,10 @@ export class PlanoAulaPeriodoController {
     'coordenadora_bercario',
     'coordenadora_medio'
   )
-  async criarPeriodo(@CurrentUser() session: any, @Body() dto: CriarPeriodoDto) {
+  async criarPeriodo(
+    @CurrentUser() session: { role: string; unidadeId: string; userId: string },
+    @Body() dto: CriarPeriodoDto
+  ) {
     // Validar permissão por etapa
     if (!this.podeEditarEtapa(session.role, dto.etapa)) {
       throw new ForbiddenException('Sem permissão para criar períodos desta etapa');
