@@ -133,4 +133,30 @@ describe('PlanoAulaPeriodoService', () => {
       expect(resultado).toHaveLength(0);
     });
   });
+
+  describe('calcularProximoNumero', () => {
+    it('deve retornar 1 quando não há períodos', async () => {
+      jest.spyOn(service as any, 'buscarPeriodosPorEtapa').mockResolvedValue([]);
+      const numero = await service['calcularProximoNumero']('unidade-id', 'INFANTIL', new Date('2026-03-01'));
+      expect(numero).toBe(1);
+    });
+
+    it('deve retornar próximo número em ordem cronológica', async () => {
+      jest.spyOn(service as any, 'buscarPeriodosPorEtapa').mockResolvedValue([
+        { numero: 1, dataInicio: new Date('2026-03-01') },
+        { numero: 2, dataInicio: new Date('2026-03-15') },
+      ]);
+      const numero = await service['calcularProximoNumero']('unidade-id', 'INFANTIL', new Date('2026-03-30'));
+      expect(numero).toBe(3);
+    });
+
+    it('deve inserir no meio quando data está entre períodos existentes', async () => {
+      jest.spyOn(service as any, 'buscarPeriodosPorEtapa').mockResolvedValue([
+        { numero: 1, dataInicio: new Date('2026-03-01') },
+        { numero: 2, dataInicio: new Date('2026-03-20') },
+      ]);
+      const numero = await service['calcularProximoNumero']('unidade-id', 'INFANTIL', new Date('2026-03-10'));
+      expect(numero).toBe(2);
+    });
+  });
 });

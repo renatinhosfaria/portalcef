@@ -59,8 +59,34 @@ export class PlanoAulaPeriodoService {
   private async buscarPeriodosPorEtapa(
     unidadeId: string,
     etapa: string
-  ): Promise<Array<{ id: string; dataInicio: Date; dataFim: Date }>> {
+  ): Promise<Array<{ id: string; numero: number; dataInicio: Date; dataFim: Date }>> {
     // TODO: Implementar busca real no banco
     return [];
+  }
+
+  private async calcularProximoNumero(
+    unidadeId: string,
+    etapa: string,
+    dataInicio: Date
+  ): Promise<number> {
+    const periodos = await this.buscarPeriodosPorEtapa(unidadeId, etapa);
+
+    if (periodos.length === 0) {
+      return 1;
+    }
+
+    const periodosOrdenados = periodos.sort(
+      (a, b) => new Date(a.dataInicio).getTime() - new Date(b.dataInicio).getTime()
+    );
+
+    let posicao = 1;
+    for (const periodo of periodosOrdenados) {
+      if (dataInicio < new Date(periodo.dataInicio)) {
+        break;
+      }
+      posicao++;
+    }
+
+    return posicao;
   }
 }
