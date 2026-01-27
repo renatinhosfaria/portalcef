@@ -16,7 +16,11 @@
       "Bash(pnpm test:*)",
       "Bash(test:*)",
       "Bash(pnpm --filter=@essencia/api test:*)",
-      "Bash(pnpm --filter=@essencia/api lint:*)"
+      "Bash(pnpm --filter=@essencia/api lint:*)",
+      "Bash(pnpm lint:*)",
+      "Bash(pnpm typecheck:*)",
+      "Bash(pnpm run lint)",
+      "Bash(pnpm run typecheck:*)"
     ]
   }
 }

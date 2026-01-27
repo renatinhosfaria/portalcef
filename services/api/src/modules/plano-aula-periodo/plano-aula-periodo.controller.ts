@@ -4,6 +4,7 @@ import {
   Body,
   UseGuards,
   ForbiddenException,
+  BadRequestException,
 } from '@nestjs/common';
 import { PlanoAulaPeriodoService } from './plano-aula-periodo.service';
 import { CriarPeriodoDto } from './dto/plano-aula-periodo.dto';
@@ -30,7 +31,7 @@ export class PlanoAulaPeriodoController {
     'coordenadora_medio'
   )
   async criarPeriodo(
-    @CurrentUser() session: { role: string; unidadeId: string; userId: string },
+    @CurrentUser() session: { userId: string; role: string; schoolId: string | null; unitId: string | null; stageId: string | null },
     @Body() dto: CriarPeriodoDto
   ) {
     // Validar permissão por etapa
@@ -38,7 +39,11 @@ export class PlanoAulaPeriodoController {
       throw new ForbiddenException('Sem permissão para criar períodos desta etapa');
     }
 
-    return this.service.criarPeriodo(session.unidadeId, session.userId, dto);
+    if (!session.unitId) {
+      throw new BadRequestException('Sessão inválida: unitId ausente');
+    }
+
+    return this.service.criarPeriodo(session.unitId, session.userId, dto);
   }
 
   private podeEditarEtapa(role: string, etapa: string): boolean {
