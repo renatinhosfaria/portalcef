@@ -12,15 +12,26 @@ export class PlanoAulaPeriodoService {
     const dataFim = new Date(dto.dataFim);
     const dataMaximaEntrega = new Date(dto.dataMaximaEntrega);
 
+    // Validar se as datas são válidas (não são NaN)
+    if (isNaN(dataInicio.getTime())) {
+      throw new BadRequestException('Data de início inválida');
+    }
+    if (isNaN(dataFim.getTime())) {
+      throw new BadRequestException('Data de fim inválida');
+    }
+    if (isNaN(dataMaximaEntrega.getTime())) {
+      throw new BadRequestException('Data máxima de entrega inválida');
+    }
+
     if (dataInicio >= dataFim) {
       throw new BadRequestException(
         'Data de início deve ser anterior à data de fim'
       );
     }
 
-    if (dataMaximaEntrega < dataInicio) {
+    if (dataMaximaEntrega < dataInicio || dataMaximaEntrega > dataFim) {
       throw new BadRequestException(
-        'Data máxima de entrega deve ser posterior à data de início'
+        'Data máxima de entrega deve estar entre início e fim do período'
       );
     }
 
