@@ -1,29 +1,44 @@
-
 # =============================================================================
-# Docker Compose for PRODUCTION
-# Portal Essencia Feliz - Production Deployment with Nginx
+# Docker Compose for PRODUCTION - OPTIMIZED
+# Portal Essencia Feliz
 # =============================================================================
-# IMPORTANT: Enable BuildKit for optimal cache performance:
-#   export DOCKER_BUILDKIT=1
-#   export COMPOSE_DOCKER_CLI_BUILD=1
+# BuildKit habilitado permanentemente em /etc/docker/daemon.json
 #
-# Setup:   Ensure .env.docker exists with production secrets
-# Start:   docker compose -f docker-compose.prod.yml up -d
-# Logs:    docker compose -f docker-compose.prod.yml logs -f
+# Build:   docker compose -f docker-compose.prod.yml build
+# Deploy:  docker compose -f docker-compose.prod.yml up -d
+# Logs:    docker compose -f docker-compose.prod.yml logs -f [service]
 # Stop:    docker compose -f docker-compose.prod.yml down
-#
-# Build (incremental - uses cache):
-#   docker compose -f docker-compose.prod.yml build
-#
-# Build (complete - ignores cache):
-#   docker compose -f docker-compose.prod.yml build --no-cache
-#
-# See docs/DOCKER_CACHE.md for cache optimization details
 # =============================================================================
+
+# ===========================================================================
+# Configuração Compartilhada (DRY)
+# ===========================================================================
+x-build-config: &build-config
+  context: .
+  dockerfile: Dockerfile.prod
+  args:
+    BUILDKIT_INLINE_CACHE: 1
+  cache_from:
+    - essencia-prod:latest
+
+x-common-config: &common-config
+  restart: unless-stopped
+  networks:
+    - essencia-prod
+  logging:
+    driver: "json-file"
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+x-nextjs-env: &nextjs-env
+  NODE_ENV: production
+  API_INTERNAL_URL: http://api:3002
+  NEXT_PUBLIC_API_URL: https://www.portalcef.com.br/api
 
 services:
   # ===========================================================================
-  # Nginx - Reverse Proxy with HTTPS
+  # Nginx - Reverse Proxy (INALTERADO)
   # ===========================================================================
   nginx:
     image: nginx:alpine
@@ -46,7 +61,6 @@ services:
         max-size: "10m"
         max-file: "3"
 
-  # Certbot for Let's Encrypt SSL certificates
   certbot:
     image: certbot/certbot
     container_name: essencia-certbot
@@ -58,7 +72,7 @@ services:
       - essencia-prod
 
   # ===========================================================================
-  # Infrastructure Services
+  # Infraestrutura (INALTERADOS)
   # ===========================================================================
   postgres:
     image: postgres:16-alpine
@@ -140,20 +154,14 @@ services:
       exit 0;
       "
 
-  # ===========================================================================
-  # Carbone - Document Conversion Service
-  # ===========================================================================
   carbone:
     image: carbone/carbone-ee:latest
     container_name: essencia-carbone
     environment:
-      # Carbone configuração
       CARBONE_WORKERS: 4
     networks:
       - essencia-prod
     restart: unless-stopped
-    # Healthcheck desabilitado temporariamente - container não tem curl/wget
-    # TODO: Adicionar healthcheck customizado ou usar exec para verificar porta
     logging:
       driver: "json-file"
       options:
@@ -161,228 +169,122 @@ services:
         max-file: "3"
 
   # ===========================================================================
-  # Frontend Apps - Next.js
+  # Frontend Apps - Next.js (CONSOLIDADOS)
   # ===========================================================================
   home:
-    build:
-      context: .
-      dockerfile: Dockerfile.prod
-      target: production
+    <<: *common-config
+    build: *build-config
     container_name: essencia-home
-    command: pnpm --filter home start
+    command: pnpm --filter=home start
     environment:
-      NODE_ENV: production
+      <<: *nextjs-env
       PORT: 3000
-      API_INTERNAL_URL: http://api:3002
-      NEXT_PUBLIC_API_URL: https://www.portalcef.com.br/api
-    networks:
-      - essencia-prod
-    restart: unless-stopped
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
 
   login:
-    build:
-      context: .
-      dockerfile: Dockerfile.prod
-      target: production
+    <<: *common-config
+    build: *build-config
     container_name: essencia-login
-    command: pnpm --filter login start
+    command: pnpm --filter=login start
     environment:
-      NODE_ENV: production
+      <<: *nextjs-env
       PORT: 3003
-      API_INTERNAL_URL: http://api:3002
-      NEXT_PUBLIC_API_URL: https://www.portalcef.com.br/api
-    networks:
-      - essencia-prod
-    restart: unless-stopped
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
 
   usuarios:
-    build:
-      context: .
-      dockerfile: Dockerfile.prod
-      target: production
+    <<: *common-config
+    build: *build-config
     container_name: essencia-usuarios
-    command: pnpm --filter usuarios start
+    command: pnpm --filter=usuarios start
     environment:
-      NODE_ENV: production
+      <<: *nextjs-env
       PORT: 3004
-      API_INTERNAL_URL: http://api:3002
-      NEXT_PUBLIC_API_URL: https://www.portalcef.com.br/api
-    networks:
-      - essencia-prod
-    restart: unless-stopped
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
 
   escolas:
-    build:
-      context: .
-      dockerfile: Dockerfile.prod
-      target: production
+    <<: *common-config
+    build: *build-config
     container_name: essencia-escolas
-    command: pnpm --filter escolas start
+    command: pnpm --filter=escolas start
     environment:
-      NODE_ENV: production
+      <<: *nextjs-env
       PORT: 3005
-      API_INTERNAL_URL: http://api:3002
-      NEXT_PUBLIC_API_URL: https://www.portalcef.com.br/api
-    networks:
-      - essencia-prod
-    restart: unless-stopped
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
 
   turmas:
-    build:
-      context: .
-      dockerfile: Dockerfile.prod
-      target: production
+    <<: *common-config
+    build: *build-config
     container_name: essencia-turmas
-    command: pnpm --filter @essencia/turmas start
+    command: pnpm --filter=turmas start
     environment:
-      NODE_ENV: production
+      <<: *nextjs-env
       PORT: 3006
-      API_INTERNAL_URL: http://api:3002
-      NEXT_PUBLIC_API_URL: https://www.portalcef.com.br/api
-    networks:
-      - essencia-prod
-    restart: unless-stopped
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
 
   planejamento:
-    build:
-      context: .
-      dockerfile: Dockerfile.prod
-      target: production
+    <<: *common-config
+    build: *build-config
     container_name: essencia-planejamento
-    command: pnpm --filter planejamento start
+    command: pnpm --filter=planejamento start
     environment:
-      NODE_ENV: production
+      <<: *nextjs-env
       PORT: 3007
-      API_INTERNAL_URL: http://api:3002
-      NEXT_PUBLIC_API_URL: https://www.portalcef.com.br/api
-    networks:
-      - essencia-prod
-    restart: unless-stopped
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-  loja:
-    build:
-      context: .
-      dockerfile: Dockerfile.prod
-      target: production
-    container_name: essencia-loja
-    command: pnpm --filter @essencia/loja start
-    environment:
-      NODE_ENV: production
-      PORT: 3010
-      API_INTERNAL_URL: http://api:3002
-      NEXT_PUBLIC_API_URL: https://loja.portalcef.com.br/api
-    networks:
-      - essencia-prod
-    restart: unless-stopped
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-  loja-admin:
-    build:
-      context: .
-      dockerfile: Dockerfile.prod
-      target: production
-    container_name: essencia-loja-admin
-    command: pnpm --filter @essencia/loja-admin start
-    environment:
-      NODE_ENV: production
-      PORT: 3011
-      API_INTERNAL_URL: http://api:3002
-      NEXT_PUBLIC_API_URL: https://www.portalcef.com.br/api
-    networks:
-      - essencia-prod
-    restart: unless-stopped
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
 
   calendario:
-    build:
-      context: .
-      dockerfile: Dockerfile.prod
-      target: production
+    <<: *common-config
+    build: *build-config
     container_name: essencia-calendario
-    command: pnpm --filter @essencia/calendario start
+    command: pnpm --filter=calendario start
     environment:
-      NODE_ENV: production
+      <<: *nextjs-env
       PORT: 3008
-      API_INTERNAL_URL: http://api:3002
-      NEXT_PUBLIC_API_URL: https://www.portalcef.com.br/api
-    networks:
-      - essencia-prod
-    restart: unless-stopped
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+
+  loja:
+    <<: *common-config
+    build: *build-config
+    container_name: essencia-loja
+    command: pnpm --filter=@essencia/loja start
+    environment:
+      <<: *nextjs-env
+      PORT: 3010
+      NEXT_PUBLIC_API_URL: https://loja.portalcef.com.br/api
+
+  loja-admin:
+    <<: *common-config
+    build: *build-config
+    container_name: essencia-loja-admin
+    command: pnpm --filter=@essencia/loja-admin start
+    environment:
+      <<: *nextjs-env
+      PORT: 3011
+
+  tarefas:
+    <<: *common-config
+    build: *build-config
+    container_name: essencia-tarefas
+    command: pnpm --filter=tarefas start
+    environment:
+      <<: *nextjs-env
+      PORT: 3009
 
   # ===========================================================================
-  # API - NestJS Backend
+  # API - NestJS (CONSOLIDADO)
   # ===========================================================================
   api:
-    build:
-      context: .
-      dockerfile: Dockerfile.prod
-      target: production
+    <<: *common-config
+    build: *build-config
     container_name: essencia-api
-    command: pnpm --filter @essencia/api start
+    command: pnpm --filter @essencia/api start:prod
     env_file:
       - .env.docker
     environment:
       NODE_ENV: production
-      # Database URL is loaded from .env.docker (already URL-encoded)
-      # Redis
       REDIS_URL: redis://redis:6379
-      # MinIO
       MINIO_ENDPOINT: http://minio:9000
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
       MINIO_PUBLIC_ENDPOINT: https://www.portalcef.com.br/storage
       MINIO_BUCKET: ${MINIO_BUCKET}
-      # API Config
       API_PORT: 3002
       API_HOST: 0.0.0.0
-      # Session
       SESSION_SECRET: ${SESSION_SECRET}
       SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-24}
       SESSION_RENEWAL_THRESHOLD: ${SESSION_RENEWAL_THRESHOLD:-0.25}
-      # Cookie
       COOKIE_DOMAIN: ${COOKIE_DOMAIN}
       COOKIE_SECURE: "true"
     depends_on:
@@ -392,9 +294,6 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
-    networks:
-      - essencia-prod
-    restart: unless-stopped
     logging:
       driver: "json-file"
       options:
@@ -408,18 +307,17 @@ services:
           memory: 512M
 
   # ===========================================================================
-  # Worker - Conversao de Documentos
+  # Worker - Conversão de Documentos (CONSOLIDADO)
   # ===========================================================================
   worker:
-    build:
-      context: .
-      dockerfile: Dockerfile.worker
+    <<: *common-config
+    build: *build-config
     container_name: essencia-worker
+    command: node services/worker/dist/index.js
     env_file:
       - .env.docker
     environment:
       NODE_ENV: production
-      # Database URL is loaded from .env.docker (already URL-encoded)
       REDIS_URL: redis://redis:6379
       MINIO_ENDPOINT: http://minio:9000
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
@@ -428,7 +326,6 @@ services:
       MINIO_BUCKET: ${MINIO_BUCKET}
       HEALTH_PORT: 3100
       WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-2}
-      # Carbone API URL
       CARBONE_URL: http://carbone:4000
     depends_on:
       postgres:
@@ -439,9 +336,6 @@ services:
         condition: service_healthy
       carbone:
         condition: service_started
-    networks:
-      - essencia-prod
-    restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3100/health"]
       interval: 30s

@@ -41,10 +41,23 @@ pnpm-debug.log*
 
 # Testing
 coverage
+*.coverage
+.nyc_output
 
 # Docker
 .docker
 docker-compose.override.yml
+
+# Cache e arquivos temporários
+.cache
+*.cache
+.eslintcache
+tsconfig.tsbuildinfo
+*.tmp
+*.temp
+*~
+*.swp
+*.swo
 
 # Documentation (not needed in container)
 BMAD/
@@ -84,3 +97,26 @@ nginx.conf
 nginx-temp.conf
 docker-compose*.yml
 Dockerfile*
+
+# Ferramentas de desenvolvimento
+.prettierrc*
+.eslintrc*
+.editorconfig
+.npmrc
+.nvmrc
+renovate.json
+.husky/
+.commitlintrc*
+
+# Storybook
+.storybook/
+storybook-static/
+
+# Backups e arquivos gerados
+*.bak
+*.backup
+*.orig
+dump.rdb
+
+# Agent e skills (não necessários em produção)
+.agent/
