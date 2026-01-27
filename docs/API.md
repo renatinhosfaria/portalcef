@@ -950,6 +950,357 @@ Quando um documento DOC ou DOCX é enviado via `POST /api/plano-aula/:id/documen
 
 ---
 
+## Plano de Aula - Períodos
+
+Sistema de gerenciamento de períodos de planejamento por etapa educacional.
+
+### Criar Período
+
+**POST** `/api/plano-aula-periodo`
+
+Cria um novo período de planejamento para uma etapa específica.
+
+**Permissões:** Coordenadoras (por etapa) + Gestão (coordenadora_geral, gerente_unidade, diretora_geral)
+
+**Body:**
+
+```json
+{
+  "etapa": "INFANTIL",
+  "descricao": "Tema: Meio Ambiente",
+  "dataInicio": "2026-03-01",
+  "dataFim": "2026-03-15",
+  "dataMaximaEntrega": "2026-02-25"
+}
+```
+
+**Campos:**
+
+| Campo | Tipo | Obrigatório | Descrição |
+|-------|------|-------------|-----------|
+| `etapa` | string | Sim | Etapa educacional (BERCARIO, INFANTIL, FUNDAMENTAL_I, etc.) |
+| `descricao` | string | Não | Descrição opcional do período (ex: tema da quinzena) |
+| `dataInicio` | string (ISO) | Sim | Data de início do período |
+| `dataFim` | string (ISO) | Sim | Data de fim do período |
+| `dataMaximaEntrega` | string (ISO) | Sim | Data máxima para entrega dos planos |
+
+**Validações:**
+
+- `dataInicio` deve ser anterior a `dataFim`
+- `dataMaximaEntrega` deve ser anterior a `dataInicio`
+- Não pode haver sobreposição de períodos para a mesma etapa
+- Coordenadoras de etapa só podem criar períodos para sua etapa específica
+- Gestão pode criar períodos para qualquer etapa
+
+**Resposta 201 Created:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid-periodo",
+    "unitId": "uuid-unidade",
+    "etapa": "INFANTIL",
+    "descricao": "Tema: Meio Ambiente",
+    "dataInicio": "2026-03-01T00:00:00.000Z",
+    "dataFim": "2026-03-15T23:59:59.000Z",
+    "dataMaximaEntrega": "2026-02-25T23:59:59.000Z",
+    "createdAt": "2026-01-27T10:00:00.000Z",
+    "updatedAt": "2026-01-27T10:00:00.000Z"
+  }
+}
+```
+
+**Erros:**
+
+| Código | Mensagem |
+|--------|----------|
+| 400 | Data de início deve ser anterior à data de fim |
+| 400 | Data máxima de entrega deve ser anterior à data de início |
+| 400 | Já existe um período conflitante para esta etapa |
+| 403 | Coordenadora só pode criar períodos para sua etapa |
+
+**Exemplo cURL:**
+
+```bash
+curl -X POST http://localhost:3001/api/plano-aula-periodo \
+  -H "Content-Type: application/json" \
+  -b cookies.txt \
+  -d '{
+    "etapa": "INFANTIL",
+    "descricao": "Tema: Meio Ambiente",
+    "dataInicio": "2026-03-01",
+    "dataFim": "2026-03-15",
+    "dataMaximaEntrega": "2026-02-25"
+  }'
+```
+
+### Listar Períodos
+
+**GET** `/api/plano-aula-periodo`
+
+Lista todos os períodos da unidade do usuário autenticado.
+
+**Permissões:** Todos os usuários autenticados
+
+**Resposta 200 OK:**
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "uuid-periodo-1",
+      "unitId": "uuid-unidade",
+      "etapa": "INFANTIL",
+      "descricao": "Tema: Meio Ambiente",
+      "dataInicio": "2026-03-01T00:00:00.000Z",
+      "dataFim": "2026-03-15T23:59:59.000Z",
+      "dataMaximaEntrega": "2026-02-25T23:59:59.000Z",
+      "createdAt": "2026-01-27T10:00:00.000Z",
+      "updatedAt": "2026-01-27T10:00:00.000Z"
+    },
+    {
+      "id": "uuid-periodo-2",
+      "unitId": "uuid-unidade",
+      "etapa": "FUNDAMENTAL_I",
+      "descricao": "Tema: História do Brasil",
+      "dataInicio": "2026-03-01T00:00:00.000Z",
+      "dataFim": "2026-03-15T23:59:59.000Z",
+      "dataMaximaEntrega": "2026-02-25T23:59:59.000Z",
+      "createdAt": "2026-01-27T11:00:00.000Z",
+      "updatedAt": "2026-01-27T11:00:00.000Z"
+    }
+  ]
+}
+```
+
+**Exemplo cURL:**
+
+```bash
+curl http://localhost:3001/api/plano-aula-periodo \
+  -b cookies.txt
+```
+
+### Buscar Período por ID
+
+**GET** `/api/plano-aula-periodo/:id`
+
+Busca um período específico por ID.
+
+**Permissões:** Todos os usuários autenticados
+
+**Path Parameters:**
+
+| Parâmetro | Tipo | Descrição |
+|-----------|------|-----------|
+| `id` | string (UUID) | ID do período |
+
+**Resposta 200 OK:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid-periodo",
+    "unitId": "uuid-unidade",
+    "etapa": "INFANTIL",
+    "descricao": "Tema: Meio Ambiente",
+    "dataInicio": "2026-03-01T00:00:00.000Z",
+    "dataFim": "2026-03-15T23:59:59.000Z",
+    "dataMaximaEntrega": "2026-02-25T23:59:59.000Z",
+    "createdAt": "2026-01-27T10:00:00.000Z",
+    "updatedAt": "2026-01-27T10:00:00.000Z"
+  }
+}
+```
+
+**Resposta 404 Not Found:**
+
+```json
+{
+  "statusCode": 404,
+  "message": "Período não encontrado"
+}
+```
+
+**Validações:**
+
+- Período deve pertencer à unidade do usuário (tenant isolation)
+
+**Exemplo cURL:**
+
+```bash
+curl http://localhost:3001/api/plano-aula-periodo/uuid-periodo \
+  -b cookies.txt
+```
+
+### Buscar Períodos de uma Turma
+
+**GET** `/api/plano-aula-periodo/turma/:turmaId`
+
+Busca períodos filtrados pela etapa de uma turma específica.
+
+**Permissões:** Professoras + Coordenadoras
+
+**Path Parameters:**
+
+| Parâmetro | Tipo | Descrição |
+|-----------|------|-----------|
+| `turmaId` | string (UUID) | ID da turma |
+
+**Resposta 200 OK:**
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "uuid-periodo",
+      "unitId": "uuid-unidade",
+      "etapa": "INFANTIL",
+      "descricao": "Tema: Meio Ambiente",
+      "dataInicio": "2026-03-01T00:00:00.000Z",
+      "dataFim": "2026-03-15T23:59:59.000Z",
+      "dataMaximaEntrega": "2026-02-25T23:59:59.000Z",
+      "createdAt": "2026-01-27T10:00:00.000Z",
+      "updatedAt": "2026-01-27T10:00:00.000Z"
+    }
+  ]
+}
+```
+
+**Resposta 404 Not Found:**
+
+```json
+{
+  "statusCode": 404,
+  "message": "Turma não encontrada"
+}
+```
+
+**Validações:**
+
+- Turma deve pertencer à unidade do usuário (tenant isolation)
+- Retorna apenas períodos da etapa correspondente à turma
+
+**Exemplo cURL:**
+
+```bash
+curl http://localhost:3001/api/plano-aula-periodo/turma/uuid-turma \
+  -b cookies.txt
+```
+
+### Editar Período
+
+**PUT** `/api/plano-aula-periodo/:id`
+
+Edita um período existente.
+
+**Permissões:** Coordenadoras (por etapa) + Gestão (coordenadora_geral, gerente_unidade, diretora_geral)
+
+**Path Parameters:**
+
+| Parâmetro | Tipo | Descrição |
+|-----------|------|-----------|
+| `id` | string (UUID) | ID do período |
+
+**Body (campos opcionais):**
+
+```json
+{
+  "descricao": "Tema: Meio Ambiente e Sustentabilidade",
+  "dataInicio": "2026-03-01",
+  "dataFim": "2026-03-15",
+  "dataMaximaEntrega": "2026-02-25"
+}
+```
+
+**Validações:**
+
+- Mesmas validações do POST
+- Coordenadoras de etapa só podem editar períodos de sua etapa
+- Proteção contra edição de datas de períodos em andamento ou finalizados
+
+**Resposta 200 OK:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid-periodo",
+    "unitId": "uuid-unidade",
+    "etapa": "INFANTIL",
+    "descricao": "Tema: Meio Ambiente e Sustentabilidade",
+    "dataInicio": "2026-03-01T00:00:00.000Z",
+    "dataFim": "2026-03-15T23:59:59.000Z",
+    "dataMaximaEntrega": "2026-02-25T23:59:59.000Z",
+    "createdAt": "2026-01-27T10:00:00.000Z",
+    "updatedAt": "2026-01-27T15:00:00.000Z"
+  }
+}
+```
+
+**Erros:**
+
+| Código | Mensagem |
+|--------|----------|
+| 404 | Período não encontrado |
+| 403 | Coordenadora só pode editar períodos de sua etapa |
+| 400 | Não é possível editar datas de período em andamento |
+
+**Exemplo cURL:**
+
+```bash
+curl -X PUT http://localhost:3001/api/plano-aula-periodo/uuid-periodo \
+  -H "Content-Type: application/json" \
+  -b cookies.txt \
+  -d '{
+    "descricao": "Tema: Meio Ambiente e Sustentabilidade"
+  }'
+```
+
+### Excluir Período
+
+**DELETE** `/api/plano-aula-periodo/:id`
+
+Exclui um período. Bloqueado se houver planos de aula vinculados.
+
+**Permissões:** Coordenadoras (por etapa) + Gestão (coordenadora_geral, gerente_unidade, diretora_geral)
+
+**Path Parameters:**
+
+| Parâmetro | Tipo | Descrição |
+|-----------|------|-----------|
+| `id` | string (UUID) | ID do período |
+
+**Resposta 204 No Content**
+
+(Sem body)
+
+**Erros:**
+
+| Código | Mensagem |
+|--------|----------|
+| 404 | Período não encontrado |
+| 403 | Coordenadora só pode excluir períodos de sua etapa |
+| 400 | Não é possível excluir período com planos vinculados |
+
+**Validações:**
+
+- Período deve pertencer à unidade do usuário (tenant isolation)
+- Coordenadoras de etapa só podem excluir períodos de sua etapa
+- Bloqueado se existirem planos de aula vinculados ao período
+
+**Exemplo cURL:**
+
+```bash
+curl -X DELETE http://localhost:3001/api/plano-aula-periodo/uuid-periodo \
+  -b cookies.txt
+```
+
+---
+
 ## Referencias
 
 Para mais informacoes sobre o sistema de tarefas e historico:
