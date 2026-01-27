@@ -43,14 +43,26 @@ export class PlanoAulaPeriodoController {
 
   @Get('turma/:turmaId')
   @Roles('professora', 'coordenadora_geral', 'coordenadora_infantil')
-  async buscarPeriodosDaTurma(@Param('turmaId') turmaId: string) {
-    return this.service.buscarPorTurma(turmaId);
+  async buscarPeriodosDaTurma(
+    @CurrentUser() session: { userId: string; role: string; schoolId: string | null; unitId: string | null; stageId: string | null },
+    @Param('turmaId') turmaId: string
+  ) {
+    if (!session.unitId) {
+      throw new BadRequestException('Sessão inválida: unitId ausente');
+    }
+    return this.service.buscarPorTurma(turmaId, session.unitId);
   }
 
   @Get(':id')
   @Roles('diretora_geral', 'gerente_unidade', 'coordenadora_geral', 'coordenadora_infantil', 'professora')
-  async buscarPeriodo(@Param('id') id: string) {
-    return this.service.buscarPorId(id);
+  async buscarPeriodo(
+    @CurrentUser() session: { userId: string; role: string; schoolId: string | null; unitId: string | null; stageId: string | null },
+    @Param('id') id: string
+  ) {
+    if (!session.unitId) {
+      throw new BadRequestException('Sessão inválida: unitId ausente');
+    }
+    return this.service.buscarPorId(id, session.unitId);
   }
 
   @Post()

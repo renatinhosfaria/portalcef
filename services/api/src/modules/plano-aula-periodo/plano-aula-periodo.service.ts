@@ -1,6 +1,6 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { eq, and, asc, getDb } from '@essencia/db';
-import { planoAulaPeriodo, type PlanoAulaPeriodo, turmas } from '@essencia/db/schema';
+import { planoAulaPeriodo, type PlanoAulaPeriodo, turmas, educationStages } from '@essencia/db/schema';
 import { CriarPeriodoDto } from './dto/plano-aula-periodo.dto';
 
 @Injectable()
@@ -20,11 +20,14 @@ export class PlanoAulaPeriodoService {
       );
   }
 
-  async buscarPorId(id: string) {
+  async buscarPorId(id: string, unitId: string) {
     const [periodo] = await this.db
       .select()
       .from(planoAulaPeriodo)
-      .where(eq(planoAulaPeriodo.id, id));
+      .where(and(
+        eq(planoAulaPeriodo.id, id),
+        eq(planoAulaPeriodo.unidadeId, unitId)
+      ));
 
     if (!periodo) {
       throw new BadRequestException('Período não encontrado');
@@ -33,12 +36,20 @@ export class PlanoAulaPeriodoService {
     return periodo;
   }
 
-  async buscarPorTurma(turmaId: string) {
-    // 1. Buscar etapa da turma
+  async buscarPorTurma(turmaId: string, unitId: string) {
+    // 1. Buscar etapa da turma E validar tenant
     const [turma] = await this.db
-      .select()
+      .select({
+        turmaId: turmas.id,
+        stageId: turmas.stageId,
+        etapaCode: educationStages.code,
+      })
       .from(turmas)
-      .where(eq(turmas.id, turmaId));
+      .innerJoin(educationStages, eq(turmas.stageId, educationStages.id))
+      .where(and(
+        eq(turmas.id, turmaId),
+        eq(turmas.unitId, unitId)
+      ));
 
     if (!turma) {
       throw new BadRequestException('Turma não encontrada');
@@ -50,8 +61,8 @@ export class PlanoAulaPeriodoService {
       .from(planoAulaPeriodo)
       .where(
         and(
-          eq(planoAulaPeriodo.unidadeId, turma.unidadeId),
-          eq(planoAulaPeriodo.etapa, turma.etapa)
+          eq(planoAulaPeriodo.unidadeId, unitId),
+          eq(planoAulaPeriodo.etapa, turma.etapaCode)
         )
       )
       .orderBy(asc(planoAulaPeriodo.numero));
