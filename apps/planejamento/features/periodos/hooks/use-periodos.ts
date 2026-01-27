@@ -1,0 +1,131 @@
+// apps/planejamento/features/periodos/hooks/use-periodos.ts
+'use client';
+
+import { api } from '@essencia/shared/fetchers/client';
+import { useEffect, useState, useCallback } from 'react';
+
+export interface Periodo {
+  id: string;
+  unidadeId: string;
+  etapa: string;
+  numero: number;
+  descricao?: string;
+  dataInicio: string;
+  dataFim: string;
+  dataMaximaEntrega: string;
+  planosVinculados?: number;
+  criadoEm: Date;
+  atualizadoEm: Date;
+}
+
+interface UsePeriodosReturn {
+  periodos: Periodo[];
+  isLoading: boolean;
+  error: Error | null;
+  refetch: () => Promise<void>;
+  criarPeriodo: (dto: {
+    etapa: string;
+    descricao?: string;
+    dataInicio: string;
+    dataFim: string;
+    dataMaximaEntrega: string;
+  }) => Promise<Periodo>;
+  editarPeriodo: (
+    id: string,
+    dto: Partial<{
+      descricao: string;
+      dataInicio: string;
+      dataFim: string;
+      dataMaximaEntrega: string;
+    }>,
+  ) => Promise<Periodo>;
+  excluirPeriodo: (id: string) => Promise<void>;
+}
+
+/**
+ * Hook para gerenciar períodos de planejamento
+ */
+export function usePeriodos(): UsePeriodosReturn {
+  const [periodos, setPeriodos] = useState<Periodo[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+
+  const fetchPeriodos = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      const response = await api.get<Periodo[]>('/plano-aula-periodo');
+
+      if (Array.isArray(response)) {
+        setPeriodos(response);
+      } else {
+        setPeriodos([]);
+      }
+    } catch (err) {
+      console.error('Erro ao buscar períodos:', err);
+      setError(
+        err instanceof Error ? err : new Error('Erro ao buscar períodos'),
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchPeriodos();
+  }, [fetchPeriodos]);
+
+  const criarPeriodo = useCallback(
+    async (dto: {
+      etapa: string;
+      descricao?: string;
+      dataInicio: string;
+      dataFim: string;
+      dataMaximaEntrega: string;
+    }) => {
+      const response = await api.post<Periodo>('/plano-aula-periodo', dto);
+      await fetchPeriodos();
+      return response;
+    },
+    [fetchPeriodos],
+  );
+
+  const editarPeriodo = useCallback(
+    async (
+      id: string,
+      dto: Partial<{
+        descricao: string;
+        dataInicio: string;
+        dataFim: string;
+        dataMaximaEntrega: string;
+      }>,
+    ) => {
+      const response = await api.put<Periodo>(
+        `/plano-aula-periodo/${id}`,
+        dto,
+      );
+      await fetchPeriodos();
+      return response;
+    },
+    [fetchPeriodos],
+  );
+
+  const excluirPeriodo = useCallback(
+    async (id: string) => {
+      await api.delete(`/plano-aula-periodo/${id}`);
+      await fetchPeriodos();
+    },
+    [fetchPeriodos],
+  );
+
+  return {
+    periodos,
+    isLoading,
+    error,
+    refetch: fetchPeriodos,
+    criarPeriodo,
+    editarPeriodo,
+    excluirPeriodo,
+  };
+}
