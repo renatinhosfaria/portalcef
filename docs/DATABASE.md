@@ -23,7 +23,14 @@ Core (multi-tenant):
 - `role_groups`, `role_group_mappings`
 - `turmas`, `calendar_events`
 
-Planejamento:
+Planejamento (Novo):
+- `plano_aula_periodo` - Periodos configuraveis por etapa
+- `plano_aula` - Planos de aula com periodos flexiveis
+- `quinzena_documents` - Documentos anexados (DOCX→PDF)
+- `plano_aula_historico` - Rastreamento de mudancas de status
+- `plano_aula_comentarios` - Comentarios de revisao
+
+Planejamento (Legacy):
 - `plannings`, `planning_contents`, `planning_reviews`
 
 Shop (CEF Shop):
@@ -137,7 +144,41 @@ Shop (CEF Shop):
 
 ## Planejamento Pedagogico
 
-### plannings
+### plano_aula_periodo
+
+**Armazena períodos configuráveis de planejamento de aulas por etapa educacional.**
+
+| Coluna | Tipo | Descricao |
+| ------ | ---- | --------- |
+| `id` | uuid | PK |
+| `unidade_id` | uuid | FK -> units.id (NOT NULL) |
+| `etapa` | text | Etapa educacional (BERCARIO, INFANTIL, FUNDAMENTAL_I, FUNDAMENTAL_II, MEDIO) |
+| `numero` | integer | Numero sequencial do periodo na etapa |
+| `descricao` | text | Descricao opcional (ex: tema do periodo) |
+| `data_inicio` | date | Data de inicio do periodo (NOT NULL) |
+| `data_fim` | date | Data de fim do periodo (NOT NULL) |
+| `data_maxima_entrega` | date | Prazo de entrega - deve ser antes do inicio (NOT NULL) |
+| `criado_por` | uuid | FK -> users.id (usuario que criou o periodo) |
+| `criado_em` | timestamptz | Criacao (DEFAULT NOW()) |
+| `atualizado_em` | timestamptz | Atualizacao (DEFAULT NOW()) |
+
+**Índices:**
+- UNIQUE(unidade_id, etapa, numero) - Garante numeracao unica por etapa
+- INDEX(unidade_id) - Buscas por unidade
+- INDEX(etapa) - Filtro por etapa
+- INDEX(data_inicio, data_fim) - Queries por periodo
+
+**Constraints:**
+- `data_inicio < data_fim`
+- `data_maxima_entrega < data_inicio`
+- Sem sobreposicao de datas na mesma unidade/etapa
+
+**Relações:**
+- `plano_aula.plano_aula_periodo_id` FK -> `plano_aula_periodo.id`
+
+### plannings (Legacy)
+
+**NOTA:** Sistema legado de quinzenas fixas. Em migração para `plano_aula_periodo`.
 
 | Coluna | Tipo | Descricao |
 | ------ | ---- | --------- |
@@ -182,6 +223,75 @@ Shop (CEF Shop):
 | `status` | text | Enum review_status |
 | `comentario` | text | Obrigatorio |
 | `created_at` | timestamptz | Criacao |
+
+### plano_aula
+
+**Sistema atual de planejamento com períodos configuráveis.**
+
+| Coluna | Tipo | Descricao |
+| ------ | ---- | --------- |
+| `id` | uuid | PK |
+| `professora_id` | uuid | FK -> users.id (professora titular) |
+| `turma_id` | uuid | FK -> turmas.id |
+| `plano_aula_periodo_id` | uuid | FK -> plano_aula_periodo.id |
+| `status` | text | Enum: RASCUNHO, ENVIADO, EM_REVISAO, APROVADO, REJEITADO |
+| `versao` | integer | Numero da versao (incrementa a cada submissao) |
+| `criado_em` | timestamptz | Criacao |
+| `atualizado_em` | timestamptz | Atualizacao |
+| `enviado_em` | timestamptz | Data de envio |
+| `aprovado_em` | timestamptz | Data de aprovacao |
+
+**Índices:**
+- INDEX(professora_id) - Planos por professora
+- INDEX(turma_id) - Planos por turma
+- INDEX(plano_aula_periodo_id) - Planos por periodo
+- INDEX(status) - Filtro por status
+
+**Relações:**
+- `quinzena_documents.plano_aula_id` FK -> `plano_aula.id` (documentos anexados)
+- `plano_aula_historico.plano_aula_id` FK -> `plano_aula.id` (historico de mudancas)
+- `plano_aula_comentarios.plano_aula_id` FK -> `plano_aula.id` (comentarios de revisao)
+
+### quinzena_documents
+
+**Documentos anexados aos planos de aula.**
+
+| Coluna | Tipo | Descricao |
+| ------ | ---- | --------- |
+| `id` | uuid | PK |
+| `plano_aula_id` | uuid | FK -> plano_aula.id |
+| `arquivo_original` | text | Nome do arquivo original |
+| `caminho_pdf` | text | Caminho do PDF convertido |
+| `tipo_mime` | text | Tipo MIME original |
+| `tamanho` | integer | Tamanho em bytes |
+| `uploaded_at` | timestamptz | Data de upload |
+
+### plano_aula_historico
+
+**Rastreamento de mudanças de status.**
+
+| Coluna | Tipo | Descricao |
+| ------ | ---- | --------- |
+| `id` | uuid | PK |
+| `plano_aula_id` | uuid | FK -> plano_aula.id |
+| `status_anterior` | text | Status antes da mudanca |
+| `status_novo` | text | Novo status |
+| `usuario_id` | uuid | FK -> users.id (quem fez a mudanca) |
+| `observacao` | text | Observacao opcional |
+| `criado_em` | timestamptz | Quando a mudanca ocorreu |
+
+### plano_aula_comentarios
+
+**Comentários de revisão por coordenadoras.**
+
+| Coluna | Tipo | Descricao |
+| ------ | ---- | --------- |
+| `id` | uuid | PK |
+| `plano_aula_id` | uuid | FK -> plano_aula.id |
+| `documento_id` | uuid | FK -> quinzena_documents.id (opcional - comentario em documento especifico) |
+| `autor_id` | uuid | FK -> users.id (coordenadora) |
+| `conteudo` | text | Texto do comentario |
+| `criado_em` | timestamptz | Criacao |
 
 ---
 
@@ -231,13 +341,28 @@ Campos principais: `unit_id`, `max_installments`, `is_shop_enabled`, `pickup_ins
 
 ## Enums
 
-### planning_status
+### planning_status (Legacy)
 
 `RASCUNHO`, `PENDENTE`, `EM_AJUSTE`, `APROVADO`
 
-### review_status
+### review_status (Legacy)
 
 `APROVADO`, `EM_AJUSTE`
+
+### plano_aula_status
+
+`RASCUNHO`, `ENVIADO`, `EM_REVISAO`, `APROVADO`, `REJEITADO`
+
+**Fluxo:**
+1. Professora cria plano → `RASCUNHO`
+2. Professora envia → `ENVIADO`
+3. Coordenadora inicia revisão → `EM_REVISAO`
+4. Coordenadora aprova → `APROVADO`
+5. Coordenadora rejeita → `REJEITADO` (professora pode reenviar)
+
+### education_stage_enum
+
+`BERCARIO`, `INFANTIL`, `FUNDAMENTAL_I`, `FUNDAMENTAL_II`, `MEDIO`
 
 ### shop enums
 
@@ -257,7 +382,9 @@ Campos principais: `unit_id`, `max_installments`, `is_shop_enabled`, `pickup_ins
 packages/db/src/schema/
   calendar-events.ts
   education-stages.ts
-  planejamento.ts
+  planejamento.ts            # Legacy (plannings, planning_contents, planning_reviews)
+  plano-aula.ts              # Novo sistema (plano_aula, plano_aula_periodo)
+  quinzena-documents.ts      # Documentos anexados aos planos
   role-groups.ts
   schools.ts
   sessions.ts
@@ -283,6 +410,29 @@ pnpm db:studio     # Drizzle Studio
 ## Doc Drift (Pendencias)
 
 - `shop_interest_requests.status` e usado nos services do Shop, mas nao existe no schema atual (`packages/db/src/schema/shop.ts`). Necessita migration ou ajuste no service.
+
+## Migração em Andamento
+
+**Sistema de Planejamento (2026-01):**
+
+Sistema **Legacy** (quinzenas fixas):
+- `plannings`, `planning_contents`, `planning_reviews`
+- Quinzenas hardcoded no código (Q01-Q24)
+- Sem flexibilidade por etapa educacional
+
+Sistema **Novo** (períodos configuráveis):
+- `plano_aula_periodo` - Períodos configurados por coordenadora
+- `plano_aula` - Planos vinculados a períodos flexíveis
+- `quinzena_documents` - Upload e conversão DOCX→PDF via Carbone
+- `plano_aula_historico` - Auditoria de mudanças
+- `plano_aula_comentarios` - Feedback estruturado
+
+**Status:**
+- ✅ Migration 0012 aplicada em produção
+- ✅ API `/plano-aula-periodos` implementada
+- ✅ Interface da coordenadora implementada
+- ⚠️ Interface da professora em desenvolvimento
+- ⚠️ Sistema legado ainda em uso (coexistência temporária)
 
 ---
 
