@@ -29,9 +29,9 @@ export class PlanoAulaPeriodoService {
       );
     }
 
-    if (dataMaximaEntrega < dataInicio || dataMaximaEntrega > dataFim) {
+    if (dataMaximaEntrega >= dataInicio) {
       throw new BadRequestException(
-        'Data máxima de entrega deve estar entre início e fim do período'
+        'Data máxima de entrega deve ser anterior ao início do período'
       );
     }
 

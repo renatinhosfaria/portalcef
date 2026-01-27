@@ -27,17 +27,16 @@ describe('PlanoAulaPeriodoService', () => {
       ).rejects.toThrow(BadRequestException);
     });
 
-    it('deve lançar erro se dataMaximaEntrega < dataInicio', async () => {
+    it('deve aceitar dataMaximaEntrega antes do início', async () => {
       const dto = {
         etapa: 'INFANTIL',
         dataInicio: '2026-03-10',
-        dataFim: '2026-03-15',
-        dataMaximaEntrega: '2026-03-05',
+        dataFim: '2026-03-20',
+        dataMaximaEntrega: '2026-03-08', // ✅ ANTES do início
       };
 
-      await expect(
-        service.criarPeriodo('unidade-id', 'user-id', dto)
-      ).rejects.toThrow(BadRequestException);
+      const result = await service.criarPeriodo('unidade-id', 'user-id', dto);
+      expect(result).toBe(null); // TODO para Task 8
     });
 
     it('deve lançar erro se datas forem inválidas', async () => {
@@ -53,12 +52,12 @@ describe('PlanoAulaPeriodoService', () => {
       ).rejects.toThrow(BadRequestException);
     });
 
-    it('deve lançar erro se dataMaximaEntrega > dataFim', async () => {
+    it('deve lançar erro se dataMaximaEntrega >= dataInicio', async () => {
       const dto = {
         etapa: 'INFANTIL',
         dataInicio: '2026-03-10',
-        dataFim: '2026-03-15',
-        dataMaximaEntrega: '2026-03-20', // Após o fim
+        dataFim: '2026-03-20',
+        dataMaximaEntrega: '2026-03-15', // ❌ Durante o período (inválido)
       };
 
       await expect(
@@ -66,12 +65,25 @@ describe('PlanoAulaPeriodoService', () => {
       ).rejects.toThrow(BadRequestException);
     });
 
-    it('deve aceitar datas válidas', async () => {
+    it('deve lançar erro se dataMaximaEntrega == dataInicio', async () => {
       const dto = {
         etapa: 'INFANTIL',
         dataInicio: '2026-03-10',
         dataFim: '2026-03-20',
-        dataMaximaEntrega: '2026-03-15',
+        dataMaximaEntrega: '2026-03-10', // ❌ Igual ao início (inválido)
+      };
+
+      await expect(
+        service.criarPeriodo('unidade-id', 'user-id', dto)
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('deve aceitar datas válidas com dataMaximaEntrega antes do início', async () => {
+      const dto = {
+        etapa: 'INFANTIL',
+        dataInicio: '2026-03-10',
+        dataFim: '2026-03-20',
+        dataMaximaEntrega: '2026-03-05', // ✅ Antes do início (válido)
       };
 
       const result = await service.criarPeriodo('unidade-id', 'user-id', dto);
