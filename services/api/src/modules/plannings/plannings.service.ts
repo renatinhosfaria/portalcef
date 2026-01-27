@@ -1,4 +1,5 @@
 import { and, asc, eq, getDb, sql } from "@essencia/db";
+import * as schema from "@essencia/db/schema";
 import {
   educationStages,
   planningContents,
@@ -17,7 +18,7 @@ import {
   isInVacationPeriod,
   formatQuinzenaDateRange,
 } from "@essencia/shared/config/quinzenas";
-import { ForbiddenException, Injectable } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, Injectable } from "@nestjs/common";
 import { CalendarService } from "../calendar/calendar.service";
 
 /**
@@ -135,7 +136,7 @@ const normalizeStageCode = (value: string): EducationStageCode | null => {
 
 @Injectable()
 export class PlanningsService {
-  constructor(private readonly calendarService: CalendarService) { }
+  constructor(private readonly calendarService: CalendarService) {}
 
   /**
    * Salva ou atualiza um rascunho de planejamento.
@@ -151,11 +152,10 @@ export class PlanningsService {
     // Validar dias letivos da quinzena (apenas warning, não bloqueia)
     let schoolDaysWarning: string | undefined;
     if (input.quinzena && unitId) {
-      const validation =
-        await this.calendarService.validateQuinzenaSchoolDays(
-          unitId,
-          input.quinzena,
-        );
+      const validation = await this.calendarService.validateQuinzenaSchoolDays(
+        unitId,
+        input.quinzena,
+      );
       if (!validation.isValid) {
         schoolDaysWarning = validation.message;
       }
@@ -243,11 +243,10 @@ export class PlanningsService {
   ): Promise<SubmitPlanningResult> {
     // BLOQUEIA se a quinzena não tiver dias letivos
     if (input.quinzena && unitId) {
-      const validation =
-        await this.calendarService.validateQuinzenaSchoolDays(
-          unitId,
-          input.quinzena,
-        );
+      const validation = await this.calendarService.validateQuinzenaSchoolDays(
+        unitId,
+        input.quinzena,
+      );
       if (!validation.isValid) {
         return {
           success: false,
@@ -1265,5 +1264,142 @@ export class PlanningsService {
       console.error("getPlanningReviewHistory error:", error);
       return { success: false, error: "Erro ao buscar histórico de reviews" };
     }
+  }
+
+  /**
+   * Busca um período por ID.
+   * Task 9 - Suporte para edição de períodos
+   */
+  async buscarPorId(periodoId: string) {
+    const db = getDb();
+    const [periodo] = await db
+      .select()
+      .from(schema.planoAulaPeriodo)
+      .where(eq(schema.planoAulaPeriodo.id, periodoId));
+
+    if (!periodo) {
+      throw new BadRequestException("Período não encontrado");
+    }
+    return periodo;
+  }
+
+  /**
+   * Conta quantos planos de aula estão vinculados a um período.
+   * Task 9 - Suporte para edição controlada de períodos
+   */
+  private async contarPlanosVinculados(periodoId: string): Promise<number> {
+    const db = getDb();
+    const [result] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(planoAula)
+      .where(eq(planoAula.planoAulaPeriodoId, periodoId));
+
+    return result?.count || 0;
+  }
+
+  /**
+   * Edita um período existente com regras de proteção.
+   * Task 9 - Edição controlada de períodos
+   *
+   * Regras:
+   * - Descrição pode sempre ser editada
+   * - Datas só podem ser editadas se:
+   *   - Prazo não expirou OU
+   *   - Não há planos vinculados
+   */
+  async editarPeriodo(
+    periodoId: string,
+    dto: { descricao?: string; dataInicio?: string; dataFim?: string; dataMaximaEntrega?: string },
+  ) {
+    const db = getDb();
+    const periodo = await this.buscarPorId(periodoId);
+    const planosVinculados = await this.contarPlanosVinculados(periodoId);
+    const temPlanosVinculados = planosVinculados > 0;
+    const agora = new Date();
+    const prazoPassou = new Date(periodo.dataMaximaEntrega) < agora;
+
+    // Bloquear edição de datas se prazo passou E há planos vinculados
+    if (prazoPassou && temPlanosVinculados) {
+      const tentandoEditarDatas =
+        dto.dataInicio || dto.dataFim || dto.dataMaximaEntrega;
+      if (tentandoEditarDatas) {
+        throw new BadRequestException(
+          "Não é possível alterar datas de um período com prazo expirado e planos vinculados",
+        );
+      }
+    }
+
+    // Atualizar apenas os campos fornecidos
+    const updateData: any = { atualizadoEm: new Date() };
+    if (dto.descricao !== undefined) updateData.descricao = dto.descricao;
+    if (dto.dataInicio) updateData.dataInicio = dto.dataInicio;
+    if (dto.dataFim) updateData.dataFim = dto.dataFim;
+    if (dto.dataMaximaEntrega) updateData.dataMaximaEntrega = dto.dataMaximaEntrega;
+
+    await db
+      .update(schema.planoAulaPeriodo)
+      .set(updateData)
+      .where(eq(schema.planoAulaPeriodo.id, periodoId));
+  }
+
+  /**
+   * Renumera períodos após exclusão para manter sequência sem gaps.
+   * Task 10 - Suporte para exclusão de períodos
+   */
+  private async renumerarPeriodosSeNecessario(
+    unidadeId: string,
+    etapa: string,
+  ) {
+    const db = getDb();
+
+    // Buscar todos os períodos restantes ordenados por número
+    const periodos = await db
+      .select()
+      .from(schema.planoAulaPeriodo)
+      .where(
+        and(
+          eq(schema.planoAulaPeriodo.unidadeId, unidadeId),
+          eq(schema.planoAulaPeriodo.etapa, etapa),
+        ),
+      )
+      .orderBy(asc(schema.planoAulaPeriodo.numero));
+
+    // Renumerar se necessário
+    for (let i = 0; i < periodos.length; i++) {
+      const numeroEsperado = i + 1;
+      if (periodos[i].numero !== numeroEsperado) {
+        await db
+          .update(schema.planoAulaPeriodo)
+          .set({ numero: numeroEsperado, atualizadoEm: new Date() })
+          .where(eq(schema.planoAulaPeriodo.id, periodos[i].id));
+      }
+    }
+  }
+
+  /**
+   * Exclui um período se não houver planos vinculados.
+   * Task 10 - Exclusão protegida de períodos
+   *
+   * Regras:
+   * - Não pode excluir se há planos vinculados
+   * - Após exclusão, renumera períodos restantes
+   */
+  async excluirPeriodo(periodoId: string) {
+    const planosVinculados = await this.contarPlanosVinculados(periodoId);
+
+    if (planosVinculados > 0) {
+      throw new BadRequestException(
+        `Não é possível excluir. ${planosVinculados} professoras já iniciaram este período.`,
+      );
+    }
+
+    const db = getDb();
+    const periodo = await this.buscarPorId(periodoId);
+
+    await db
+      .delete(schema.planoAulaPeriodo)
+      .where(eq(schema.planoAulaPeriodo.id, periodoId));
+
+    await this.renumerarPeriodosSeNecessario(periodo.unidadeId, periodo.etapa);
   }
 }
