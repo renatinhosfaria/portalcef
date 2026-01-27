@@ -149,41 +149,51 @@ export function PeriodoModal({
                 placeholder="Ex: Primeiro bimestre, período de adaptação..."
                 value={descricao}
                 onChange={(e) => setDescricao(e.target.value)}
+                disabled={loading || isSubmitting}
                 rows={2}
               />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
-                <Label htmlFor="dataInicio">Data de Início</Label>
+                <Label htmlFor="dataInicio">
+                  Data de Início <span className="text-destructive">*</span>
+                </Label>
                 <Input
                   id="dataInicio"
                   type="date"
                   value={dataInicio}
                   onChange={(e) => setDataInicio(e.target.value)}
+                  disabled={loading || isSubmitting}
                   required
                 />
               </div>
 
               <div className="grid gap-2">
-                <Label htmlFor="dataFim">Data de Fim</Label>
+                <Label htmlFor="dataFim">
+                  Data de Fim <span className="text-destructive">*</span>
+                </Label>
                 <Input
                   id="dataFim"
                   type="date"
                   value={dataFim}
                   onChange={(e) => setDataFim(e.target.value)}
+                  disabled={loading || isSubmitting}
                   required
                 />
               </div>
             </div>
 
             <div className="grid gap-2">
-              <Label htmlFor="dataMaximaEntrega">Prazo de Entrega</Label>
+              <Label htmlFor="dataMaximaEntrega">
+                Prazo de Entrega <span className="text-destructive">*</span>
+              </Label>
               <Input
                 id="dataMaximaEntrega"
                 type="date"
                 value={dataMaximaEntrega}
                 onChange={(e) => setDataMaximaEntrega(e.target.value)}
+                disabled={loading || isSubmitting}
                 required
               />
               <p className="text-sm text-muted-foreground">
@@ -197,12 +207,12 @@ export function PeriodoModal({
               type="button"
               variant="outline"
               onClick={() => onOpenChange(false)}
-              disabled={isSubmitting}
+              disabled={loading || isSubmitting}
             >
               Cancelar
             </Button>
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? 'Salvando...' : 'Salvar'}
+            <Button type="submit" disabled={loading || isSubmitting}>
+              {isSubmitting ? 'Salvando...' : periodo ? 'Atualizar' : 'Criar'}
             </Button>
           </DialogFooter>
         </form>
