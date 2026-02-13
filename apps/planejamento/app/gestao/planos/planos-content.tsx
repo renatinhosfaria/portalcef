@@ -34,12 +34,14 @@ import {
   FileText,
   RefreshCcw,
   Search,
+  Trash2,
   X,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { usePeriodos, type Periodo } from "../../../features/periodos/hooks/use-periodos";
 import {
   useGestaoPlanos,
   STATUS_FILTER_OPTIONS,
@@ -75,12 +77,9 @@ function getVerUrl(plano: PlanoAulaListItem): string {
   switch (plano.status) {
     case "RASCUNHO":
       return `/plano-aula/${plano.quinzenaId}?planoId=${plano.id}`;
-    case "AGUARDANDO_ANALISTA":
-    case "DEVOLVIDO_ANALISTA":
-    case "REVISAO_ANALISTA":
-      return `/analise/${plano.id}`;
     default:
-      return `/coordenacao/${plano.id}`;
+      // Todos os outros status são visualizados via /analise
+      return `/analise/${plano.id}`;
   }
 }
 
@@ -137,6 +136,9 @@ export function PlanosContent({
   );
   const [page, setPage] = useState(initialPage);
 
+  // Estado de exclusão
+  const [excluindo, setExcluindo] = useState<string | null>(null);
+
   // Hook de listagem
   const {
     planos = [],
@@ -144,7 +146,19 @@ export function PlanosContent({
     isLoading,
     error,
     fetchPlanos,
+    deletarPlano,
   } = useGestaoPlanos();
+
+  // Buscar períodos para exibir nomes ao invés de UUIDs
+  const { periodos: todosPeriodos } = usePeriodos();
+
+  const periodoMap = useMemo(() => {
+    const map = new Map<string, Periodo>();
+    for (const periodo of todosPeriodos) {
+      map.set(periodo.id, periodo);
+    }
+    return map;
+  }, [todosPeriodos]);
 
   /**
    * Busca planos com os filtros atuais
@@ -159,6 +173,21 @@ export function PlanosContent({
       limit: 20,
     });
   }, [fetchPlanos, status, initialQuinzena, segmento, professora, page]);
+
+  /**
+   * Exclui permanentemente um plano de aula
+   */
+  const handleExcluirPlano = async (planoId: string) => {
+    setExcluindo(planoId);
+    try {
+      await deletarPlano(planoId);
+      buscarPlanos();
+    } catch {
+      // Erro será tratado pelo hook
+    } finally {
+      setExcluindo(null);
+    }
+  };
 
   // Busca inicial e quando filtros mudam
   useEffect(() => {
@@ -430,7 +459,7 @@ export function PlanosContent({
                   <TableHead>Professora</TableHead>
                   <TableHead>Turma</TableHead>
                   <TableHead>Segmento</TableHead>
-                  <TableHead>Quinzena</TableHead>
+                  <TableHead>Período</TableHead>
                   <TableHead>Enviado</TableHead>
                   <TableHead className="text-center">Docs</TableHead>
                   <TableHead>Status</TableHead>
@@ -453,12 +482,29 @@ export function PlanosContent({
                     </TableCell>
                     <TableCell>{plano.segmento || "-"}</TableCell>
                     <TableCell>
-                      <div>
-                        <span className="font-medium">{plano.quinzenaId}</span>
-                        <span className="text-muted-foreground text-xs block">
-                          {plano.quinzenaPeriodo}
-                        </span>
-                      </div>
+                      {(() => {
+                        const periodo = periodoMap.get(plano.quinzenaId);
+                        if (periodo) {
+                          return (
+                            <div>
+                              <span className="font-medium">
+                                {periodo.descricao || `${periodo.numero}º Plano`}
+                              </span>
+                              <span className="text-muted-foreground text-xs block">
+                                {new Date(periodo.dataInicio).toLocaleDateString("pt-BR")} -{" "}
+                                {new Date(periodo.dataFim).toLocaleDateString("pt-BR")}
+                              </span>
+                            </div>
+                          );
+                        }
+                        return (
+                          <div>
+                            <span className="text-muted-foreground text-xs">
+                              {plano.quinzenaPeriodo || "-"}
+                            </span>
+                          </div>
+                        );
+                      })()}
                     </TableCell>
                     <TableCell>
                       {plano.submittedAt
@@ -474,12 +520,31 @@ export function PlanosContent({
                       <StatusBadge status={plano.status} />
                     </TableCell>
                     <TableCell className="text-right">
-                      <Link href={getVerUrl(plano)}>
-                        <Button variant="ghost" size="sm">
-                          <Eye className="h-4 w-4 mr-1" />
-                          Ver
+                      <div className="flex items-center justify-end gap-1">
+                        <Link href={getVerUrl(plano)}>
+                          <Button variant="ghost" size="sm">
+                            <Eye className="h-4 w-4 mr-1" />
+                            Ver
+                          </Button>
+                        </Link>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-destructive hover:text-destructive"
+                          disabled={excluindo === plano.id}
+                          onClick={() => {
+                            if (
+                              window.confirm(
+                                `Excluir plano de ${plano.professorName} (${plano.turmaCode})? Esta ação não pode ser desfeita.`,
+                              )
+                            ) {
+                              handleExcluirPlano(plano.id);
+                            }
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4" />
                         </Button>
-                      </Link>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
