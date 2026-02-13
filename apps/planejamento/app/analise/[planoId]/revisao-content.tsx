@@ -23,16 +23,13 @@ import {
 import {
   AlertCircle,
   ArrowLeft,
-  Calendar,
   Check,
-  Clock,
   FileText,
   Loader2,
   Plus,
   RotateCcw,
   Send,
   Upload,
-  User,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -42,8 +39,9 @@ import {
   DocumentoList,
   DocumentoUpload,
   HistoricoTimeline,
-  PlanoStatusBadge,
+  PlanoHeader,
   useAnalistaActions,
+  usePeriodoData,
   usePlanoAula,
   usePlanoDetalhe,
 } from "../../../features/plano-aula";
@@ -52,21 +50,6 @@ import { TarefaForm } from "./tarefa-form";
 
 interface RevisaoContentProps {
   planoId: string;
-}
-
-/**
- * Formata a data de submissao para exibicao
- */
-function formatarDataSubmissao(data?: string): string {
-  if (!data) return "Nao informada";
-  const date = new Date(data);
-  return date.toLocaleDateString("pt-BR", {
-    day: "2-digit",
-    month: "long",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
 }
 
 export function RevisaoContent({ planoId }: RevisaoContentProps) {
@@ -81,6 +64,9 @@ export function RevisaoContent({ planoId }: RevisaoContentProps) {
   const { loading: loadingAction, aprovar, devolver } = useAnalistaActions();
   const { uploadDocumento, addLink, aprovarDocumento, desaprovarDocumento, imprimirDocumento, editarComentario, deletarComentario } =
     usePlanoAula();
+
+  // Buscar dados do período para exibir no header
+  const { periodo: periodoData, etapaNome, isLoading: isLoadingPeriodo } = usePeriodoData(plano?.quinzenaId);
 
   const [actionError, setActionError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -399,9 +385,6 @@ export function RevisaoContent({ planoId }: RevisaoContentProps) {
     );
   }
 
-  // TODO: Buscar configuracao da quinzena via API /plano-aula-periodo
-  const periodoDisplay = "Periodo nao disponivel";
-
   const isLoading = loadingPlano || loadingAction;
   const canPerformActions =
     !isLoading && plano.status === "AGUARDANDO_ANALISTA";
@@ -420,54 +403,20 @@ export function RevisaoContent({ planoId }: RevisaoContentProps) {
       </div>
 
       {/* Header Info */}
-      <Card className="mb-6">
-        <CardHeader>
-          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-            <div className="space-y-3">
-              {/* Professora e Turma */}
-              <div className="flex items-center gap-3">
-                <div className="rounded-lg bg-primary/10 p-2">
-                  <User className="h-6 w-6 text-primary" />
-                </div>
-                <div>
-                  <CardTitle className="text-xl">
-                    {plano.professorName}
-                  </CardTitle>
-                  <CardDescription className="text-base">
-                    {plano.turmaName}
-                    {plano.turmaCode && (
-                      <span className="text-muted-foreground ml-1">
-                        ({plano.turmaCode})
-                      </span>
-                    )}
-                  </CardDescription>
-                </div>
-              </div>
-
-              {/* Quinzena e Data */}
-              <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
-                <div className="flex items-center gap-1.5">
-                  <Calendar className="h-4 w-4" />
-                  <span>
-                    {plano.quinzenaId} - {periodoDisplay}
-                  </span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <Clock className="h-4 w-4" />
-                  <span>
-                    Enviado em: {formatarDataSubmissao(plano.submittedAt)}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Status Badge */}
-            <div className="flex-shrink-0">
-              <PlanoStatusBadge status={plano.status} className="text-sm" />
-            </div>
-          </div>
-        </CardHeader>
-      </Card>
+      <PlanoHeader
+        professorName={plano.professorName}
+        turmaName={plano.turmaName}
+        turmaCode={plano.turmaCode}
+        periodoNumero={periodoData?.numero}
+        periodoDescricao={periodoData?.descricao}
+        periodoInicio={periodoData?.dataInicio}
+        periodoFim={periodoData?.dataFim}
+        prazoEntrega={periodoData?.dataMaximaEntrega}
+        etapaNome={etapaNome ?? undefined}
+        status={plano.status}
+        submittedAt={plano.submittedAt}
+        isLoadingPeriodo={isLoadingPeriodo}
+      />
 
       {/* Success Message */}
       {successMessage && (
