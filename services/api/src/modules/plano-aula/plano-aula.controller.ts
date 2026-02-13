@@ -85,8 +85,7 @@ const VISUALIZAR_ACCESS = [
  *
  * Controller para o novo workflow de planos de aula com:
  * - Professora: criar, submeter, anexar documentos
- * - Analista: revisar, aprovar/devolver
- * - Coordenadora: aprovar final/devolver
+ * - Analista: revisar, aprovar (final)/devolver
  * - Gestão: dashboard, configuração de deadlines
  *
  * NOTA: TenantGuard não é usado pois o isolamento de tenant é feito
@@ -216,7 +215,7 @@ export class PlanoAulaController {
    * Upload de arquivo para o plano (multipart/form-data)
    */
   @Post(":id/documentos/upload")
-  @Roles(...PROFESSORA_ACCESS)
+  @Roles(...PROFESSORA_ACCESS, ...ANALISTA_ACCESS)
   async uploadDocumento(
     @Param("id") planoId: string,
     @Req() req: FastifyMultipartRequest,
@@ -237,12 +236,14 @@ export class PlanoAulaController {
       });
     }
 
-    // Verificar se plano existe e pertence ao usuário
+    // Verificar se plano existe e usuário tem acesso
     const plano = await this.planoAulaService.getPlanoById(user, planoId);
-    if (plano.user.id !== user.userId) {
+    const isOwner = plano.user.id === user.userId;
+    const isAnalistaUser = ANALISTA_ROLES.includes(user.role as typeof ANALISTA_ROLES[number]);
+    if (!isOwner && !isAnalistaUser) {
       throw new BadRequestException({
-        code: "NOT_OWNER",
-        message: "Apenas o autor pode anexar documentos ao plano",
+        code: "NOT_AUTHORIZED",
+        message: "Você não tem permissão para anexar documentos a este plano",
       });
     }
 
@@ -339,7 +340,7 @@ export class PlanoAulaController {
    * Adiciona link do YouTube ao plano
    */
   @Post(":id/documentos/link")
-  @Roles(...PROFESSORA_ACCESS)
+  @Roles(...PROFESSORA_ACCESS, ...ANALISTA_ACCESS)
   async adicionarLinkYouTube(
     @Param("id") planoId: string,
     @Req() req: { user: UserContext },
@@ -363,12 +364,14 @@ export class PlanoAulaController {
       });
     }
 
-    // Verificar se plano existe e pertence ao usuário
+    // Verificar se plano existe e usuário tem acesso
     const plano = await this.planoAulaService.getPlanoById(user, planoId);
-    if (plano.user.id !== user.userId) {
+    const isOwner = plano.user.id === user.userId;
+    const isAnalistaUser = ANALISTA_ROLES.includes(user.role as typeof ANALISTA_ROLES[number]);
+    if (!isOwner && !isAnalistaUser) {
       throw new BadRequestException({
-        code: "NOT_OWNER",
-        message: "Apenas o autor pode anexar documentos ao plano",
+        code: "NOT_AUTHORIZED",
+        message: "Você não tem permissão para anexar documentos a este plano",
       });
     }
 
@@ -390,9 +393,11 @@ export class PlanoAulaController {
   /**
    * DELETE /plano-aula/:id/documentos/:docId
    * Remove documento do plano
+   * NOTA: Apenas gestão e analista podem excluir documentos.
+   * Professoras NÃO têm permissão para excluir documentos após o upload.
    */
   @Delete(":id/documentos/:docId")
-  @Roles(...PROFESSORA_ACCESS)
+  @Roles(...GESTAO_ACCESS, ...ANALISTA_ACCESS)
   async deletarDocumento(
     @Param("id") planoId: string,
     @Param("docId") docId: string,
@@ -400,14 +405,8 @@ export class PlanoAulaController {
   ) {
     const user = req.user;
 
-    // Verificar se plano existe e pertence ao usuário
-    const plano = await this.planoAulaService.getPlanoById(user, planoId);
-    if (plano.user.id !== user.userId) {
-      throw new BadRequestException({
-        code: "NOT_OWNER",
-        message: "Apenas o autor pode remover documentos do plano",
-      });
-    }
+    // Verificar se plano existe e usuário tem acesso
+    await this.planoAulaService.getPlanoById(user, planoId);
 
     await this.planoAulaService.removerDocumento(planoId, docId);
 
@@ -558,7 +557,7 @@ export class PlanoAulaController {
    * Dashboard com estatísticas por status e segmento
    */
   @Get("dashboard")
-  @Roles(...GESTAO_ACCESS)
+  @Roles(...GESTAO_ACCESS, ...COORDENADORA_ACCESS)
   async getDashboard(
     @Req() req: { user: UserContext },
     @Query() query: DashboardQueryDto,
@@ -589,7 +588,7 @@ export class PlanoAulaController {
    * Lista planos com filtros e paginação para gestão
    */
   @Get("gestao/listar")
-  @Roles(...GESTAO_ACCESS)
+  @Roles(...GESTAO_ACCESS, ...COORDENADORA_ACCESS)
   async listarPlanosGestao(
     @Req() req: { user: UserContext },
     @Query() query: ListarPlanosGestaoDto,
@@ -652,6 +651,24 @@ export class PlanoAulaController {
     return {
       success: true,
       data: deadlines,
+    };
+  }
+
+  /**
+   * DELETE /plano-aula/:id
+   * Exclui permanentemente um plano de aula
+   * Apenas roles de gestão podem excluir
+   */
+  @Delete(":id")
+  @Roles(...GESTAO_ACCESS)
+  async deletarPlano(
+    @Req() req: { user: UserContext },
+    @Param("id") id: string,
+  ) {
+    await this.planoAulaService.deletarPlano(req.user, id);
+    return {
+      success: true,
+      message: "Plano de aula excluído com sucesso",
     };
   }
 
@@ -743,6 +760,26 @@ export class PlanoAulaController {
     @Param("id") documentoId: string,
   ) {
     const documento = await this.planoAulaService.aprovarDocumento(
+      req.user,
+      documentoId,
+    );
+    return {
+      success: true,
+      data: documento,
+    };
+  }
+
+  /**
+   * POST /plano-aula/documentos/:id/imprimir
+   * Registra a impressão de um documento aprovado
+   */
+  @Post("documentos/:id/imprimir")
+  @Roles(...VISUALIZAR_ACCESS)
+  async imprimirDocumento(
+    @Req() req: { user: UserContext },
+    @Param("id") documentoId: string,
+  ) {
+    const documento = await this.planoAulaService.registrarImpressaoDocumento(
       req.user,
       documentoId,
     );
