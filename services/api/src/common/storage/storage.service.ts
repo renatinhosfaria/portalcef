@@ -47,6 +47,7 @@ export class StorageService {
           Key: key,
           Body: buffer,
           ContentType: file.mimetype,
+          ContentDisposition: `inline; filename="${file.filename}"`,
         }),
       );
 

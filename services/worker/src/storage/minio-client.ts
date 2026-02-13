@@ -43,9 +43,13 @@ export async function baixarArquivo(storageKey: string, destino: string) {
   await pipeline(bodyStream, createWriteStream(destino));
 }
 
-export async function enviarPdf(caminho: string) {
+export async function enviarPdf(caminho: string, nomeOriginal?: string) {
   const buffer = await readFile(caminho);
   const key = `${randomUUID()}.pdf`;
+
+  const nomePdf = nomeOriginal
+    ? nomeOriginal.replace(/\.(docx?|odt)$/i, ".pdf")
+    : undefined;
 
   await s3Client.send(
     new PutObjectCommand({
@@ -53,6 +57,7 @@ export async function enviarPdf(caminho: string) {
       Key: key,
       Body: buffer,
       ContentType: "application/pdf",
+      ...(nomePdf && { ContentDisposition: `inline; filename="${nomePdf}"` }),
     }),
   );
 

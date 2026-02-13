@@ -34,8 +34,11 @@ const worker = new Worker<ConversaoDocumentoJob>(
 
     try {
       await baixarArquivo(storageKey, caminhoEntrada);
-      const caminhoPdf = await converterDocParaPdf(caminhoEntrada, pastaTemp);
-      const preview = await enviarPdf(caminhoPdf);
+      const caminhoPdf = await converterDocParaPdf(caminhoEntrada, pastaTemp, {
+        mimeType: job.data.mimeType,
+        nomeArquivoOriginal: job.data.fileName,
+      });
+      const preview = await enviarPdf(caminhoPdf, fileName);
 
       await db
         .update(planoDocumento)
