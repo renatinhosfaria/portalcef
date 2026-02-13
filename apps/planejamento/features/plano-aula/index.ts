@@ -38,4 +38,5 @@ export {
   DocumentoComentarios,
   PlanoStatusBadge,
   HistoricoTimeline,
+  PlanoHeader,
 } from "./components";
