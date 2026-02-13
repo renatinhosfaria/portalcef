@@ -31,6 +31,7 @@ import {
   Plus,
   RotateCcw,
   Send,
+  Upload,
   User,
 } from "lucide-react";
 import Link from "next/link";
@@ -78,7 +79,7 @@ export function RevisaoContent({ planoId }: RevisaoContentProps) {
     refetch,
   } = usePlanoDetalhe();
   const { loading: loadingAction, aprovar, devolver } = useAnalistaActions();
-  const { uploadDocumento, addLink, aprovarDocumento, imprimirDocumento, editarComentario, deletarComentario } =
+  const { uploadDocumento, addLink, aprovarDocumento, desaprovarDocumento, imprimirDocumento, editarComentario, deletarComentario } =
     usePlanoAula();
 
   const [actionError, setActionError] = useState<string | null>(null);
@@ -203,6 +204,27 @@ export function RevisaoContent({ planoId }: RevisaoContentProps) {
       }
     },
     [aprovarDocumento, refetch],
+  );
+
+  /**
+   * Desfaz a aprovação de um documento
+   */
+  const handleDesaprovarDocumento = useCallback(
+    async (documentoId: string) => {
+      try {
+        await desaprovarDocumento(documentoId);
+        await refetch();
+        setSuccessMessage("Aprovação do documento desfeita!");
+        setTimeout(() => setSuccessMessage(null), 3000);
+      } catch (err) {
+        const message =
+          err instanceof Error
+            ? err.message
+            : "Erro ao desfazer aprovação do documento";
+        setActionError(message);
+      }
+    },
+    [desaprovarDocumento, refetch],
   );
 
   /**
@@ -492,6 +514,7 @@ export function RevisaoContent({ planoId }: RevisaoContentProps) {
                 onEditComentario={handleEditComentario}
                 onDeleteComentario={handleDeleteComentario}
                 onAprovar={handleAprovarDocumento}
+                onDesaprovar={handleDesaprovarDocumento}
                 onImprimir={handleImprimirDocumento}
                 currentUserId={currentUserId}
               />
@@ -584,8 +607,18 @@ export function RevisaoContent({ planoId }: RevisaoContentProps) {
               )}
 
               {/* Upload de documento pela analista */}
-              <div className="border-t pt-3">
-                <p className="text-sm font-medium mb-2">Enviar Documento Corrigido</p>
+              <div className="mt-4 rounded-lg border-2 border-indigo-200 bg-indigo-50/50 p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="rounded-md bg-indigo-100 p-1.5">
+                    <Upload className="h-4 w-4 text-indigo-600" />
+                  </div>
+                  <p className="text-sm font-semibold text-indigo-900">
+                    Enviar Documento Corrigido
+                  </p>
+                </div>
+                <p className="text-xs text-indigo-600/80 mb-3">
+                  Envie a versao corrigida do documento diretamente ao plano.
+                </p>
                 <DocumentoUpload
                   onUpload={handleUploadDocumento}
                   onAddLink={handleAddLink}

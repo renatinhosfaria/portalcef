@@ -17,7 +17,9 @@ import {
   FileSpreadsheet,
   FileText,
   Image,
+  Printer,
   Trash2,
+  Undo2,
   Youtube,
 } from "lucide-react";
 
@@ -32,6 +34,8 @@ interface DocumentoListProps {
   onEditComentario?: (comentarioId: string, novoTexto: string) => Promise<void>;
   onDeleteComentario?: (comentarioId: string) => Promise<void>;
   onAprovar?: (docId: string) => Promise<void>;
+  onDesaprovar?: (docId: string) => Promise<void>;
+  onImprimir?: (docId: string) => Promise<void>;
   showComments?: boolean;
   canDelete?: boolean;
   canAprovar?: boolean;
@@ -108,6 +112,47 @@ function getDocumentUrl(documento: PlanoDocumento): string | undefined {
   return documento.url;
 }
 
+function getDocumentPdfUrl(documento: PlanoDocumento): string | null {
+  // PDF nativo
+  if (documento.mimeType === "application/pdf" && documento.url) {
+    return documento.url;
+  }
+
+  // Preview convertido para PDF
+  if (documento.previewStatus === "PRONTO" && documento.previewUrl) {
+    return documento.previewUrl;
+  }
+
+  return null;
+}
+
+function imprimirPdf(url: string): void {
+  const iframe = document.createElement("iframe");
+  iframe.style.position = "fixed";
+  iframe.style.right = "0";
+  iframe.style.bottom = "0";
+  iframe.style.width = "0";
+  iframe.style.height = "0";
+  iframe.style.border = "0";
+  iframe.src = url;
+
+  iframe.onload = () => {
+    try {
+      iframe.contentWindow?.focus();
+      iframe.contentWindow?.print();
+    } catch {
+      window.open(url, "_blank", "noopener,noreferrer");
+    }
+  };
+
+  document.body.appendChild(iframe);
+  setTimeout(() => {
+    if (document.body.contains(iframe)) {
+      document.body.removeChild(iframe);
+    }
+  }, 60_000);
+}
+
 function getDocumentName(documento: PlanoDocumento): string {
   if (documento.tipo === "LINK_YOUTUBE" && documento.url) {
     // Extrair ID do video do YouTube para exibicao
@@ -126,6 +171,8 @@ export function DocumentoList({
   onEditComentario,
   onDeleteComentario,
   onAprovar,
+  onDesaprovar,
+  onImprimir,
   showComments = false,
   canDelete = false,
   canAprovar = false,
@@ -133,6 +180,8 @@ export function DocumentoList({
 }: DocumentoListProps) {
   const [openDocId, setOpenDocId] = useState<string | null>(null);
   const [aprovandoId, setAprovandoId] = useState<string | null>(null);
+  const [imprimindoId, setImprimindoId] = useState<string | null>(null);
+  const [desaprovandoId, setDesaprovandoId] = useState<string | null>(null);
 
   const handleAprovar = async (docId: string) => {
     if (!onAprovar) return;
@@ -143,6 +192,35 @@ export function DocumentoList({
       console.error("Erro ao aprovar documento:", error);
     } finally {
       setAprovandoId(null);
+    }
+  };
+
+  const handleDesaprovar = async (docId: string) => {
+    if (!onDesaprovar) return;
+    try {
+      setDesaprovandoId(docId);
+      await onDesaprovar(docId);
+    } catch (error) {
+      console.error("Erro ao desfazer aprovação:", error);
+    } finally {
+      setDesaprovandoId(null);
+    }
+  };
+
+  const handleImprimir = async (documento: PlanoDocumento) => {
+    if (!onImprimir) return;
+
+    const pdfUrl = getDocumentPdfUrl(documento);
+    if (!pdfUrl) return;
+
+    try {
+      setImprimindoId(documento.id);
+      imprimirPdf(pdfUrl);
+      await onImprimir(documento.id);
+    } catch (error) {
+      console.error("Erro ao imprimir documento:", error);
+    } finally {
+      setImprimindoId(null);
     }
   };
 
@@ -165,10 +243,13 @@ export function DocumentoList({
       {documentos.map((documento) => {
         const Icon = getFileIcon(documento);
         const url = getDocumentUrl(documento);
+        const pdfUrl = getDocumentPdfUrl(documento);
         const name = getDocumentName(documento);
         const hasUnresolvedComments = documento.comentarios?.some(
           (c) => !c.resolved,
         );
+        const podeImprimir =
+          !!documento.approvedAt && !!documento.approvedBy && !!onImprimir;
 
         return (
           <div
@@ -271,6 +352,24 @@ export function DocumentoList({
                         </span>
                       </>
                     )}
+                    {documento.printedAt && (
+                      <>
+                        <span>*</span>
+                        <span className="text-indigo-600 font-medium">
+                          Impresso em{" "}
+                          {new Date(documento.printedAt).toLocaleString(
+                            "pt-BR",
+                            {
+                              day: "2-digit",
+                              month: "2-digit",
+                              year: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            },
+                          )}
+                        </span>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
@@ -289,6 +388,21 @@ export function DocumentoList({
                   Ver Documento
                 </Button>
 
+                {/* Imprimir - somente para documento aprovado */}
+                {podeImprimir && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 gap-1 text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50"
+                    onClick={() => handleImprimir(documento)}
+                    disabled={imprimindoId === documento.id || !pdfUrl}
+                    title="Imprimir documento em PDF"
+                  >
+                    <Printer className="h-4 w-4" />
+                    {imprimindoId === documento.id ? "Imprimindo..." : "Imprimir"}
+                  </Button>
+                )}
+
                 {/* Aprovar Button - apenas para analista_pedagogico */}
                 {canAprovar && onAprovar && !documento.approvedBy && (
                   <Button
@@ -304,6 +418,23 @@ export function DocumentoList({
                   >
                     <CheckCircle className="h-4 w-4" />
                     {aprovandoId === documento.id ? "Aprovando..." : "Aprovar"}
+                  </Button>
+                )}
+
+                {/* Desfazer Aprovação - apenas para analista quando documento está aprovado */}
+                {canAprovar && onDesaprovar && !!documento.approvedBy && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 gap-1 text-amber-600 hover:text-amber-700 hover:bg-amber-50"
+                    onClick={() => handleDesaprovar(documento.id)}
+                    disabled={desaprovandoId === documento.id}
+                    title="Desfazer aprovação do documento"
+                  >
+                    <Undo2 className="h-4 w-4" />
+                    {desaprovandoId === documento.id
+                      ? "Desfazendo..."
+                      : "Desfazer"}
                   </Button>
                 )}
 

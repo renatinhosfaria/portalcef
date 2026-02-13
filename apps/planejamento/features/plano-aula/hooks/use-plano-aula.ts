@@ -6,6 +6,7 @@ import type {
   PlanoAula,
   PlanoAulaSummary,
   DashboardData,
+  PlanoAulaStatus,
   CriarPlanoResult,
   PlanoDocumento,
   AddComentarioDto,
@@ -30,6 +31,8 @@ interface UsePlanoAulaReturn {
   addLink: (planoId: string, url: string) => Promise<PlanoDocumento>;
   deleteDocumento: (planoId: string, docId: string) => Promise<void>;
   aprovarDocumento: (documentoId: string) => Promise<PlanoDocumento>;
+  desaprovarDocumento: (documentoId: string) => Promise<PlanoDocumento>;
+  imprimirDocumento: (documentoId: string) => Promise<PlanoDocumento>;
   submeterPlano: (planoId: string) => Promise<{ success: boolean }>;
   editarComentario: (comentarioId: string, comentario: string) => Promise<void>;
   deletarComentario: (comentarioId: string) => Promise<void>;
@@ -172,6 +175,50 @@ export function usePlanoAula(): UsePlanoAulaReturn {
     [],
   );
 
+  const desaprovarDocumento = useCallback(
+    async (documentoId: string): Promise<PlanoDocumento> => {
+      setLoading(true);
+      setError(null);
+      try {
+        const result = await api.post<PlanoDocumento>(
+          `/plano-aula/documentos/${documentoId}/desaprovar`,
+          {},
+        );
+        return result;
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "Erro ao desfazer aprovação";
+        setError(message);
+        throw err;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [],
+  );
+
+  const imprimirDocumento = useCallback(
+    async (documentoId: string): Promise<PlanoDocumento> => {
+      setLoading(true);
+      setError(null);
+      try {
+        const result = await api.post<PlanoDocumento>(
+          `/plano-aula/documentos/${documentoId}/imprimir`,
+          {},
+        );
+        return result;
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "Erro ao registrar impressão";
+        setError(message);
+        throw err;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [],
+  );
+
   const submeterPlano = useCallback(
     async (planoId: string): Promise<{ success: boolean }> => {
       setLoading(true);
@@ -241,6 +288,8 @@ export function usePlanoAula(): UsePlanoAulaReturn {
     addLink,
     deleteDocumento,
     aprovarDocumento,
+    desaprovarDocumento,
+    imprimirDocumento,
     submeterPlano,
     editarComentario,
     deletarComentario,
@@ -379,6 +428,91 @@ interface UseDashboardReturn {
   fetchDashboard: (quinzenaId?: string) => Promise<void>;
 }
 
+interface DashboardItemApi {
+  status: PlanoAulaStatus;
+  count: number;
+}
+
+interface DashboardApiLegado {
+  totais?: DashboardItemApi[];
+  porSegmento?: Record<
+    string,
+    DashboardItemApi[] | DashboardData["porSegmento"][string]
+  >;
+}
+
+const DASHBOARD_STATS_VAZIAS: DashboardData["stats"] = {
+  total: 0,
+  rascunho: 0,
+  aguardandoAnalista: 0,
+  aguardandoCoordenadora: 0,
+  devolvidos: 0,
+  aprovados: 0,
+};
+
+function somarStatus(
+  itens: DashboardItemApi[],
+  status: PlanoAulaStatus[],
+): number {
+  return itens.reduce((acumulado, item) => {
+    if (status.includes(item.status)) {
+      return acumulado + item.count;
+    }
+    return acumulado;
+  }, 0);
+}
+
+function normalizarDashboardData(
+  payload: DashboardData | DashboardApiLegado,
+): DashboardData {
+  const totais = Array.isArray((payload as DashboardApiLegado).totais)
+    ? ((payload as DashboardApiLegado).totais ?? [])
+    : [];
+
+  const stats: DashboardData["stats"] =
+    "stats" in payload && payload.stats
+      ? payload.stats
+      : {
+          total: totais.reduce((acumulado, item) => acumulado + item.count, 0),
+          rascunho: somarStatus(totais, ["RASCUNHO"]),
+          aguardandoAnalista: somarStatus(totais, [
+            "AGUARDANDO_ANALISTA",
+            "REVISAO_ANALISTA",
+          ]),
+          aguardandoCoordenadora: somarStatus(totais, [
+            "AGUARDANDO_COORDENADORA",
+          ]),
+          devolvidos: somarStatus(totais, [
+            "DEVOLVIDO_ANALISTA",
+            "DEVOLVIDO_COORDENADORA",
+          ]),
+          aprovados: somarStatus(totais, ["APROVADO"]),
+        };
+
+  const porSegmentoRaw = (payload as DashboardApiLegado).porSegmento ?? {};
+  const porSegmentoNormalizado: DashboardData["porSegmento"] = {};
+
+  for (const [segmento, valor] of Object.entries(porSegmentoRaw)) {
+    if (Array.isArray(valor)) {
+      porSegmentoNormalizado[segmento] = {
+        total: valor.reduce((acumulado, item) => acumulado + item.count, 0),
+        aprovados: somarStatus(valor, ["APROVADO"]),
+      };
+      continue;
+    }
+
+    porSegmentoNormalizado[segmento] = {
+      total: valor?.total ?? 0,
+      aprovados: valor?.aprovados ?? 0,
+    };
+  }
+
+  return {
+    stats: stats ?? DASHBOARD_STATS_VAZIAS,
+    porSegmento: porSegmentoNormalizado,
+  };
+}
+
 /**
  * Hook para Dashboard de Gestão
  * - Estatísticas gerais (total, pendentes, aprovados, etc.)
@@ -400,10 +534,10 @@ export function useDashboard(): UseDashboardReturn {
         }
         const queryString = params.toString() ? `?${params.toString()}` : "";
 
-        const result = await api.get<DashboardData>(
+        const result = await api.get<DashboardData | DashboardApiLegado>(
           `/plano-aula/dashboard${queryString}`,
         );
-        setData(result);
+        setData(normalizarDashboardData(result));
       } catch (err) {
         const message =
           err instanceof Error ? err.message : "Erro ao buscar dashboard";
@@ -555,6 +689,7 @@ interface UseGestaoPlanosReturn {
   isLoading: boolean;
   error: string | null;
   fetchPlanos: (filtros: FiltrosGestaoPlanos) => Promise<void>;
+  deletarPlano: (planoId: string) => Promise<void>;
 }
 
 /**
@@ -622,5 +757,12 @@ export function useGestaoPlanos(): UseGestaoPlanosReturn {
     [],
   );
 
-  return { planos, pagination, isLoading, error, fetchPlanos };
+  const deletarPlano = useCallback(
+    async (planoId: string): Promise<void> => {
+      await api.delete(`/plano-aula/${planoId}`);
+    },
+    [],
+  );
+
+  return { planos, pagination, isLoading, error, fetchPlanos, deletarPlano };
 }

@@ -154,6 +154,7 @@ export class PlanoAulaService {
         turmaId: dto.turmaId,
         unitId: user.unitId,
         quinzenaId: dto.quinzenaId,
+        planoAulaPeriodoId: dto.quinzenaId,
         status: "RASCUNHO",
       })
       .returning();
@@ -408,7 +409,8 @@ export class PlanoAulaService {
     const [atualizado] = await db
       .update(planoAula)
       .set({
-        status: "AGUARDANDO_COORDENADORA",
+        status: "APROVADO",
+        approvedAt: new Date(),
         updatedAt: new Date(),
       })
       .where(eq(planoAula.id, planoId))
@@ -423,7 +425,7 @@ export class PlanoAulaService {
       userRole: user.role,
       acao: "APROVADO_ANALISTA",
       statusAnterior,
-      statusNovo: "AGUARDANDO_COORDENADORA",
+      statusNovo: "APROVADO",
     });
 
     return atualizado;
@@ -1027,6 +1029,30 @@ export class PlanoAulaService {
     }));
   }
 
+  /**
+   * Exclui permanentemente um plano de aula
+   * Apenas gestão pode excluir. Cascade remove documentos, comentários e histórico.
+   */
+  async deletarPlano(user: UserContext, planoId: string): Promise<void> {
+    const db = getDb();
+
+    const plano = await db.query.planoAula.findFirst({
+      where: eq(planoAula.id, planoId),
+    });
+
+    if (!plano) {
+      throw new NotFoundException("Plano não encontrado");
+    }
+
+    if (plano.unitId !== user.unitId) {
+      throw new ForbiddenException(
+        "Você só pode excluir planos da sua unidade",
+      );
+    }
+
+    await db.delete(planoAula).where(eq(planoAula.id, planoId));
+  }
+
   // ============================================
   // Métodos Auxiliares
   // ============================================
@@ -1188,6 +1214,130 @@ export class PlanoAulaService {
       })
       .where(eq(planoDocumento.id, documentoId))
       .returning();
+
+    return documentoAtualizado;
+  }
+
+  /**
+   * Desfaz a aprovação de um documento
+   * Qualquer analista_pedagogico da mesma unidade pode desfazer
+   */
+  async desaprovarDocumento(
+    user: UserContext,
+    documentoId: string,
+  ): Promise<PlanoDocumento> {
+    const db = getDb();
+
+    const documento = await db.query.planoDocumento.findFirst({
+      where: eq(planoDocumento.id, documentoId),
+      with: { plano: true },
+    });
+
+    if (!documento) {
+      throw new NotFoundException("Documento não encontrado");
+    }
+
+    if (documento.plano.unitId !== user.unitId) {
+      throw new ForbiddenException(
+        "Você não tem permissão para desaprovar este documento",
+      );
+    }
+
+    if (!documento.approvedBy) {
+      throw new BadRequestException("Este documento não está aprovado");
+    }
+
+    const [documentoAtualizado] = await db
+      .update(planoDocumento)
+      .set({
+        approvedBy: null,
+        approvedAt: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(planoDocumento.id, documentoId))
+      .returning();
+
+    return documentoAtualizado;
+  }
+
+  /**
+   * Registra impressão de um documento aprovado
+   * - Atualiza o documento com printedBy/printedAt
+   * - Registra evento no histórico do plano
+   */
+  async registrarImpressaoDocumento(
+    user: UserContext,
+    documentoId: string,
+  ): Promise<PlanoDocumento> {
+    const db = getDb();
+
+    const documento = await db.query.planoDocumento.findFirst({
+      where: eq(planoDocumento.id, documentoId),
+      with: {
+        plano: {
+          columns: {
+            status: true,
+          },
+        },
+      },
+    });
+
+    if (!documento) {
+      throw new NotFoundException("Documento não encontrado");
+    }
+
+    // Reaproveita a validação completa de acesso ao plano
+    await this.getPlanoById(user, documento.planoId);
+
+    if (!documento.approvedBy || !documento.approvedAt) {
+      throw new BadRequestException(
+        "Somente documentos aprovados podem ser impressos",
+      );
+    }
+
+    // Documento imprimível precisa ter PDF nativo ou preview convertido disponível
+    const possuiPdfNativo =
+      documento.mimeType === "application/pdf" && !!documento.url;
+    const possuiPdfConvertido =
+      documento.previewStatus === "PRONTO" && !!documento.previewUrl;
+
+    if (!possuiPdfNativo && !possuiPdfConvertido) {
+      throw new BadRequestException(
+        "Documento não possui versão em PDF disponível para impressão",
+      );
+    }
+
+    const impressoEm = new Date();
+
+    const [documentoAtualizado] = await db
+      .update(planoDocumento)
+      .set({
+        printedBy: user.userId,
+        printedAt: impressoEm,
+        updatedAt: impressoEm,
+      })
+      .where(eq(planoDocumento.id, documentoId))
+      .returning();
+
+    if (!documentoAtualizado) {
+      throw new NotFoundException("Não foi possível atualizar o documento");
+    }
+
+    const userName = await this.getUserName(user.userId);
+    await this.historicoService.registrar({
+      planoId: documento.planoId,
+      userId: user.userId,
+      userName,
+      userRole: user.role,
+      acao: "DOCUMENTO_IMPRESSO",
+      statusAnterior: null,
+      statusNovo: documento.plano.status,
+      detalhes: {
+        documentoId: documento.id,
+        documentoNome: documento.fileName || "Documento sem nome",
+        impressoEm: impressoEm.toISOString(),
+      },
+    });
 
     return documentoAtualizado;
   }

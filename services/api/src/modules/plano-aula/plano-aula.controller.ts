@@ -770,6 +770,26 @@ export class PlanoAulaController {
   }
 
   /**
+   * POST /plano-aula/documentos/:id/desaprovar
+   * Desfaz a aprovação de um documento (apenas analista_pedagogico)
+   */
+  @Post("documentos/:id/desaprovar")
+  @Roles("analista_pedagogico")
+  async desaprovarDocumento(
+    @Req() req: { user: UserContext },
+    @Param("id") documentoId: string,
+  ) {
+    const documento = await this.planoAulaService.desaprovarDocumento(
+      req.user,
+      documentoId,
+    );
+    return {
+      success: true,
+      data: documento,
+    };
+  }
+
+  /**
    * POST /plano-aula/documentos/:id/imprimir
    * Registra a impressão de um documento aprovado
    */
