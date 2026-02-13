@@ -26,6 +26,7 @@ import { ClipboardList, FileSearch, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { usePeriodos, type Periodo } from "../../features/periodos/hooks/use-periodos";
 import {
   PlanoStatusBadge,
   useAnalistaActions,
@@ -60,23 +61,24 @@ function formatarDataEnvio(data?: string): string {
   });
 }
 
-/**
- * Extrai o nome da quinzena do ID (ex: "2026-Q01" -> "Quinzena 01")
- */
-function formatarQuinzena(quinzenaId: string): string {
-  const match = quinzenaId.match(/Q(\d+)/);
-  if (match?.[1]) {
-    return `Quinzena ${match[1]}`;
-  }
-  return quinzenaId;
-}
-
 export function AnaliseContent() {
   const { listarPendentes } = useAnalistaActions();
   const [planos, setPlanos] = useState<PlanoAulaSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [segmentoAtivo, setSegmentoAtivo] = useState<SegmentoValue>("todos");
+
+  // Buscar períodos da unidade para exibir nomes ao invés de UUIDs
+  const { periodos: todosPeriodos } = usePeriodos();
+
+  // Mapa de periodoId -> Periodo para lookup rápido
+  const periodoMap = useMemo(() => {
+    const map = new Map<string, Periodo>();
+    for (const periodo of todosPeriodos) {
+      map.set(periodo.id, periodo);
+    }
+    return map;
+  }, [todosPeriodos]);
 
   /**
    * Carrega os planos pendentes da API
@@ -250,7 +252,7 @@ export function AnaliseContent() {
                 <TableRow>
                   <TableHead>Professora</TableHead>
                   <TableHead>Turma</TableHead>
-                  <TableHead>Quinzena</TableHead>
+                  <TableHead>Período</TableHead>
                   <TableHead>Segmento</TableHead>
                   <TableHead>Data Envio</TableHead>
                   <TableHead>Status</TableHead>
@@ -273,7 +275,25 @@ export function AnaliseContent() {
                         )}
                       </div>
                     </TableCell>
-                    <TableCell>{formatarQuinzena(plano.quinzenaId)}</TableCell>
+                    <TableCell>
+                      {(() => {
+                        const periodo = periodoMap.get(plano.quinzenaId);
+                        if (periodo) {
+                          return (
+                            <div>
+                              <span className="font-medium">
+                                {periodo.descricao || `${periodo.numero}º Plano`}
+                              </span>
+                              <span className="text-muted-foreground text-xs block">
+                                {new Date(periodo.dataInicio).toLocaleDateString("pt-BR")} -{" "}
+                                {new Date(periodo.dataFim).toLocaleDateString("pt-BR")}
+                              </span>
+                            </div>
+                          );
+                        }
+                        return <span className="text-muted-foreground">-</span>;
+                      })()}
+                    </TableCell>
                     <TableCell>
                       <span className="text-sm text-muted-foreground">
                         {plano.stageName || plano.stageCode || "-"}
