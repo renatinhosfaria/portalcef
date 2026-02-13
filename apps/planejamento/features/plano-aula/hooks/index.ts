@@ -8,3 +8,4 @@ export {
   useGestaoPlanos,
 } from "./use-plano-aula";
 export { useHistorico } from "./use-historico";
+export { usePeriodoData } from "./use-periodo-data";

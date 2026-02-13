@@ -28,6 +28,7 @@ export {
   useDeadlines,
   usePlanoDetalhe,
   useGestaoPlanos,
+  usePeriodoData,
 } from "./hooks";
 
 // Components
