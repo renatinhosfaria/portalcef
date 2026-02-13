@@ -28,6 +28,7 @@ import {
   Clock,
   FileText,
   Loader2,
+  Plus,
   RotateCcw,
   Send,
   User,
@@ -38,12 +39,15 @@ import { useCallback, useEffect, useState } from "react";
 
 import {
   DocumentoList,
+  DocumentoUpload,
   HistoricoTimeline,
   PlanoStatusBadge,
   useAnalistaActions,
   usePlanoAula,
   usePlanoDetalhe,
 } from "../../../features/plano-aula";
+
+import { TarefaForm } from "./tarefa-form";
 
 interface RevisaoContentProps {
   planoId: string;
@@ -74,12 +78,13 @@ export function RevisaoContent({ planoId }: RevisaoContentProps) {
     refetch,
   } = usePlanoDetalhe();
   const { loading: loadingAction, aprovar, devolver } = useAnalistaActions();
-  const { aprovarDocumento, editarComentario, deletarComentario } =
+  const { uploadDocumento, addLink, aprovarDocumento, imprimirDocumento, editarComentario, deletarComentario } =
     usePlanoAula();
 
   const [actionError, setActionError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | undefined>();
+  const [isTarefaFormOpen, setIsTarefaFormOpen] = useState(false);
 
   // Carrega o usuario atual
   useEffect(() => {
@@ -201,6 +206,65 @@ export function RevisaoContent({ planoId }: RevisaoContentProps) {
   );
 
   /**
+   * Imprime um documento aprovado e registra no histórico
+   */
+  const handleImprimirDocumento = useCallback(
+    async (documentoId: string) => {
+      try {
+        await imprimirDocumento(documentoId);
+        await refetch();
+        setSuccessMessage("Documento impresso e registrado no histórico!");
+        setTimeout(() => setSuccessMessage(null), 3000);
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "Erro ao imprimir documento";
+        setActionError(message);
+      }
+    },
+    [imprimirDocumento, refetch],
+  );
+
+  /**
+   * Upload de documento pela analista
+   */
+  const handleUploadDocumento = useCallback(
+    async (file: File) => {
+      if (!plano) return;
+      try {
+        await uploadDocumento(plano.id, file);
+        await refetch();
+        setSuccessMessage("Documento enviado com sucesso!");
+        setTimeout(() => setSuccessMessage(null), 3000);
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "Erro ao enviar documento";
+        setActionError(message);
+      }
+    },
+    [plano, uploadDocumento, refetch],
+  );
+
+  /**
+   * Adicionar link YouTube pela analista
+   */
+  const handleAddLink = useCallback(
+    async (url: string) => {
+      if (!plano) return;
+      try {
+        await addLink(plano.id, url);
+        await refetch();
+        setSuccessMessage("Link adicionado com sucesso!");
+        setTimeout(() => setSuccessMessage(null), 3000);
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "Erro ao adicionar link";
+        setActionError(message);
+      }
+    },
+    [plano, addLink, refetch],
+  );
+
+  /**
    * Aprova o plano e envia para a coordenacao
    */
   const handleAprovar = useCallback(async () => {
@@ -209,7 +273,7 @@ export function RevisaoContent({ planoId }: RevisaoContentProps) {
 
     try {
       await aprovar(planoId);
-      setSuccessMessage("Plano aprovado e enviado para a Coordenacao!");
+      setSuccessMessage("Plano aprovado com sucesso!");
       // Redirecionar apos 2 segundos
       setTimeout(() => {
         router.push("/analise");
@@ -428,6 +492,7 @@ export function RevisaoContent({ planoId }: RevisaoContentProps) {
                 onEditComentario={handleEditComentario}
                 onDeleteComentario={handleDeleteComentario}
                 onAprovar={handleAprovarDocumento}
+                onImprimir={handleImprimirDocumento}
                 currentUserId={currentUserId}
               />
             </CardContent>
@@ -466,7 +531,7 @@ export function RevisaoContent({ planoId }: RevisaoContentProps) {
                     ) : (
                       <>
                         <Send className="mr-2 h-4 w-4" />
-                        Aprovar e Enviar para Coordenacao
+                        Aprovar Plano de Aula
                       </>
                     )}
                   </Button>
@@ -491,6 +556,17 @@ export function RevisaoContent({ planoId }: RevisaoContentProps) {
                     )}
                   </Button>
 
+                  {/* Botao Criar Tarefa */}
+                  <Button
+                    onClick={() => setIsTarefaFormOpen(true)}
+                    disabled={isLoading}
+                    variant="outline"
+                    className="w-full border-blue-400 bg-blue-50 text-blue-700 hover:bg-blue-100 hover:text-blue-800"
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    Criar Tarefa vinculada ao Plano
+                  </Button>
+
                   {/* Aviso sobre comentarios */}
                   <p className="text-xs text-muted-foreground text-center">
                     Adicione comentarios aos documentos via painel flutuante
@@ -506,10 +582,31 @@ export function RevisaoContent({ planoId }: RevisaoContentProps) {
                   </AlertDescription>
                 </Alert>
               )}
+
+              {/* Upload de documento pela analista */}
+              <div className="border-t pt-3">
+                <p className="text-sm font-medium mb-2">Enviar Documento Corrigido</p>
+                <DocumentoUpload
+                  onUpload={handleUploadDocumento}
+                  onAddLink={handleAddLink}
+                  disabled={!plano}
+                />
+              </div>
             </CardContent>
           </Card>
         </div>
       </div>
+
+      <TarefaForm
+        isOpen={isTarefaFormOpen}
+        onClose={() => setIsTarefaFormOpen(false)}
+        initialContexts={{
+          quinzenaId: plano?.quinzenaId,
+          etapaId: plano?.stageId,
+          turmaId: plano?.turmaId,
+          professoraId: plano?.userId,
+        }}
+      />
     </div>
   );
 }
