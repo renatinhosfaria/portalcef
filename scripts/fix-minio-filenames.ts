@@ -12,7 +12,9 @@
 
 import {
   CopyObjectCommand,
+  GetObjectCommand,
   HeadObjectCommand,
+  PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
 import postgres from "postgres";
@@ -80,19 +82,41 @@ async function atualizarContentDisposition(
       return false; // Já correto, nada a fazer
     }
 
-    // Copiar objeto para si mesmo com nova metadata
-    await s3Client.send(
-      new CopyObjectCommand({
-        Bucket: minioBucket,
-        Key: key,
-        CopySource: `${minioBucket}/${key}`,
-        ContentType: head.ContentType || "application/octet-stream",
-        ContentDisposition: disposicaoEsperada,
-        MetadataDirective: "REPLACE",
-      }),
-    );
+    // Tentar CopyObject primeiro (mais eficiente)
+    try {
+      await s3Client.send(
+        new CopyObjectCommand({
+          Bucket: minioBucket,
+          Key: key,
+          CopySource: `${minioBucket}/${key}`,
+          ContentType: head.ContentType || "application/octet-stream",
+          ContentDisposition: disposicaoEsperada,
+          MetadataDirective: "REPLACE",
+        }),
+      );
+      return true;
+    } catch {
+      // Fallback: download + re-upload (resolve erro de assinatura do MinIO)
+      const getResponse = await s3Client.send(
+        new GetObjectCommand({ Bucket: minioBucket, Key: key }),
+      );
+      const chunks: Uint8Array[] = [];
+      for await (const chunk of getResponse.Body as AsyncIterable<Uint8Array>) {
+        chunks.push(chunk);
+      }
+      const body = Buffer.concat(chunks);
 
-    return true; // Atualizado
+      await s3Client.send(
+        new PutObjectCommand({
+          Bucket: minioBucket,
+          Key: key,
+          Body: body,
+          ContentType: head.ContentType || "application/octet-stream",
+          ContentDisposition: disposicaoEsperada,
+        }),
+      );
+      return true;
+    }
   } catch (error) {
     const mensagem =
       error instanceof Error ? error.message : String(error);
@@ -110,8 +134,7 @@ async function migrarPlanoDocumento(): Promise<ResultadoMigracao> {
   const documentos = await sql`
     SELECT storage_key, file_name, preview_key
     FROM plano_documento
-    WHERE tipo = 'ARQUIVO'
-      AND storage_key IS NOT NULL
+    WHERE storage_key IS NOT NULL
       AND file_name IS NOT NULL
   `;
 
