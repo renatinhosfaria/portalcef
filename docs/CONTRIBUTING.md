@@ -320,9 +320,10 @@ export class UsersController {
 
 ### Scopes Comuns
 
-- `auth`, `users`, `schools`, `turmas`, `planejamento`, `calendario`, `shop`
+- `auth`, `users`, `schools`, `turmas`, `planejamento`, `calendario`, `shop`, `tarefas`
+- `plano-aula`, `periodos`, `worker`, `documentos`
 - `api`, `db`, `ui`, `shared`, `components`
-- `docker`, `nginx`, `deps`, `docs`
+- `docker`, `nginx`, `deps`, `docs`, `ci`
 
 ### Exemplos
 
@@ -636,6 +637,8 @@ Relates to #456
 | Mudança em deploy/infra       | `docs/DEPLOYMENT.md`          |
 | Novo módulo                   | `docs/ARCHITECTURE.md`        |
 | Módulo de loja                | `docs/MODULO_LOJA.md`         |
+| Novo workflow de plano de aula  | `docs/API.md`, `docs/ARCHITECTURE.md` |
+| Sistema de tarefas              | `docs/API.md`, `docs/DATABASE.md`     |
 
 ### Comentários no Código
 

@@ -158,6 +158,19 @@ Body:
 
 Encerra a sessao atual.
 
+#### POST `/auth/change-password`
+
+Altera a senha do usuario autenticado.
+
+Body:
+
+```json
+{
+  "currentPassword": "senha-atual",
+  "newPassword": "nova-senha"
+}
+```
+
 #### GET `/auth/me`
 
 Retorna o usuario autenticado.
@@ -355,6 +368,325 @@ Body:
 ```json
 { "comment": "Solicitar ajustes" }
 ```
+
+---
+
+### Plano de Aula (Novo Sistema)
+
+Sistema de planos de aula com workflow de aprovacao em duas etapas: analista pedagogico + coordenadora.
+
+**Guards:** `AuthGuard` + `RolesGuard` (TenantGuard nao e usado - isolamento via UserContext no service).
+
+**Grupos de Roles:**
+- **Professora**: `professora`
+- **Analista**: `analista_pedagogico`
+- **Coordenadora**: `coordenadora_geral`, `coordenadora_bercario`, `coordenadora_infantil`, `coordenadora_fundamental_i`, `coordenadora_fundamental_ii`, `coordenadora_medio`
+- **Gestao**: `master`, `diretora_geral`, `gerente_unidade`
+
+---
+
+#### POST `/plano-aula`
+
+Cria ou retorna plano existente para turma/quinzena.
+
+Acesso: Professora.
+
+Body:
+
+```json
+{
+  "turmaId": "uuid-turma",
+  "quinzenaId": "uuid-quinzena",
+  "planoAulaPeriodoId": "uuid-periodo"
+}
+```
+
+---
+
+#### GET `/plano-aula/meus`
+
+Lista planos do usuario logado.
+
+Acesso: Professora.
+
+Query: `quinzenaId` (opcional).
+
+---
+
+#### GET `/plano-aula/:id`
+
+Busca plano por ID com documentos e comentarios.
+
+Acesso: Todas as roles do workflow (professora, analista, coordenadoras, gestao).
+
+---
+
+#### GET `/plano-aula/:id/historico`
+
+Retorna historico completo de acoes do plano, ordenado por data (mais recente primeiro).
+
+Acesso: Todas as roles do workflow.
+
+Resposta:
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "uuid",
+      "planoId": "uuid",
+      "userId": "uuid",
+      "userName": "Nome do Usuario",
+      "userRole": "coordenadora_geral",
+      "acao": "APROVADO_COORDENADORA",
+      "statusAnterior": "AGUARDANDO_COORDENADORA",
+      "statusNovo": "APROVADO",
+      "detalhes": null,
+      "createdAt": "2026-01-21T13:00:00.000Z"
+    }
+  ]
+}
+```
+
+Tipos de acao: `CRIADO`, `SUBMETIDO`, `APROVADO_ANALISTA`, `DEVOLVIDO_ANALISTA`, `APROVADO_COORDENADORA`, `DEVOLVIDO_COORDENADORA`, `DOCUMENTO_IMPRESSO`.
+
+---
+
+#### POST `/plano-aula/:id/submeter`
+
+Submete plano para analise pedagogica. Muda status de `RASCUNHO` para `AGUARDANDO_ANALISTA`.
+
+Acesso: Professora.
+
+---
+
+#### POST `/plano-aula/:id/documentos/upload`
+
+Upload de arquivo para o plano (multipart/form-data).
+
+Acesso: Professora, Analista.
+
+Tipos aceitos: PDF, DOC, DOCX, PNG, JPG. Tamanho maximo: 10MB.
+
+DOC/DOCX sao enfileirados para conversao assincrona via BullMQ (previewStatus: PENDENTE → PRONTO | ERRO).
+
+---
+
+#### POST `/plano-aula/:id/documentos/link`
+
+Adiciona link do YouTube ao plano.
+
+Acesso: Professora, Analista.
+
+Body:
+
+```json
+{
+  "url": "https://www.youtube.com/watch?v=...",
+  "titulo": "Titulo opcional"
+}
+```
+
+---
+
+#### DELETE `/plano-aula/:id/documentos/:docId`
+
+Remove documento do plano.
+
+Acesso: Gestao, Analista. **Professoras NAO podem excluir documentos.**
+
+---
+
+#### GET `/plano-aula/analista/pendentes`
+
+Lista planos pendentes para analise pedagogica (status `AGUARDANDO_ANALISTA` e `REVISAO_ANALISTA`).
+
+Acesso: Analista.
+
+---
+
+#### POST `/plano-aula/:id/analista/aprovar`
+
+Aprova plano como analista. Status muda para `AGUARDANDO_COORDENADORA`.
+
+Acesso: Analista.
+
+---
+
+#### POST `/plano-aula/:id/analista/devolver`
+
+Devolve plano como analista com comentarios em documentos especificos.
+
+Acesso: Analista.
+
+Body:
+
+```json
+{
+  "comentarios": [
+    {
+      "documentoId": "uuid-doc",
+      "comentario": "Texto do feedback"
+    }
+  ]
+}
+```
+
+---
+
+#### GET `/plano-aula/coordenadora/pendentes`
+
+Lista planos pendentes para coordenadora (status `AGUARDANDO_COORDENADORA`).
+
+Acesso: Coordenadoras + Gestao.
+
+---
+
+#### POST `/plano-aula/:id/coordenadora/aprovar`
+
+Aprovacao final do plano. Status muda para `APROVADO`.
+
+Acesso: Coordenadoras + Gestao.
+
+---
+
+#### POST `/plano-aula/:id/coordenadora/devolver`
+
+Devolve plano como coordenadora.
+
+Acesso: Coordenadoras + Gestao.
+
+Body:
+
+```json
+{
+  "comentarios": [
+    {
+      "documentoId": "uuid-doc",
+      "comentario": "Texto do feedback"
+    }
+  ]
+}
+```
+
+---
+
+#### GET `/plano-aula/dashboard`
+
+Dashboard com estatisticas por status e segmento.
+
+Acesso: Gestao + Coordenadoras.
+
+Query: `unitId` (opcional), `quinzenaId` (opcional).
+
+---
+
+#### GET `/plano-aula/gestao/listar`
+
+Lista planos com filtros e paginacao para gestao.
+
+Acesso: Gestao + Coordenadoras.
+
+Query: filtros de status, etapa, turma, quinzena, paginacao.
+
+---
+
+#### POST `/plano-aula/config/deadline`
+
+Define deadline para quinzena.
+
+Acesso: Gestao.
+
+Body:
+
+```json
+{
+  "quinzenaId": "uuid-quinzena",
+  "deadline": "2026-02-25T23:59:59Z"
+}
+```
+
+---
+
+#### GET `/plano-aula/config/deadlines`
+
+Lista deadlines configurados para a unidade.
+
+Acesso: Gestao.
+
+---
+
+#### DELETE `/plano-aula/:id`
+
+Exclui permanentemente um plano de aula.
+
+Acesso: Gestao.
+
+---
+
+#### POST `/plano-aula/comentarios`
+
+Adiciona comentario a um documento.
+
+Acesso: Analista, Coordenadoras.
+
+Body:
+
+```json
+{
+  "documentoId": "uuid-doc",
+  "comentario": "Texto do comentario"
+}
+```
+
+---
+
+#### PATCH `/plano-aula/comentarios/:id`
+
+Edita um comentario (apenas autor).
+
+Acesso: Analista, Coordenadoras.
+
+Body:
+
+```json
+{
+  "comentario": "Texto atualizado"
+}
+```
+
+---
+
+#### DELETE `/plano-aula/comentarios/:id`
+
+Deleta um comentario (apenas autor).
+
+Acesso: Analista, Coordenadoras.
+
+---
+
+#### POST `/plano-aula/documentos/:id/aprovar`
+
+Aprova um documento individualmente.
+
+Acesso: `analista_pedagogico`.
+
+---
+
+#### POST `/plano-aula/documentos/:id/desaprovar`
+
+Desfaz a aprovacao de um documento.
+
+Acesso: `analista_pedagogico`.
+
+---
+
+#### POST `/plano-aula/documentos/:id/imprimir`
+
+Registra a impressao de um documento aprovado.
+
+Acesso: Todas as roles do workflow.
 
 ---
 
@@ -1303,8 +1635,7 @@ curl -X DELETE http://localhost:3001/api/plano-aula-periodo/uuid-periodo \
 
 ## Referencias
 
-Para mais informacoes sobre o sistema de tarefas e historico:
-
-- [Sistema de Tarefas e Historico](./SISTEMA_TAREFAS_HISTORICO.md)
-- [Design Document](./plans/2026-01-21-historico-tarefas-design.md)
-- [Implementation Plan](./plans/2026-01-21-historico-tarefas-implementation.md)
+- [Arquitetura do Sistema](./ARCHITECTURE.md)
+- [Database Schema](./DATABASE.md)
+- [Seguranca e RBAC](./SECURITY.md)
+- [Modulo de Loja](./MODULO_LOJA.md)

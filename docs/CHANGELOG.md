@@ -11,7 +11,7 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
 ### ⚠️ Pendências Conhecidas
 
-- **CORS incompleto**: Faltam origens para `calendario` (3008), `loja` (3010), `loja-admin` (3011) em `services/api/src/main.ts`
+- **CORS tarefas**: Falta origem para `tarefas` (3012) em `services/api/src/config/cors.ts`
 - **docker-compose.dev.yml**: Mapeamento incorreto de portas (home na 3006 ao invés de 3000)
 - **shop_interest_requests.status**: Campo `status` usado em `shop-interest.service.ts` mas não existe no schema
 
@@ -28,6 +28,49 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 - Instruções no header do [docker-compose.prod.yml](../docker-compose.prod.yml)
 
 ### ✨ Adicionado
+
+#### Plano de Aula (Novo Sistema)
+
+- Workflow completo de aprovação em duas etapas (analista + coordenadora)
+- 7 status: RASCUNHO → AGUARDANDO_ANALISTA → AGUARDANDO_COORDENADORA → APROVADO
+- Upload de documentos com conversão assíncrona DOC/DOCX → PDF
+- Links do YouTube como material de apoio
+- Aprovação individual de documentos pelo analista
+- Registro de impressão de documentos
+- Comentários em documentos específicos
+- Histórico completo de ações (auditoria)
+- Dashboard de gestão com estatísticas por status/segmento
+- Listagem com filtros e paginação para gestão
+
+#### Períodos Configuráveis
+
+- Períodos de planejamento configuráveis por etapa educacional
+- CRUD completo: criar, listar, editar, excluir períodos
+- Validação de sobreposição de datas
+- Filtro por turma (retorna períodos da etapa correspondente)
+- Permissões por etapa (coordenadoras só gerenciam sua etapa)
+
+#### Sistema de Tarefas
+
+- Criação manual e automática de tarefas
+- Prioridades: ALTA, MÉDIA, BAIXA
+- Contexto flexível por módulo (PLANEJAMENTO, CALENDARIO, TURMAS, etc.)
+- Estatísticas agregadas (pendentes, concluídas, atrasadas)
+- App frontend dedicado (tarefas :3012)
+
+#### Worker de Conversão
+
+- Serviço dedicado para conversão de documentos (DOCX → PDF)
+- BullMQ job queue com retry e backoff exponencial
+- Preview assíncrono com 3 status (PENDENTE, PRONTO, ERRO)
+
+#### CI/CD
+
+- GitHub Actions pipeline completo
+- Quality check (lint + typecheck) em PRs
+- Build matrix para 12 serviços
+- Deploy automático com rolling deployment
+- E2E tests opcionais com Playwright
 
 #### Loja Admin
 

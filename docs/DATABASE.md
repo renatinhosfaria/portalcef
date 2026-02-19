@@ -26,9 +26,15 @@ Core (multi-tenant):
 Planejamento (Novo):
 - `plano_aula_periodo` - Periodos configuraveis por etapa
 - `plano_aula` - Planos de aula com periodos flexiveis
-- `quinzena_documents` - Documentos anexados (DOCX→PDF)
+- `plano_documento` - Documentos anexados aos planos (ARQUIVO, LINK_YOUTUBE)
+- `documento_comentario` - Comentarios de revisao por documento
 - `plano_aula_historico` - Rastreamento de mudancas de status
-- `plano_aula_comentarios` - Comentarios de revisao
+- `quinzena_config` - Configuracao de prazos por quinzena/unidade
+- `quinzena_documents` - Documentos legados de quinzena
+
+Tarefas:
+- `tarefas` - Tarefas manuais e automaticas
+- `tarefa_contextos` - Contexto flexivel por modulo
 
 Planejamento (Legacy):
 - `plannings`, `planning_contents`, `planning_reviews`
@@ -226,35 +232,64 @@ Shop (CEF Shop):
 
 ### plano_aula
 
-**Sistema atual de planejamento com períodos configuráveis.**
+**Sistema atual de planejamento com períodos configuráveis e fluxo de aprovação em dois níveis (analista + coordenadora).**
 
 | Coluna | Tipo | Descricao |
 | ------ | ---- | --------- |
 | `id` | uuid | PK |
-| `professora_id` | uuid | FK -> users.id (professora titular) |
-| `turma_id` | uuid | FK -> turmas.id |
-| `plano_aula_periodo_id` | uuid | FK -> plano_aula_periodo.id |
-| `status` | text | Enum: RASCUNHO, ENVIADO, EM_REVISAO, APROVADO, REJEITADO |
-| `versao` | integer | Numero da versao (incrementa a cada submissao) |
-| `criado_em` | timestamptz | Criacao |
-| `atualizado_em` | timestamptz | Atualizacao |
-| `enviado_em` | timestamptz | Data de envio |
-| `aprovado_em` | timestamptz | Data de aprovacao |
+| `user_id` | uuid | FK -> users.id (professora titular, NOT NULL) |
+| `turma_id` | uuid | FK -> turmas.id (NOT NULL, CASCADE) |
+| `unit_id` | uuid | FK -> units.id (NOT NULL, CASCADE) |
+| `plano_aula_periodo_id` | uuid | FK -> plano_aula_periodo.id (opcional, CASCADE) |
+| `quinzena_id` | uuid | Identificador da quinzena (NOT NULL) |
+| `status` | text | Enum plano_aula_status (default RASCUNHO) |
+| `submitted_at` | timestamptz | Data de envio |
+| `approved_at` | timestamptz | Data de aprovacao |
+| `created_at` | timestamptz | Criacao |
+| `updated_at` | timestamptz | Atualizacao |
 
 **Índices:**
-- INDEX(professora_id) - Planos por professora
-- INDEX(turma_id) - Planos por turma
-- INDEX(plano_aula_periodo_id) - Planos por periodo
-- INDEX(status) - Filtro por status
+- `plano_aula_status_idx` on status
+- `plano_aula_quinzena_id_idx` on quinzena_id
+- `plano_aula_unit_id_idx` on unit_id
+- `plano_aula_user_idx` on user_id
+- `plano_aula_periodo_id_idx` on plano_aula_periodo_id
+- UNIQUE `plano_aula_user_turma_quinzena_unique` on (user_id, turma_id, quinzena_id)
 
 **Relações:**
-- `quinzena_documents.plano_aula_id` FK -> `plano_aula.id` (documentos anexados)
-- `plano_aula_historico.plano_aula_id` FK -> `plano_aula.id` (historico de mudancas)
-- `plano_aula_comentarios.plano_aula_id` FK -> `plano_aula.id` (comentarios de revisao)
+- `plano_documento.plano_id` FK -> `plano_aula.id` (documentos anexados)
+- `plano_aula_historico.plano_id` FK -> `plano_aula.id` (historico de mudancas)
+- `documento_comentario` via `plano_documento` (comentarios por documento)
 
-### quinzena_documents
+### plano_documento
 
-**Documentos anexados aos planos de aula.**
+**Documentos anexados aos planos de aula (sistema atual). Suporta arquivos e links do YouTube, com conversao automatica para PDF preview.**
+
+| Coluna | Tipo | Descricao |
+| ------ | ---- | --------- |
+| `id` | uuid | PK |
+| `plano_id` | uuid | FK -> plano_aula.id (NOT NULL, CASCADE) |
+| `tipo` | text | Enum: ARQUIVO, LINK_YOUTUBE |
+| `storage_key` | varchar(500) | Key no storage (para ARQUIVO) |
+| `url` | varchar(1000) | URL completa (YouTube ou arquivo publico) |
+| `file_name` | varchar(255) | Nome original do arquivo |
+| `file_size` | integer | Tamanho em bytes |
+| `mime_type` | varchar(100) | Tipo MIME |
+| `preview_key` | varchar(500) | Key do PDF convertido no storage |
+| `preview_url` | varchar(1000) | URL publica do preview |
+| `preview_mime_type` | varchar(100) | Tipo MIME do preview |
+| `preview_status` | text | Enum: PENDENTE, PRONTO, ERRO |
+| `preview_error` | text | Mensagem de erro |
+| `approved_by` | uuid | FK -> users.id (analista que aprovou) |
+| `approved_at` | timestamptz | Data da aprovacao |
+| `printed_by` | uuid | FK -> users.id (quem imprimiu) |
+| `printed_at` | timestamptz | Data da impressao |
+| `created_at` | timestamptz | Criacao |
+| `updated_at` | timestamptz | Atualizacao |
+
+### quinzena_documents (Legacy)
+
+**NOTA:** Tabela legada para documentos de quinzena do sistema antigo. Mantida para compatibilidade. Para documentos do sistema atual, usar `plano_documento`.
 
 | Coluna | Tipo | Descricao |
 | ------ | ---- | --------- |
@@ -268,30 +303,86 @@ Shop (CEF Shop):
 
 ### plano_aula_historico
 
-**Rastreamento de mudanças de status.**
+**Rastreamento de mudanças de status com dados denormalizados do usuario para auditoria.**
 
 | Coluna | Tipo | Descricao |
 | ------ | ---- | --------- |
 | `id` | uuid | PK |
-| `plano_aula_id` | uuid | FK -> plano_aula.id |
+| `plano_id` | uuid | FK -> plano_aula.id (NOT NULL, CASCADE) |
+| `user_id` | uuid | FK -> users.id (NOT NULL) |
+| `user_name` | text | Nome do usuario (denormalizado, NOT NULL) |
+| `user_role` | text | Role do usuario (denormalizado, NOT NULL) |
+| `acao` | text | Enum: CRIADO, SUBMETIDO, APROVADO_ANALISTA, DEVOLVIDO_ANALISTA, APROVADO_COORDENADORA, DEVOLVIDO_COORDENADORA, DOCUMENTO_IMPRESSO |
 | `status_anterior` | text | Status antes da mudanca |
-| `status_novo` | text | Novo status |
-| `usuario_id` | uuid | FK -> users.id (quem fez a mudanca) |
-| `observacao` | text | Observacao opcional |
-| `criado_em` | timestamptz | Quando a mudanca ocorreu |
+| `status_novo` | text | Novo status (NOT NULL) |
+| `detalhes` | jsonb | Detalhes adicionais (flexivel) |
+| `created_at` | timestamptz | Quando a mudanca ocorreu |
 
-### plano_aula_comentarios
+### documento_comentario
 
-**Comentários de revisão por coordenadoras.**
+**Comentarios de revisao vinculados a documentos especificos, com suporte a resolucao.**
 
 | Coluna | Tipo | Descricao |
 | ------ | ---- | --------- |
 | `id` | uuid | PK |
-| `plano_aula_id` | uuid | FK -> plano_aula.id |
-| `documento_id` | uuid | FK -> quinzena_documents.id (opcional - comentario em documento especifico) |
-| `autor_id` | uuid | FK -> users.id (coordenadora) |
-| `conteudo` | text | Texto do comentario |
-| `criado_em` | timestamptz | Criacao |
+| `documento_id` | uuid | FK -> plano_documento.id (NOT NULL, CASCADE) |
+| `autor_id` | uuid | FK -> users.id (NOT NULL, CASCADE) |
+| `comentario` | text | Texto do comentario (NOT NULL) |
+| `resolved` | boolean | Status de resolucao (default false) |
+| `created_at` | timestamptz | Criacao |
+
+### quinzena_config
+
+**Configuracao de prazos de entrega por quinzena e unidade.**
+
+| Coluna | Tipo | Descricao |
+| ------ | ---- | --------- |
+| `id` | uuid | PK |
+| `unit_id` | uuid | FK -> units.id (NOT NULL, CASCADE) |
+| `quinzena_id` | uuid | Identificador da quinzena (NOT NULL) |
+| `deadline` | timestamptz | Prazo para entrega (NOT NULL) |
+| `created_by` | uuid | FK -> users.id |
+| `created_at` | timestamptz | Criacao |
+| `updated_at` | timestamptz | Atualizacao |
+
+---
+
+## Tarefas
+
+### tarefas
+
+**Tarefas manuais e automaticas geradas pelo sistema, com controle de prioridade e prazo.**
+
+| Coluna | Tipo | Descricao |
+| ------ | ---- | --------- |
+| `id` | uuid | PK |
+| `school_id` | uuid | FK -> schools.id (NOT NULL) |
+| `unit_id` | uuid | FK -> units.id |
+| `titulo` | text | Titulo da tarefa (NOT NULL) |
+| `descricao` | text | Descricao detalhada |
+| `status` | text | Enum: PENDENTE, CONCLUIDA, CANCELADA |
+| `prioridade` | text | Enum: ALTA, MEDIA, BAIXA (NOT NULL) |
+| `prazo` | timestamptz | Prazo de conclusao (NOT NULL) |
+| `criado_por` | uuid | FK -> users.id (NOT NULL) |
+| `responsavel` | uuid | FK -> users.id (NOT NULL) |
+| `tipo_origem` | text | Enum: AUTOMATICA, MANUAL (NOT NULL) |
+| `created_at` | timestamptz | Criacao |
+| `updated_at` | timestamptz | Atualizacao |
+| `concluida_em` | timestamptz | Data de conclusao |
+
+### tarefa_contextos
+
+**Contexto flexivel vinculado a tarefas, permitindo associacao com diferentes modulos do sistema.**
+
+| Coluna | Tipo | Descricao |
+| ------ | ---- | --------- |
+| `id` | uuid | PK |
+| `tarefa_id` | uuid | FK -> tarefas.id (NOT NULL, CASCADE) |
+| `modulo` | text | Enum: PLANEJAMENTO, CALENDARIO, USUARIOS, TURMAS, LOJA |
+| `quinzena_id` | varchar(10) | Identificador de quinzena |
+| `etapa_id` | uuid | FK -> education_stages.id |
+| `turma_id` | uuid | FK -> turmas.id |
+| `professora_id` | uuid | FK -> users.id |
 
 ---
 
@@ -351,14 +442,23 @@ Campos principais: `unit_id`, `max_installments`, `is_shop_enabled`, `pickup_ins
 
 ### plano_aula_status
 
-`RASCUNHO`, `ENVIADO`, `EM_REVISAO`, `APROVADO`, `REJEITADO`
+`RASCUNHO`, `AGUARDANDO_ANALISTA`, `AGUARDANDO_COORDENADORA`, `DEVOLVIDO_ANALISTA`, `DEVOLVIDO_COORDENADORA`, `REVISAO_ANALISTA`, `APROVADO`
 
-**Fluxo:**
-1. Professora cria plano → `RASCUNHO`
-2. Professora envia → `ENVIADO`
-3. Coordenadora inicia revisão → `EM_REVISAO`
-4. Coordenadora aprova → `APROVADO`
-5. Coordenadora rejeita → `REJEITADO` (professora pode reenviar)
+**Fluxo de aprovacao em dois niveis:**
+
+```mermaid
+stateDiagram-v2
+    [*] --> RASCUNHO: Professora cria
+    RASCUNHO --> AGUARDANDO_ANALISTA: Professora submete
+    AGUARDANDO_ANALISTA --> AGUARDANDO_COORDENADORA: Analista aprova
+    AGUARDANDO_ANALISTA --> DEVOLVIDO_ANALISTA: Analista devolve
+    DEVOLVIDO_ANALISTA --> REVISAO_ANALISTA: Professora reenvia
+    REVISAO_ANALISTA --> AGUARDANDO_COORDENADORA: Analista aprova
+    AGUARDANDO_COORDENADORA --> APROVADO: Coordenadora aprova
+    AGUARDANDO_COORDENADORA --> DEVOLVIDO_COORDENADORA: Coordenadora devolve
+    DEVOLVIDO_COORDENADORA --> AGUARDANDO_ANALISTA: Professora reenvia
+    APROVADO --> [*]
+```
 
 ### education_stage_enum
 
@@ -372,6 +472,19 @@ Campos principais: `unit_id`, `max_installments`, `is_shop_enabled`, `pickup_ins
 - `paymentMethodEnum`: `PIX`, `CARTAO_CREDITO`, `CARTAO_DEBITO`, `DINHEIRO`
 - `movementTypeEnum`: `ENTRADA`, `VENDA_ONLINE`, `VENDA_PRESENCIAL`, `AJUSTE`, `RESERVA`, `LIBERACAO`
 
+### planejamento enums (novos)
+
+- `documentoTipoEnum`: `ARQUIVO`, `LINK_YOUTUBE`
+- `documentoPreviewStatusEnum`: `PENDENTE`, `PRONTO`, `ERRO`
+- `planoAulaHistoricoAcaoEnum`: `CRIADO`, `SUBMETIDO`, `APROVADO_ANALISTA`, `DEVOLVIDO_ANALISTA`, `APROVADO_COORDENADORA`, `DEVOLVIDO_COORDENADORA`, `DOCUMENTO_IMPRESSO`
+
+### tarefas enums
+
+- `tarefaStatusEnum`: `PENDENTE`, `CONCLUIDA`, `CANCELADA`
+- `tarefaPrioridadeEnum`: `ALTA`, `MEDIA`, `BAIXA`
+- `tarefaTipoOrigemEnum`: `AUTOMATICA`, `MANUAL`
+- `tarefaContextoModuloEnum`: `PLANEJAMENTO`, `CALENDARIO`, `USUARIOS`, `TURMAS`, `LOJA`
+
 ---
 
 ## Drizzle ORM
@@ -383,8 +496,11 @@ packages/db/src/schema/
   calendar-events.ts
   education-stages.ts
   planejamento.ts            # Legacy (plannings, planning_contents, planning_reviews)
-  plano-aula.ts              # Novo sistema (plano_aula, plano_aula_periodo)
-  quinzena-documents.ts      # Documentos anexados aos planos
+  plano-aula.ts              # Novo sistema (plano_aula, plano_documento, documento_comentario)
+  plano-aula-periodo.ts      # Periodos configuraveis por etapa
+  plano-aula-historico.ts    # Historico de acoes no plano
+  quinzena-documents.ts      # Documentos legados de quinzena
+  tarefas.ts                 # Tarefas e contextos (tarefas, tarefa_contextos)
   role-groups.ts
   schools.ts
   sessions.ts
@@ -422,10 +538,15 @@ Sistema **Legacy** (quinzenas fixas):
 
 Sistema **Novo** (períodos configuráveis):
 - `plano_aula_periodo` - Períodos configurados por coordenadora
-- `plano_aula` - Planos vinculados a períodos flexíveis
-- `quinzena_documents` - Upload e conversão DOCX→PDF via Carbone
-- `plano_aula_historico` - Auditoria de mudanças
-- `plano_aula_comentarios` - Feedback estruturado
+- `plano_aula` - Planos vinculados a períodos e quinzenas
+- `plano_documento` - Documentos com preview automatico e aprovacao por analista
+- `documento_comentario` - Feedback por documento com resolucao
+- `plano_aula_historico` - Auditoria completa com dados denormalizados
+- `quinzena_config` - Prazos configuráveis por quinzena/unidade
+
+Sistema **Tarefas**:
+- `tarefas` - Tarefas manuais e automaticas com prioridade e prazo
+- `tarefa_contextos` - Contexto flexivel vinculado a modulos do sistema
 
 **Status:**
 - ✅ Migration 0012 aplicada em produção

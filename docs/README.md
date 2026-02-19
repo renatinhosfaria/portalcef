@@ -35,7 +35,8 @@ O **Portal Digital Colegio Essencia Feliz** e uma plataforma web moderna para ge
 | **Planejamento**  | 3007  | Planejamento pedagogico quinzenal           |
 | **Loja**          | 3010  | Loja publica (uniformes)                    |
 | **Loja Admin**    | 3011  | Administracao de produtos, estoque, pedidos |
-| **API**           | 3001  | Backend REST centralizado                   |
+| **Tarefas**       | 3012  | Gerenciamento de tarefas                    |
+| **API**           | 3001/3002 | Backend REST centralizado (18 modulos)  |
 
 ### Principais Funcionalidades
 
@@ -46,6 +47,7 @@ O **Portal Digital Colegio Essencia Feliz** e uma plataforma web moderna para ge
 - **Calendario Escolar**: Eventos letivos com filtros por unidade e permissao
 - **Dashboard Analitico**: Metricas, indicadores semaforicos, KPIs de First Pass Yield
 - **Design System**: Componentes consistentes com shadcn/ui e Tailwind CSS
+- **Conversao de Documentos**: Worker assincrono para DOCX->PDF via BullMQ
 
 ---
 
@@ -96,6 +98,7 @@ pnpm dev
 | Planejamento   | http://localhost:3007 |
 | Loja           | http://localhost:3010 |
 | Loja Admin     | http://localhost:3011 |
+| Tarefas        | http://localhost:3012 |
 | API            | http://localhost:3001 |
 | Drizzle Studio | http://localhost:4983 |
 
@@ -120,7 +123,7 @@ pnpm dev
 ### Estrutura do Projeto
 
 ```portalessencia/
-+-- apps/                           # Aplicacoes Next.js
++-- apps/                           # 10 Aplicacoes Next.js
 |   +-- home/             :3000     # Portal publico
 |   +-- calendario/       :3008     # Calendario escolar
 |   +-- login/            :3003     # Autenticacao
@@ -132,7 +135,8 @@ pnpm dev
 |   +-- loja-admin/       :3011     # Admin da loja
 |
 +-- services/
-|   +-- api/              :3001     # Backend NestJS
+|   +-- api/              :3001     # Backend NestJS (18 modulos)
+|   +-- worker/           :3100     # Worker de conversao de documentos
 |
 +-- packages/
 |   +-- ui/                        # Design System (shadcn/ui)

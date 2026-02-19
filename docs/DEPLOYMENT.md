@@ -9,7 +9,7 @@ Guia completo de deployment do Portal Digital Colégio Essência Feliz.
 O Portal Essência Feliz utiliza uma arquitetura containerizada baseada em **Docker Compose** com as seguintes características:
 
 - **Reverse Proxy**: Nginx + Certbot (Let's Encrypt SSL automático)
-- **Frontend**: 9 apps Next.js independentes
+- **Frontend**: 10 apps Next.js independentes
 - **Backend**: API NestJS + Fastify
 - **Database**: PostgreSQL 16 com volumes persistentes
 - **Cache**: Redis 7
@@ -38,6 +38,7 @@ Internet
    ├──→ /calendario/*   →  essencia-calendario:3008 (Next.js)
    ├──→ /loja/*         →  essencia-loja:3010      (Next.js)
    ├──→ /loja-admin/*   →  essencia-loja-admin:3011 (Next.js)
+   ├──→ /tarefas/*      →  essencia-tarefas:3012   (Next.js)
    └──→ /*              →  essencia-home:3000      (Next.js)
    │
    ▼
@@ -71,6 +72,8 @@ Internet
 | **Calendario**   | essencia-calendario      | 3008          | —             | —            |
 | **Loja**         | essencia-loja            | 3010          | —             | —            |
 | **Loja Admin**   | essencia-loja-admin      | 3011          | —             | —            |
+| **Tarefas**      | essencia-tarefas         | 3012          | —             | —            |
+| **Worker**       | essencia-worker          | 3100          | —             | —            |
 | **PostgreSQL**   | essencia-postgres        | 5432          | —             | pg_isready   |
 | **Redis**        | essencia-redis           | 6379          | —             | redis-cli    |
 | **MinIO**        | essencia-minio           | 9000, 9001    | —             | /health/live |
@@ -645,35 +648,35 @@ DATABASE_URL=postgresql://user:pass@postgres:5432/essencia_db?pool_timeout=10&po
 
 ---
 
-## CI/CD (Futuro)
+## CI/CD (GitHub Actions)
 
-### GitHub Actions (Exemplo)
+O pipeline de CI/CD está configurado em `.github/workflows/deploy.yml` com os seguintes estágios:
 
-```yaml
-name: Deploy to Production
+### 1. Quality Check
+- **Trigger**: Todo push para `main` e pull requests
+- **Tasks**: `pnpm turbo lint` e `pnpm turbo typecheck`
+- Node 22, pnpm 9.15.1, Turbo cache
 
-on:
-  push:
-    branches: [main]
+### 2. Build de Imagens Docker (Matrix)
+- 10 apps Next.js + API + Worker (12 serviços)
+- Build paralelo com matrix strategy
+- Cache otimizado com GitHub Actions cache
+- Imagens publicadas no GHCR (GitHub Container Registry)
 
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Deploy to VPS
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          script: |
-            cd /opt/essencia
-            git pull origin main
-            docker compose -f docker-compose.prod.yml build --no-cache
-            docker compose -f docker-compose.prod.yml up -d
-            ./scripts/health-check.sh
-```
+### 3. Deploy em Produção
+- **Condição**: Apenas branch `main` (não PRs)
+- Acesso via SSH (`appleboy/ssh-action`)
+- Etapas:
+  1. `git pull` do código mais recente
+  2. `docker compose pull` das novas imagens
+  3. `./scripts/deploy-rolling.sh` (zero downtime)
+  4. `./scripts/health-check.sh` (verificação)
+  5. Limpeza de imagens antigas (24h+)
+
+### 4. E2E Tests (Opcional)
+- Executados após deploy em produção
+- Playwright contra `https://www.portalcef.com.br`
+- Reports de testes salvos como artifacts
 
 ---
 

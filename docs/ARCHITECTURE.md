@@ -9,32 +9,34 @@ Este documento descreve a arquitetura tecnica do Portal Digital Colegio Essencia
 O sistema segue uma arquitetura de **monorepo** com separacao clara entre frontend (Next.js apps), backend (NestJS API) e pacotes compartilhados. A comunicacao entre camadas e feita exclusivamente via HTTP/REST.
 
 ```
-Frontend (Next.js)
+Frontend (Next.js 15 - 10 apps)
   - home :3000
-  - calendario :3008
   - login :3003
   - usuarios :3004
   - escolas :3005
   - turmas :3006
   - planejamento :3007
+  - calendario :3008
   - loja :3010
   - loja-admin :3011
+  - tarefas :3012
 
         |
         |  HTTP/REST
         v
 
-Backend (NestJS API) :3001
-  - auth, users, schools, units, stages, turmas, plannings
-  - calendar, shop, payments, stats, setup, health, storage
+Backend (NestJS + Fastify)
+  - API :3001/3002       (18 modulos)
+  - Worker :3100         (conversao DOCX->PDF)
 
         |
         v
 
 Data Layer
-  - PostgreSQL :5432
-  - Redis :6379
-  - MinIO (opcional) :9000/9001
+  - PostgreSQL :5432     (Drizzle ORM)
+  - Redis :6379          (Sessoes, cache)
+  - MinIO :9000/9001     (Storage de arquivos)
+  - BullMQ              (Job queue via Redis)
 ```
 
 ---
@@ -72,6 +74,8 @@ Data Layer
 | **ioredis**     | 5.4.2   | Cliente Redis     |
 | **bcrypt**      | 5.1.1   | Hashing de senhas |
 | **Stripe**      | 20.1.2  | Pagamentos (Shop) |
+| **BullMQ**      | 5.28.4  | Job queue (conversao de documentos) |
+| **AWS SDK S3**  | -       | Storage de arquivos (MinIO) |
 
 ### Infraestrutura
 
@@ -127,42 +131,54 @@ apps/
 |   +-- lib/
 |   +-- package.json
 +-- loja-admin/         # Admin da loja (:3011)
+|   +-- app/
+|   +-- components/
+|   +-- package.json
++-- tarefas/            # Sistema de gerenciamento de tarefas (:3012)
     +-- app/
-    +-- components/
     +-- package.json
 ```
 
 ### Services (services/)
 
-Backend API centralizado.
+Backend API centralizado e worker de processamento.
 
 ```
 services/
-+-- api/
++-- api/                :3001/3002  # Backend NestJS (18 modulos)
+|   +-- src/
+|   |   +-- app.module.ts           # Modulo raiz
+|   |   +-- main.ts                 # Bootstrap Fastify
+|   |   +-- common/
+|   |   |   +-- decorators/
+|   |   |   +-- filters/
+|   |   |   +-- guards/
+|   |   |   +-- interceptors/
+|   |   |   +-- middleware/
+|   |   |   +-- storage/            # Upload (MinIO)
+|   |   +-- modules/
+|   |       +-- auth/               # Login, logout, sessoes
+|   |       +-- calendar/           # Calendario escolar
+|   |       +-- health/             # Health check
+|   |       +-- payments/           # Webhooks Stripe
+|   |       +-- plannings/          # Planejamentos (Legacy)
+|   |       +-- plano-aula/         # Plano de aula (Novo workflow)
+|   |       +-- plano-aula-periodo/ # Periodos configuraveis
+|   |       +-- quinzena-documents/ # Documentos de quinzena (Legacy)
+|   |       +-- schools/            # Escolas
+|   |       +-- security/           # CSP reporting e headers
+|   |       +-- setup/              # Bootstrap inicial
+|   |       +-- shop/               # CEF Shop
+|   |       +-- stages/             # Etapas educacionais
+|   |       +-- stats/              # Dashboard stats
+|   |       +-- tarefas/            # Sistema de tarefas
+|   |       +-- turmas/             # Turmas
+|   |       +-- units/              # Unidades
+|   |       +-- users/              # Usuarios
+|   +-- package.json
++-- worker/             :3100       # Worker de conversao de documentos
     +-- src/
-    |   +-- app.module.ts           # Modulo raiz
-    |   +-- main.ts                 # Bootstrap Fastify
-    |   +-- common/
-    |   |   +-- decorators/
-    |   |   +-- filters/
-    |   |   +-- guards/
-    |   |   +-- interceptors/
-    |   |   +-- middleware/
-    |   |   +-- storage/            # Upload (MinIO)
-    |   +-- modules/
-    |       +-- auth/               # Login, logout, sessoes
-    |       +-- calendar/           # Calendario escolar
-    |       +-- health/             # Health check
-    |       +-- payments/           # Webhooks Stripe
-    |       +-- plannings/          # Planejamentos
-    |       +-- schools/            # Escolas
-    |       +-- setup/              # Bootstrap inicial
-    |       +-- shop/               # CEF Shop
-    |       +-- stages/             # Etapas
-    |       +-- stats/              # Dashboard stats
-    |       +-- turmas/             # Turmas
-    |       +-- units/              # Unidades
-    |       +-- users/              # Usuarios
+    |   +-- index.ts               # Bootstrap
     +-- package.json
 ```
 
@@ -355,7 +371,9 @@ apps/planejamento/
        └─▶ Limpa cookie
 ```
 
-### Wizard de Planejamento
+### Wizard de Planejamento (Legacy)
+
+**NOTA:** Sistema legado (plannings). O novo sistema usa plano_aula com workflow de analista + coordenadora (ver secao abaixo).
 
 ```
 1. Criacao
@@ -383,6 +401,95 @@ apps/planejamento/
        └─▶ Status = EM_AJUSTE
        └─▶ reviewCycles++
        └─▶ Cria planning_review com comentario
+```
+
+### Fluxo do Plano de Aula (Novo Sistema)
+
+O novo sistema de plano de aula substitui o wizard legado com um workflow de aprovacao em duas etapas (analista + coordenadora).
+
+**Workflow de Status:**
+
+```mermaid
+stateDiagram-v2
+    [*] --> RASCUNHO: Professora cria
+    RASCUNHO --> AGUARDANDO_ANALISTA: Professora submete
+    AGUARDANDO_ANALISTA --> AGUARDANDO_COORDENADORA: Analista aprova
+    AGUARDANDO_ANALISTA --> DEVOLVIDO_ANALISTA: Analista devolve
+    DEVOLVIDO_ANALISTA --> REVISAO_ANALISTA: Professora reenvia
+    REVISAO_ANALISTA --> AGUARDANDO_COORDENADORA: Analista aprova
+    AGUARDANDO_COORDENADORA --> APROVADO: Coordenadora aprova
+    AGUARDANDO_COORDENADORA --> DEVOLVIDO_COORDENADORA: Coordenadora devolve
+    DEVOLVIDO_COORDENADORA --> AGUARDANDO_ANALISTA: Professora reenvia
+    APROVADO --> [*]
+```
+
+**Detalhamento:**
+
+```
+1. Criacao (Professora)
+   POST /plano-aula
+   └─▶ Cria plano para turma/quinzena
+       └─▶ Status = RASCUNHO
+           └─▶ Upload de documentos (DOC, DOCX, PDF, imagens)
+               └─▶ Adicao de links YouTube
+
+2. Submissao (Professora)
+   POST /plano-aula/:id/submeter
+   └─▶ Valida documentos anexados
+       └─▶ Status = AGUARDANDO_ANALISTA
+           └─▶ submittedAt = now()
+
+3. Analise (Analista Pedagogico)
+   └─▶ Aprovar: POST /plano-aula/:id/analista/aprovar
+       └─▶ Status = AGUARDANDO_COORDENADORA
+   └─▶ Devolver: POST /plano-aula/:id/analista/devolver
+       └─▶ Status = DEVOLVIDO_ANALISTA
+       └─▶ Comentarios em documentos especificos
+
+4. Revisao (Professora - apos devolucao analista)
+   POST /plano-aula/:id/submeter
+   └─▶ Status = REVISAO_ANALISTA
+
+5. Aprovacao Final (Coordenadora)
+   └─▶ Aprovar: POST /plano-aula/:id/coordenadora/aprovar
+       └─▶ Status = APROVADO
+       └─▶ approvedAt = now()
+   └─▶ Devolver: POST /plano-aula/:id/coordenadora/devolver
+       └─▶ Status = DEVOLVIDO_COORDENADORA
+       └─▶ Volta para analista apos resubmissao
+
+6. Conversao de Documentos (Worker)
+   └─▶ DOC/DOCX enviados sao enfileirados no BullMQ
+       └─▶ Worker converte para PDF
+           └─▶ previewStatus: PENDENTE -> PRONTO | ERRO
+```
+
+### Worker Service
+
+O worker processa conversao assincrona de documentos DOC/DOCX para PDF.
+
+**Tecnologia:**
+- BullMQ 5.28.4 (job queue via Redis)
+- LibreOffice (conversao DOCX -> PDF)
+- AWS SDK S3 (upload do preview para MinIO)
+
+**Fluxo:**
+
+```
+1. Upload de DOC/DOCX
+   API -> BullMQ queue "documentos-conversao"
+
+2. Worker processa
+   Worker consome job
+   └─▶ Download do arquivo original do MinIO
+       └─▶ Conversao para PDF via LibreOffice
+           └─▶ Upload do PDF para MinIO
+               └─▶ Atualiza previewUrl, previewKey, previewStatus = PRONTO
+
+3. Erro de conversao
+   └─▶ previewStatus = ERRO
+   └─▶ previewError = mensagem
+   └─▶ Retry: 3x com backoff exponencial
 ```
 
 ---

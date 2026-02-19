@@ -111,6 +111,15 @@ Escola -> Unidade -> Usuarios -> Recursos
 
 ## Rate Limiting
 
+### ThrottlerModule (Global)
+
+| Configuracao | Limite | Janela |
+| ------------ | ------ | ------ |
+| **Default** | 10.000 requests | 1 minuto |
+| **Strict** | 1.000 requests | 1 hora |
+
+### Endpoints Especificos
+
 | Endpoint           | Limite       | Janela |
 | ------------------ | ------------ | ------ |
 | `/stats/dashboard` | 5 requests/IP | 15s    |
@@ -120,27 +129,7 @@ Escola -> Unidade -> Usuarios -> Recursos
 
 ## CORS
 
-Config atual em `services/api/src/main.ts`:
-
-```ts
-origin: [
-  "http://localhost:3000", // home
-  "http://localhost:3003", // login
-  "http://localhost:3004", // usuarios
-  "http://localhost:3005", // escolas
-  "http://localhost:3006", // turmas
-  "http://localhost:3007"  // planejamento
-]
-```
-
-> **⚠️ PENDÊNCIA CONHECIDA**: O código atual **não inclui** as origens dos apps:
-> - `calendario` (porta 3008)
-> - `loja` (porta 3010)
-> - `loja-admin` (porta 3011)
->
-> Esses apps terão erros de CORS até que `services/api/src/main.ts` seja atualizado para incluir essas origens.
-
-**CORS completo recomendado:**
+Configuracao em `services/api/src/config/cors.ts`:
 
 ```ts
 origin: [
@@ -152,9 +141,23 @@ origin: [
   "http://localhost:3007",  // planejamento
   "http://localhost:3008",  // calendario
   "http://localhost:3010",  // loja
-  "http://localhost:3011"   // loja-admin
+  "http://localhost:3011",  // loja-admin
 ]
 ```
+
+> **⚠️ PENDENCIA**: O app `tarefas` (porta 3012) ainda nao esta incluido nas origens CORS.
+
+**Producao**: Em producao, o CORS e desnecessario pois todos os apps estao atras do mesmo reverse proxy Nginx em `www.portalcef.com.br`.
+
+---
+
+## Content Security Policy (CSP)
+
+O modulo `SecurityModule` processa CSP violation reports:
+
+- **Endpoint**: `POST /api/security/csp-report`
+- Recebe e loga violacoes de Content Security Policy
+- Uso futuro para monitoramento de seguranca
 
 ---
 
@@ -214,8 +217,14 @@ const safeHash = createHash("sha256").update(token).digest("hex").slice(0, 10);
 
 ## Checklist de Seguranca (Producao)
 
-- [ ] `COOKIE_SECRET` forte configurado.
-- [ ] `DATABASE_URL` seguro.
-- [ ] HTTPS via reverse proxy.
-- [ ] CORS ajustado para todas as origens usadas.
-- [ ] Backups e monitoramento habilitados.
+- [ ] `COOKIE_SECRET` forte configurado (256-bit)
+- [ ] `DATABASE_URL` com senha forte e URL-encoded
+- [ ] HTTPS via reverse proxy (Nginx + Let's Encrypt)
+- [ ] CORS ajustado (incluir tarefas :3012)
+- [ ] `COOKIE_SECURE=true` em producao
+- [ ] `COOKIE_DOMAIN=.portalcef.com.br`
+- [ ] Backups automatizados diariamente
+- [ ] Health checks configurados em todos os containers
+- [ ] Rate limiting ativo (ThrottlerModule)
+- [ ] Log rotation configurado
+- [ ] Firewall: apenas portas 80, 443, 22 abertas
