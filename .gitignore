@@ -42,3 +42,4 @@ tmpclaude-*
 .env
 worktrees/
 .worktrees/
+.github/
