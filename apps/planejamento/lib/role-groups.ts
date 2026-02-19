@@ -14,17 +14,22 @@ export const CREATOR_ROLES: RoleType[] = ["professora", "auxiliar_sala"];
 
 /**
  * GRUPO 2: Analista Pedagogica
- * Role that reviews plannings before coordinators
+ * Role that reviews and approves plannings (aprovação final)
  * Dashboard: /analise
  */
 export const ANALYST_ROLES: RoleType[] = ["analista_pedagogico"];
 
 /**
- * GRUPO 3: Coordenadoras
- * Roles that approve/reject plannings after analyst review
- * Dashboard: /coordenacao
+ * GRUPO 3: Gestores (Painel de Gestão)
+ * Roles with high-level management access to see KPIs and overview
+ * Includes coordenadoras, diretora, master, e gerentes
+ * Dashboard: /gestao
  */
-export const COORDINATOR_ROLES: RoleType[] = [
+export const MANAGER_ROLES: RoleType[] = [
+  "diretora_geral",
+  "master",
+  "gerente_unidade",
+  "gerente_financeiro",
   "coordenadora_bercario",
   "coordenadora_infantil",
   "coordenadora_fundamental_i",
@@ -34,19 +39,7 @@ export const COORDINATOR_ROLES: RoleType[] = [
 ];
 
 /**
- * GRUPO 4: Gestores (Painel de Gestão)
- * Roles with high-level management access to see KPIs and overview
- * Dashboard: /gestao
- */
-export const MANAGER_ROLES: RoleType[] = [
-  "diretora_geral",
-  "master",
-  "gerente_unidade",
-  "gerente_financeiro",
-];
-
-/**
- * GRUPO 5: Sem Acesso ao Módulo
+ * GRUPO 4: Sem Acesso ao Módulo
  * Roles that should be redirected to home
  */
 export const NO_ACCESS_ROLES: RoleType[] = ["auxiliar_administrativo"];
@@ -60,10 +53,6 @@ export function isCreatorRole(role: string): boolean {
 
 export function isAnalystRole(role: string): boolean {
   return ANALYST_ROLES.includes(role as RoleType);
-}
-
-export function isCoordinatorRole(role: string): boolean {
-  return COORDINATOR_ROLES.includes(role as RoleType);
 }
 
 export function isManagerRole(role: string): boolean {
@@ -80,7 +69,6 @@ export function isNoAccessRole(role: string): boolean {
 export type DashboardType =
   | "professora"
   | "analise"
-  | "coordenacao"
   | "gestao"
   | "no-access"
   | "unknown";
@@ -88,7 +76,6 @@ export type DashboardType =
 export function getDashboardForRole(role: string): DashboardType {
   if (isCreatorRole(role)) return "professora";
   if (isAnalystRole(role)) return "analise";
-  if (isCoordinatorRole(role)) return "coordenacao";
   if (isManagerRole(role)) return "gestao";
   if (isNoAccessRole(role)) return "no-access";
   return "unknown";

@@ -12,6 +12,7 @@ import { ConfigService } from "@nestjs/config";
 import { FastifyReply, FastifyRequest } from "fastify";
 import { loginSchema } from "@essencia/shared/schemas";
 
+import { z } from "zod";
 import { AuthService } from "./auth.service";
 
 const COOKIE_NAME = "cef_session";
@@ -98,6 +99,50 @@ export class AuthController {
     return {
       success: true,
       data: { user },
+    };
+  }
+  @Post("change-password")
+  @HttpCode(HttpStatus.OK)
+  async changePassword(
+    @Body() body: unknown,
+    @Res({ passthrough: true }) res: FastifyReply,
+  ) {
+    const request = res.request as FastifyRequest;
+    const token = request.cookies?.[COOKIE_NAME];
+
+    if (!token) {
+      throw new UnauthorizedException("Não autenticado");
+    }
+
+    const currentUser = await this.authService.getCurrentUser(token);
+
+    const schema = z.object({
+      currentPassword: z.string().min(1),
+      newPassword: z.string().min(8),
+    });
+
+    const result = schema.safeParse(body);
+    if (!result.success) {
+      return {
+        success: false,
+        error: {
+          code: "VALIDATION_ERROR",
+          message: "Dados inválidos",
+          details: result.error.flatten(),
+        },
+      };
+    }
+
+    const { currentPassword, newPassword } = result.data;
+    await this.authService.changePassword(
+      currentUser.id,
+      currentPassword,
+      newPassword,
+    );
+
+    return {
+      success: true,
+      data: null,
     };
   }
 }

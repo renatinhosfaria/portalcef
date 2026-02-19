@@ -404,9 +404,9 @@ export function RevisaoContent({ planoId }: RevisaoContentProps) {
 
       {/* Header Info */}
       <PlanoHeader
-        professorName={plano.professorName}
-        turmaName={plano.turmaName}
-        turmaCode={plano.turmaCode}
+        professorName={plano.user?.name || plano.professorName || ""}
+        turmaName={plano.turma?.name || plano.turmaName || ""}
+        turmaCode={plano.turma?.code || plano.turmaCode}
         periodoNumero={periodoData?.numero}
         periodoDescricao={periodoData?.descricao}
         periodoInicio={periodoData?.dataInicio}

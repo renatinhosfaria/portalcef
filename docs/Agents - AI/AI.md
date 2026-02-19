@@ -501,4 +501,8 @@ docker system prune -a --volumes -f
 
 <div align="center">
 
-**Portal Digital Colégio Essência Feliz** 
+**Portal Digital Colégio Essência Feliz**
+## AI Context References
+- Documentation index: `.context/docs/README.md`
+- Agent playbooks: `.context/agents/README.md`
+

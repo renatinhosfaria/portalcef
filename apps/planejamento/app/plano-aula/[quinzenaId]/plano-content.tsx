@@ -5,6 +5,7 @@
  * Task 23: Atualizado para usar periodoId (UUID) ao invés de quinzenaId (número)
  */
 
+import { api } from "@essencia/shared/fetchers/client";
 import {
   Alert,
   AlertDescription,
@@ -43,6 +44,11 @@ import {
   type PlanoAula,
   type PlanoAulaStatus,
 } from "../../../features/plano-aula";
+
+interface ComentarioApiPayload {
+  documentoId: string;
+  comentario: string;
+}
 
 interface PlanoContentProps {
   periodoId: string; // UUID do período (não mais número hardcoded)
@@ -96,7 +102,7 @@ export function PlanoContent({
     getPlano,
     uploadDocumento,
     addLink,
-    deleteDocumento,
+    imprimirDocumento,
     submeterPlano,
   } = usePlanoAula();
 
@@ -181,20 +187,70 @@ export function PlanoContent({
   );
 
   /**
-   * Handler para excluir documento
+   * Handler para adicionar comentário a um documento via API
    */
-  const handleDelete = useCallback(
-    async (docId: string) => {
-      if (!plano?.id) return;
-
+  const handleAddComentario = useCallback(
+    async (documentoId: string, comentario: string) => {
       try {
-        await deleteDocumento(plano.id, docId);
+        const payload: ComentarioApiPayload = { documentoId, comentario };
+        await api.post("/plano-aula/comentarios", payload);
         await refetchPlano();
       } catch (err) {
-        console.error("Erro ao excluir documento:", err);
+        console.error("Erro ao adicionar comentário:", err);
+        throw err;
       }
     },
-    [plano?.id, deleteDocumento, refetchPlano],
+    [refetchPlano],
+  );
+
+  /**
+   * Handler para editar comentário existente
+   */
+  const handleEditComentario = useCallback(
+    async (comentarioId: string, novoTexto: string) => {
+      try {
+        await api.patch(`/plano-aula/comentarios/${comentarioId}`, {
+          comentario: novoTexto,
+        });
+        await refetchPlano();
+      } catch (err) {
+        console.error("Erro ao editar comentário:", err);
+        throw err;
+      }
+    },
+    [refetchPlano],
+  );
+
+  /**
+   * Handler para deletar comentário
+   */
+  const handleDeleteComentario = useCallback(
+    async (comentarioId: string) => {
+      try {
+        await api.delete(`/plano-aula/comentarios/${comentarioId}`);
+        await refetchPlano();
+      } catch (err) {
+        console.error("Erro ao deletar comentário:", err);
+        throw err;
+      }
+    },
+    [refetchPlano],
+  );
+
+  /**
+   * Handler para imprimir documento aprovado
+   */
+  const handleImprimirDocumento = useCallback(
+    async (documentoId: string) => {
+      try {
+        await imprimirDocumento(documentoId);
+        await refetchPlano();
+      } catch (err) {
+        console.error("Erro ao imprimir documento:", err);
+        throw err;
+      }
+    },
+    [imprimirDocumento, refetchPlano],
   );
 
   /**
@@ -404,11 +460,16 @@ export function PlanoContent({
               )}
 
               {/* Lista de Documentos */}
+              {/* NOTA: Professoras NÃO podem excluir documentos após o upload */}
               <DocumentoList
                 documentos={plano.documentos}
-                onDelete={handleDelete}
+                onAddComentario={handleAddComentario}
+                onEditComentario={handleEditComentario}
+                onDeleteComentario={handleDeleteComentario}
+                onImprimir={handleImprimirDocumento}
                 showComments={showFeedback}
-                canDelete={isEditable && !actionLoading}
+                canDelete={false}
+                currentUserId={userId ?? undefined}
               />
             </TabsContent>
 

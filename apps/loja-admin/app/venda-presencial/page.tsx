@@ -27,6 +27,7 @@ interface CartItem {
     unitPrice: number;
 }
 
+
 export default function VendaPresencialPage() {
     const [products, setProducts] = useState<Product[]>([]);
     const [loadingProducts, setLoadingProducts] = useState(true);
@@ -38,7 +39,12 @@ export default function VendaPresencialPage() {
     const [quantity, setQuantity] = useState(1);
     const [customerName, setCustomerName] = useState('');
     const [customerPhone, setCustomerPhone] = useState('');
-    const [paymentMethod, setPaymentMethod] = useState<'DINHEIRO' | 'PIX' | 'CARTAO_CREDITO' | 'CARTAO_DEBITO'>('DINHEIRO');
+
+    // Multiple Payments State
+    const [payments, setPayments] = useState<Array<{ method: string; amount: number }>>([]);
+    const [currentPaymentMethod, setCurrentPaymentMethod] = useState<'DINHEIRO' | 'PIX' | 'CARTAO_CREDITO' | 'CARTAO_DEBITO' | 'BRINDE'>('DINHEIRO');
+    const [currentPaymentAmount, setCurrentPaymentAmount] = useState<number>(0);
+
     const [submitting, setSubmitting] = useState(false);
     const [success, setSuccess] = useState(false);
 
@@ -62,6 +68,18 @@ export default function VendaPresencialPage() {
 
     const activeProduct = products.find(p => p.id === selectedProduct);
     const totalAmount = items.reduce((sum, item) => sum + (item.unitPrice * item.quantity), 0);
+    const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
+    const remainingAmount = Math.max(0, totalAmount - totalPaid);
+
+    // Update default amount when remainder changes, but only if user hasn't typed 0 or something manually (simplified: just sync for now or let user type)
+    useEffect(() => {
+        if (remainingAmount > 0) {
+            setCurrentPaymentAmount(remainingAmount);
+        } else {
+            setCurrentPaymentAmount(0);
+        }
+    }, [remainingAmount]);
+
 
     const addItem = () => {
         if (!selectedProduct || !selectedVariantId || !studentName || quantity < 1) {
@@ -95,11 +113,58 @@ export default function VendaPresencialPage() {
         setItems(items.filter((_, i) => i !== index));
     };
 
+    // Auto set value to 0 if Brinde
+    useEffect(() => {
+        if (currentPaymentMethod === 'BRINDE') {
+            setCurrentPaymentAmount(0);
+        } else if (currentPaymentAmount === 0 && remainingAmount > 0) {
+            // Only auto-fill if amount is 0 (likely just switched back or new)
+            setCurrentPaymentAmount(remainingAmount);
+        }
+    }, [currentPaymentMethod, remainingAmount]);
+
+    const addPayment = () => {
+        if (currentPaymentMethod !== 'BRINDE' && currentPaymentAmount <= 0) {
+            alert('Valor do pagamento deve ser maior que zero');
+            return;
+        }
+        if (currentPaymentMethod !== 'BRINDE' && currentPaymentAmount > remainingAmount) {
+            alert(`Valor do pagamento não pode ser maior que o restante (${formatCurrency(remainingAmount)})`);
+            return;
+        }
+
+        setPayments([...payments, { method: currentPaymentMethod, amount: currentPaymentAmount }]);
+    };
+
+    const removePayment = (index: number) => {
+        setPayments(payments.filter((_, i) => i !== index));
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
         if (items.length === 0) {
             alert('Adicione pelo menos um item');
+            return;
+        }
+
+        let finalPayments = [...payments];
+
+        // UX Shortcut: if no payments added, check if we can use the current inputs
+        if (finalPayments.length === 0) {
+            const isImplicitBrinde = currentPaymentMethod === 'BRINDE';
+            const isImplicitFullPayment = currentPaymentAmount >= totalAmount;
+
+            if (isImplicitBrinde || isImplicitFullPayment) {
+                finalPayments = [{ method: currentPaymentMethod, amount: currentPaymentAmount }];
+            }
+        }
+
+        const hasBrinde = finalPayments.some(p => p.method === 'BRINDE');
+        const finalTotalPaid = finalPayments.reduce((acc, p) => acc + p.amount, 0);
+
+        if (!hasBrinde && finalTotalPaid !== totalAmount) {
+            alert(`Total pago (${formatCurrency(finalTotalPaid)}) deve ser igual ao total do pedido (${formatCurrency(totalAmount)})`);
             return;
         }
 
@@ -109,12 +174,12 @@ export default function VendaPresencialPage() {
             const payload = {
                 customerName,
                 customerPhone: customerPhone.replace(/\D/g, ''), // Send digits only
-                paymentMethod,
                 items: items.map(item => ({
                     variantId: item.variantId,
                     quantity: item.quantity,
                     studentName: item.studentName
-                }))
+                })),
+                payments: finalPayments
             };
 
             const res = await apiFetch('/api/shop/admin/orders/presencial', {
@@ -130,10 +195,11 @@ export default function VendaPresencialPage() {
 
             setSuccess(true);
             setItems([]);
+            setPayments([]);
             setStudentName('');
             setCustomerName('');
             setCustomerPhone('');
-            setPaymentMethod('DINHEIRO');
+            setCurrentPaymentMethod('DINHEIRO');
             window.scrollTo(0, 0);
             setTimeout(() => setSuccess(false), 5000);
         } catch (error: unknown) {
@@ -317,33 +383,97 @@ export default function VendaPresencialPage() {
                                         />
                                     </div>
 
-                                    <div>
-                                        <label className="form-label">Forma de Pagamento *</label>
-                                        <select
-                                            value={paymentMethod}
-                                            onChange={(e) => setPaymentMethod(e.target.value as typeof paymentMethod)}
-                                            className="form-select"
-                                            required
-                                        >
-                                            <option value="DINHEIRO">Dinheiro</option>
-                                            <option value="PIX">PIX</option>
-                                            <option value="CARTAO_DEBITO">Cartão de Débito</option>
-                                            <option value="CARTAO_CREDITO">Cartão de Crédito</option>
-                                        </select>
+                                    {/* Multi Payment Section */}
+                                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-4">
+                                        <h3 className="font-medium text-slate-800">Pagamento (Total: {formatCurrency(totalAmount)})</h3>
+
+                                        {payments.length > 0 && (
+                                            <div className="space-y-2">
+                                                {payments.map((p, idx) => (
+                                                    <div key={idx} className="flex justify-between items-center text-sm bg-white p-2 rounded border border-slate-100">
+                                                        <span>{p.method.replace('_', ' ')}: {formatCurrency(p.amount)}</span>
+                                                        <button onClick={() => removePayment(idx)} type="button" className="text-red-500"><Trash2 className="w-4 h-4" /></button>
+                                                    </div>
+                                                ))}
+                                                <div className="flex justify-between text-sm font-semibold pt-2 border-t border-slate-200">
+                                                    <span>Total Pago:</span>
+                                                    <span className={remainingAmount === 0 ? "text-green-600" : "text-amber-600"}>
+                                                        {formatCurrency(totalPaid)}
+                                                    </span>
+                                                </div>
+                                                {remainingAmount > 0 && (
+                                                    <div className="flex justify-between text-sm text-red-500">
+                                                        <span>Restante:</span>
+                                                        <span>{formatCurrency(remainingAmount)}</span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        {remainingAmount > 0 && (
+                                            <div className="flex gap-3 items-end">
+                                                <div className="flex-1">
+                                                    <label className="form-label text-xs">Forma</label>
+                                                    <select
+                                                        value={currentPaymentMethod}
+                                                        onChange={(e) => setCurrentPaymentMethod(e.target.value as 'DINHEIRO' | 'PIX' | 'CARTAO_CREDITO' | 'CARTAO_DEBITO' | 'BRINDE')}
+                                                        className="form-select text-sm h-10"
+                                                    >
+                                                        <option value="DINHEIRO">Dinheiro</option>
+                                                        <option value="PIX">PIX</option>
+                                                        <option value="CARTAO_DEBITO">Débito</option>
+                                                        <option value="CARTAO_CREDITO">Crédito</option>
+                                                        <option value="BRINDE">Brinde</option>
+                                                    </select>
+                                                </div>
+                                                <div className="w-1/3">
+                                                    <label className="form-label text-xs">Valor (R$)</label>
+                                                    {/* Input handles raw numbers for cents conversation or just plain input. Using step 0.01 for decimal input */}
+                                                    <input
+                                                        type="number"
+                                                        value={(currentPaymentAmount / 100).toFixed(2)}
+                                                        onChange={(e) => setCurrentPaymentAmount(Math.round(parseFloat(e.target.value) * 100))}
+                                                        className="form-input text-sm h-10"
+                                                        step="0.01"
+                                                    />
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={addPayment}
+                                                    className="btn-admin btn-admin-secondary h-10 px-3 flex items-center justify-center"
+                                                    disabled={currentPaymentMethod !== 'BRINDE' && currentPaymentAmount <= 0}
+                                                >
+                                                    <Plus className="w-4 h-4" />
+                                                </button>
+                                            </div>
+                                        )}
                                     </div>
+
 
                                     <div className="bg-amber-50 p-4 rounded-lg flex gap-3 text-sm text-amber-800">
                                         <AlertCircle className="w-5 h-5 shrink-0" />
                                         <p>Esta ação baixa o estoque imediatamente e gera um pedido com status &quot;PAGO&quot;.</p>
                                     </div>
 
-                                    <button
-                                        type="submit"
-                                        disabled={submitting}
-                                        className="btn-admin btn-admin-primary w-full"
-                                    >
-                                        {submitting ? 'Processando...' : 'Finalizar Venda Presencial'}
-                                    </button>
+                                    {(() => {
+                                        const hasBrinde = payments.some(p => p.method === 'BRINDE');
+
+                                        // Implicit payment logic: if no payments added, but current input is valid to cover cost
+                                        const isImplicitBrinde = payments.length === 0 && currentPaymentMethod === 'BRINDE';
+                                        const isImplicitFullPayment = payments.length === 0 && currentPaymentAmount >= totalAmount;
+
+                                        const canSubmit = remainingAmount === 0 || hasBrinde || isImplicitBrinde || isImplicitFullPayment;
+
+                                        return (
+                                            <button
+                                                type="submit"
+                                                disabled={submitting || !canSubmit}
+                                                className="btn-admin btn-admin-primary w-full disabled:opacity-50 disabled:cursor-not-allowed"
+                                            >
+                                                {submitting ? 'Processando...' : canSubmit ? 'Finalizar Venda Presencial' : `Faltam ${formatCurrency(remainingAmount)}`}
+                                            </button>
+                                        );
+                                    })()}
                                 </form>
                             </div>
                         )}

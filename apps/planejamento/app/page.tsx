@@ -32,13 +32,7 @@ export default function HomePage() {
       return;
     }
 
-    // Coordenadoras -> /coordenacao
-    if (dashboardType === "coordenacao") {
-      router.replace("/coordenacao");
-      return;
-    }
-
-    // Gestao (diretora, master, gerentes) -> /gestao
+    // Gestao (diretora, master, gerentes, coordenadoras) -> /gestao
     if (dashboardType === "gestao") {
       router.replace("/gestao");
       return;
@@ -67,7 +61,6 @@ export default function HomePage() {
   if (
     dashboardType === "professora" ||
     dashboardType === "analise" ||
-    dashboardType === "coordenacao" ||
     dashboardType === "gestao" ||
     dashboardType === "no-access"
   ) {

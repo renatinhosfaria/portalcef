@@ -1,0 +1,257 @@
+# =============================================================================
+# GITHUB ACTIONS - CI/CD Pipeline
+# Portal Essência Feliz
+# =============================================================================
+#
+# Este workflow:
+# 1. Roda lint e typecheck em PRs e pushes
+# 2. Build de imagens Docker com cache otimizado
+# 3. Deploy automático para produção (apenas main)
+#
+# Secrets necessários no GitHub:
+#   - DEPLOY_HOST: IP/hostname do servidor
+#   - DEPLOY_USER: Usuário SSH
+#   - DEPLOY_SSH_KEY: Chave SSH privada
+#   - NEXT_PUBLIC_API_URL: URL pública da API
+#
+# =============================================================================
+
+name: Build and Deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancela runs anteriores do mesmo branch/PR
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ${{ github.repository }}
+
+jobs:
+  # ===========================================================================
+  # STAGE 1: Quality Check (Lint + Typecheck)
+  # ===========================================================================
+  quality:
+    name: Quality Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Turbo Cache
+        uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: turbo-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-
+
+      - name: Lint
+        run: pnpm turbo lint
+
+      - name: Typecheck
+        run: pnpm turbo typecheck
+
+  # ===========================================================================
+  # STAGE 2: Build Docker Images (Matrix paralelo)
+  # ===========================================================================
+  build:
+    name: Build ${{ matrix.app }}
+    needs: quality
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Apps Next.js
+          - app: home
+            dockerfile: docker/Dockerfile.nextjs
+            port: "3000"
+          - app: login
+            dockerfile: docker/Dockerfile.nextjs
+            port: "3003"
+          - app: usuarios
+            dockerfile: docker/Dockerfile.nextjs
+            port: "3004"
+          - app: escolas
+            dockerfile: docker/Dockerfile.nextjs
+            port: "3005"
+          - app: turmas
+            dockerfile: docker/Dockerfile.nextjs
+            port: "3006"
+          - app: planejamento
+            dockerfile: docker/Dockerfile.nextjs
+            port: "3007"
+          - app: calendario
+            dockerfile: docker/Dockerfile.nextjs
+            port: "3008"
+          - app: loja
+            dockerfile: docker/Dockerfile.nextjs
+            port: "3010"
+          - app: loja-admin
+            dockerfile: docker/Dockerfile.nextjs
+            port: "3011"
+          - app: tarefas
+            dockerfile: docker/Dockerfile.nextjs
+            port: "3012"
+          # Serviços Backend
+          - app: api
+            dockerfile: docker/Dockerfile.api
+            port: "3002"
+          - app: worker
+            dockerfile: docker/Dockerfile.worker
+            port: "3100"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.app }}
+          tags: |
+            type=sha,prefix=
+            type=ref,event=branch
+            type=ref,event=pr
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            APP_NAME=${{ matrix.app }}
+            APP_PORT=${{ matrix.port }}
+            NEXT_PUBLIC_API_URL=${{ secrets.NEXT_PUBLIC_API_URL }}
+            API_INTERNAL_URL=http://api:3002
+          cache-from: type=gha,scope=${{ matrix.app }}
+          cache-to: type=gha,scope=${{ matrix.app }},mode=max
+
+  # ===========================================================================
+  # STAGE 3: Deploy para Produção
+  # ===========================================================================
+  deploy:
+    name: Deploy to Production
+    needs: build
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://www.portalcef.com.br
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            cd /var/www/essencia
+
+            # Pull do código mais recente
+            git fetch origin main
+            git reset --hard origin/main
+
+            # Atualizar variável de tag
+            export IMAGE_TAG=${{ github.sha }}
+
+            # Pull das novas imagens
+            docker compose -f docker-compose.prod.yml pull
+
+            # Rolling deploy
+            ./scripts/deploy-rolling.sh ${{ github.sha }}
+
+            # Verificar saúde
+            ./scripts/health-check.sh
+
+            # Limpar imagens antigas
+            docker image prune -af --filter "until=24h"
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "Deploy failed! Check the logs above."
+          # Adicionar notificação (Slack, Discord, etc.) se necessário
+
+  # ===========================================================================
+  # STAGE 4: Testes E2E (opcional, após deploy)
+  # ===========================================================================
+  e2e:
+    name: E2E Tests
+    needs: deploy
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run E2E tests
+        run: pnpm e2e
+        env:
+          PLAYWRIGHT_TEST_BASE_URL: https://www.portalcef.com.br
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report
+          path: e2e-results/
+          retention-days: 7

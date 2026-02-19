@@ -8,7 +8,8 @@ export type AcaoHistorico =
   | "APROVADO_ANALISTA"
   | "DEVOLVIDO_ANALISTA"
   | "APROVADO_COORDENADORA"
-  | "DEVOLVIDO_COORDENADORA";
+  | "DEVOLVIDO_COORDENADORA"
+  | "DOCUMENTO_IMPRESSO";
 
 export interface HistoricoEntry {
   id: string;

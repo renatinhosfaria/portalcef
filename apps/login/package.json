@@ -15,8 +15,8 @@
     "@essencia/tailwind-config": "workspace:*",
     "lucide-react": "^0.469.0",
     "next": "15.1.0",
-    "react": "19.0.0",
-    "react-dom": "19.0.0"
+    "react": "19.0.4",
+    "react-dom": "19.0.4"
   },
   "devDependencies": {
     "@essencia/config": "workspace:*",

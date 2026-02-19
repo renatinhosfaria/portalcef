@@ -1,5 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+    output: "standalone",
     transpilePackages: ["@essencia/ui", "@essencia/components", "@essencia/shared"],
 
     // Docker/Windows file watching support

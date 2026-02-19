@@ -19,6 +19,13 @@ describe("DocumentoList", () => {
     comentarios: [],
   };
 
+  const mockDocumentoAprovado = {
+    ...mockDocumentoPronto,
+    id: "doc-aprovado",
+    approvedBy: "analista-1",
+    approvedAt: "2026-02-06T15:30:00.000Z",
+  };
+
   const mockDocumentoPendente = {
     ...mockDocumentoPronto,
     id: "doc-2",
@@ -77,5 +84,54 @@ describe("DocumentoList", () => {
 
     const botao = screen.getByRole("button", { name: /ver documento/i });
     expect(botao).not.toBeDisabled();
+  });
+
+  it("exibe botão Imprimir apenas para documento aprovado", () => {
+    const onImprimir = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <DocumentoList
+        documentos={[
+          mockDocumentoAprovado,
+          { ...mockDocumentoPronto, id: "doc-nao-aprovado" },
+        ]}
+        onImprimir={onImprimir}
+      />,
+    );
+
+    const botoesImprimir = screen.getAllByRole("button", { name: /imprimir/i });
+    expect(botoesImprimir).toHaveLength(1);
+  });
+
+  it("chama callback onImprimir ao clicar no botão Imprimir", async () => {
+    const user = userEvent.setup();
+    const onImprimir = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <DocumentoList
+        documentos={[mockDocumentoAprovado]}
+        onImprimir={onImprimir}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /imprimir/i }));
+
+    expect(onImprimir).toHaveBeenCalledTimes(1);
+    expect(onImprimir).toHaveBeenCalledWith("doc-aprovado");
+  });
+
+  it("mostra data e horário quando documento já foi impresso", () => {
+    render(
+      <DocumentoList
+        documentos={[
+          {
+            ...mockDocumentoAprovado,
+            printedAt: "2026-02-06T16:45:00.000Z",
+          } as typeof mockDocumentoAprovado & { printedAt: string },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText(/impresso em/i)).toBeInTheDocument();
   });
 });

@@ -33,7 +33,21 @@ export class UsersController {
   ) {}
 
   @Get()
-  @Roles("master", "diretora_geral", "gerente_unidade", "gerente_financeiro")
+  @Roles(
+    "master",
+    "diretora_geral",
+    "gerente_unidade",
+    "gerente_financeiro",
+    "coordenadora_geral",
+    "coordenadora_bercario",
+    "coordenadora_infantil",
+    "coordenadora_fundamental_i",
+    "coordenadora_fundamental_ii",
+    "coordenadora_medio",
+    "analista_pedagogico",
+    "professora",
+    "auxiliar_sala",
+  )
   async findAll(
     @CurrentUser()
     currentUser: {
@@ -301,11 +315,12 @@ export class UsersController {
       };
     }
 
-    // Non-diretora geral cannot change unitId
+    // Non-diretora geral cannot change unitId (only block if actually changing to a different unit)
     if (
       currentUser.role !== "master" &&
       currentUser.role !== "diretora_geral" &&
-      result.data.unitId
+      result.data.unitId &&
+      result.data.unitId !== existingUser.unitId
     ) {
       return {
         success: false,
@@ -317,12 +332,13 @@ export class UsersController {
       };
     }
 
-    // Stage-scoped roles cannot change stageId
+    // Stage-scoped roles cannot change stageId (only block if actually changing to a different stage)
     if (
       stageRequiredRoles.includes(
         currentUser.role as (typeof stageRequiredRoles)[number],
       ) &&
-      result.data.stageId
+      result.data.stageId &&
+      result.data.stageId !== existingUser.stageId
     ) {
       return {
         success: false,

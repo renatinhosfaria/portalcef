@@ -22,6 +22,7 @@ export const planoAulaHistoricoAcaoEnum = [
   "DEVOLVIDO_ANALISTA",
   "APROVADO_COORDENADORA",
   "DEVOLVIDO_COORDENADORA",
+  "DOCUMENTO_IMPRESSO",
 ] as const;
 export type PlanoAulaHistoricoAcao =
   (typeof planoAulaHistoricoAcaoEnum)[number];

@@ -227,6 +227,64 @@ export class ShopInventoryService implements OnModuleDestroy {
   }
 
   /**
+   * Confirma venda presencial (sem reserva prévia)
+   * Apenas decrementa quantity, não mexe em reservedQuantity
+   * Registra como VENDA_PRESENCIAL no ledger
+   */
+  async confirmPresentialSale(
+    variantId: string,
+    unitId: string,
+    quantity: number,
+    orderNumber: string,
+    userId: string,
+  ) {
+    const db = getDb();
+    const lockAcquired = await this.acquireLock(variantId, unitId);
+
+    if (!lockAcquired) {
+      throw new ConflictException({
+        code: "CONFLICT",
+        message: "Estoque sendo atualizado. Tente novamente.",
+      });
+    }
+
+    try {
+      const inventory = await this.getOrCreateInventory(variantId, unitId);
+      const available = inventory.quantity - inventory.reservedQuantity;
+
+      if (available < quantity) {
+        throw new BadRequestException({
+          code: "INSUFFICIENT_STOCK",
+          message: `Estoque insuficiente. Disponível: ${available}, solicitado: ${quantity}`,
+        });
+      }
+
+      // Decrementa APENAS quantity (venda presencial não tem reserva)
+      await db
+        .update(shopInventory)
+        .set({
+          quantity: inventory.quantity - quantity,
+          updatedAt: new Date(),
+        })
+        .where(eq(shopInventory.id, inventory.id));
+
+      // Cria ledger entry como VENDA_PRESENCIAL
+      await db.insert(shopInventoryLedger).values({
+        inventoryId: inventory.id,
+        movementType: "VENDA_PRESENCIAL",
+        quantityChange: -quantity,
+        referenceId: orderNumber,
+        notes: `Venda presencial - pedido ${orderNumber}`,
+        createdBy: userId,
+      });
+
+      return { success: true, confirmed: quantity };
+    } finally {
+      await this.releaseLock(variantId, unitId);
+    }
+  }
+
+  /**
    * Libera reserva (quando pagamento expira ou falha)
    */
   async releaseReservation(
@@ -408,5 +466,70 @@ export class ShopInventoryService implements OnModuleDestroy {
       createdBy: entry.createdBy,
       createdAt: entry.createdAt,
     }));
+  }
+
+  /**
+   * POST /shop/admin/inventory/exit
+   *
+   * Remove estoque manualmente (SAIDA)
+   */
+  async removeStock(
+    variantId: string,
+    unitId: string,
+    quantity: number,
+    notes: string,
+    reason: "VENDA_BALCAO" | "DANO" | "PERDA" | "AMOSTRA" | "OUTROS",
+    userId: string,
+  ) {
+    const db = getDb();
+    const lockAcquired = await this.acquireLock(variantId, unitId);
+
+    if (!lockAcquired) {
+      throw new ConflictException({
+        code: "CONFLICT",
+        message: "Estoque sendo atualizado. Tente novamente.",
+      });
+    }
+
+    try {
+      const inventory = await this.getOrCreateInventory(variantId, unitId);
+      const available = inventory.quantity - inventory.reservedQuantity;
+
+      if (available < quantity) {
+        throw new BadRequestException({
+          code: "INSUFFICIENT_STOCK",
+          message: `Estoque disponível insuficiente. Disponível: ${available}, solicitado: ${quantity}`,
+        });
+      }
+
+      // Decrementa quantity
+      const newQuantity = inventory.quantity - quantity;
+      await db
+        .update(shopInventory)
+        .set({
+          quantity: newQuantity,
+          updatedAt: new Date(),
+        })
+        .where(eq(shopInventory.id, inventory.id));
+
+      // Cria ledger entry
+      await db.insert(shopInventoryLedger).values({
+        inventoryId: inventory.id,
+        movementType: `SAIDA_${reason}`,
+        quantityChange: -quantity,
+        referenceId: null,
+        notes: notes || `Saída manual - ${reason}`,
+        createdBy: userId,
+      });
+
+      return {
+        success: true,
+        previousQuantity: inventory.quantity,
+        newQuantity,
+        removed: quantity,
+      };
+    } finally {
+      await this.releaseLock(variantId, unitId);
+    }
   }
 }

@@ -43,6 +43,12 @@ export default function PedidosPage() {
     const [statusFilter, setStatusFilter] = useState('');
     const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
 
+    // Estado para paginação
+    const [currentPage, setCurrentPage] = useState(1);
+    const [totalPages, setTotalPages] = useState(1);
+    const [totalOrders, setTotalOrders] = useState(0);
+
+
     // Estado para modal de confirmação de pagamento
     const [confirmPaymentModal, setConfirmPaymentModal] = useState<{
         open: boolean;
@@ -50,16 +56,23 @@ export default function PedidosPage() {
         orderNumber: string;
         totalAmount: number;
     } | null>(null);
-    const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod>('DINHEIRO');
+
+    // Multi-payment state for Modal
+    const [modalPayments, setModalPayments] = useState<Array<{ method: string; amount: number }>>([]);
+    const [currentModalPaymentMethod, setCurrentModalPaymentMethod] = useState<PaymentMethod | 'BRINDE'>('DINHEIRO');
+    const [currentModalPaymentAmount, setCurrentModalPaymentAmount] = useState<number>(0);
+
     const [confirmingPayment, setConfirmingPayment] = useState(false);
 
-    const loadOrders = useCallback(async () => {
+    const loadOrders = useCallback(async (page: number = 1) => {
         try {
             setLoading(true);
 
             const params = new URLSearchParams();
             if (search) params.set('search', search);
             if (statusFilter) params.set('status', statusFilter);
+            params.set('page', page.toString());
+            params.set('limit', '30');
 
             const response = await apiFetch(`/api/shop/admin/orders?${params.toString()}`);
 
@@ -70,14 +83,13 @@ export default function PedidosPage() {
             }
 
             const result = await response.json();
-            let filtered = result.data || [];
+            const newOrders = result.data || [];
+            const pagination = result.meta?.pagination;
 
-            // Filter by status
-            if (statusFilter) {
-                filtered = filtered.filter((o: Order) => o.status === statusFilter);
-            }
-
-            setOrders(filtered);
+            setOrders(newOrders);
+            setCurrentPage(page);
+            setTotalPages(pagination?.totalPages || 1);
+            setTotalOrders(pagination?.total || newOrders.length);
         } catch (err) {
             console.warn('Não foi possível carregar pedidos. API ainda não implementada?', err);
             setOrders([]);
@@ -86,9 +98,16 @@ export default function PedidosPage() {
         }
     }, [search, statusFilter]);
 
+    const goToPage = useCallback((page: number) => {
+        if (page >= 1 && page <= totalPages && page !== currentPage) {
+            loadOrders(page);
+        }
+    }, [loadOrders, totalPages, currentPage]);
+
     useEffect(() => {
         const debounce = setTimeout(() => {
-            loadOrders();
+            setCurrentPage(1);
+            loadOrders(1);
         }, 300);
         return () => clearTimeout(debounce);
     }, [loadOrders]);
@@ -121,14 +140,16 @@ export default function PedidosPage() {
         return <span className={`badge ${config.class}`}>{config.label}</span>;
     };
 
-    const getPaymentMethodLabel = (method: PaymentMethod) => {
-        const labels: Record<PaymentMethod, string> = {
+    const getPaymentMethodLabel = (method: string) => {
+        const labels: Record<string, string> = {
             DINHEIRO: 'Dinheiro',
             PIX: 'PIX',
             CARTAO_CREDITO: 'Cartão de Crédito',
             CARTAO_DEBITO: 'Cartão de Débito',
+            BRINDE: 'Brinde',
+            MULTIPLO: 'Múltiplo'
         };
-        return labels[method];
+        return labels[method] || method;
     };
 
     const handleMarkPickedUp = async (orderId: string) => {
@@ -141,7 +162,7 @@ export default function PedidosPage() {
 
             if (!res.ok) throw new Error('Falha ao marcar retirada');
 
-            loadOrders();
+            loadOrders(1);
         } catch (err) {
             console.error(err);
             alert('Erro ao confirmar retirada');
@@ -155,16 +176,80 @@ export default function PedidosPage() {
             orderNumber: order.orderNumber,
             totalAmount: order.totalAmount,
         });
-        setSelectedPaymentMethod('DINHEIRO');
+        setModalPayments([]);
+        setCurrentModalPaymentMethod('DINHEIRO');
+        setCurrentModalPaymentAmount(order.totalAmount);
     };
 
     const closeConfirmPaymentModal = () => {
         setConfirmPaymentModal(null);
-        setSelectedPaymentMethod('DINHEIRO');
+        setModalPayments([]);
+        setCurrentModalPaymentMethod('DINHEIRO');
+        setCurrentModalPaymentAmount(0);
+    };
+
+    // Auto set value to 0 if Brinde in Modal
+    useEffect(() => {
+        if (!confirmPaymentModal) return;
+
+        if (currentModalPaymentMethod === 'BRINDE') {
+            setCurrentModalPaymentAmount(0);
+        } else {
+            // Calculate remaining
+            const currentPaid = modalPayments.reduce((acc, p) => acc + p.amount, 0);
+            const remaining = confirmPaymentModal.totalAmount - currentPaid;
+
+            if (currentModalPaymentAmount === 0 && remaining > 0) {
+                setCurrentModalPaymentAmount(remaining);
+            }
+        }
+    }, [currentModalPaymentMethod, confirmPaymentModal, modalPayments]);
+
+    const addModalPayment = () => {
+        if (!confirmPaymentModal) return;
+
+        const currentPaid = modalPayments.reduce((acc, p) => acc + p.amount, 0);
+        const remaining = confirmPaymentModal.totalAmount - currentPaid;
+
+        if (currentModalPaymentMethod !== 'BRINDE' && currentModalPaymentAmount <= 0) {
+            alert('Valor deve ser maior que zero');
+            return;
+        }
+
+        if (currentModalPaymentMethod !== 'BRINDE' && currentModalPaymentAmount > remaining) {
+            alert(`Valor excede o restante (${formatCurrency(remaining)})`);
+            return;
+        }
+
+        setModalPayments([...modalPayments, { method: currentModalPaymentMethod, amount: currentModalPaymentAmount }]);
+    };
+
+    const removeModalPayment = (index: number) => {
+        if (!confirmPaymentModal) return;
+        const newPayments = modalPayments.filter((_, i) => i !== index);
+        setModalPayments(newPayments);
     };
 
     const handleConfirmPayment = async () => {
         if (!confirmPaymentModal) return;
+
+        const totalPaid = modalPayments.reduce((acc, p) => acc + p.amount, 0);
+
+        // Se não adicionou nem um pagamento na lista, tenta adicionar o atual se cobrir tudo (atalho UX)
+        let finalPayments = [...modalPayments];
+        if (finalPayments.length === 0) {
+            if (currentModalPaymentMethod === 'BRINDE' || currentModalPaymentAmount === confirmPaymentModal.totalAmount) {
+                finalPayments = [{ method: currentModalPaymentMethod, amount: currentModalPaymentAmount }];
+            }
+        }
+
+        const finalTotalPaid = finalPayments.reduce((acc, p) => acc + p.amount, 0);
+        const hasBrinde = finalPayments.some(p => p.method === 'BRINDE');
+
+        if (!hasBrinde && finalTotalPaid !== confirmPaymentModal.totalAmount) {
+            alert(`Total pago (${formatCurrency(finalTotalPaid)}) deve ser igual ao total do pedido (${formatCurrency(confirmPaymentModal.totalAmount)})`);
+            return;
+        }
 
         setConfirmingPayment(true);
 
@@ -172,7 +257,7 @@ export default function PedidosPage() {
             const res = await apiFetch(`/api/shop/admin/orders/${confirmPaymentModal.orderId}/confirm-payment`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ paymentMethod: selectedPaymentMethod }),
+                body: JSON.stringify({ payments: finalPayments }),
             });
 
             if (!res.ok) {
@@ -181,7 +266,7 @@ export default function PedidosPage() {
             }
 
             closeConfirmPaymentModal();
-            loadOrders();
+            loadOrders(1);
             alert('Pagamento confirmado com sucesso!');
         } catch (err) {
             console.error(err);
@@ -191,6 +276,10 @@ export default function PedidosPage() {
             setConfirmingPayment(false);
         }
     };
+
+    // Calculate remaining for display
+    const modalTotalPaid = modalPayments.reduce((acc, p) => acc + p.amount, 0);
+    const modalRemaining = confirmPaymentModal ? confirmPaymentModal.totalAmount - modalTotalPaid : 0;
 
     // Estado para modal de exclusão
     const [deleteOrderModal, setDeleteOrderModal] = useState<{
@@ -228,7 +317,7 @@ export default function PedidosPage() {
             }
 
             closeDeleteOrderModal();
-            loadOrders();
+            loadOrders(1);
             alert('Pedido excluído com sucesso!');
         } catch (err) {
             console.error(err);
@@ -366,7 +455,7 @@ export default function PedidosPage() {
                                                             Retirar
                                                         </button>
                                                     )}
-                                                    {['AGUARDANDO_PAGAMENTO', 'CANCELADO', 'EXPIRADO'].includes(order.status) && (
+                                                    {['AGUARDANDO_PAGAMENTO', 'CANCELADO', 'EXPIRADO', 'RETIRADO', 'PAGO'].includes(order.status) && (
                                                         <button
                                                             onClick={() => openDeleteOrderModal(order)}
                                                             className="btn-admin btn-admin-ghost btn-admin-sm text-red-500 hover:text-red-700 hover:bg-red-50"
@@ -414,6 +503,48 @@ export default function PedidosPage() {
                         </tbody>
                     </table>
                 </div>
+
+                {/* Footer com paginação... (omitted for brevity, assume correct) */}
+                <div className="px-6 py-4 border-t border-slate-200 flex items-center justify-between">
+                    <p className="text-sm text-slate-500">
+                        Página <span className="font-medium text-slate-700">{currentPage}</span> de{' '}
+                        <span className="font-medium text-slate-700">{totalPages}</span>
+                        {' '}• Total: <span className="font-medium text-slate-700">{totalOrders}</span> pedidos
+                    </p>
+
+                    {totalPages > 1 && (
+                        <div className="flex items-center gap-1">
+                            <button
+                                onClick={() => goToPage(currentPage - 1)}
+                                disabled={currentPage === 1}
+                                className="px-3 py-2 text-sm font-medium rounded-lg border border-slate-200 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            >
+                                ← Anterior
+                            </button>
+                            <div className="flex items-center gap-1 mx-2">
+                                {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                                    <button
+                                        key={page}
+                                        onClick={() => goToPage(page)}
+                                        className={`min-w-[40px] px-3 py-2 text-sm font-medium rounded-lg transition-colors ${page === currentPage
+                                            ? 'bg-[#A3D154] text-white'
+                                            : 'border border-slate-200 hover:bg-slate-50 text-slate-700'
+                                            }`}
+                                    >
+                                        {page}
+                                    </button>
+                                ))}
+                            </div>
+                            <button
+                                onClick={() => goToPage(currentPage + 1)}
+                                disabled={currentPage === totalPages}
+                                className="px-3 py-2 text-sm font-medium rounded-lg border border-slate-200 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            >
+                                Próximo →
+                            </button>
+                        </div>
+                    )}
+                </div>
             </div>
 
             {/* Modal de Confirmação de Pagamento */}
@@ -457,27 +588,60 @@ export default function PedidosPage() {
                         </div>
 
                         {/* Payment Method Selection */}
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-3">
-                                Forma de Pagamento
-                            </label>
-                            <div className="grid grid-cols-2 gap-3">
-                                {(['DINHEIRO', 'PIX', 'CARTAO_CREDITO', 'CARTAO_DEBITO'] as PaymentMethod[]).map(
-                                    (method) => (
-                                        <button
-                                            key={method}
-                                            type="button"
-                                            onClick={() => setSelectedPaymentMethod(method)}
-                                            className={`p-3 rounded-lg border-2 text-sm font-medium transition-all ${selectedPaymentMethod === method
-                                                ? 'border-[#A3D154] bg-[#A3D154]/10 text-[#8FBD3F]'
-                                                : 'border-slate-200 hover:border-slate-300 text-slate-600'
-                                                }`}
+                        <div className="space-y-4">
+                            {/* List of added payments */}
+                            {modalPayments.length > 0 && (
+                                <div className="space-y-2 border border-slate-200 rounded-lg p-3">
+                                    {modalPayments.map((p, idx) => (
+                                        <div key={idx} className="flex justify-between items-center text-sm bg-slate-50 p-2 rounded">
+                                            <span>{getPaymentMethodLabel(p.method)}: {formatCurrency(p.amount)}</span>
+                                            <button onClick={() => removeModalPayment(idx)} type="button" className="text-red-500"><Trash2 className="w-4 h-4" /></button>
+                                        </div>
+                                    ))}
+                                    <div className="flex justify-between text-sm font-semibold pt-2 border-t border-slate-200">
+                                        <span>Total Pago:</span>
+                                        <span className={modalRemaining === 0 ? "text-green-600" : "text-amber-600"}>
+                                            {formatCurrency(modalTotalPaid)}
+                                        </span>
+                                    </div>
+                                </div>
+                            )}
+
+                            {modalRemaining > 0 && (
+                                <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
+                                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                                        Adicionar Pagamento (Restante: {formatCurrency(modalRemaining)})
+                                    </label>
+                                    <div className="flex gap-2 mb-2">
+                                        <select
+                                            value={currentModalPaymentMethod}
+                                            onChange={(e) => setCurrentModalPaymentMethod(e.target.value as PaymentMethod | 'BRINDE')}
+                                            className="form-select text-sm flex-1"
                                         >
-                                            {getPaymentMethodLabel(method)}
+                                            {(['DINHEIRO', 'PIX', 'CARTAO_CREDITO', 'CARTAO_DEBITO', 'BRINDE'] as const).map(m => (
+                                                <option key={m} value={m}>{getPaymentMethodLabel(m)}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <input
+                                            type="number"
+                                            value={(currentModalPaymentAmount / 100).toFixed(2)}
+                                            onChange={(e) => setCurrentModalPaymentAmount(Math.round(parseFloat(e.target.value) * 100))}
+                                            className="form-input text-sm flex-1"
+                                            step="0.01"
+                                        />
+                                        <button
+                                            onClick={addModalPayment}
+                                            type="button"
+                                            className="btn-admin btn-admin-secondary px-3"
+                                            disabled={currentModalPaymentAmount <= 0}
+                                        >
+                                            Adicionar
                                         </button>
-                                    )
-                                )}
-                            </div>
+                                    </div>
+                                </div>
+                            )}
                         </div>
 
                         {/* Actions */}
@@ -491,7 +655,7 @@ export default function PedidosPage() {
                             </button>
                             <button
                                 onClick={handleConfirmPayment}
-                                disabled={confirmingPayment}
+                                disabled={confirmingPayment || modalRemaining > 0}
                                 className="flex-1 px-4 py-2.5 rounded-lg bg-[#A3D154] text-white font-medium hover:bg-[#8FBD3F] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 {confirmingPayment ? (

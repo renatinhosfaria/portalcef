@@ -34,6 +34,7 @@ interface TurmasListProps {
   onCreateClick: () => void;
   onEditClick: (turma: TurmaWithProfessora) => void;
   onGerenciarProfessoraClick: (turma: TurmaWithProfessora) => void;
+  onDeleteClick: (turma: TurmaWithProfessora) => void;
 }
 
 export function TurmasList({
@@ -43,6 +44,7 @@ export function TurmasList({
   onCreateClick,
   onEditClick,
   onGerenciarProfessoraClick,
+  onDeleteClick,
 }: TurmasListProps) {
   const [filter, setFilter] = useState("");
 
@@ -203,9 +205,12 @@ export function TurmasList({
                           <UserCheck className="w-4 h-4 text-slate-500" />
                           Gerenciar Professora
                         </DropdownMenuItem>
-                        <DropdownMenuItem className="gap-2 cursor-pointer text-red-600 focus:text-red-700 bg-red-50/50 hover:bg-red-50">
+                        <DropdownMenuItem
+                          className="gap-2 cursor-pointer text-red-600 focus:text-red-700 bg-red-50/50 hover:bg-red-50"
+                          onClick={() => onDeleteClick(turma)}
+                        >
                           <Trash2 className="w-4 h-4" />
-                          Desativar
+                          Excluir
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>

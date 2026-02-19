@@ -4,8 +4,8 @@ import { api } from "@essencia/shared/fetchers/client";
 import { LayoutDashboard, Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 
-import { PeriodoCardProfessora } from "../../features/periodos/components/periodo-card-professora";
 import { PeriodosEmptyState } from "../../features/periodos/components/periodos-empty-state";
+import { PlanoAulaGrid } from "../../features/periodos/components/plano-aula-grid";
 import { usePeriodosDaTurma } from "../../features/periodos/hooks/use-periodos";
 
 /**
@@ -27,10 +27,35 @@ interface Stage {
   code: string;
 }
 
+/**
+ * Interface do plano de aula existente da professora
+ */
+interface PlanoExistente {
+  id: string;
+  planoAulaPeriodoId?: string;
+  quinzenaId?: string;
+  status: string;
+}
+
+/**
+ * Interface da resposta da API de férias
+ */
+interface FeriasResponse {
+  success: boolean;
+  data?: { startDate: string };
+}
+
 export function PlanejamentosContent() {
   const [turma, setTurma] = useState<Turma | null>(null);
   const [stage, setStage] = useState<Stage | null>(null);
+  const [planosExistentes, setPlanosExistentes] = useState<PlanoExistente[]>(
+    [],
+  );
+  const [dataInicioFeriasJulho, setDataInicioFeriasJulho] = useState<
+    string | undefined
+  >(undefined);
   const [isLoadingTurma, setIsLoadingTurma] = useState(true);
+  const [isLoadingPlanos, setIsLoadingPlanos] = useState(true);
   const [errorTurma, setErrorTurma] = useState<string | null>(null);
 
   // Buscar turma e etapa do usuário
@@ -42,7 +67,9 @@ export function PlanejamentosContent() {
 
         // Buscar turmas do usuário
         const turmas = await api.get<Turma[]>("/plannings/turmas");
-        const primaryTurma = Array.isArray(turmas) && turmas.length > 0 ? turmas[0] : null;
+        const primaryTurma: Turma | null =
+          (Array.isArray(turmas) && turmas.length > 0 ? turmas[0] : null) ??
+          null;
         setTurma(primaryTurma);
 
         // Buscar etapa da turma
@@ -56,7 +83,7 @@ export function PlanejamentosContent() {
       } catch (err) {
         console.error("Erro ao buscar dados do usuário:", err);
         setErrorTurma(
-          err instanceof Error ? err.message : "Erro ao buscar turma"
+          err instanceof Error ? err.message : "Erro ao buscar turma",
         );
       } finally {
         setIsLoadingTurma(false);
@@ -66,12 +93,59 @@ export function PlanejamentosContent() {
     fetchUserData();
   }, []);
 
-  // Buscar períodos da turma
-  const { periodos, isLoading: isLoadingPeriodos, error: errorPeriodos } = usePeriodosDaTurma(
-    turma?.id || ""
-  );
+  // Buscar planos existentes da professora
+  useEffect(() => {
+    async function fetchPlanosExistentes() {
+      try {
+        setIsLoadingPlanos(true);
+        const response = await api.get<{ data: PlanoExistente[] }>(
+          "/plano-aula/meus",
+        );
+        if (response && Array.isArray(response.data)) {
+          setPlanosExistentes(response.data);
+        } else if (Array.isArray(response)) {
+          setPlanosExistentes(response);
+        } else {
+          setPlanosExistentes([]);
+        }
+      } catch (err) {
+        console.error("Erro ao buscar planos existentes:", err);
+        setPlanosExistentes([]);
+      } finally {
+        setIsLoadingPlanos(false);
+      }
+    }
 
-  const isLoading = isLoadingTurma || isLoadingPeriodos;
+    fetchPlanosExistentes();
+  }, []);
+
+  // Buscar data de início das férias de julho
+  useEffect(() => {
+    async function fetchFeriasJulho() {
+      try {
+        const response = await api.get<FeriasResponse>(
+          `/calendar/ferias-julho?year=${new Date().getFullYear()}`,
+        );
+        if (response?.success && response.data?.startDate) {
+          setDataInicioFeriasJulho(response.data.startDate);
+        }
+      } catch (err) {
+        console.error("Erro ao buscar data de férias:", err);
+        // Fallback já está no componente, não precisa fazer nada
+      }
+    }
+
+    fetchFeriasJulho();
+  }, []);
+
+  // Buscar períodos da turma
+  const {
+    periodos,
+    isLoading: isLoadingPeriodos,
+    error: errorPeriodos,
+  } = usePeriodosDaTurma(turma?.id || "");
+
+  const isLoading = isLoadingTurma || isLoadingPeriodos || isLoadingPlanos;
   const error = errorTurma || errorPeriodos;
 
   return (
@@ -116,17 +190,13 @@ export function PlanejamentosContent() {
         <PeriodosEmptyState etapa={stage?.name || ""} />
       )}
 
-      {/* Grid de Períodos */}
+      {/* Grid de Planos de Aula por Semestre */}
       {!isLoading && !error && periodos.length > 0 && (
-        <div className="grid gap-4">
-          {periodos.map((periodo) => (
-            <PeriodoCardProfessora
-              key={periodo.id}
-              periodo={periodo}
-              planoExistente={undefined} // TODO: Buscar plano existente via API
-            />
-          ))}
-        </div>
+        <PlanoAulaGrid
+          periodos={periodos}
+          planosExistentes={planosExistentes}
+          dataInicioFeriasJulho={dataInicioFeriasJulho}
+        />
       )}
     </div>
   );

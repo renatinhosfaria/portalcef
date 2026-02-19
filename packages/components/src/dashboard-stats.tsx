@@ -6,10 +6,10 @@ import { useEffect, useState } from "react";
 
 export function DashboardStats() {
   const [stats, setStats] = useState({
-    totalUsers: 156,
-    activeNow: 24,
-    administrators: 8,
-    sessions24h: 342,
+    totalUsers: 0,
+    activeNow: 0,
+    administrators: 0,
+    sessions24h: 0,
   });
 
   useEffect(() => {

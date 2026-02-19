@@ -6,13 +6,18 @@
 
 "use client";
 
-import { Card, CardContent, CardHeader, CardTitle } from '@essencia/ui/components/card';
-import { Button } from '@essencia/ui/components/button';
-import { Badge } from '@essencia/ui/components/badge';
-import { format, isPast, differenceInDays } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
-import { useRouter } from 'next/navigation';
-import { cn } from '@essencia/ui/lib/utils';
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@essencia/ui/components/card";
+import { Button } from "@essencia/ui/components/button";
+import { Badge } from "@essencia/ui/components/badge";
+import { format, isPast, differenceInDays } from "date-fns";
+import { ptBR } from "date-fns/locale";
+import { useRouter } from "next/navigation";
+import { cn } from "@essencia/ui/lib/utils";
 
 interface PeriodoCardProfessoraProps {
   periodo: {
@@ -29,7 +34,10 @@ interface PeriodoCardProfessoraProps {
   };
 }
 
-export function PeriodoCardProfessora({ periodo, planoExistente }: PeriodoCardProfessoraProps) {
+export function PeriodoCardProfessora({
+  periodo,
+  planoExistente,
+}: PeriodoCardProfessoraProps) {
   const router = useRouter();
   const dataMaxima = new Date(periodo.dataMaximaEntrega);
   const prazoExpirado = isPast(dataMaxima);
@@ -37,7 +45,7 @@ export function PeriodoCardProfessora({ periodo, planoExistente }: PeriodoCardPr
   const prazoProximo = diasRestantes <= 3 && diasRestantes > 0;
 
   const handleClick = () => {
-    router.push(`/planejamento/plano-aula/${periodo.id}`);
+    router.push(`/plano-aula/${periodo.id}`);
   };
 
   return (
@@ -45,7 +53,9 @@ export function PeriodoCardProfessora({ periodo, planoExistente }: PeriodoCardPr
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           {periodo.numero}º Plano de Aula
-          {planoExistente && <Badge variant="secondary">{planoExistente.status}</Badge>}
+          {planoExistente && (
+            <Badge variant="secondary">{planoExistente.status}</Badge>
+          )}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -57,25 +67,30 @@ export function PeriodoCardProfessora({ periodo, planoExistente }: PeriodoCardPr
           <div>
             <span className="font-medium">Período:</span>
             <br />
-            {format(new Date(periodo.dataInicio), 'dd/MM/yyyy', { locale: ptBR })} até{' '}
-            {format(new Date(periodo.dataFim), 'dd/MM/yyyy', { locale: ptBR })}
+            {format(new Date(periodo.dataInicio), "dd/MM/yyyy", {
+              locale: ptBR,
+            })}{" "}
+            até{" "}
+            {format(new Date(periodo.dataFim), "dd/MM/yyyy", { locale: ptBR })}
           </div>
           <div>
             <span className="font-medium">Prazo de Entrega:</span>
             <br />
             <div className="flex items-center gap-2">
-              {format(dataMaxima, 'dd/MM/yyyy', { locale: ptBR })}
+              {format(dataMaxima, "dd/MM/yyyy", { locale: ptBR })}
               {prazoProximo && (
                 <Badge
                   variant="default"
                   className={cn(
-                    "bg-yellow-500 hover:bg-yellow-500/90 text-white border-yellow-500"
+                    "bg-yellow-500 hover:bg-yellow-500/90 text-white border-yellow-500",
                   )}
                 >
                   Prazo próximo
                 </Badge>
               )}
-              {prazoExpirado && <Badge variant="destructive">Prazo expirado</Badge>}
+              {prazoExpirado && (
+                <Badge variant="destructive">Prazo expirado</Badge>
+              )}
             </div>
           </div>
         </div>
@@ -87,7 +102,7 @@ export function PeriodoCardProfessora({ periodo, planoExistente }: PeriodoCardPr
         )}
 
         <Button onClick={handleClick} className="w-full">
-          {planoExistente ? 'Continuar Plano' : 'Iniciar Plano de Aula'}
+          {planoExistente ? "Continuar Plano" : "Iniciar Plano de Aula"}
         </Button>
       </CardContent>
     </Card>

@@ -23,12 +23,7 @@ import { z } from "zod";
  */
 export const createPlanoSchema = z.object({
   turmaId: z.string().uuid("turmaId deve ser um UUID válido"),
-  quinzenaId: z
-    .string()
-    .regex(
-      /^\d{4}-Q\d{2}$/,
-      "quinzenaId deve seguir o formato YYYY-QNN (ex: 2026-Q01)",
-    ),
+  quinzenaId: z.string().uuid("quinzenaId deve ser um UUID válido"),
 });
 
 export type CreatePlanoDto = z.infer<typeof createPlanoSchema>;
@@ -70,12 +65,7 @@ export type DevolverPlanoDto = z.infer<typeof devolverPlanoSchema>;
  * Gestão define deadline para entrega de planos
  */
 export const setDeadlineSchema = z.object({
-  quinzenaId: z
-    .string()
-    .regex(
-      /^\d{4}-Q\d{2}$/,
-      "quinzenaId deve seguir o formato YYYY-QNN (ex: 2026-Q01)",
-    ),
+  quinzenaId: z.string().uuid("quinzenaId deve ser um UUID válido"),
   deadline: z.string().datetime("deadline deve ser uma data/hora ISO válida"),
 });
 
@@ -85,10 +75,7 @@ export type SetDeadlineDto = z.infer<typeof setDeadlineSchema>;
  * Schema para listagem de planos pendentes (query params)
  */
 export const listPlanosQuerySchema = z.object({
-  quinzenaId: z
-    .string()
-    .regex(/^\d{4}-Q\d{2}$/)
-    .optional(),
+  quinzenaId: z.string().uuid().optional(),
   status: z
     .enum([
       "RASCUNHO",
@@ -216,10 +203,7 @@ export const listarPlanosGestaoSchema = z.object({
     ])
     .optional()
     .default("todos"),
-  quinzenaId: z
-    .string()
-    .regex(/^\d{4}-Q\d{2}$/)
-    .optional(),
+  quinzenaId: z.string().uuid().optional(),
   segmentoId: z.string().optional(),
   professora: z.string().optional(),
   dataInicio: z.string().datetime().optional(),

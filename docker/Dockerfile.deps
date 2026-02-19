@@ -1,0 +1,67 @@
+# =============================================================================
+# DOCKERFILE.DEPS - Instalação de dependências com cache otimizado
+# Portal Essência Feliz - Docker Strategy 2025/2026
+# =============================================================================
+# syntax=docker/dockerfile:1.4
+
+FROM node:22-alpine AS deps
+
+# Ferramentas necessárias
+RUN apk add --no-cache curl && \
+    corepack enable && \
+    corepack prepare pnpm@9.15.1 --activate
+
+WORKDIR /app
+
+# =============================================================================
+# STAGE: PRUNER - Turbo prune para dependências mínimas por app
+# =============================================================================
+FROM deps AS pruner
+
+# Copiar todo o código fonte (necessário para turbo prune)
+COPY . .
+
+# ARG para especificar qual app/service fazer prune
+ARG SCOPE
+ENV SCOPE=${SCOPE}
+
+# Executar turbo prune - cria output otimizado em /app/out
+RUN pnpm dlx turbo prune --scope=${SCOPE} --docker
+
+# =============================================================================
+# STAGE: INSTALLER - Instalar dependências com cache mount
+# =============================================================================
+FROM deps AS installer
+
+# Copiar apenas arquivos de manifesto (primeira layer - raramente muda)
+COPY --from=pruner /app/out/json/ .
+COPY --from=pruner /app/out/pnpm-lock.yaml ./pnpm-lock.yaml
+COPY --from=pruner /app/out/pnpm-workspace.yaml ./pnpm-workspace.yaml
+
+# Instalar dependências com cache mount para pnpm store
+# CRÍTICO: Este cache persiste entre builds, acelerando drasticamente rebuilds
+RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
+    pnpm install --frozen-lockfile --prefer-offline
+
+# =============================================================================
+# STAGE: BUILDER - Compilação com cache do Turborepo
+# =============================================================================
+FROM installer AS builder
+
+ARG SCOPE
+ENV SCOPE=${SCOPE}
+
+# Copiar código fonte após node_modules (melhor cache hit)
+COPY --from=pruner /app/out/full/ .
+
+# Build args para variáveis de ambiente de build-time
+ARG NEXT_PUBLIC_API_URL
+ARG API_INTERNAL_URL
+
+ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+ENV API_INTERNAL_URL=${API_INTERNAL_URL}
+
+# Build com cache mount do Turborepo
+# Este cache persiste e acelera builds incrementais
+RUN --mount=type=cache,id=turbo-cache,target=/app/.turbo \
+    pnpm turbo build --filter=${SCOPE}

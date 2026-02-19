@@ -52,6 +52,8 @@ export const paymentMethodEnum = [
   "CARTAO_CREDITO",
   "CARTAO_DEBITO",
   "DINHEIRO",
+  "BRINDE",
+  "MULTIPLO",
 ] as const;
 export type PaymentMethod = (typeof paymentMethodEnum)[number];
 
@@ -431,6 +433,31 @@ export const shopSettings = pgTable(
 export type ShopSettings = typeof shopSettings.$inferSelect;
 export type NewShopSettings = typeof shopSettings.$inferInsert;
 
+
+// ============================================
+// Table: shop_order_payments
+// ============================================
+export const shopOrderPayments = pgTable(
+  "shop_order_payments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orderId: uuid("order_id")
+      .notNull()
+      .references(() => shopOrders.id, { onDelete: "cascade" }),
+    paymentMethod: text("payment_method", { enum: paymentMethodEnum }).notNull(),
+    amount: integer("amount").notNull(), // em centavos
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    orderIdIdx: index("shop_order_payments_order_id_idx").on(table.orderId),
+  }),
+);
+
+export type ShopOrderPayment = typeof shopOrderPayments.$inferSelect;
+export type NewShopOrderPayment = typeof shopOrderPayments.$inferInsert;
+
 // ============================================
 // Zod Schemas
 // ============================================
@@ -452,5 +479,8 @@ export const selectShopInterestRequestSchema =
 
 export const insertShopSettingsSchema = createInsertSchema(shopSettings);
 export const selectShopSettingsSchema = createSelectSchema(shopSettings);
+
+export const insertShopOrderPaymentSchema = createInsertSchema(shopOrderPayments);
+export const selectShopOrderPaymentSchema = createSelectSchema(shopOrderPayments);
 
 // End of file

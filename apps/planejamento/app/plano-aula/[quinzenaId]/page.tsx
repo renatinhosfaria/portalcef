@@ -50,11 +50,10 @@ interface Stage {
 interface PlanoAulaPeriodo {
   id: string;
   numero: number;
-  label: string;
+  descricao?: string;
   dataInicio: string;
   dataFim: string;
-  deadline: string;
-  liberado: boolean;
+  dataMaximaEntrega: string;
 }
 
 async function getCookieHeader(): Promise<string> {
@@ -166,7 +165,7 @@ export default async function PlanoAulaPage({ params }: PageProps) {
 
   // Formatar deadline
   const deadlineDisplay = periodoData
-    ? new Date(periodoData.deadline).toLocaleDateString("pt-BR", {
+    ? new Date(periodoData.dataMaximaEntrega).toLocaleDateString("pt-BR", {
         day: "2-digit",
         month: "long",
         year: "numeric",
@@ -221,7 +220,8 @@ export default async function PlanoAulaPage({ params }: PageProps) {
               </div>
               <div>
                 <h1 className="text-2xl font-bold tracking-tight">
-                  {periodoData.label}
+                  {periodoData.descricao ||
+                    `${periodoData.numero}º Plano de Aula`}
                 </h1>
                 <p className="text-sm text-muted-foreground">
                   {periodoDisplay}

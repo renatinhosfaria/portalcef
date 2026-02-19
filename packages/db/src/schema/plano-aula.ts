@@ -66,11 +66,13 @@ export const planoAula = pgTable(
     unitId: uuid("unit_id")
       .notNull()
       .references(() => units.id, { onDelete: "cascade" }),
-    planoAulaPeriodoId: uuid("plano_aula_periodo_id")
-      .references(() => planoAulaPeriodo.id, { onDelete: "cascade" }),
+    planoAulaPeriodoId: uuid("plano_aula_periodo_id").references(
+      () => planoAulaPeriodo.id,
+      { onDelete: "cascade" },
+    ),
 
     // Identificador da quinzena
-    quinzenaId: varchar("quinzena_id", { length: 10 }).notNull(), // Ex: "2026-Q01"
+    quinzenaId: uuid("quinzena_id").notNull(),
 
     // Status e fluxo
     status: text("status", { enum: planoAulaStatusEnum })
@@ -145,6 +147,12 @@ export const planoDocumento = pgTable(
     }), // ID do analista que aprovou
     approvedAt: timestamp("approved_at", { withTimezone: true }), // Data/hora da aprovação
 
+    // Registro de impressão
+    printedBy: uuid("printed_by").references(() => users.id, {
+      onDelete: "set null",
+    }), // ID de quem imprimiu
+    printedAt: timestamp("printed_at", { withTimezone: true }), // Data/hora da impressão
+
     // Timestamps
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -216,7 +224,7 @@ export const quinzenaConfig = pgTable(
       .references(() => units.id, { onDelete: "cascade" }),
 
     // Identificador da quinzena
-    quinzenaId: varchar("quinzena_id", { length: 10 }).notNull(), // Ex: "2026-Q01"
+    quinzenaId: uuid("quinzena_id").notNull(),
 
     // Deadline para entrega
     deadline: timestamp("deadline", { withTimezone: true }).notNull(),

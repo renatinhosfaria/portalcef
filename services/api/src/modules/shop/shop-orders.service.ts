@@ -68,7 +68,7 @@ export class ShopOrdersService {
     private inventoryService: ShopInventoryService,
     @Inject(forwardRef(() => PaymentsService))
     private paymentsService: PaymentsService,
-  ) {}
+  ) { }
 
   /**
    * Gera número de pedido único de 6 dígitos
@@ -513,19 +513,38 @@ export class ShopOrdersService {
       });
     }
 
-    // 4. Decrementar estoque DIRETAMENTE (sem reserva)
+    // 4. Validar Pagamentos
+    const payments = dto.payments || (dto.paymentMethod ? [{ method: dto.paymentMethod, amount: totalAmount }] : []);
+
+    if (payments.length === 0) {
+      throw new BadRequestException("Pelo menos um método de pagamento deve ser informado.");
+    }
+
+    const totalPaid = payments.reduce((acc, p) => acc + p.amount, 0);
+
+    // Se houver pagamento como BRINDE, aceitamos qualquer valor (geralmente 0 ou parcial)
+    // Caso contrário, o valor pago deve bater com o total
+    const hasBrinde = payments.some(p => p.method === "BRINDE");
+
+    if (!hasBrinde && totalPaid !== totalAmount) {
+      throw new BadRequestException(`Valor pago (${totalPaid}) diverge do total do pedido (${totalAmount})`);
+    }
+
+    // 5. Decrementar estoque DIRETAMENTE (sem reserva)
     const salesConfirmed: Array<{
       variantId: string;
       unitId: string;
       quantity: number;
     }> = [];
+
+    // Decrementa estoque usando função dedicada para venda presencial
     for (const item of dto.items) {
-      // Usa confirmSale com orderId temporário (será substituído)
-      await this.inventoryService.confirmSale(
+      await this.inventoryService.confirmPresentialSale(
         item.variantId,
         unitId,
         item.quantity,
         orderNumber,
+        userId,
       );
       salesConfirmed.push({
         variantId: item.variantId,
@@ -534,8 +553,11 @@ export class ShopOrdersService {
       });
     }
 
-    // 5. Criar pedido com status RETIRADO
+    // 6. Criar pedido com status RETIRADO e pagamentos
     const now = new Date();
+
+    // Determina método de pagamento principal para campo legado/resumo
+    const primaryPaymentMethod = payments.length === 1 ? payments[0].method : "MULTIPLO";
 
     const [order] = await db
       .insert(shopOrders)
@@ -549,14 +571,14 @@ export class ShopOrdersService {
         customerName: dto.customerName,
         customerPhone: dto.customerPhone,
         customerEmail: dto.customerEmail || null,
-        paymentMethod: dto.paymentMethod,
+        paymentMethod: primaryPaymentMethod,
         paidAt: now,
         pickedUpAt: now,
         pickedUpBy: userId,
       })
       .returning();
 
-    // 6. Criar itens
+    // 7. Criar itens
     const orderItemsValues = itemsWithPrice.map((item) => ({
       orderId: order.id,
       variantId: item.variantId,
@@ -567,6 +589,21 @@ export class ShopOrdersService {
     }));
 
     await db.insert(shopOrderItems).values(orderItemsValues);
+
+    // 8. Criar registros de pagamento
+    if (payments.length > 0) {
+      // Importar tabela se necessário, ou usar string literal se import circular for problema
+      // Assumindo shopOrderPayments importado do @essencia/db (precisa adicionar no topo se não tiver)
+      const { shopOrderPayments } = await import("@essencia/db");
+
+      const paymentValues = payments.map(p => ({
+        orderId: order.id,
+        paymentMethod: p.method,
+        amount: p.amount,
+      }));
+
+      await db.insert(shopOrderPayments).values(paymentValues);
+    }
 
     return {
       orderId: order.id,
@@ -701,7 +738,11 @@ export class ShopOrdersService {
    */
   async confirmPayment(
     orderId: string,
-    paymentMethod: "DINHEIRO" | "PIX" | "CARTAO_CREDITO" | "CARTAO_DEBITO",
+    // paymentMethod: "DINHEIRO" | "PIX" | "CARTAO_CREDITO" | "CARTAO_DEBITO", // REMOVED
+    dto: {
+      paymentMethod?: "DINHEIRO" | "PIX" | "CARTAO_CREDITO" | "CARTAO_DEBITO" | "BRINDE",
+      payments?: Array<{ method: "DINHEIRO" | "PIX" | "CARTAO_CREDITO" | "CARTAO_DEBITO" | "BRINDE"; amount: number }>
+    },
     _adminUserId: string,
   ) {
     const db = getDb();
@@ -734,6 +775,21 @@ export class ShopOrdersService {
       });
     }
 
+    // Validar Pagamentos
+    const payments = dto.payments || (dto.paymentMethod ? [{ method: dto.paymentMethod, amount: order.totalAmount }] : []);
+
+    if (payments.length === 0) {
+      throw new BadRequestException("Pelo menos um método de pagamento deve ser informado.");
+    }
+
+    const totalPaid = payments.reduce((acc, p) => acc + p.amount, 0);
+
+    const hasBrinde = payments.some(p => p.method === "BRINDE");
+
+    if (!hasBrinde && totalPaid !== order.totalAmount) {
+      throw new BadRequestException(`Valor pago (${totalPaid}) diverge do total do pedido (${order.totalAmount})`);
+    }
+
     // Converter reservas em vendas confirmadas
     for (const item of order.items) {
       await this.inventoryService.confirmSale(
@@ -744,21 +800,36 @@ export class ShopOrdersService {
       );
     }
 
+    const primaryPaymentMethod = payments.length === 1 ? payments[0].method : "MULTIPLO";
+
     // Atualizar pedido para PAGO
     await db
       .update(shopOrders)
       .set({
         status: "PAGO",
-        paymentMethod,
+        paymentMethod: primaryPaymentMethod,
         paidAt: new Date(),
       })
       .where(eq(shopOrders.id, orderId));
+
+    // Criar registros de pagamento
+    if (payments.length > 0) {
+      const { shopOrderPayments } = await import("@essencia/db");
+
+      const paymentValues = payments.map(p => ({
+        orderId: order.id,
+        paymentMethod: p.method,
+        amount: p.amount,
+      }));
+
+      await db.insert(shopOrderPayments).values(paymentValues);
+    }
 
     return {
       success: true,
       message: "Pagamento confirmado com sucesso",
       orderNumber: order.orderNumber,
-      paymentMethod,
+      paymentMethod: primaryPaymentMethod,
     };
   }
 
@@ -766,9 +837,9 @@ export class ShopOrdersService {
    * DELETE /shop/admin/orders/:id
    *
    * Exclui permanentemente um pedido (hard delete)
-   * Apenas pedidos AGUARDANDO_PAGAMENTO, CANCELADO ou EXPIRADO podem ser excluídos
+   * Pedidos RETIRADO e PAGO devolvem produtos ao estoque
    */
-  async deleteOrder(orderId: string, _userId: string) {
+  async deleteOrder(orderId: string, userId: string) {
     const db = getDb();
 
     const order = await db.query.shopOrders.findFirst({
@@ -783,15 +854,6 @@ export class ShopOrdersService {
       });
     }
 
-    // Validar status permite exclusão
-    const allowedStatuses = ["AGUARDANDO_PAGAMENTO", "CANCELADO", "EXPIRADO"];
-    if (!allowedStatuses.includes(order.status)) {
-      throw new BadRequestException({
-        code: "INVALID_STATUS",
-        message: `Apenas pedidos AGUARDANDO_PAGAMENTO, CANCELADO ou EXPIRADO podem ser excluídos. Status atual: ${order.status}`,
-      });
-    }
-
     // Se AGUARDANDO_PAGAMENTO, liberar reservas antes de excluir
     if (order.status === "AGUARDANDO_PAGAMENTO") {
       for (const item of order.items) {
@@ -803,9 +865,28 @@ export class ShopOrdersService {
             order.id,
           );
         } catch (error) {
-          // Log mas continua (reserva pode já não existir)
           console.warn(
             `Erro ao liberar reserva do item ${item.id} do pedido ${order.orderNumber}:`,
+            error,
+          );
+        }
+      }
+    }
+
+    // Se PAGO ou RETIRADO, devolver produtos ao estoque
+    if (order.status === "PAGO" || order.status === "RETIRADO") {
+      for (const item of order.items) {
+        try {
+          await this.inventoryService.addStock(
+            item.variantId,
+            order.unitId,
+            item.quantity,
+            `Estorno por exclusão do pedido ${order.orderNumber}`,
+            userId,
+          );
+        } catch (error) {
+          console.warn(
+            `Erro ao devolver estoque do item ${item.id} do pedido ${order.orderNumber}:`,
             error,
           );
         }

@@ -1,5 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+    output: "standalone",
     transpilePackages: ["@essencia/ui", "@essencia/components", "@essencia/shared"],
 
     // Configuração de imagens para MinIO e Storage

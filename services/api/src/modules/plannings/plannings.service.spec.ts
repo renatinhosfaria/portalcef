@@ -155,7 +155,9 @@ describe("PlanningsService - Edição e Exclusão de Períodos", () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      jest.spyOn(service as any, "renumerarPeriodosSeNecessario").mockResolvedValue(undefined);
+      jest
+        .spyOn(service as any, "renumerarPeriodosSeNecessario")
+        .mockResolvedValue(undefined);
 
       await expect(
         service.excluirPeriodo("periodo-id"),

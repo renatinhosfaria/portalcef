@@ -1,6 +1,6 @@
 'use client';
 
-import { Search, Plus, Settings, History, Package, AlertTriangle, X } from 'lucide-react';
+import { Search, Plus, Minus, Settings, History, Package, AlertTriangle, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { apiFetch } from '../../lib/api';
@@ -9,10 +9,12 @@ interface InventoryItem {
     variantId: string;
     productName: string;
     variantSize: string;
-    quantity: number;
     reservedQuantity: number;
+    available: number;
+    totalSold: number;
     lowStockThreshold: number;
     unitId: string;
+    needsRestock: boolean;
 }
 
 export default function EstoquePage() {
@@ -20,6 +22,7 @@ export default function EstoquePage() {
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
     const [showEntryModal, setShowEntryModal] = useState(false);
+    const [showExitModal, setShowExitModal] = useState(false);
     const [selectedVariant, setSelectedVariant] = useState<InventoryItem | null>(null);
 
     useEffect(() => {
@@ -53,31 +56,31 @@ export default function EstoquePage() {
     );
 
     const getStockStatus = (item: InventoryItem) => {
-        const available = item.quantity - item.reservedQuantity;
-        if (available === 0) return { class: 'badge-danger', label: 'Sem Estoque' };
-        if (available <= item.lowStockThreshold) return { class: 'badge-warning', label: 'Estoque Baixo' };
+        if (item.available === 0) return { class: 'badge-danger', label: 'Sem Estoque' };
+        if (item.needsRestock) return { class: 'badge-warning', label: 'Estoque Baixo' };
         return { class: 'badge-success', label: 'Disponível' };
     };
 
-    const totalInStock = inventory.reduce((sum, i) => sum + i.quantity, 0);
+    const totalAvailable = inventory.reduce((sum, i) => sum + i.available, 0);
     const totalReserved = inventory.reduce((sum, i) => sum + i.reservedQuantity, 0);
-    const lowStockCount = inventory.filter(i => i.quantity - i.reservedQuantity <= i.lowStockThreshold).length;
+    const totalSold = inventory.reduce((sum, i) => sum + i.totalSold, 0);
+    const lowStockCount = inventory.filter(i => i.needsRestock).length;
 
     return (
         <div className="space-y-8">
             {/* Header */}
             <div>
                 <h1 className="text-3xl font-bold text-slate-800 tracking-tight">Gestão de Estoque</h1>
-                <p className="text-slate-500 mt-1">Controle de entrada, ajuste e movimentações</p>
+                <p className="text-slate-500 mt-1">Controle de entrada, saída e movimentações</p>
             </div>
 
             {/* Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                 <div className="stat-card">
                     <div className="flex items-start justify-between">
                         <div>
-                            <p className="stat-card-label">Total em Estoque</p>
-                            <p className="stat-card-value">{totalInStock}</p>
+                            <p className="stat-card-label">Disponível</p>
+                            <p className="stat-card-value">{totalAvailable}</p>
                         </div>
                         <div className="stat-card-icon bg-[#A3D154]/20 text-[#5a7a1f]">
                             <Package className="w-6 h-6" />
@@ -91,6 +94,17 @@ export default function EstoquePage() {
                             <p className="stat-card-value text-amber-600">{totalReserved}</p>
                         </div>
                         <div className="stat-card-icon bg-amber-100 text-amber-600">
+                            <Package className="w-6 h-6" />
+                        </div>
+                    </div>
+                </div>
+                <div className="stat-card">
+                    <div className="flex items-start justify-between">
+                        <div>
+                            <p className="stat-card-label">Total Vendido</p>
+                            <p className="stat-card-value text-emerald-600">{totalSold}</p>
+                        </div>
+                        <div className="stat-card-icon bg-emerald-100 text-emerald-600">
                             <Package className="w-6 h-6" />
                         </div>
                     </div>
@@ -130,9 +144,9 @@ export default function EstoquePage() {
                             <tr>
                                 <th>Produto</th>
                                 <th>Tamanho</th>
-                                <th>Quantidade</th>
                                 <th>Reservado</th>
                                 <th>Disponível</th>
+                                <th>Vendido</th>
                                 <th>Status</th>
                                 <th>Ações</th>
                             </tr>
@@ -158,19 +172,17 @@ export default function EstoquePage() {
                                 </tr>
                             ) : (
                                 filteredInventory.map((item) => {
-                                    const available = item.quantity - item.reservedQuantity;
                                     const status = getStockStatus(item);
-                                    const isLow = available <= item.lowStockThreshold;
 
                                     return (
-                                        <tr key={item.variantId} className={isLow ? 'bg-red-50/50' : ''}>
+                                        <tr key={item.variantId} className={item.needsRestock ? 'bg-red-50/50' : ''}>
                                             <td className="font-semibold text-slate-800">{item.productName}</td>
                                             <td>
                                                 <span className="badge badge-neutral">{item.variantSize}</span>
                                             </td>
-                                            <td className="font-mono text-slate-700">{item.quantity}</td>
                                             <td className="font-mono text-amber-600">{item.reservedQuantity}</td>
-                                            <td className="font-mono font-bold text-slate-800">{available}</td>
+                                            <td className="font-mono font-bold text-slate-800">{item.available}</td>
+                                            <td className="font-mono text-emerald-600">{item.totalSold}</td>
                                             <td>
                                                 <span className={`badge ${status.class}`}>{status.label}</span>
                                             </td>
@@ -185,6 +197,16 @@ export default function EstoquePage() {
                                                     >
                                                         <Plus className="w-4 h-4" />
                                                         Entrada
+                                                    </button>
+                                                    <button
+                                                        onClick={() => {
+                                                            setSelectedVariant(item);
+                                                            setShowExitModal(true);
+                                                        }}
+                                                        className="btn-admin btn-admin-danger btn-admin-sm"
+                                                    >
+                                                        <Minus className="w-4 h-4" />
+                                                        Saída
                                                     </button>
                                                     <button className="btn-admin btn-admin-ghost btn-admin-sm">
                                                         <Settings className="w-4 h-4" />
@@ -279,6 +301,125 @@ export default function EstoquePage() {
                     </div>
                 </div>
             )}
+
+            {/* Exit Modal */}
+            {showExitModal && selectedVariant && (
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-2xl shadow-xl max-w-md w-full">
+                        <div className="flex items-center justify-between p-6 border-b border-slate-100">
+                            <h3 className="text-lg font-bold text-slate-800">Saída de Estoque</h3>
+                            <button
+                                onClick={() => setShowExitModal(false)}
+                                className="p-2 hover:bg-slate-100 rounded-xl transition-colors"
+                            >
+                                <X className="w-5 h-5 text-slate-500" />
+                            </button>
+                        </div>
+                        <div className="p-6">
+                            <div className="bg-slate-50 rounded-xl p-4 mb-6">
+                                <p className="font-semibold text-slate-800">{selectedVariant.productName}</p>
+                                <p className="text-sm text-slate-500">Tamanho {selectedVariant.variantSize}</p>
+                                <p className="text-sm text-slate-500 mt-1">
+                                    Disponível: <span className="font-semibold text-slate-700">{selectedVariant.available}</span>
+                                </p>
+                            </div>
+
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="form-label">Quantidade</label>
+                                    <input
+                                        id="exit-quantity"
+                                        type="number"
+                                        min="1"
+                                        max={selectedVariant.available}
+                                        defaultValue="1"
+                                        className="form-input"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="form-label">Motivo da Saída</label>
+                                    <select id="exit-reason" className="form-input">
+                                        <option value="VENDA_BALCAO">Venda Balcão</option>
+                                        <option value="DANO">Dano/Avaria</option>
+                                        <option value="PERDA">Perda/Extravio</option>
+                                        <option value="AMOSTRA">Amostra</option>
+                                        <option value="OUTROS">Outros</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="form-label">Observação</label>
+                                    <input
+                                        id="exit-notes"
+                                        type="text"
+                                        placeholder="Ex: Produto com defeito de fábrica"
+                                        className="form-input"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="flex gap-3 mt-6">
+                                <button onClick={() => setShowExitModal(false)} className="btn-admin btn-admin-secondary flex-1">
+                                    Cancelar
+                                </button>
+                                <button
+                                    onClick={async () => {
+                                        try {
+                                            const quantityInput = document.getElementById('exit-quantity') as HTMLInputElement;
+                                            const reasonSelect = document.getElementById('exit-reason') as HTMLSelectElement;
+                                            const notesInput = document.getElementById('exit-notes') as HTMLInputElement;
+                                            const quantity = parseInt(quantityInput.value) || 0;
+                                            const available = selectedVariant.available;
+
+                                            if (quantity <= 0) {
+                                                alert('Quantidade deve ser maior que zero');
+                                                return;
+                                            }
+
+                                            if (quantity > available) {
+                                                alert(`Quantidade maior que o disponível (${available})`);
+                                                return;
+                                            }
+
+                                            if (!notesInput.value.trim()) {
+                                                alert('Observação é obrigatória para dar saída');
+                                                return;
+                                            }
+
+                                            const res = await apiFetch('/api/shop/admin/inventory/exit', {
+                                                method: 'POST',
+                                                headers: { 'Content-Type': 'application/json' },
+                                                body: JSON.stringify({
+                                                    variantId: selectedVariant.variantId,
+                                                    unitId: selectedVariant.unitId,
+                                                    quantity,
+                                                    reason: reasonSelect.value,
+                                                    notes: notesInput.value
+                                                })
+                                            });
+
+                                            if (!res.ok) {
+                                                const data = await res.json();
+                                                throw new Error(data.error?.message || 'Falha ao registrar saída');
+                                            }
+
+                                            alert('Saída registrada com sucesso!');
+                                            setShowExitModal(false);
+                                            loadInventory();
+                                        } catch (err) {
+                                            console.error(err);
+                                            alert(err instanceof Error ? err.message : 'Erro ao registrar saída');
+                                        }
+                                    }}
+                                    className="btn-admin btn-admin-danger flex-1"
+                                >
+                                    Confirmar Saída
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
+

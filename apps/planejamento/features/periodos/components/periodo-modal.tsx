@@ -1,7 +1,7 @@
-'use client';
+"use client";
 
-import { useEffect, useState } from 'react';
-import { Button } from '@essencia/ui/components/button';
+import { useEffect, useState } from "react";
+import { Button } from "@essencia/ui/components/button";
 import {
   Dialog,
   DialogContent,
@@ -9,19 +9,19 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@essencia/ui/components/dialog';
-import { Input } from '@essencia/ui/components/input';
-import { Label } from '@essencia/ui/components/label';
-import { Textarea } from '@essencia/ui/components/textarea';
+} from "@essencia/ui/components/dialog";
+import { Input } from "@essencia/ui/components/input";
+import { Label } from "@essencia/ui/components/label";
+import { Textarea } from "@essencia/ui/components/textarea";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@essencia/ui/components/select';
-import type { EducationStageCode } from '@essencia/shared/types';
-import { educationStageLabels } from '@essencia/shared/types';
+} from "@essencia/ui/components/select";
+import type { EducationStageCode } from "@essencia/shared/types";
+import { educationStageLabels } from "@essencia/shared/types";
 
 interface Periodo {
   id: string;
@@ -38,6 +38,7 @@ interface PeriodoModalProps {
   onOpenChange: (open: boolean) => void;
   periodo?: Periodo | null;
   etapas: string[];
+  defaultEtapa?: string;
   onSubmit: (dto: {
     etapa: string;
     descricao?: string;
@@ -53,31 +54,32 @@ export function PeriodoModal({
   onOpenChange,
   periodo,
   etapas,
+  defaultEtapa,
   onSubmit,
   loading = false,
 }: PeriodoModalProps) {
-  const [etapa, setEtapa] = useState('');
-  const [descricao, setDescricao] = useState('');
-  const [dataInicio, setDataInicio] = useState('');
-  const [dataFim, setDataFim] = useState('');
-  const [dataMaximaEntrega, setDataMaximaEntrega] = useState('');
+  const [etapa, setEtapa] = useState("");
+  const [descricao, setDescricao] = useState("");
+  const [dataInicio, setDataInicio] = useState("");
+  const [dataFim, setDataFim] = useState("");
+  const [dataMaximaEntrega, setDataMaximaEntrega] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (periodo) {
       setEtapa(periodo.etapa);
-      setDescricao(periodo.descricao || '');
-      setDataInicio(periodo.dataInicio.split('T')[0]);
-      setDataFim(periodo.dataFim.split('T')[0]);
-      setDataMaximaEntrega(periodo.dataMaximaEntrega.split('T')[0]);
+      setDescricao(periodo.descricao || "");
+      setDataInicio(periodo.dataInicio.split("T")[0] ?? "");
+      setDataFim(periodo.dataFim.split("T")[0] ?? "");
+      setDataMaximaEntrega(periodo.dataMaximaEntrega.split("T")[0] ?? "");
     } else {
-      setEtapa(etapas[0] || '');
-      setDescricao('');
-      setDataInicio('');
-      setDataFim('');
-      setDataMaximaEntrega('');
+      setEtapa(defaultEtapa || etapas[0] || "");
+      setDescricao("");
+      setDataInicio("");
+      setDataFim("");
+      setDataMaximaEntrega("");
     }
-  }, [periodo, etapas, open]);
+  }, [periodo, etapas, open, defaultEtapa]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -93,7 +95,7 @@ export function PeriodoModal({
       });
       onOpenChange(false);
     } catch (error) {
-      console.error('Erro ao salvar período:', error);
+      console.error("Erro ao salvar período:", error);
     } finally {
       setIsSubmitting(false);
     }
@@ -104,12 +106,12 @@ export function PeriodoModal({
       <DialogContent className="sm:max-w-[525px]">
         <DialogHeader>
           <DialogTitle>
-            {periodo ? 'Editar Plano de Aula' : 'Novo Plano de Aula'}
+            {periodo ? "Editar Plano de Aula" : "Novo Plano de Aula"}
           </DialogTitle>
           <DialogDescription>
             {periodo
-              ? 'Atualize as informações do plano de aula'
-              : 'Configure um novo plano de aula para a etapa'}
+              ? "Atualize as informações do plano de aula"
+              : "Configure um novo plano de aula para a etapa"}
           </DialogDescription>
         </DialogHeader>
 
@@ -212,7 +214,7 @@ export function PeriodoModal({
               Cancelar
             </Button>
             <Button type="submit" disabled={loading || isSubmitting}>
-              {isSubmitting ? 'Salvando...' : periodo ? 'Atualizar' : 'Criar'}
+              {isSubmitting ? "Salvando..." : periodo ? "Atualizar" : "Criar"}
             </Button>
           </DialogFooter>
         </form>

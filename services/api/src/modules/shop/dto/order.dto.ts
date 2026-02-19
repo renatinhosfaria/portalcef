@@ -110,6 +110,22 @@ export class ListOrdersDto {
   limit?: number;
 }
 
+
+export class PaymentItemDto {
+  @IsEnum([
+    "DINHEIRO",
+    "PIX",
+    "CARTAO_CREDITO",
+    "CARTAO_DEBITO",
+    "BRINDE",
+  ])
+  method!: "DINHEIRO" | "PIX" | "CARTAO_CREDITO" | "CARTAO_DEBITO" | "BRINDE";
+
+  @IsInt()
+  @Min(0)
+  amount!: number; // Em centavos
+}
+
 /**
  * DTO para venda presencial
  * POST /shop/admin/orders/presencial
@@ -128,8 +144,18 @@ export class CreatePresentialSaleDto {
   @IsString()
   customerEmail?: string;
 
-  @IsEnum(["DINHEIRO", "PIX", "CARTAO_CREDITO", "CARTAO_DEBITO"])
-  paymentMethod!: "DINHEIRO" | "PIX" | "CARTAO_CREDITO" | "CARTAO_DEBITO";
+  /**
+   * @deprecated Use payments instead
+   */
+  @IsOptional()
+  @IsEnum(["DINHEIRO", "PIX", "CARTAO_CREDITO", "CARTAO_DEBITO", "BRINDE"])
+  paymentMethod?: "DINHEIRO" | "PIX" | "CARTAO_CREDITO" | "CARTAO_DEBITO" | "BRINDE";
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => PaymentItemDto)
+  payments?: PaymentItemDto[];
 
   @IsArray()
   @ArrayMinSize(1)
@@ -154,6 +180,16 @@ export class CancelOrderDto {
  * Usado no sistema de voucher onde cliente paga presencialmente na escola
  */
 export class ConfirmPaymentDto {
-  @IsEnum(["DINHEIRO", "PIX", "CARTAO_CREDITO", "CARTAO_DEBITO"])
-  paymentMethod!: "DINHEIRO" | "PIX" | "CARTAO_CREDITO" | "CARTAO_DEBITO";
+  /**
+   * @deprecated Use payments instead
+   */
+  @IsOptional()
+  @IsEnum(["DINHEIRO", "PIX", "CARTAO_CREDITO", "CARTAO_DEBITO", "BRINDE"])
+  paymentMethod?: "DINHEIRO" | "PIX" | "CARTAO_CREDITO" | "CARTAO_DEBITO" | "BRINDE";
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => PaymentItemDto)
+  payments?: PaymentItemDto[];
 }

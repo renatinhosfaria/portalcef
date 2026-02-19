@@ -113,6 +113,34 @@
       "when": 1769467237426,
       "tag": "0015_fancy_killmonger",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1769511270574,
+      "tag": "0016_bright_johnny_storm",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1769511337642,
+      "tag": "0017_nebulous_robbie_robertson",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1769700703136,
+      "tag": "0018_silly_genesis",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1770404772829,
+      "tag": "0019_youthful_wendell_rand",
+      "breakpoints": true
     }
   ]
 }

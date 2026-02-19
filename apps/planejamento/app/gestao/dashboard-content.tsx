@@ -52,12 +52,12 @@ interface StatCardProps {
   value: number;
   icon: React.ReactNode;
   variant?:
-  | "default"
-  | "success"
-  | "warning"
-  | "destructive"
-  | "info"
-  | "purple";
+    | "default"
+    | "success"
+    | "warning"
+    | "destructive"
+    | "info"
+    | "purple";
   description?: string;
   href?: string;
 }

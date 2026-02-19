@@ -21,6 +21,7 @@ import {
   UpdateProductDto,
   InventoryEntryDto,
   InventoryAdjustDto,
+  InventoryExitDto,
   CreatePresentialSaleDto,
   CancelOrderDto,
   ConfirmPaymentDto,
@@ -37,6 +38,7 @@ import {
   getDb,
   shopProducts,
   shopInventory,
+  shopInventoryLedger,
   shopOrders,
   shopProductImages,
   shopInterestRequests,
@@ -45,6 +47,7 @@ import {
   and,
   sql,
   isNull,
+  inArray,
 } from "@essencia/db";
 
 interface UserContext {
@@ -78,7 +81,7 @@ export class ShopAdminController {
     private readonly ordersService: ShopOrdersService,
     private readonly interestService: ShopInterestService,
     private readonly settingsService: ShopSettingsService,
-  ) {}
+  ) { }
 
   // ==================== DASHBOARD ====================
 
@@ -103,14 +106,14 @@ export class ShopAdminController {
     // Construir condições baseadas no tenant
     const orderConditions = unitId
       ? and(
-          eq(shopOrders.schoolId, schoolId),
-          eq(shopOrders.unitId, unitId),
-          eq(shopOrders.status, "CONFIRMADO"),
-        )
+        eq(shopOrders.schoolId, schoolId),
+        eq(shopOrders.unitId, unitId),
+        eq(shopOrders.status, "CONFIRMADO"),
+      )
       : and(
-          eq(shopOrders.schoolId, schoolId),
-          eq(shopOrders.status, "CONFIRMADO"),
-        );
+        eq(shopOrders.schoolId, schoolId),
+        eq(shopOrders.status, "CONFIRMADO"),
+      );
 
     // Condição de estoque baixo usando SQL raw para evitar problemas de interpolação
     const lowStockCondition = sql`("shop_inventory"."quantity" - "shop_inventory"."reserved_quantity") <= "shop_inventory"."low_stock_threshold"`;
@@ -121,9 +124,9 @@ export class ShopAdminController {
 
     const interestConditions = unitId
       ? and(
-          eq(shopInterestRequests.unitId, unitId),
-          isNull(shopInterestRequests.contactedAt),
-        )
+        eq(shopInterestRequests.unitId, unitId),
+        isNull(shopInterestRequests.contactedAt),
+      )
       : isNull(shopInterestRequests.contactedAt);
 
     // Contadores de pedidos pendentes de retirada
@@ -444,6 +447,31 @@ export class ShopAdminController {
     // Definir tipo para item com relações
     type InventoryWithRelations = (typeof inventory)[number];
 
+    // Buscar total vendido por inventário (VENDA_ONLINE + VENDA_PRESENCIAL)
+    const inventoryIds = inventory.map((item: InventoryWithRelations) => item.id);
+
+    const salesByInventory: Record<string, number> = {};
+
+    if (inventoryIds.length > 0) {
+      const salesData = await db
+        .select({
+          inventoryId: shopInventoryLedger.inventoryId,
+          totalSold: sql<number>`cast(abs(sum(${shopInventoryLedger.quantityChange})) as integer)`,
+        })
+        .from(shopInventoryLedger)
+        .where(
+          and(
+            inArray(shopInventoryLedger.inventoryId, inventoryIds),
+            inArray(shopInventoryLedger.movementType, ["VENDA_ONLINE", "VENDA_PRESENCIAL"]),
+          ),
+        )
+        .groupBy(shopInventoryLedger.inventoryId);
+
+      for (const sale of salesData) {
+        salesByInventory[sale.inventoryId] = sale.totalSold;
+      }
+    }
+
     // Transformar para formato mais legível
     const formattedInventory = inventory.map((item: InventoryWithRelations) => {
       // Acessar relações com type assertion seguro
@@ -459,9 +487,9 @@ export class ShopAdminController {
         unitName: unitRelation.unit?.name || "N/A",
         productName: variantRelation.variant?.product?.name || "N/A",
         variantSize: variantRelation.variant?.size || "N/A",
-        quantity: item.quantity,
         reservedQuantity: item.reservedQuantity,
         available: Math.max(0, item.quantity - item.reservedQuantity),
+        totalSold: salesByInventory[item.id] || 0,
         lowStockThreshold: item.lowStockThreshold,
         needsRestock:
           item.quantity - item.reservedQuantity <= item.lowStockThreshold,
@@ -536,6 +564,39 @@ export class ShopAdminController {
   }
 
   /**
+   * POST /shop/admin/inventory/exit
+   *
+   * Remove estoque manualmente (SAIDA)
+   * Roles: master, diretora_geral, gerente_unidade, auxiliar_administrativo
+   */
+  @Post("inventory/exit")
+  @Roles(
+    "master",
+    "diretora_geral",
+    "gerente_unidade",
+    "auxiliar_administrativo",
+  )
+  @HttpCode(HttpStatus.CREATED)
+  async removeInventory(
+    @Req() req: { user: UserContext },
+    @Body() dto: InventoryExitDto,
+  ) {
+    const result = await this.inventoryService.removeStock(
+      dto.variantId,
+      dto.unitId,
+      dto.quantity,
+      dto.notes || "Saída manual de estoque",
+      dto.reason,
+      req.user.userId,
+    );
+
+    return {
+      success: true,
+      data: result,
+    };
+  }
+
+  /**
    * POST /shop/admin/inventory/adjust
    *
    * Ajusta estoque (positivo ou negativo)
@@ -566,6 +627,7 @@ export class ShopAdminController {
       data: result,
     };
   }
+
 
   /**
    * GET /shop/admin/inventory/ledger/:variantId/:unitId
@@ -749,7 +811,7 @@ export class ShopAdminController {
   ) {
     const result = await this.ordersService.confirmPayment(
       id,
-      dto.paymentMethod,
+      dto,
       req.user.userId,
     );
 

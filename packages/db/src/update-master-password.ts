@@ -33,7 +33,7 @@ async function updateMasterPassword() {
     // Atualizar senha
     await db
       .update(users)
-      .set({ passwordHash, updatedAt: new Date() })
+      .set({ passwordHash: passwordHash, updatedAt: new Date() })
       .where(eq(users.id, masterUser.id));
 
     console.log("✅ Senha atualizada com sucesso!");

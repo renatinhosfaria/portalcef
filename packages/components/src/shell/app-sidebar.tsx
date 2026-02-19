@@ -224,6 +224,8 @@ export function AppSidebar({ tarefasBadge }: AppSidebarProps = {}) {
     setActivePage(null);
   }, [pathname]);
 
+  const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
+
   const handleLogout = async () => {
     try {
       // Tenta invalidar sessão no backend via proxy do app atual
@@ -248,7 +250,7 @@ export function AppSidebar({ tarefasBadge }: AppSidebarProps = {}) {
         </span>
       </div>
 
-      <nav className="flex flex-col gap-2 w-full px-4">
+      <nav className="flex flex-col gap-2 w-full px-4 flex-1 overflow-y-auto py-4">
         {visibleMenuItems.map((item) => (
           <div key={item.key} className="relative">
             <SidebarItem
@@ -266,7 +268,7 @@ export function AppSidebar({ tarefasBadge }: AppSidebarProps = {}) {
         ))}
       </nav>
 
-      <div className="mt-auto flex flex-col gap-4 w-full px-6">
+      <div className="mt-auto flex flex-col gap-4 w-full px-6 py-6 border-t border-slate-100/50">
         <div className="flex flex-col gap-1 hidden lg:flex">
           <p className="text-sm font-bold text-slate-800">
             {name || "Usuário"}
@@ -275,15 +277,175 @@ export function AppSidebar({ tarefasBadge }: AppSidebarProps = {}) {
             {role.replace("_", " ")}
           </p>
         </div>
-        <Button
-          variant="ghost"
-          className="w-full justify-start gap-3 text-red-500 hover:text-red-600 hover:bg-red-50 rounded-xl py-6"
-          onClick={handleLogout}
-        >
-          <LogOut className="w-5 h-5" />
-          <span className="hidden lg:block font-medium">Sair da Conta</span>
-        </Button>
+
+        <ChangePasswordDialog
+          open={isPasswordDialogOpen}
+          onOpenChange={setIsPasswordDialogOpen}
+        />
+
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            title="Alterar Senha"
+            className="flex-1 justify-center text-slate-500 hover:text-slate-900 hover:bg-slate-50 rounded-xl h-10 px-0"
+            onClick={() => setIsPasswordDialogOpen(true)}
+          >
+            <Lock className="w-5 h-5 flex-shrink-0" />
+          </Button>
+
+          <Button
+            variant="ghost"
+            title="Sair da Conta"
+            className="flex-1 justify-center text-red-500 hover:text-red-600 hover:bg-red-50 rounded-xl h-10 px-0"
+            onClick={handleLogout}
+          >
+            <LogOut className="w-5 h-5" />
+          </Button>
+        </div>
       </div>
     </aside>
+  );
+}
+
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@essencia/ui/components/dialog";
+import { Input } from "@essencia/ui/components/input";
+import { Lock } from "lucide-react";
+import { toast } from "@essencia/ui/components/toaster";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
+import { zodResolver } from "@hookform/resolvers/zod";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@essencia/ui/components/form";
+
+const passwordSchema = z.object({
+  currentPassword: z.string().min(1, "Senha atual obrigatória"),
+  newPassword: z.string().min(8, "A senha deve ter no mínimo 8 caracteres"),
+  confirmPassword: z.string(),
+}).refine((data) => data.newPassword === data.confirmPassword, {
+  message: "As senhas não coincidem",
+  path: ["confirmPassword"],
+});
+
+interface ChangePasswordDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}
+
+function ChangePasswordDialog({ open, onOpenChange }: ChangePasswordDialogProps) {
+  const form = useForm<z.infer<typeof passwordSchema>>({
+    resolver: zodResolver(passwordSchema),
+    defaultValues: {
+      currentPassword: "",
+      newPassword: "",
+      confirmPassword: "",
+    },
+  });
+
+  const onSubmit = async (values: z.infer<typeof passwordSchema>) => {
+    try {
+      const response = await fetch("/api/auth/change-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          currentPassword: values.currentPassword,
+          newPassword: values.newPassword,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error?.message || "Erro ao alterar senha");
+      }
+
+      toast.success("Sucesso", {
+        description: "Senha alterada com sucesso!",
+      });
+
+      onOpenChange(false);
+      form.reset();
+    } catch (error) {
+      toast.error("Erro", {
+        description: error instanceof Error ? error.message : "Erro ao alterar senha",
+      });
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[425px]">
+        <DialogHeader>
+          <DialogTitle>Alterar Senha</DialogTitle>
+          <DialogDescription>
+            Crie uma nova senha para acessar sua conta.
+          </DialogDescription>
+        </DialogHeader>
+
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <FormField
+              control={form.control}
+              name="currentPassword"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Senha Atual</FormLabel>
+                  <FormControl>
+                    <Input type="password" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="newPassword"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Nova Senha</FormLabel>
+                  <FormControl>
+                    <Input type="password" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="confirmPassword"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Confirmar Nova Senha</FormLabel>
+                  <FormControl>
+                    <Input type="password" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <DialogFooter>
+              <Button type="submit" disabled={form.formState.isSubmitting}>
+                {form.formState.isSubmitting ? "Salvando..." : "Salvar Alterações"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
   );
 }

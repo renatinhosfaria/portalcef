@@ -206,4 +206,34 @@ export class CalendarController {
 
     return { success: true, data: result };
   }
+
+  /**
+   * Retorna a data de início das férias de julho para um ano específico.
+   * Usado para determinar a divisão entre 1º e 2º semestre nos planos de aula.
+   */
+  @Get("ferias-julho")
+  @Roles(...VIEW_ROLES)
+  async getFeriasJulho(
+    @CurrentUser() user: UserContext,
+    @Query("unitId") unitId?: string,
+    @Query("year") year?: string,
+  ) {
+    const targetUnitId = unitId || user.unitId;
+    const targetYear = year ? parseInt(year, 10) : new Date().getFullYear();
+
+    if (!targetUnitId) {
+      return {
+        success: false,
+        error: {
+          code: "MISSING_UNIT",
+          message: "Unidade não especificada",
+        },
+      };
+    }
+
+    return await this.calendarService.getFeriasJulhoStartDate(
+      targetUnitId,
+      targetYear,
+    );
+  }
 }

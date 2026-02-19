@@ -112,4 +112,34 @@ export class AuthService {
     const saltRounds = 12;
     return bcrypt.hash(password, saltRounds);
   }
+
+  async changePassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<void> {
+    const db = getDb();
+    const user = await db.query.users.findFirst({
+      where: eq(users.id, userId),
+    });
+
+    if (!user) {
+      throw new UnauthorizedException("Usuario nao encontrado");
+    }
+
+    const isValidPassword = await bcrypt.compare(
+      currentPassword,
+      user.passwordHash,
+    );
+    if (!isValidPassword) {
+      throw new UnauthorizedException("Senha atual incorreta");
+    }
+
+    const passwordHash = await this.hashPassword(newPassword);
+
+    await db
+      .update(users)
+      .set({ passwordHash, updatedAt: new Date() })
+      .where(eq(users.id, userId));
+  }
 }

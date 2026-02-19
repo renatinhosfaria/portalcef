@@ -12,7 +12,11 @@ import {
   type Turma,
 } from "@essencia/db/schema";
 import type { EducationStageCode } from "@essencia/shared/types";
-import { BadRequestException, ForbiddenException, Injectable } from "@nestjs/common";
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+} from "@nestjs/common";
 import { CalendarService } from "../calendar/calendar.service";
 
 /**
@@ -796,6 +800,7 @@ export class PlanningsService {
           eq(turmas.isActive, true),
           eq(turmas.unitId, user.unitId),
           eq(turmas.stageId, user.stageId),
+          eq(turmas.professoraId, user.userId),
         ),
         orderBy: [asc(turmas.name)],
       });
@@ -845,7 +850,7 @@ export class PlanningsService {
       return {
         success: true,
         data: [], // Retorna vazio até implementar novo sistema
-        isVacation: false
+        isVacation: false,
       };
     } catch (error) {
       console.error("getQuinzenas error:", error);
@@ -1207,7 +1212,12 @@ export class PlanningsService {
    */
   async editarPeriodo(
     periodoId: string,
-    dto: { descricao?: string; dataInicio?: string; dataFim?: string; dataMaximaEntrega?: string },
+    dto: {
+      descricao?: string;
+      dataInicio?: string;
+      dataFim?: string;
+      dataMaximaEntrega?: string;
+    },
   ) {
     const db = getDb();
     const periodo = await this.buscarPorId(periodoId);
@@ -1238,7 +1248,8 @@ export class PlanningsService {
     if (dto.descricao !== undefined) updateData.descricao = dto.descricao;
     if (dto.dataInicio) updateData.dataInicio = dto.dataInicio;
     if (dto.dataFim) updateData.dataFim = dto.dataFim;
-    if (dto.dataMaximaEntrega) updateData.dataMaximaEntrega = dto.dataMaximaEntrega;
+    if (dto.dataMaximaEntrega)
+      updateData.dataMaximaEntrega = dto.dataMaximaEntrega;
 
     await db
       .update(schema.planoAulaPeriodo)

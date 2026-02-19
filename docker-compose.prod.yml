@@ -1,290 +1,297 @@
 # =============================================================================
-# Docker Compose for PRODUCTION - OPTIMIZED
-# Portal Essencia Feliz
+# DOCKER COMPOSE - PRODUÇÃO
+# Portal Essência Feliz - Docker Strategy 2025/2026
 # =============================================================================
-# BuildKit habilitado permanentemente em /etc/docker/daemon.json
 #
-# Build:   docker compose -f docker-compose.prod.yml build
-# Deploy:  docker compose -f docker-compose.prod.yml up -d
-# Logs:    docker compose -f docker-compose.prod.yml logs -f [service]
-# Stop:    docker compose -f docker-compose.prod.yml down
+# Uso:
+#   docker compose -f docker-compose.prod.yml pull           # Pull imagens
+#   docker compose -f docker-compose.prod.yml up -d          # Iniciar todos
+#   docker compose -f docker-compose.prod.yml logs -f        # Ver logs
+#   ./scripts/deploy-rolling.sh                              # Deploy zero downtime
+#
 # =============================================================================
 
-# ===========================================================================
-# Configuração Compartilhada (DRY)
-# ===========================================================================
-x-build-config: &build-config
-  context: .
-  dockerfile: Dockerfile.prod
-  args:
-    BUILDKIT_INLINE_CACHE: 1
+# -----------------------------------------------------------------------------
+# CONFIGURAÇÕES COMPARTILHADAS (YAML Anchors)
+# -----------------------------------------------------------------------------
 
-x-common-config: &common-config
+x-common: &common
   restart: unless-stopped
-  networks:
-    - essencia-prod
   logging:
-    driver: "json-file"
+    driver: json-file
     options:
       max-size: "10m"
       max-file: "3"
+  networks:
+    - essencia-prod
 
 x-nextjs-env: &nextjs-env
   NODE_ENV: production
   API_INTERNAL_URL: http://api:3002
   NEXT_PUBLIC_API_URL: https://www.portalcef.com.br/api
 
+x-healthcheck: &healthcheck
+  interval: 30s
+  timeout: 10s
+  retries: 3
+  start_period: 10s
+
+# =============================================================================
+# SERVICES
+# =============================================================================
+
 services:
+
   # ===========================================================================
-  # Nginx - Reverse Proxy (INALTERADO)
+  # NGINX REVERSE PROXY
   # ===========================================================================
+
   nginx:
     image: nginx:alpine
     container_name: essencia-nginx
-    restart: unless-stopped
+    <<: *common
     ports:
       - "80:80"
       - "443:443"
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
-      - nginx_certs:/etc/letsencrypt
-      - nginx_webroot:/var/www/certbot
+      - essencia-nginx-cache:/var/cache/nginx
+      - essencia-nginx-certs:/etc/letsencrypt:ro
+      - essencia-nginx-webroot:/var/www/certbot:ro
     depends_on:
-      - api
-    networks:
-      - essencia-prod
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+      api:
+        condition: service_healthy
+    healthcheck:
+      <<: *healthcheck
+      test: [ "CMD", "nginx", "-t" ]
+
+  # ===========================================================================
+  # CERTBOT (Let's Encrypt)
+  # ===========================================================================
 
   certbot:
-    image: certbot/certbot
+    image: certbot/certbot:latest
     container_name: essencia-certbot
     volumes:
-      - nginx_certs:/etc/letsencrypt
-      - nginx_webroot:/var/www/certbot
+      - essencia-nginx-certs:/etc/letsencrypt
+      - essencia-nginx-webroot:/var/www/certbot
     entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
     networks:
       - essencia-prod
 
   # ===========================================================================
-  # Infraestrutura (INALTERADOS)
+  # INFRAESTRUTURA
   # ===========================================================================
+
   postgres:
     image: postgres:16-alpine
     container_name: essencia-postgres
+    <<: *common
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - essencia-postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - essencia-prod
-    restart: unless-stopped
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+      <<: *healthcheck
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER}" ]
 
   redis:
     image: redis:7-alpine
     container_name: essencia-redis
+    <<: *common
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
     volumes:
-      - redis_data:/data
+      - essencia-redis-data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - essencia-prod
-    restart: unless-stopped
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+      <<: *healthcheck
+      test: [ "CMD", "redis-cli", "ping" ]
 
   minio:
     image: minio/minio:latest
     container_name: essencia-minio
+    <<: *common
     environment:
       MINIO_ROOT_USER: ${MINIO_ACCESS_KEY}
       MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
     volumes:
-      - minio_data:/data
+      - essencia-minio-data:/data
     command: server /data --console-address ":9001"
-    networks:
-      - essencia-prod
-    restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 30s
-      timeout: 20s
-      retries: 3
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-  createbuckets:
-    image: minio/mc
-    depends_on:
-      minio:
-        condition: service_healthy
-    networks:
-      - essencia-prod
-    entrypoint: >
-      /bin/sh -c "
-      /usr/bin/mc config host add myminio http://minio:9000 ${MINIO_ACCESS_KEY} ${MINIO_SECRET_KEY};
-      /usr/bin/mc mb myminio/${MINIO_BUCKET} || true;
-      /usr/bin/mc anonymous set public myminio/${MINIO_BUCKET};
-      exit 0;
-      "
-
-  carbone:
-    image: carbone/carbone-ee:latest
-    container_name: essencia-carbone
-    environment:
-      CARBONE_WORKERS: 4
-    networks:
-      - essencia-prod
-    restart: unless-stopped
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+      <<: *healthcheck
+      test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
 
   # ===========================================================================
-  # Frontend Apps - Next.js (CONSOLIDADOS)
+  # APPS NEXT.JS
   # ===========================================================================
+
   home:
-    <<: *common-config
-    build: *build-config
+    image: essencia-home:latest
     container_name: essencia-home
-    command: pnpm --filter=home start
+    <<: *common
     environment:
       <<: *nextjs-env
       PORT: 3000
+    healthcheck:
+      <<: *healthcheck
+      test: [ "CMD", "curl", "-f", "http://localhost:3000/" ]
+    depends_on:
+      api:
+        condition: service_healthy
 
   login:
-    <<: *common-config
-    build: *build-config
+    image: essencia-login:latest
     container_name: essencia-login
-    command: pnpm --filter=login start
+    <<: *common
     environment:
       <<: *nextjs-env
       PORT: 3003
+    healthcheck:
+      <<: *healthcheck
+      test: [ "CMD", "curl", "-f", "http://localhost:3003/login" ]
+    depends_on:
+      api:
+        condition: service_healthy
 
   usuarios:
-    <<: *common-config
-    build: *build-config
+    image: essencia-usuarios:latest
     container_name: essencia-usuarios
-    command: pnpm --filter=usuarios start
+    <<: *common
     environment:
       <<: *nextjs-env
       PORT: 3004
+    healthcheck:
+      <<: *healthcheck
+      test: [ "CMD", "curl", "-f", "http://localhost:3004/usuarios" ]
+    depends_on:
+      api:
+        condition: service_healthy
 
   escolas:
-    <<: *common-config
-    build: *build-config
+    image: essencia-escolas:latest
     container_name: essencia-escolas
-    command: pnpm --filter=escolas start
+    <<: *common
     environment:
       <<: *nextjs-env
       PORT: 3005
+    healthcheck:
+      <<: *healthcheck
+      test: [ "CMD", "curl", "-f", "http://localhost:3005/escolas" ]
+    depends_on:
+      api:
+        condition: service_healthy
 
   turmas:
-    <<: *common-config
-    build: *build-config
+    image: essencia-turmas:latest
     container_name: essencia-turmas
-    command: pnpm --filter=turmas start
+    <<: *common
     environment:
       <<: *nextjs-env
       PORT: 3006
+    healthcheck:
+      <<: *healthcheck
+      test: [ "CMD", "curl", "-f", "http://localhost:3006/turmas" ]
+    depends_on:
+      api:
+        condition: service_healthy
 
   planejamento:
-    <<: *common-config
-    build: *build-config
+    image: essencia-planejamento:latest
     container_name: essencia-planejamento
-    command: pnpm --filter=planejamento start
+    <<: *common
     environment:
       <<: *nextjs-env
       PORT: 3007
+    healthcheck:
+      <<: *healthcheck
+      test: [ "CMD", "curl", "-f", "http://localhost:3007/planejamento" ]
+    depends_on:
+      api:
+        condition: service_healthy
 
   calendario:
-    <<: *common-config
-    build: *build-config
+    image: essencia-calendario:latest
     container_name: essencia-calendario
-    command: pnpm --filter=calendario start
+    <<: *common
     environment:
       <<: *nextjs-env
       PORT: 3008
+    healthcheck:
+      <<: *healthcheck
+      test: [ "CMD", "curl", "-f", "http://localhost:3008/calendario" ]
+    depends_on:
+      api:
+        condition: service_healthy
 
   loja:
-    <<: *common-config
-    build: *build-config
+    image: essencia-loja:latest
     container_name: essencia-loja
-    command: pnpm --filter=@essencia/loja start
+    <<: *common
     environment:
       <<: *nextjs-env
       PORT: 3010
-      NEXT_PUBLIC_API_URL: https://loja.portalcef.com.br/api
+      NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY}
+    healthcheck:
+      <<: *healthcheck
+      test: [ "CMD", "curl", "-f", "http://localhost:3010/" ]
+    depends_on:
+      api:
+        condition: service_healthy
 
   loja-admin:
-    <<: *common-config
-    build: *build-config
+    image: essencia-loja-admin:latest
     container_name: essencia-loja-admin
-    command: pnpm --filter=@essencia/loja-admin start
+    <<: *common
     environment:
       <<: *nextjs-env
       PORT: 3011
+    healthcheck:
+      <<: *healthcheck
+      test: [ "CMD", "curl", "-f", "http://localhost:3011/loja-admin" ]
+    depends_on:
+      api:
+        condition: service_healthy
 
   tarefas:
-    <<: *common-config
-    build: *build-config
+    image: essencia-tarefas:latest
     container_name: essencia-tarefas
-    command: pnpm --filter=tarefas start
+    <<: *common
     environment:
       <<: *nextjs-env
-      PORT: 3009
+      PORT: 3012
+    healthcheck:
+      <<: *healthcheck
+      test: [ "CMD", "curl", "-f", "http://localhost:3012/tarefas" ]
+    depends_on:
+      api:
+        condition: service_healthy
 
   # ===========================================================================
-  # API - NestJS (CONSOLIDADO)
+  # API NESTJS
   # ===========================================================================
+
   api:
-    <<: *common-config
-    build: *build-config
+    image: essencia-api:latest
     container_name: essencia-api
-    command: pnpm --filter @essencia/api start:prod
-    env_file:
-      - .env.docker
+    <<: *common
     environment:
       NODE_ENV: production
-      REDIS_URL: redis://redis:6379
-      MINIO_ENDPOINT: http://minio:9000
-      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
-      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
-      MINIO_PUBLIC_ENDPOINT: https://www.portalcef.com.br/storage
-      MINIO_BUCKET: ${MINIO_BUCKET}
       API_PORT: 3002
       API_HOST: 0.0.0.0
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: redis://redis:6379
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_PUBLIC_ENDPOINT: https://www.portalcef.com.br/storage
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      MINIO_BUCKET: ${MINIO_BUCKET:-essencia-uploads}
       SESSION_SECRET: ${SESSION_SECRET}
-      SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-24}
-      SESSION_RENEWAL_THRESHOLD: ${SESSION_RENEWAL_THRESHOLD:-0.25}
-      COOKIE_DOMAIN: ${COOKIE_DOMAIN}
+      SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-168}
+      COOKIE_DOMAIN: ${COOKIE_DOMAIN:-.portalcef.com.br}
       COOKIE_SECURE: "true"
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET}
     depends_on:
       postgres:
         condition: service_healthy
@@ -292,11 +299,10 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "50m"
-        max-file: "5"
+    healthcheck:
+      <<: *healthcheck
+      test: [ "CMD", "curl", "-f", "http://localhost:3002/health" ]
+      start_period: 15s
     deploy:
       resources:
         limits:
@@ -305,63 +311,59 @@ services:
           memory: 512M
 
   # ===========================================================================
-  # Worker - Conversão de Documentos (CONSOLIDADO)
+  # WORKER BULLMQ
   # ===========================================================================
+
   worker:
-    <<: *common-config
-    build: *build-config
+    image: essencia-worker:latest
     container_name: essencia-worker
-    command: node services/worker/dist/index.js
-    env_file:
-      - .env.docker
+    <<: *common
     environment:
       NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL}
       REDIS_URL: redis://redis:6379
       MINIO_ENDPOINT: http://minio:9000
+      MINIO_PUBLIC_ENDPOINT: https://www.portalcef.com.br/storage
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
-      MINIO_PUBLIC_ENDPOINT: https://www.portalcef.com.br/storage
-      MINIO_BUCKET: ${MINIO_BUCKET}
-      HEALTH_PORT: 3100
+      MINIO_BUCKET: ${MINIO_BUCKET:-essencia-uploads}
       WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-2}
-      CARBONE_URL: http://carbone:4000
+      CARBONE_URL: ${CARBONE_URL:-http://carbone:4000}
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
-      minio:
+      postgres:
         condition: service_healthy
-      carbone:
-        condition: service_started
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3100/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "50m"
-        max-file: "5"
+      <<: *healthcheck
+      test: [ "CMD", "curl", "-f", "http://localhost:3100/health" ]
+
+# =============================================================================
+# NETWORKS
+# =============================================================================
 
 networks:
   essencia-prod:
     driver: bridge
     name: essencia-prod
 
+# =============================================================================
+# VOLUMES (EXTERNOS - reutiliza volumes existentes)
+# =============================================================================
+
 volumes:
-  postgres_data:
-    name: essencia-postgres-data
+  # Dados persistentes
+  essencia-postgres-data:
     external: true
-  redis_data:
-    name: essencia-redis-data
+  essencia-redis-data:
     external: true
-  minio_data:
-    name: essencia-minio-data
+  essencia-minio-data:
     external: true
-  nginx_certs:
-    name: essencia-nginx-certs
-  nginx_webroot:
-    name: essencia-nginx-webroot
+
+  # Nginx
+  essencia-nginx-certs:
+    external: true
+  essencia-nginx-webroot:
+    external: true
+  essencia-nginx-cache:
+    name: essencia-nginx-cache

@@ -8,9 +8,12 @@ dist
 .turbo
 *.tsbuildinfo
 
-# Backups (n�o commitar dados)
+# Backups (não commitar dados)
+backup/
 backup-*.sql
 backup-*.tar.gz
+backups/
+*.sql.gz
 
 # Environment variables (n�o commitar senhas)
 .env.production
@@ -21,6 +24,7 @@ backup-*.tar.gz
 .logs/
 *.log
 api-crash.log
+loja_logs.txt
 
 # Coverage de testes
 coverage/

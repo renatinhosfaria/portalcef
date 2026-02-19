@@ -1,12 +1,18 @@
-import { Button } from '@essencia/ui/components/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@essencia/ui/components/card';
-import { Badge } from '@essencia/ui/components/badge';
-import { Pencil, Trash2 } from 'lucide-react';
-import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
+import { Button } from "@essencia/ui/components/button";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@essencia/ui/components/card";
+import { Badge } from "@essencia/ui/components/badge";
+import { Pencil, Trash2 } from "lucide-react";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
 
 interface Periodo {
   id: string;
+  unidadeId: string;
   numero: number;
   etapa: string;
   descricao?: string;
@@ -14,6 +20,8 @@ interface Periodo {
   dataFim: string;
   dataMaximaEntrega: string;
   planosVinculados?: number;
+  criadoEm: Date;
+  atualizadoEm: Date;
 }
 
 interface PeriodosListProps {
@@ -23,7 +31,12 @@ interface PeriodosListProps {
   onDelete: (id: string) => void;
 }
 
-export function PeriodosList({ periodos, etapa, onEdit, onDelete }: PeriodosListProps) {
+export function PeriodosList({
+  periodos,
+  etapa,
+  onEdit,
+  onDelete,
+}: PeriodosListProps) {
   const periodosDaEtapa = periodos.filter((p) => p.etapa === etapa);
 
   if (periodosDaEtapa.length === 0) {
@@ -57,7 +70,9 @@ export function PeriodosList({ periodos, etapa, onEdit, onDelete }: PeriodosList
                 variant="ghost"
                 size="sm"
                 onClick={() => onDelete(periodo.id)}
-                disabled={periodo.planosVinculados && periodo.planosVinculados > 0}
+                disabled={
+                  !!(periodo.planosVinculados && periodo.planosVinculados > 0)
+                }
               >
                 <Trash2 className="h-4 w-4" />
               </Button>
@@ -65,19 +80,28 @@ export function PeriodosList({ periodos, etapa, onEdit, onDelete }: PeriodosList
           </CardHeader>
           <CardContent>
             {periodo.descricao && (
-              <p className="text-sm text-muted-foreground mb-4">{periodo.descricao}</p>
+              <p className="text-sm text-muted-foreground mb-4">
+                {periodo.descricao}
+              </p>
             )}
             <div className="grid grid-cols-3 gap-4 text-sm">
               <div>
                 <span className="font-medium">Período:</span>
                 <br />
-                {format(new Date(periodo.dataInicio), 'dd/MM/yyyy', { locale: ptBR })} até{' '}
-                {format(new Date(periodo.dataFim), 'dd/MM/yyyy', { locale: ptBR })}
+                {format(new Date(periodo.dataInicio), "dd/MM/yyyy", {
+                  locale: ptBR,
+                })}{" "}
+                até{" "}
+                {format(new Date(periodo.dataFim), "dd/MM/yyyy", {
+                  locale: ptBR,
+                })}
               </div>
               <div>
                 <span className="font-medium">Prazo de Entrega:</span>
                 <br />
-                {format(new Date(periodo.dataMaximaEntrega), 'dd/MM/yyyy', { locale: ptBR })}
+                {format(new Date(periodo.dataMaximaEntrega), "dd/MM/yyyy", {
+                  locale: ptBR,
+                })}
               </div>
             </div>
           </CardContent>

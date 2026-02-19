@@ -72,5 +72,7 @@ export type NovoPlanoAulaPeriodo = typeof planoAulaPeriodo.$inferInsert;
 // ============================================
 // Zod Schemas (drizzle-zod)
 // ============================================
-export const insertPlanoAulaPeriodoSchema = createInsertSchema(planoAulaPeriodo);
-export const selectPlanoAulaPeriodoSchema = createSelectSchema(planoAulaPeriodo);
+export const insertPlanoAulaPeriodoSchema =
+  createInsertSchema(planoAulaPeriodo);
+export const selectPlanoAulaPeriodoSchema =
+  createSelectSchema(planoAulaPeriodo);

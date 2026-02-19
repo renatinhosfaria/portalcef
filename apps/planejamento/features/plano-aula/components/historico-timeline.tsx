@@ -14,6 +14,7 @@ import {
   CheckCheck,
   MessageSquare,
   Plus,
+  Printer,
   Send,
   Undo,
 } from "lucide-react";
@@ -55,6 +56,8 @@ function getAcaoIcon(acao: AcaoHistorico) {
     case "DEVOLVIDO_ANALISTA":
     case "DEVOLVIDO_COORDENADORA":
       return <Undo className="h-4 w-4" />;
+    case "DOCUMENTO_IMPRESSO":
+      return <Printer className="h-4 w-4" />;
     default:
       return <Check className="h-4 w-4" />;
   }
@@ -75,6 +78,8 @@ function getAcaoColor(acao: AcaoHistorico): string {
     case "DEVOLVIDO_ANALISTA":
     case "DEVOLVIDO_COORDENADORA":
       return "bg-red-100 text-red-600";
+    case "DOCUMENTO_IMPRESSO":
+      return "bg-indigo-100 text-indigo-600";
     default:
       return "bg-gray-100 text-gray-600";
   }
@@ -97,9 +102,47 @@ function getAcaoLabel(acao: AcaoHistorico): string {
       return "Aprovado pela coordenadora";
     case "DEVOLVIDO_COORDENADORA":
       return "Devolvido pela coordenadora";
+    case "DOCUMENTO_IMPRESSO":
+      return "Documento impresso";
     default:
       return acao;
   }
+}
+
+function getDetalhesMensagem(entry: HistoricoEntry): string | null {
+  if (!entry.detalhes || typeof entry.detalhes !== "object") {
+    return null;
+  }
+
+  if ("comentarios" in entry.detalhes && entry.detalhes.comentarios) {
+    return String(entry.detalhes.comentarios);
+  }
+
+  if (entry.acao === "DOCUMENTO_IMPRESSO") {
+    const documentoNome =
+      typeof entry.detalhes.documentoNome === "string"
+        ? entry.detalhes.documentoNome
+        : "Documento";
+
+    const impressoEm =
+      typeof entry.detalhes.impressoEm === "string"
+        ? new Date(entry.detalhes.impressoEm).toLocaleString("pt-BR", {
+            day: "2-digit",
+            month: "2-digit",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+          })
+        : null;
+
+    if (impressoEm) {
+      return `${documentoNome} impresso em ${impressoEm}`;
+    }
+
+    return `${documentoNome} impresso`;
+  }
+
+  return null;
 }
 
 /**
@@ -145,11 +188,7 @@ function UserInfo({
  * Timeline Item Component
  */
 function TimelineItem({ entry }: { entry: HistoricoEntry }) {
-  const hasComentarios =
-    entry.detalhes &&
-    typeof entry.detalhes === "object" &&
-    "comentarios" in entry.detalhes &&
-    entry.detalhes.comentarios;
+  const detalhesMensagem = getDetalhesMensagem(entry);
 
   return (
     <div key={entry.id} className="relative flex gap-4">
@@ -185,12 +224,14 @@ function TimelineItem({ entry }: { entry: HistoricoEntry }) {
           </div>
         ) : null}
 
-        {hasComentarios ? (
+        {detalhesMensagem ? (
           <Alert className="mt-2">
-            <MessageSquare className="h-4 w-4" />
-            <AlertDescription>
-              {String(entry.detalhes!.comentarios)}
-            </AlertDescription>
+            {entry.acao === "DOCUMENTO_IMPRESSO" ? (
+              <Printer className="h-4 w-4" />
+            ) : (
+              <MessageSquare className="h-4 w-4" />
+            )}
+            <AlertDescription>{detalhesMensagem}</AlertDescription>
           </Alert>
         ) : null}
       </div>

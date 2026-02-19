@@ -1,9 +1,13 @@
-import { IsString, IsDateString, IsOptional, IsEnum } from 'class-validator';
+import { IsString, IsDateString, IsOptional, IsEnum } from "class-validator";
 
 export class CriarPeriodoDto {
-  @IsEnum(['BERCARIO', 'INFANTIL', 'FUNDAMENTAL_I', 'FUNDAMENTAL_II', 'MEDIO'], {
-    message: 'Etapa deve ser BERCARIO, INFANTIL, FUNDAMENTAL_I, FUNDAMENTAL_II ou MEDIO'
-  })
+  @IsEnum(
+    ["BERCARIO", "INFANTIL", "FUNDAMENTAL_I", "FUNDAMENTAL_II", "MEDIO"],
+    {
+      message:
+        "Etapa deve ser BERCARIO, INFANTIL, FUNDAMENTAL_I, FUNDAMENTAL_II ou MEDIO",
+    },
+  )
   etapa!: string;
 
   @IsOptional()

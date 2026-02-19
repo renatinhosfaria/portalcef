@@ -75,18 +75,40 @@ export async function clientFetch<T>(
     throw new FetchError(403, "FORBIDDEN", "Acesso negado");
   }
 
-  const data = (await response.json()) as ApiResponse<T>;
+  const data = await response.json();
 
-  if (!response.ok || !data.success) {
+  if (
+    !response.ok ||
+    (data && typeof data === "object" && "success" in data && !data.success)
+  ) {
+    // Handle standard NestJS error response (statusCode, message, error)
+    if (
+      data &&
+      typeof data === "object" &&
+      "statusCode" in data &&
+      "message" in data
+    ) {
+      throw new FetchError(
+        (data as any).statusCode,
+        (data as any).error ?? "UNKNOWN_ERROR",
+        // NestJS message can be string or array of strings
+        Array.isArray((data as any).message)
+          ? (data as any).message.join(", ")
+          : (data as any).message,
+      );
+    }
+
+    // Handle ApiResponse format
+    const apiResponse = data as ApiResponse<T>;
     throw new FetchError(
       response.status,
-      data.error?.code ?? "UNKNOWN_ERROR",
-      data.error?.message ?? "Erro desconhecido",
-      data.error?.details,
+      apiResponse.error?.code ?? "UNKNOWN_ERROR",
+      apiResponse.error?.message ?? "Erro desconhecido",
+      apiResponse.error?.details,
     );
   }
 
-  return data.data as T;
+  return (data as ApiResponse<T>).data as T;
 }
 
 // Convenience methods

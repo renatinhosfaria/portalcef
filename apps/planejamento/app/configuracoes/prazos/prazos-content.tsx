@@ -117,7 +117,14 @@ export function PrazosContent() {
   }, [deadlines]);
 
   // TODO: Buscar períodos via API /plano-aula-periodo filtrados por semestre
-  const quinzenasFiltradas = useMemo(() => {
+  interface QuinzenaFiltrada {
+    id: string;
+    label: string;
+    startDate: string;
+    endDate: string;
+    deadline: string;
+  }
+  const quinzenasFiltradas = useMemo<QuinzenaFiltrada[]>(() => {
     return []; // Vazio até implementar novo sistema
   }, [selectedSemester]);
 
@@ -329,11 +336,10 @@ export function PrazosContent() {
             <div className="flex items-center gap-3 text-yellow-800">
               <AlertCircle className="h-5 w-5" />
               <div>
-                <p className="font-medium">
-                  Sistema de períodos em migração
-                </p>
+                <p className="font-medium">Sistema de períodos em migração</p>
                 <p className="text-sm">
-                  A configuração de prazos será implementada com o novo sistema de períodos dinâmicos.
+                  A configuração de prazos será implementada com o novo sistema
+                  de períodos dinâmicos.
                 </p>
               </div>
             </div>

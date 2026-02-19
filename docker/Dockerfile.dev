@@ -1,0 +1,64 @@
+# =============================================================================
+# DOCKERFILE.DEV - Ambiente de desenvolvimento com hot reload
+# Portal Essência Feliz - Docker Strategy 2025/2026
+# =============================================================================
+
+FROM node:22-alpine
+
+# Ferramentas de desenvolvimento
+RUN apk add --no-cache \
+    git \
+    curl \
+    bash \
+    openssh-client
+
+# Habilitar pnpm
+RUN corepack enable && corepack prepare pnpm@9.15.1 --activate
+
+WORKDIR /app
+
+# Copiar apenas lockfiles para cache de dependências
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+
+# Copiar package.json de todos os workspaces para instalação
+COPY apps/home/package.json ./apps/home/
+COPY apps/login/package.json ./apps/login/
+COPY apps/usuarios/package.json ./apps/usuarios/
+COPY apps/escolas/package.json ./apps/escolas/
+COPY apps/turmas/package.json ./apps/turmas/
+COPY apps/planejamento/package.json ./apps/planejamento/
+COPY apps/calendario/package.json ./apps/calendario/
+COPY apps/loja/package.json ./apps/loja/
+COPY apps/loja-admin/package.json ./apps/loja-admin/
+COPY apps/tarefas/package.json ./apps/tarefas/
+
+COPY services/api/package.json ./services/api/
+COPY services/worker/package.json ./services/worker/
+
+COPY packages/ui/package.json ./packages/ui/
+COPY packages/shared/package.json ./packages/shared/
+COPY packages/components/package.json ./packages/components/
+COPY packages/lib/package.json ./packages/lib/
+COPY packages/db/package.json ./packages/db/
+COPY packages/config/package.json ./packages/config/
+COPY packages/tailwind-config/package.json ./packages/tailwind-config/
+
+# Instalar todas as dependências (incluindo devDependencies)
+RUN --mount=type=cache,id=pnpm-store-dev,target=/root/.local/share/pnpm/store \
+    pnpm install --frozen-lockfile
+
+# Código fonte será montado via volume (não copiado)
+# Isso permite hot reload sem rebuild do container
+
+# Variáveis de ambiente para desenvolvimento
+ENV NODE_ENV=development
+ENV WATCHPACK_POLLING=true
+ENV WATCHPACK_POLLING_INTERVAL=1000
+ENV CHOKIDAR_USEPOLLING=true
+ENV CHOKIDAR_INTERVAL=1000
+
+# Expor todas as portas dos apps
+EXPOSE 3000 3001 3003 3004 3005 3006 3007 3008 3010 3011 3012
+
+# Comando padrão: rodar todos os apps em modo dev
+CMD ["pnpm", "turbo", "dev"]

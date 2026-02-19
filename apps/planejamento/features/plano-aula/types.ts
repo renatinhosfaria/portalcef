@@ -61,6 +61,9 @@ export interface PlanoDocumento {
   // Campos de aprovação individual (analista_pedagogico)
   approvedBy?: string;
   approvedAt?: string;
+  // Campos de impressão
+  printedBy?: string;
+  printedAt?: string;
 }
 
 /**
@@ -77,12 +80,16 @@ export interface PlanoAula {
   createdAt: string;
   updatedAt: string;
   unitId: string;
-  professorName: string;
-  turmaName: string;
-  turmaCode: string;
+  // Campos planos (vindos de endpoints de listagem)
+  professorName?: string;
+  turmaName?: string;
+  turmaCode?: string;
   stageId?: string;
   documentos: PlanoDocumento[];
   deadline?: string;
+  // Objetos aninhados (vindos do endpoint de detalhe GET /plano-aula/:id)
+  user?: { id: string; name: string };
+  turma?: { id: string; name: string; code: string };
 }
 
 /**

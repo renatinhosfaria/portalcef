@@ -115,7 +115,7 @@ export class ShopPublicController {
    * Cria um novo pedido (reserva estoque + cria PaymentIntent Stripe)
    * Público - sem autenticação
    *
-   * Rate limit: 5 pedidos por hora por IP (@nestjs/throttler)
+   * Rate limit: 50 pedidos por hora por IP (@nestjs/throttler)
    *
    * Fluxo:
    * 1. Valida estoque disponível para todos os itens
@@ -126,7 +126,7 @@ export class ShopPublicController {
    * 6. Retorna { orderId, orderNumber, clientSecret }
    */
   @Post("orders")
-  @Throttle({ strict: { limit: 5, ttl: 3600000 } }) // 5 pedidos por hora
+  @Throttle({ strict: { limit: 50, ttl: 3600000 } }) // 50 pedidos por hora
   @HttpCode(HttpStatus.CREATED)
   async createOrder(@Body() dto: CreateOrderDto) {
     const result = await this.ordersService.createOrder(dto);

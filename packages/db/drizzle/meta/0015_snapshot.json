@@ -135,12 +135,8 @@
           "name": "calendar_events_unit_id_units_id_fk",
           "tableFrom": "calendar_events",
           "tableTo": "units",
-          "columnsFrom": [
-            "unit_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["unit_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -148,12 +144,8 @@
           "name": "calendar_events_created_by_users_id_fk",
           "tableFrom": "calendar_events",
           "tableTo": "users",
-          "columnsFrom": [
-            "created_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["created_by"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -209,9 +201,7 @@
         "education_stages_code_unique": {
           "name": "education_stages_code_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "code"
-          ]
+          "columns": ["code"]
         }
       },
       "policies": {},
@@ -402,12 +392,8 @@
           "name": "plano_aula_user_id_users_id_fk",
           "tableFrom": "plano_aula",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -415,12 +401,8 @@
           "name": "plano_aula_turma_id_turmas_id_fk",
           "tableFrom": "plano_aula",
           "tableTo": "turmas",
-          "columnsFrom": [
-            "turma_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["turma_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -428,12 +410,8 @@
           "name": "plano_aula_unit_id_units_id_fk",
           "tableFrom": "plano_aula",
           "tableTo": "units",
-          "columnsFrom": [
-            "unit_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["unit_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -441,12 +419,8 @@
           "name": "plano_aula_plano_aula_periodo_id_plano_aula_periodo_id_fk",
           "tableFrom": "plano_aula",
           "tableTo": "plano_aula_periodo",
-          "columnsFrom": [
-            "plano_aula_periodo_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["plano_aula_periodo_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -589,12 +563,8 @@
           "name": "plano_documento_plano_id_plano_aula_id_fk",
           "tableFrom": "plano_documento",
           "tableTo": "plano_aula",
-          "columnsFrom": [
-            "plano_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["plano_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -602,12 +572,8 @@
           "name": "plano_documento_approved_by_users_id_fk",
           "tableFrom": "plano_documento",
           "tableTo": "users",
-          "columnsFrom": [
-            "approved_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["approved_by"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -684,12 +650,8 @@
           "name": "documento_comentario_documento_id_plano_documento_id_fk",
           "tableFrom": "documento_comentario",
           "tableTo": "plano_documento",
-          "columnsFrom": [
-            "documento_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["documento_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -697,12 +659,8 @@
           "name": "documento_comentario_autor_id_users_id_fk",
           "tableFrom": "documento_comentario",
           "tableTo": "users",
-          "columnsFrom": [
-            "autor_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["autor_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -791,12 +749,8 @@
           "name": "quinzena_config_unit_id_units_id_fk",
           "tableFrom": "quinzena_config",
           "tableTo": "units",
-          "columnsFrom": [
-            "unit_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["unit_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -804,12 +758,8 @@
           "name": "quinzena_config_created_by_users_id_fk",
           "tableFrom": "quinzena_config",
           "tableTo": "users",
-          "columnsFrom": [
-            "created_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["created_by"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -924,12 +874,8 @@
           "name": "plano_aula_historico_plano_id_plano_aula_id_fk",
           "tableFrom": "plano_aula_historico",
           "tableTo": "plano_aula",
-          "columnsFrom": [
-            "plano_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["plano_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -937,12 +883,8 @@
           "name": "plano_aula_historico_user_id_users_id_fk",
           "tableFrom": "plano_aula_historico",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -1084,12 +1026,8 @@
           "name": "plannings_user_id_users_id_fk",
           "tableFrom": "plannings",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1097,12 +1035,8 @@
           "name": "plannings_stage_id_education_stages_id_fk",
           "tableFrom": "plannings",
           "tableTo": "education_stages",
-          "columnsFrom": [
-            "stage_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["stage_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -1217,12 +1151,8 @@
           "name": "planning_contents_planning_id_plannings_id_fk",
           "tableFrom": "planning_contents",
           "tableTo": "plannings",
-          "columnsFrom": [
-            "planning_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["planning_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1232,9 +1162,7 @@
         "planning_contents_planning_id_unique": {
           "name": "planning_contents_planning_id_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "planning_id"
-          ]
+          "columns": ["planning_id"]
         }
       },
       "policies": {},
@@ -1290,12 +1218,8 @@
           "name": "planning_reviews_planning_id_plannings_id_fk",
           "tableFrom": "planning_reviews",
           "tableTo": "plannings",
-          "columnsFrom": [
-            "planning_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["planning_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1303,12 +1227,8 @@
           "name": "planning_reviews_reviewer_id_users_id_fk",
           "tableFrom": "planning_reviews",
           "tableTo": "users",
-          "columnsFrom": [
-            "reviewer_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["reviewer_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1377,9 +1297,7 @@
         "role_groups_code_unique": {
           "name": "role_groups_code_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "code"
-          ]
+          "columns": ["code"]
         }
       },
       "policies": {},
@@ -1453,12 +1371,8 @@
           "name": "role_group_mappings_group_id_role_groups_id_fk",
           "tableFrom": "role_group_mappings",
           "tableTo": "role_groups",
-          "columnsFrom": [
-            "group_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["group_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1468,9 +1382,7 @@
         "role_group_mappings_role_unique": {
           "name": "role_group_mappings_role_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "role"
-          ]
+          "columns": ["role"]
         }
       },
       "policies": {},
@@ -1522,9 +1434,7 @@
         "schools_code_unique": {
           "name": "schools_code_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "code"
-          ]
+          "columns": ["code"]
         }
       },
       "policies": {},
@@ -1574,12 +1484,8 @@
           "name": "sessions_user_id_users_id_fk",
           "tableFrom": "sessions",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1589,9 +1495,7 @@
         "sessions_token_unique": {
           "name": "sessions_token_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "token"
-          ]
+          "columns": ["token"]
         }
       },
       "policies": {},
@@ -1719,12 +1623,8 @@
           "name": "shop_products_school_id_schools_id_fk",
           "tableFrom": "shop_products",
           "tableTo": "schools",
-          "columnsFrom": [
-            "school_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["school_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1810,12 +1710,8 @@
           "name": "shop_product_images_product_id_shop_products_id_fk",
           "tableFrom": "shop_product_images",
           "tableTo": "shop_products",
-          "columnsFrom": [
-            "product_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["product_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1926,12 +1822,8 @@
           "name": "shop_product_variants_product_id_shop_products_id_fk",
           "tableFrom": "shop_product_variants",
           "tableTo": "shop_products",
-          "columnsFrom": [
-            "product_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["product_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -2052,12 +1944,8 @@
           "name": "shop_inventory_variant_id_shop_product_variants_id_fk",
           "tableFrom": "shop_inventory",
           "tableTo": "shop_product_variants",
-          "columnsFrom": [
-            "variant_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["variant_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -2065,12 +1953,8 @@
           "name": "shop_inventory_unit_id_units_id_fk",
           "tableFrom": "shop_inventory",
           "tableTo": "units",
-          "columnsFrom": [
-            "unit_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["unit_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -2203,12 +2087,8 @@
           "name": "shop_inventory_ledger_inventory_id_shop_inventory_id_fk",
           "tableFrom": "shop_inventory_ledger",
           "tableTo": "shop_inventory",
-          "columnsFrom": [
-            "inventory_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["inventory_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -2216,12 +2096,8 @@
           "name": "shop_inventory_ledger_created_by_users_id_fk",
           "tableFrom": "shop_inventory_ledger",
           "tableTo": "users",
-          "columnsFrom": [
-            "created_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["created_by"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -2480,12 +2356,8 @@
           "name": "shop_orders_school_id_schools_id_fk",
           "tableFrom": "shop_orders",
           "tableTo": "schools",
-          "columnsFrom": [
-            "school_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["school_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -2493,12 +2365,8 @@
           "name": "shop_orders_unit_id_units_id_fk",
           "tableFrom": "shop_orders",
           "tableTo": "units",
-          "columnsFrom": [
-            "unit_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["unit_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -2506,12 +2374,8 @@
           "name": "shop_orders_picked_up_by_users_id_fk",
           "tableFrom": "shop_orders",
           "tableTo": "users",
-          "columnsFrom": [
-            "picked_up_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["picked_up_by"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         },
@@ -2519,12 +2383,8 @@
           "name": "shop_orders_cancelled_by_users_id_fk",
           "tableFrom": "shop_orders",
           "tableTo": "users",
-          "columnsFrom": [
-            "cancelled_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["cancelled_by"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -2534,9 +2394,7 @@
         "shop_orders_order_number_unique": {
           "name": "shop_orders_order_number_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "order_number"
-          ]
+          "columns": ["order_number"]
         }
       },
       "policies": {},
@@ -2622,12 +2480,8 @@
           "name": "shop_order_items_order_id_shop_orders_id_fk",
           "tableFrom": "shop_order_items",
           "tableTo": "shop_orders",
-          "columnsFrom": [
-            "order_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["order_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -2635,12 +2489,8 @@
           "name": "shop_order_items_variant_id_shop_product_variants_id_fk",
           "tableFrom": "shop_order_items",
           "tableTo": "shop_product_variants",
-          "columnsFrom": [
-            "variant_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["variant_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -2819,12 +2669,8 @@
           "name": "shop_interest_requests_school_id_schools_id_fk",
           "tableFrom": "shop_interest_requests",
           "tableTo": "schools",
-          "columnsFrom": [
-            "school_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["school_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -2832,12 +2678,8 @@
           "name": "shop_interest_requests_unit_id_units_id_fk",
           "tableFrom": "shop_interest_requests",
           "tableTo": "units",
-          "columnsFrom": [
-            "unit_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["unit_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -2845,12 +2687,8 @@
           "name": "shop_interest_requests_contacted_by_users_id_fk",
           "tableFrom": "shop_interest_requests",
           "tableTo": "users",
-          "columnsFrom": [
-            "contacted_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["contacted_by"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -2935,12 +2773,8 @@
           "name": "shop_interest_items_interest_request_id_shop_interest_requests_id_fk",
           "tableFrom": "shop_interest_items",
           "tableTo": "shop_interest_requests",
-          "columnsFrom": [
-            "interest_request_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["interest_request_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -2948,12 +2782,8 @@
           "name": "shop_interest_items_variant_id_shop_product_variants_id_fk",
           "tableFrom": "shop_interest_items",
           "tableTo": "shop_product_variants",
-          "columnsFrom": [
-            "variant_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["variant_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -3038,12 +2868,8 @@
           "name": "shop_settings_unit_id_units_id_fk",
           "tableFrom": "shop_settings",
           "tableTo": "units",
-          "columnsFrom": [
-            "unit_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["unit_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -3053,9 +2879,7 @@
         "shop_settings_unit_id_unique": {
           "name": "shop_settings_unit_id_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "unit_id"
-          ]
+          "columns": ["unit_id"]
         }
       },
       "policies": {},
@@ -3294,12 +3118,8 @@
           "name": "tarefas_school_id_schools_id_fk",
           "tableFrom": "tarefas",
           "tableTo": "schools",
-          "columnsFrom": [
-            "school_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["school_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -3307,12 +3127,8 @@
           "name": "tarefas_unit_id_units_id_fk",
           "tableFrom": "tarefas",
           "tableTo": "units",
-          "columnsFrom": [
-            "unit_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["unit_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -3320,12 +3136,8 @@
           "name": "tarefas_criado_por_users_id_fk",
           "tableFrom": "tarefas",
           "tableTo": "users",
-          "columnsFrom": [
-            "criado_por"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["criado_por"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -3333,12 +3145,8 @@
           "name": "tarefas_responsavel_users_id_fk",
           "tableFrom": "tarefas",
           "tableTo": "users",
-          "columnsFrom": [
-            "responsavel"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["responsavel"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -3464,12 +3272,8 @@
           "name": "tarefa_contextos_tarefa_id_tarefas_id_fk",
           "tableFrom": "tarefa_contextos",
           "tableTo": "tarefas",
-          "columnsFrom": [
-            "tarefa_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["tarefa_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -3477,12 +3281,8 @@
           "name": "tarefa_contextos_etapa_id_education_stages_id_fk",
           "tableFrom": "tarefa_contextos",
           "tableTo": "education_stages",
-          "columnsFrom": [
-            "etapa_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["etapa_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -3490,12 +3290,8 @@
           "name": "tarefa_contextos_turma_id_turmas_id_fk",
           "tableFrom": "tarefa_contextos",
           "tableTo": "turmas",
-          "columnsFrom": [
-            "turma_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["turma_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -3503,12 +3299,8 @@
           "name": "tarefa_contextos_professora_id_users_id_fk",
           "tableFrom": "tarefa_contextos",
           "tableTo": "users",
-          "columnsFrom": [
-            "professora_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["professora_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -3634,12 +3426,8 @@
           "name": "turmas_unit_id_units_id_fk",
           "tableFrom": "turmas",
           "tableTo": "units",
-          "columnsFrom": [
-            "unit_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["unit_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -3647,12 +3435,8 @@
           "name": "turmas_stage_id_education_stages_id_fk",
           "tableFrom": "turmas",
           "tableTo": "education_stages",
-          "columnsFrom": [
-            "stage_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["stage_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -3660,12 +3444,8 @@
           "name": "turmas_professora_id_users_id_fk",
           "tableFrom": "turmas",
           "tableTo": "users",
-          "columnsFrom": [
-            "professora_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["professora_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -3779,12 +3559,8 @@
           "name": "unit_stages_unit_id_units_id_fk",
           "tableFrom": "unit_stages",
           "tableTo": "units",
-          "columnsFrom": [
-            "unit_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["unit_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -3792,12 +3568,8 @@
           "name": "unit_stages_stage_id_education_stages_id_fk",
           "tableFrom": "unit_stages",
           "tableTo": "education_stages",
-          "columnsFrom": [
-            "stage_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["stage_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -3864,12 +3636,8 @@
           "name": "units_school_id_schools_id_fk",
           "tableFrom": "units",
           "tableTo": "schools",
-          "columnsFrom": [
-            "school_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["school_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -3955,12 +3723,8 @@
           "name": "users_school_id_schools_id_fk",
           "tableFrom": "users",
           "tableTo": "schools",
-          "columnsFrom": [
-            "school_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["school_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -3968,12 +3732,8 @@
           "name": "users_unit_id_units_id_fk",
           "tableFrom": "users",
           "tableTo": "units",
-          "columnsFrom": [
-            "unit_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["unit_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -3981,12 +3741,8 @@
           "name": "users_stage_id_education_stages_id_fk",
           "tableFrom": "users",
           "tableTo": "education_stages",
-          "columnsFrom": [
-            "stage_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["stage_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -3996,9 +3752,7 @@
         "users_email_unique": {
           "name": "users_email_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "email"
-          ]
+          "columns": ["email"]
         }
       },
       "policies": {},
@@ -4146,12 +3900,8 @@
           "name": "quinzena_documents_user_id_users_id_fk",
           "tableFrom": "quinzena_documents",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -4159,12 +3909,8 @@
           "name": "quinzena_documents_unit_id_units_id_fk",
           "tableFrom": "quinzena_documents",
           "tableTo": "units",
-          "columnsFrom": [
-            "unit_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["unit_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -4334,12 +4080,8 @@
           "name": "plano_aula_periodo_unidade_id_units_id_fk",
           "tableFrom": "plano_aula_periodo",
           "tableTo": "units",
-          "columnsFrom": [
-            "unidade_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["unidade_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -4347,12 +4089,8 @@
           "name": "plano_aula_periodo_criado_por_users_id_fk",
           "tableFrom": "plano_aula_periodo",
           "tableTo": "users",
-          "columnsFrom": [
-            "criado_por"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["criado_por"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }

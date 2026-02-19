@@ -1,8 +1,8 @@
 // apps/planejamento/features/periodos/hooks/use-periodos.ts
-'use client';
+"use client";
 
-import { api } from '@essencia/shared/fetchers/client';
-import { useEffect, useState, useCallback } from 'react';
+import { api } from "@essencia/shared/fetchers/client";
+import { useEffect, useState, useCallback } from "react";
 
 export interface Periodo {
   id: string;
@@ -55,7 +55,7 @@ export function usePeriodos(): UsePeriodosReturn {
       setIsLoading(true);
       setError(null);
 
-      const response = await api.get<Periodo[]>('/plano-aula-periodo');
+      const response = await api.get<Periodo[]>("/plano-aula-periodo");
 
       if (Array.isArray(response)) {
         setPeriodos(response);
@@ -63,9 +63,9 @@ export function usePeriodos(): UsePeriodosReturn {
         setPeriodos([]);
       }
     } catch (err) {
-      console.error('Erro ao buscar períodos:', err);
+      console.error("Erro ao buscar períodos:", err);
       setError(
-        err instanceof Error ? err : new Error('Erro ao buscar períodos'),
+        err instanceof Error ? err : new Error("Erro ao buscar períodos"),
       );
     } finally {
       setIsLoading(false);
@@ -84,7 +84,7 @@ export function usePeriodos(): UsePeriodosReturn {
       dataFim: string;
       dataMaximaEntrega: string;
     }) => {
-      const response = await api.post<Periodo>('/plano-aula-periodo', dto);
+      const response = await api.post<Periodo>("/plano-aula-periodo", dto);
       await fetchPeriodos();
       return response;
     },
@@ -101,10 +101,7 @@ export function usePeriodos(): UsePeriodosReturn {
         dataMaximaEntrega: string;
       }>,
     ) => {
-      const response = await api.put<Periodo>(
-        `/plano-aula-periodo/${id}`,
-        dto,
-      );
+      const response = await api.put<Periodo>(`/plano-aula-periodo/${id}`, dto);
       await fetchPeriodos();
       return response;
     },
@@ -155,7 +152,9 @@ export function usePeriodosDaTurma(turmaId: string): UsePeriodosDaTurmaReturn {
     setError(null);
 
     try {
-      const response = await api.get<Periodo[]>(`/plano-aula-periodo/turma/${turmaId}`);
+      const response = await api.get<Periodo[]>(
+        `/plano-aula-periodo/turma/${turmaId}`,
+      );
 
       if (Array.isArray(response)) {
         setPeriodos(response);
@@ -163,8 +162,8 @@ export function usePeriodosDaTurma(turmaId: string): UsePeriodosDaTurmaReturn {
         setPeriodos([]);
       }
     } catch (err) {
-      console.error('Erro ao buscar períodos da turma:', err);
-      setError(err instanceof Error ? err.message : 'Erro ao buscar períodos');
+      console.error("Erro ao buscar períodos da turma:", err);
+      setError(err instanceof Error ? err.message : "Erro ao buscar períodos");
       setPeriodos([]);
     } finally {
       setIsLoading(false);

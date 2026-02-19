@@ -47,3 +47,25 @@ export class InventoryAdjustDto {
   @IsEnum(["AJUSTE", "DANO", "PERDA", "INVENTARIO"])
   reason!: "AJUSTE" | "DANO" | "PERDA" | "INVENTARIO";
 }
+
+/**
+ * DTO para saída manual de estoque
+ * POST /shop/admin/inventory/exit
+ */
+export class InventoryExitDto {
+  @IsUUID()
+  variantId!: string;
+
+  @IsUUID()
+  unitId!: string;
+
+  @IsInt()
+  @Min(1)
+  quantity!: number;
+
+  @IsString()
+  notes!: string; // Motivo obrigatório para saída
+
+  @IsEnum(["VENDA_BALCAO", "DANO", "PERDA", "AMOSTRA", "OUTROS"])
+  reason!: "VENDA_BALCAO" | "DANO" | "PERDA" | "AMOSTRA" | "OUTROS";
+}

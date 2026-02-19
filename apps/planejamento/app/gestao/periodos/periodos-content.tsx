@@ -1,16 +1,27 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { Button } from '@essencia/ui/components/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@essencia/ui/components/tabs';
-import { Plus, Loader2 } from 'lucide-react';
-import { usePeriodos } from '../../../features/periodos/hooks/use-periodos';
-import { PeriodosList } from '../../../features/periodos/components/periodos-list';
-import { PeriodoModal } from '../../../features/periodos/components/periodo-modal';
-import { useToast } from '@essencia/ui/hooks/use-toast';
-import type { Periodo } from '../../../features/periodos/hooks/use-periodos';
+import { useState } from "react";
+import { Button } from "@essencia/ui/components/button";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@essencia/ui/components/tabs";
+import { Plus, Loader2 } from "lucide-react";
+import { toast } from "@essencia/ui/toaster";
+import { usePeriodos } from "../../../features/periodos/hooks/use-periodos";
+import { PeriodosList } from "../../../features/periodos/components/periodos-list";
+import { PeriodoModal } from "../../../features/periodos/components/periodo-modal";
+import type { Periodo } from "../../../features/periodos/hooks/use-periodos";
 
-const ETAPAS = ['BERCARIO', 'INFANTIL', 'FUNDAMENTAL_I', 'FUNDAMENTAL_II', 'MEDIO'] as const;
+const ETAPAS = [
+  "BERCARIO",
+  "INFANTIL",
+  "FUNDAMENTAL_I",
+  "FUNDAMENTAL_II",
+  "MEDIO",
+] as const;
 
 type Etapa = (typeof ETAPAS)[number];
 
@@ -29,20 +40,20 @@ function getEtapasPermitidas(role?: string): Etapa[] {
 
   // Roles com acesso a todas as etapas
   if (
-    role === 'master' ||
-    role === 'diretora_geral' ||
-    role === 'coordenadora_geral'
+    role === "master" ||
+    role === "diretora_geral" ||
+    role === "coordenadora_geral"
   ) {
     return [...ETAPAS];
   }
 
   // Coordenadoras específicas
   const roleEtapaMap: Record<string, Etapa> = {
-    coordenadora_bercario: 'BERCARIO',
-    coordenadora_infantil: 'INFANTIL',
-    coordenadora_fundamental_i: 'FUNDAMENTAL_I',
-    coordenadora_fundamental_ii: 'FUNDAMENTAL_II',
-    coordenadora_medio: 'MEDIO',
+    coordenadora_bercario: "BERCARIO",
+    coordenadora_infantil: "INFANTIL",
+    coordenadora_fundamental_i: "FUNDAMENTAL_I",
+    coordenadora_fundamental_ii: "FUNDAMENTAL_II",
+    coordenadora_medio: "MEDIO",
   };
 
   const etapa = roleEtapaMap[role];
@@ -50,17 +61,22 @@ function getEtapasPermitidas(role?: string): Etapa[] {
 }
 
 export function PeriodosContent() {
-  const { toast } = useToast();
-  const { periodos, isLoading, error, criarPeriodo, editarPeriodo, excluirPeriodo } =
-    usePeriodos();
+  const {
+    periodos,
+    isLoading,
+    error,
+    criarPeriodo,
+    editarPeriodo,
+    excluirPeriodo,
+  } = usePeriodos();
 
-  const [selectedEtapa, setSelectedEtapa] = useState<Etapa>('BERCARIO');
+  const [selectedEtapa, setSelectedEtapa] = useState<Etapa>("BERCARIO");
   const [modalOpen, setModalOpen] = useState(false);
   const [editingPeriodo, setEditingPeriodo] = useState<Periodo | null>(null);
 
   // TODO: Pegar role do contexto de autenticação
   // Por enquanto, assumindo coordenadora_geral para desenvolvimento
-  const userRole = 'coordenadora_geral';
+  const userRole = "coordenadora_geral";
   const etapasPermitidas = getEtapasPermitidas(userRole);
 
   const handleEdit = (periodo: Periodo) => {
@@ -69,21 +85,18 @@ export function PeriodosContent() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Tem certeza que deseja excluir este plano de aula?')) {
+    if (!confirm("Tem certeza que deseja excluir este plano de aula?")) {
       return;
     }
 
     try {
       await excluirPeriodo(id);
-      toast({
-        title: 'Sucesso',
-        description: 'Plano de aula excluído com sucesso',
+      toast.success("Sucesso", {
+        description: "Plano de aula excluído com sucesso",
       });
     } catch (error) {
-      toast({
-        title: 'Erro',
-        description: 'Não foi possível excluir o plano de aula',
-        variant: 'destructive',
+      toast.error("Erro", {
+        description: "Não foi possível excluir o plano de aula",
       });
     }
   };
@@ -97,25 +110,23 @@ export function PeriodosContent() {
   }) => {
     try {
       if (editingPeriodo) {
-        await editarPeriodo(editingPeriodo.id, dto);
-        toast({
-          title: 'Sucesso',
-          description: 'Plano de aula atualizado com sucesso',
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { etapa, ...updateDto } = dto;
+        await editarPeriodo(editingPeriodo.id, updateDto);
+        toast.success("Sucesso", {
+          description: "Plano de aula atualizado com sucesso",
         });
       } else {
         await criarPeriodo(dto);
-        toast({
-          title: 'Sucesso',
-          description: 'Plano de aula criado com sucesso',
+        toast.success("Sucesso", {
+          description: "Plano de aula criado com sucesso",
         });
       }
       setModalOpen(false);
       setEditingPeriodo(null);
     } catch (error) {
-      toast({
-        title: 'Erro',
-        description: 'Não foi possível salvar o plano de aula',
-        variant: 'destructive',
+      toast.error("Erro", {
+        description: "Não foi possível salvar o plano de aula",
       });
       throw error;
     }
@@ -157,7 +168,6 @@ export function PeriodosContent() {
         <Button
           onClick={() => {
             setEditingPeriodo(null);
-            setSelectedEtapa(etapasPermitidas[0]);
             setModalOpen(true);
           }}
           disabled={isLoading}
@@ -173,6 +183,7 @@ export function PeriodosContent() {
         </div>
       ) : (
         <Tabs
+          defaultValue="BERCARIO"
           value={selectedEtapa}
           onValueChange={(value) => setSelectedEtapa(value as Etapa)}
         >
@@ -183,7 +194,7 @@ export function PeriodosContent() {
                 value={etapa}
                 disabled={!etapasPermitidas.includes(etapa)}
               >
-                {etapa.replace('_', ' ')}
+                {etapa.replace("_", " ")}
               </TabsTrigger>
             ))}
           </TabsList>
@@ -211,6 +222,7 @@ export function PeriodosContent() {
         }}
         periodo={editingPeriodo}
         etapas={etapasPermitidas}
+        defaultEtapa={selectedEtapa}
         onSubmit={handleSubmit}
       />
     </div>

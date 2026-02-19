@@ -120,3 +120,20 @@ dump.rdb
 
 # Agent e skills (não necessários em produção)
 .agent/
+
+# Turbo remote cache (arquivos locais)
+.turbo/
+node_modules/.cache/
+
+# Docker Bake (arquivo de configuração, não conteúdo)
+docker-bake.hcl
+
+# Planos e documentação de AI
+.claude/
+CLAUDE.md
+
+# Backup directories
+backup/
+
+# Keep .env.example for reference
+!.env.example

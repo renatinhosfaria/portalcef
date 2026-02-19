@@ -1,6 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   basePath: "/turmas",
+  output: "standalone",
   transpilePackages: [
     "@essencia/ui",
     "@essencia/shared",

@@ -241,7 +241,7 @@ export function DocumentoUpload({
           onClick={() => setShowLinkInput(!showLinkInput)}
         >
           <Link className="mr-2 h-4 w-4" />
-          Adicionar Link do YouTube
+          Link do YouTube
         </Button>
       </div>
 

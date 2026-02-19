@@ -440,6 +440,58 @@ export class CalendarService {
    *
    * TEMPORÁRIO: Retorna validação padrão até implementar novo sistema.
    */
+  /**
+   * Retorna a data de início das férias de julho para um ano específico.
+   * Usado para determinar a divisão entre 1º e 2º semestre.
+   */
+  async getFeriasJulhoStartDate(
+    unitId: string,
+    year: number,
+  ): Promise<
+    | { success: true; data: { startDate: string } }
+    | { success: false; error: string }
+  > {
+    const db = getDb();
+
+    // Buscar evento de férias que contenha "Julho" no título ou seja em julho
+    const feriasEvents = await db.query.calendarEvents.findMany({
+      where: and(
+        eq(calendarEvents.unitId, unitId),
+        eq(calendarEvents.eventType, "FERIAS_PROFESSORES"),
+        sql`EXTRACT(YEAR FROM ${calendarEvents.startDate}) = ${year}`,
+        sql`EXTRACT(MONTH FROM ${calendarEvents.startDate}) >= 6`, // Junho ou julho
+        sql`EXTRACT(MONTH FROM ${calendarEvents.startDate}) <= 7`, // Junho ou julho
+      ),
+      orderBy: [asc(calendarEvents.startDate)],
+    });
+
+    // Procurar especificamente as férias de julho
+    const feriasJulho = feriasEvents.find(
+      (e: (typeof feriasEvents)[number]) =>
+        e.title.toLowerCase().includes("julho") ||
+        new Date(e.startDate).getMonth() === 6,
+    );
+
+    if (feriasJulho) {
+      return {
+        success: true,
+        data: {
+          startDate: this.formatDateKey(
+            this.toLocalDate(feriasJulho.startDate),
+          ),
+        },
+      };
+    }
+
+    // Fallback: se não encontrou, usa 13 de julho como padrão
+    return {
+      success: true,
+      data: {
+        startDate: `${year}-07-13`,
+      },
+    };
+  }
+
   async validateQuinzenaSchoolDays(
     _unitId: string,
     _quinzenaId: string,

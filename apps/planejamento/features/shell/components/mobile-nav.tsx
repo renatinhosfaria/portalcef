@@ -1,19 +1,12 @@
 "use client";
 
 import { useTenant } from "@essencia/shared/providers/tenant";
-import {
-  ClipboardList,
-  FileSearch,
-  Home,
-  LayoutDashboard,
-  List,
-} from "lucide-react";
+import { FileSearch, Home, LayoutDashboard, List } from "lucide-react";
 import Link from "next/link";
 
 import {
   getDashboardForRole,
   isAnalystRole,
-  isCoordinatorRole,
   isCreatorRole,
   isManagerRole,
 } from "../../../lib/role-groups";
@@ -66,18 +59,7 @@ export function MobileNav() {
         </Link>
       )}
 
-      {/* Coordenacao - For coordinators */}
-      {isCoordinatorRole(role) && (
-        <Link
-          href="/coordenacao"
-          className="flex flex-col items-center justify-center gap-1 text-primary hover:text-primary/80 transition-colors"
-        >
-          <ClipboardList className="h-8 w-8" />
-          <span className="text-xs font-medium">Coordenacao</span>
-        </Link>
-      )}
-
-      {/* Gestao - For managers */}
+      {/* Gestao - For managers (includes coordenadoras) */}
       {isManagerRole(role) && (
         <Link
           href="/gestao"
