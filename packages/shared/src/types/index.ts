@@ -270,3 +270,6 @@ export * from "./historico";
 
 // Tarefas types (Task Management)
 export * from "./tarefas";
+
+// Suporte types (Ordem de Servico)
+export * from "./suporte";
