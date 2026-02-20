@@ -57,6 +57,7 @@ SERVICES=(
     "loja"
     "loja-admin"
     "tarefas"
+    "suporte"
 )
 
 # Função para verificar health de um container

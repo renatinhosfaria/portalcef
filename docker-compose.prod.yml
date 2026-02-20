@@ -267,6 +267,20 @@ services:
       api:
         condition: service_healthy
 
+  suporte:
+    image: essencia-suporte:latest
+    container_name: essencia-suporte
+    <<: *common
+    environment:
+      <<: *nextjs-env
+      PORT: 3013
+    healthcheck:
+      <<: *healthcheck
+      test: [ "CMD", "curl", "-f", "http://localhost:3013/suporte" ]
+    depends_on:
+      api:
+        condition: service_healthy
+
   # ===========================================================================
   # API NESTJS
   # ===========================================================================
