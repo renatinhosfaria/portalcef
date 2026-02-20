@@ -19,12 +19,16 @@ export async function apiGet<T>(endpoint: string): Promise<T> {
  * Realiza uma requisição POST
  */
 export async function apiPost<T>(endpoint: string, body: unknown): Promise<T> {
+  const isFormData = body instanceof FormData;
+
   const response = await fetch(`/api/${endpoint}`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
+    ...(isFormData
+      ? { body: body as FormData }
+      : {
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        }),
   });
 
   if (!response.ok) {
