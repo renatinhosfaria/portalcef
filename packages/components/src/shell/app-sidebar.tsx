@@ -7,6 +7,7 @@ import {
   Calendar,
   CheckSquare,
   GraduationCap,
+  Headset,
   LayoutDashboard,
   LogOut,
   School,
@@ -27,6 +28,7 @@ type ActivePage =
   | "planejamento"
   | "calendario"
   | "tarefas"
+  | "suporte"
   | "loja-admin";
 
 // Regras de acesso por módulo
@@ -51,6 +53,7 @@ const MODULE_ACCESS_RULES = {
     "professora",
     "auxiliar_sala",
   ],
+  suporte: "ALL",
   lojaAdmin: ["master", "diretora_geral", "gerente_unidade", "gerente_financeiro", "auxiliar_administrativo"],
 } as const;
 
@@ -82,6 +85,7 @@ function getActivePageFromPath(pathname: string): ActivePage | null {
   if (normalizedPath.startsWith("/planejamento")) return "planejamento";
   if (normalizedPath.startsWith("/calendario")) return "calendario";
   if (normalizedPath.startsWith("/tarefas")) return "tarefas";
+  if (normalizedPath.startsWith("/suporte")) return "suporte";
   if (normalizedPath.startsWith("/loja-admin")) return "loja-admin";
 
   return null;
@@ -186,6 +190,13 @@ export function AppSidebar({ tarefasBadge }: AppSidebarProps = {}) {
       activePage: "tarefas" as ActivePage,
     },
     {
+      key: "suporte" as ModuleKey,
+      icon: Headset,
+      label: "Suporte",
+      href: `https://www.portalcef.com.br/suporte?data=${tenantPayload}`,
+      activePage: "suporte" as ActivePage,
+    },
+    {
       key: "lojaAdmin" as ModuleKey,
       icon: ShoppingBag,
       label: "Loja",
@@ -219,6 +230,7 @@ export function AppSidebar({ tarefasBadge }: AppSidebarProps = {}) {
     if (port === "3007") return setActivePage("planejamento");
     if (port === "3008") return setActivePage("calendario");
     if (port === "3012") return setActivePage("tarefas");
+    if (port === "3013") return setActivePage("suporte");
     if (port === "3011") return setActivePage("loja-admin");
 
     setActivePage(null);
