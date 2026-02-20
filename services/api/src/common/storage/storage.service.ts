@@ -82,4 +82,53 @@ export class StorageService {
       throw error;
     }
   }
+
+  async uploadBuffer(
+    buffer: Buffer,
+    filename: string,
+    mimetype: string,
+    prefix: string = "",
+  ): Promise<{ url: string; key: string; name: string }> {
+    const fileId = randomUUID();
+    const ext = extname(filename);
+    const key = prefix ? `${prefix}/${fileId}${ext}` : `${fileId}${ext}`;
+
+    try {
+      await this.s3Client.send(
+        new PutObjectCommand({
+          Bucket: this.bucketName,
+          Key: key,
+          Body: buffer,
+          ContentType: mimetype,
+          ContentDisposition: `inline; filename="${filename}"`,
+        }),
+      );
+
+      const publicEndpoint = this.configService.get<string>(
+        "MINIO_PUBLIC_ENDPOINT",
+      );
+      const endpoint =
+        publicEndpoint || this.configService.get<string>("MINIO_ENDPOINT");
+
+      const url = `${endpoint}/${this.bucketName}/${key}`;
+
+      this.logger.log(`Buffer uploaded successfully: ${key}`);
+
+      return {
+        url,
+        key,
+        name: filename,
+      };
+    } catch (error) {
+      if (error instanceof Error) {
+        this.logger.error(
+          `Error uploading buffer: ${error.message}`,
+          error.stack,
+        );
+      } else {
+        this.logger.error(`Error uploading buffer: ${String(error)}`);
+      }
+      throw error;
+    }
+  }
 }
