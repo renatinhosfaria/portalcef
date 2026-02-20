@@ -1,4 +1,5 @@
 import { Shell } from "@essencia/components/shell/shell";
+import { SuporteBadgeContainer } from "@essencia/components/suporte";
 import { TenantProvider } from "@essencia/shared/providers/tenant";
 import { Toaster } from "@essencia/ui/components/toaster";
 import "@essencia/ui/globals.css";
@@ -27,7 +28,13 @@ export default function RootLayout({
     <html lang="pt-BR">
       <body className={inter.className}>
         <TenantProvider>
-          <Shell>{children}</Shell>
+          <Shell
+            sidebarProps={{
+              suporteBadge: <SuporteBadgeContainer />,
+            }}
+          >
+            {children}
+          </Shell>
           <Toaster position="bottom-right" />
         </TenantProvider>
       </body>

@@ -121,9 +121,11 @@ function SidebarItem({ icon: Icon, label, href, active }: SidebarItemProps) {
 export interface AppSidebarProps {
   /** Widget de tarefas (opcional) para exibir ao lado do item Tarefas */
   tarefasBadge?: React.ReactNode;
+  /** Widget de suporte (opcional) para exibir ao lado do item Suporte */
+  suporteBadge?: React.ReactNode;
 }
 
-export function AppSidebar({ tarefasBadge }: AppSidebarProps = {}) {
+export function AppSidebar({ tarefasBadge, suporteBadge }: AppSidebarProps = {}) {
   const { role, name, schoolId, unitId, email } = useTenant();
   const pathname = usePathname();
   const [activePage, setActivePage] = useState<ActivePage | null>(null);
@@ -274,6 +276,11 @@ export function AppSidebar({ tarefasBadge }: AppSidebarProps = {}) {
             {item.key === "tarefas" && tarefasBadge && (
               <div className="absolute right-2 top-1/2 -translate-y-1/2">
                 {tarefasBadge}
+              </div>
+            )}
+            {item.key === "suporte" && suporteBadge && (
+              <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                {suporteBadge}
               </div>
             )}
           </div>
