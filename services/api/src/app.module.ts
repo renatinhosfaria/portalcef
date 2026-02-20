@@ -24,6 +24,7 @@ import { UnitsModule } from "./modules/units/units.module";
 import { UsersModule } from "./modules/users/users.module";
 import { QuinzenaDocumentsModule } from "./modules/quinzena-documents/quinzena-documents.module";
 import { TarefasModule } from "./modules/tarefas/tarefas.module";
+import { SuporteModule } from "./modules/suporte/suporte.module";
 import { SecurityModule } from "./modules/security/security.module";
 
 @Module({
@@ -82,6 +83,8 @@ import { SecurityModule } from "./modules/security/security.module";
     QuinzenaDocumentsModule,
     // Sistema de Tarefas
     TarefasModule,
+    // Sistema de Suporte (Ordens de Serviço)
+    SuporteModule,
   ],
   providers: [
     {
