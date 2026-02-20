@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 
 import { AuthModule } from "../auth/auth.module";
 import { DatabaseModule } from "../../common/database/database.module";
+import { StorageModule } from "../../common/storage/storage.module";
 import { SuporteController } from "./suporte.controller";
 import { SuporteService } from "./suporte.service";
 
@@ -15,7 +16,7 @@ import { SuporteService } from "./suporte.service";
  * - Filtros por status, categoria e usuário
  */
 @Module({
-  imports: [AuthModule, DatabaseModule],
+  imports: [AuthModule, DatabaseModule, StorageModule.forRoot()],
   controllers: [SuporteController],
   providers: [SuporteService],
   exports: [SuporteService],

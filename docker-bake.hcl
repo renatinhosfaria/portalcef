@@ -54,7 +54,8 @@ group "apps" {
     "calendario",
     "loja",
     "loja-admin",
-    "tarefas"
+    "tarefas",
+    "suporte"
   ]
 }
 
@@ -221,6 +222,19 @@ target "tarefas" {
     "${REGISTRY}/tarefas:${TAG}",
     "${REGISTRY}/tarefas:latest",
     "essencia-tarefas:latest"
+  ]
+}
+
+target "suporte" {
+  inherits = ["_nextjs"]
+  args = {
+    APP_NAME = "suporte"
+    APP_PORT = "3013"
+  }
+  tags = [
+    "${REGISTRY}/suporte:${TAG}",
+    "${REGISTRY}/suporte:latest",
+    "essencia-suporte:latest"
   ]
 }
 

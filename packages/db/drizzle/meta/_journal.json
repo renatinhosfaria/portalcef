@@ -141,6 +141,13 @@
       "when": 1770404772829,
       "tag": "0019_youthful_wendell_rand",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1771597237151,
+      "tag": "0020_bumpy_namora",
+      "breakpoints": true
     }
   ]
 }
