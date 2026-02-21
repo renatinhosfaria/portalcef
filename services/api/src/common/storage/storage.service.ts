@@ -11,6 +11,21 @@ export class StorageService {
   private readonly bucketName: string;
   private readonly logger = new Logger(StorageService.name);
 
+  /**
+   * Codifica o Content-Disposition de forma segura para S3/MinIO.
+   * Caracteres não-ASCII (acentos, ç, etc.) causam erro de assinatura
+   * no MinIO quando enviados diretamente no header.
+   * Usa RFC 5987 (filename*=UTF-8''...) para nomes com caracteres especiais.
+   */
+  private buildContentDisposition(filename: string): string {
+    const hasNonAscii = /[^\x20-\x7E]/.test(filename);
+    if (!hasNonAscii) {
+      return `inline; filename="${filename}"`;
+    }
+    const encoded = encodeURIComponent(filename);
+    return `inline; filename="${encoded}"; filename*=UTF-8''${encoded}`;
+  }
+
   constructor(private readonly configService: ConfigService) {
     const endpoint = this.configService.getOrThrow<string>("MINIO_ENDPOINT");
     const region = "us-east-1"; // MinIO default
@@ -47,7 +62,7 @@ export class StorageService {
           Key: key,
           Body: buffer,
           ContentType: file.mimetype,
-          ContentDisposition: `inline; filename="${file.filename}"`,
+          ContentDisposition: this.buildContentDisposition(file.filename),
         }),
       );
 
@@ -100,7 +115,7 @@ export class StorageService {
           Key: key,
           Body: buffer,
           ContentType: mimetype,
-          ContentDisposition: `inline; filename="${filename}"`,
+          ContentDisposition: this.buildContentDisposition(filename),
         }),
       );
 
