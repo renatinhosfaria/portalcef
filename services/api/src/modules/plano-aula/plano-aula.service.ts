@@ -3,6 +3,7 @@ import {
   NotFoundException,
   BadRequestException,
   ForbiddenException,
+  ConflictException,
 } from "@nestjs/common";
 import {
   getDb,
@@ -13,6 +14,7 @@ import {
   gte,
   lte,
   inArray,
+  isNotNull,
   planoAula,
   planoDocumento,
   documentoComentario,
@@ -267,6 +269,7 @@ export class PlanoAulaService {
       "RASCUNHO",
       "DEVOLVIDO_ANALISTA",
       "DEVOLVIDO_COORDENADORA",
+      "RECUPERADO",
     ];
     if (!statusPermitidos.includes(plano.status)) {
       throw new BadRequestException(
@@ -301,6 +304,93 @@ export class PlanoAulaService {
       acao: "SUBMETIDO",
       statusAnterior,
       statusNovo: novoStatus,
+    });
+
+    return atualizado;
+  }
+
+  /**
+   * Recupera plano submetido (AGUARDANDO_ANALISTA -> RECUPERADO)
+   * Permite que a professora recupere o plano antes da analista iniciar a análise
+   */
+  async recuperarPlano(
+    user: UserContext,
+    planoId: string,
+  ): Promise<PlanoAula> {
+    const db = getDb();
+
+    const plano = await db.query.planoAula.findFirst({
+      where: eq(planoAula.id, planoId),
+    });
+
+    if (!plano) {
+      throw new NotFoundException("Plano não encontrado");
+    }
+
+    if (plano.userId !== user.userId) {
+      throw new ForbiddenException("Apenas o autor pode recuperar o plano");
+    }
+
+    if (plano.status !== "AGUARDANDO_ANALISTA") {
+      throw new ConflictException(
+        `Não é possível recuperar plano com status ${plano.status}`,
+      );
+    }
+
+    // Verificar se a analista já iniciou a análise
+    // 1. Algum documento com aprovação?
+    const documentoAprovado = await db.query.planoDocumento.findFirst({
+      where: and(
+        eq(planoDocumento.planoId, planoId),
+        isNotNull(planoDocumento.approvedBy),
+      ),
+    });
+
+    if (documentoAprovado) {
+      throw new ConflictException(
+        "A analista pedagógica já iniciou a análise deste plano. Não é mais possível recuperá-lo.",
+      );
+    }
+
+    // 2. Algum comentário nos documentos do plano?
+    const documentosDoPlano = await db.query.planoDocumento.findMany({
+      where: eq(planoDocumento.planoId, planoId),
+      with: { comentarios: true },
+    });
+
+    const temComentario = documentosDoPlano.some(
+      (doc: (typeof documentosDoPlano)[number]) =>
+        doc.comentarios && doc.comentarios.length > 0,
+    );
+
+    if (temComentario) {
+      throw new ConflictException(
+        "A analista pedagógica já iniciou a análise deste plano. Não é mais possível recuperá-lo.",
+      );
+    }
+
+    const statusAnterior = plano.status;
+
+    const [atualizado] = await db
+      .update(planoAula)
+      .set({
+        status: "RECUPERADO",
+        submittedAt: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(planoAula.id, planoId))
+      .returning();
+
+    // Registrar no histórico
+    const userName = await this.getUserName(user.userId);
+    await this.historicoService.registrar({
+      planoId,
+      userId: user.userId,
+      userName,
+      userRole: user.role,
+      acao: "RECUPERADO",
+      statusAnterior,
+      statusNovo: "RECUPERADO",
     });
 
     return atualizado;
@@ -1549,5 +1639,36 @@ export class PlanoAulaService {
 
     // Deletar documento
     await db.delete(planoDocumento).where(eq(planoDocumento.id, documentoId));
+  }
+
+  /**
+   * Busca documento por ID, validando que pertence ao plano
+   */
+  async getDocumentoById(planoId: string, documentoId: string) {
+    const db = getDb();
+    const documento = await db.query.planoDocumento.findFirst({
+      where: and(
+        eq(planoDocumento.id, documentoId),
+        eq(planoDocumento.planoId, planoId),
+      ),
+    });
+    if (!documento) {
+      throw new NotFoundException("Documento não encontrado");
+    }
+    return documento;
+  }
+
+  /**
+   * Atualiza campos de um documento (usado pelo callback do OnlyOffice)
+   */
+  async atualizarDocumento(
+    documentoId: string,
+    dados: { fileSize?: number; updatedAt?: Date },
+  ) {
+    const db = getDb();
+    await db
+      .update(planoDocumento)
+      .set(dados)
+      .where(eq(planoDocumento.id, documentoId));
   }
 }

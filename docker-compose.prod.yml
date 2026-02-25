@@ -306,6 +306,9 @@ services:
       COOKIE_SECURE: "true"
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET}
+      ONLYOFFICE_JWT_SECRET: ${ONLYOFFICE_JWT_SECRET}
+      ONLYOFFICE_URL: http://essencia-onlyoffice
+      ONLYOFFICE_PUBLIC_URL: https://www.portalcef.com.br/onlyoffice
     depends_on:
       postgres:
         condition: service_healthy
@@ -323,6 +326,39 @@ services:
           memory: 2G
         reservations:
           memory: 512M
+
+  # ===========================================================================
+  # CARBONE - Document Conversion Service
+  # ===========================================================================
+
+  carbone:
+    image: carbone/carbone-ee:latest
+    container_name: essencia-carbone
+    <<: *common
+    environment:
+      CARBONE_WORKERS: 4
+
+  # ===========================================================================
+  # ONLYOFFICE - Document Editor
+  # ===========================================================================
+
+  onlyoffice:
+    image: onlyoffice/documentserver:latest
+    container_name: essencia-onlyoffice
+    <<: *common
+    environment:
+      JWT_ENABLED: "true"
+      JWT_SECRET: ${ONLYOFFICE_JWT_SECRET}
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 2G
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD", "curl", "-f", "http://localhost/healthcheck"]
+      start_period: 60s
 
   # ===========================================================================
   # WORKER BULLMQ
@@ -348,6 +384,8 @@ services:
         condition: service_healthy
       postgres:
         condition: service_healthy
+      carbone:
+        condition: service_started
     healthcheck:
       <<: *healthcheck
       test: [ "CMD", "curl", "-f", "http://localhost:3100/health" ]

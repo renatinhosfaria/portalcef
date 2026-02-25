@@ -1,4 +1,5 @@
-import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { PutObjectCommand, GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { MultipartFile } from "@fastify/multipart";
 import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
@@ -145,5 +146,31 @@ export class StorageService {
       }
       throw error;
     }
+  }
+
+  async getPresignedUrl(key: string, expiresIn: number = 3600): Promise<string> {
+    const command = new GetObjectCommand({
+      Bucket: this.bucketName,
+      Key: key,
+    });
+    return getSignedUrl(this.s3Client, command, { expiresIn });
+  }
+
+  async replaceFile(
+    key: string,
+    buffer: Buffer,
+    mimetype: string,
+    filename: string,
+  ): Promise<void> {
+    await this.s3Client.send(
+      new PutObjectCommand({
+        Bucket: this.bucketName,
+        Key: key,
+        Body: buffer,
+        ContentType: mimetype,
+        ContentDisposition: this.buildContentDisposition(filename),
+      }),
+    );
+    this.logger.log(`File replaced successfully: ${key}`);
   }
 }

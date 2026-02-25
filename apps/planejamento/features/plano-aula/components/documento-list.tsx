@@ -17,6 +17,7 @@ import {
   FileSpreadsheet,
   FileText,
   Image,
+  Pencil,
   Printer,
   Trash2,
   Undo2,
@@ -25,6 +26,7 @@ import {
 
 import type { PlanoDocumento } from "../types";
 import { DocumentoComentarios } from "./documento-comentarios";
+import { DocumentoEditorModal } from "./documento-editor";
 import { DocumentoPreviewModal } from "./documento-preview-modal";
 
 interface DocumentoListProps {
@@ -153,6 +155,13 @@ function imprimirPdf(url: string): void {
   }, 60_000);
 }
 
+function isWordDocument(documento: PlanoDocumento): boolean {
+  return (
+    documento.mimeType?.includes("word") === true ||
+    documento.mimeType?.includes("msword") === true
+  );
+}
+
 function getDocumentName(documento: PlanoDocumento): string {
   if (documento.tipo === "LINK_YOUTUBE" && documento.url) {
     // Extrair ID do video do YouTube para exibicao
@@ -179,6 +188,8 @@ export function DocumentoList({
   currentUserId,
 }: DocumentoListProps) {
   const [openDocId, setOpenDocId] = useState<string | null>(null);
+  const [editorDocId, setEditorDocId] = useState<string | null>(null);
+  const [editorMode, setEditorMode] = useState<"edit" | "view">("view");
   const [aprovandoId, setAprovandoId] = useState<string | null>(null);
   const [imprimindoId, setImprimindoId] = useState<string | null>(null);
   const [desaprovandoId, setDesaprovandoId] = useState<string | null>(null);
@@ -376,17 +387,48 @@ export function DocumentoList({
 
               {/* Actions */}
               <div className="flex items-center gap-2 flex-shrink-0">
-                {/* Preview Button */}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 gap-1"
-                  onClick={() => setOpenDocId(documento.id)}
-                  disabled={documento.previewStatus === "PENDENTE"}
-                >
-                  <Eye className="h-4 w-4" />
-                  Ver Documento
-                </Button>
+                {/* Ver Documento */}
+                {isWordDocument(documento) ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 gap-1"
+                    onClick={() => {
+                      setEditorMode("view");
+                      setEditorDocId(documento.id);
+                    }}
+                  >
+                    <Eye className="h-4 w-4" />
+                    Ver Documento
+                  </Button>
+                ) : (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 gap-1"
+                    onClick={() => setOpenDocId(documento.id)}
+                  >
+                    <Eye className="h-4 w-4" />
+                    Ver Documento
+                  </Button>
+                )}
+
+                {/* Editar - apenas para .doc/.docx */}
+                {isWordDocument(documento) && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 gap-1 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                    onClick={() => {
+                      setEditorMode("edit");
+                      setEditorDocId(documento.id);
+                    }}
+                    title="Editar documento no browser"
+                  >
+                    <Pencil className="h-4 w-4" />
+                    Editar
+                  </Button>
+                )}
 
                 {/* Imprimir - somente para documento aprovado */}
                 {podeImprimir && (
@@ -453,7 +495,7 @@ export function DocumentoList({
               </div>
             </div>
 
-            {/* Modal de Preview */}
+            {/* Modal de Preview (PDF/Imagem) */}
             <DocumentoPreviewModal
               documento={documento}
               open={openDocId === documento.id}
@@ -463,6 +505,19 @@ export function DocumentoList({
               onDeleteComentario={onDeleteComentario}
               currentUserId={currentUserId}
             />
+
+            {/* Modal do Editor OnlyOffice (Word) */}
+            {isWordDocument(documento) && (
+              <DocumentoEditorModal
+                planoId={documento.planoId}
+                documentoId={documento.id}
+                mode={editorMode}
+                open={editorDocId === documento.id}
+                onOpenChange={(open) =>
+                  setEditorDocId(open ? documento.id : null)
+                }
+              />
+            )}
 
             {/* Comments Section */}
             {showComments && documento.comentarios.length > 0 && (
