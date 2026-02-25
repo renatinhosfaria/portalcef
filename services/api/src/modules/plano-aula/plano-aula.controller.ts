@@ -20,7 +20,6 @@ import { FastifyRequest } from "fastify";
 import { Roles } from "../../common/decorators/roles.decorator";
 import { AuthGuard } from "../../common/guards/auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
-import { DocumentosConversaoQueueService } from "../../common/queues/documentos-conversao.queue";
 import { StorageService } from "../../common/storage/storage.service";
 import {
   type AddComentarioDto,
@@ -102,7 +101,6 @@ export class PlanoAulaController {
     private readonly planoAulaService: PlanoAulaService,
     private readonly storageService: StorageService,
     private readonly historicoService: PlanoAulaHistoricoService,
-    private readonly documentosConversaoQueue: DocumentosConversaoQueueService,
     private readonly configService: ConfigService,
   ) {}
 
@@ -347,8 +345,12 @@ export class PlanoAulaController {
     @Req() req: { user: UserContext },
     @Param("id") planoId: string,
     @Param("docId") docId: string,
-    @Query("mode") mode: "edit" | "view" = "view",
+    @Query("mode") mode: string = "view",
   ) {
+    if (mode !== "edit" && mode !== "view") {
+      throw new BadRequestException("Mode deve ser 'edit' ou 'view'");
+    }
+
     const documento = await this.planoAulaService.getDocumentoById(planoId, docId);
 
     if (!documento.storageKey) {
@@ -374,7 +376,10 @@ export class PlanoAulaController {
       "https://www.portalcef.com.br/onlyoffice";
     const jwtSecret = this.configService.get<string>("ONLYOFFICE_JWT_SECRET");
 
-    const callbackUrl = `https://www.portalcef.com.br/api/plano-aula/${planoId}/documentos/${docId}/onlyoffice-callback`;
+    const apiBaseUrl =
+      this.configService.get<string>("NEXT_PUBLIC_API_URL") ||
+      "https://www.portalcef.com.br/api";
+    const callbackUrl = `${apiBaseUrl}/plano-aula/${planoId}/documentos/${docId}/onlyoffice-callback`;
 
     const config = {
       document: {
@@ -416,14 +421,34 @@ export class PlanoAulaController {
 
   /**
    * POST /plano-aula/:id/documentos/:docId/onlyoffice-callback
-   * Recebe callback do OnlyOffice após salvamento
+   * Recebe callback do OnlyOffice após salvamento (server-to-server, sem sessão)
    */
   @Post(":id/documentos/:docId/onlyoffice-callback")
+  @UseGuards() // Sobrescreve AuthGuard/RolesGuard do controller — autenticação via JWT do OnlyOffice
   async onlyofficeCallback(
+    @Req() req: FastifyRequest,
     @Param("id") planoId: string,
     @Param("docId") docId: string,
     @Body() body: { status: number; url?: string; key?: string },
   ) {
+    // Validar JWT do OnlyOffice no header Authorization
+    const jwtSecret = this.configService.get<string>("ONLYOFFICE_JWT_SECRET");
+    if (jwtSecret) {
+      const authHeader = req.headers.authorization;
+      if (!authHeader) {
+        this.logger.warn("OnlyOffice callback sem header Authorization");
+        return { error: 1 };
+      }
+      try {
+        const jwt = await import("jsonwebtoken");
+        const token = authHeader.replace("Bearer ", "");
+        jwt.default.verify(token, jwtSecret);
+      } catch {
+        this.logger.warn("OnlyOffice callback com JWT inválido");
+        return { error: 1 };
+      }
+    }
+
     // Status codes do OnlyOffice:
     // 0 - sem alteração, 1 - editando, 2 - pronto para salvar
     // 3 - erro, 4 - fechado sem mudanças, 6 - forcesave, 7 - erro forcesave

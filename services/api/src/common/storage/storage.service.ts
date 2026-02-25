@@ -162,15 +162,27 @@ export class StorageService {
     mimetype: string,
     filename: string,
   ): Promise<void> {
-    await this.s3Client.send(
-      new PutObjectCommand({
-        Bucket: this.bucketName,
-        Key: key,
-        Body: buffer,
-        ContentType: mimetype,
-        ContentDisposition: this.buildContentDisposition(filename),
-      }),
-    );
-    this.logger.log(`File replaced successfully: ${key}`);
+    try {
+      await this.s3Client.send(
+        new PutObjectCommand({
+          Bucket: this.bucketName,
+          Key: key,
+          Body: buffer,
+          ContentType: mimetype,
+          ContentDisposition: this.buildContentDisposition(filename),
+        }),
+      );
+      this.logger.log(`File replaced successfully: ${key}`);
+    } catch (error) {
+      if (error instanceof Error) {
+        this.logger.error(
+          `Error replacing file: ${error.message}`,
+          error.stack,
+        );
+      } else {
+        this.logger.error(`Error replacing file: ${String(error)}`);
+      }
+      throw error;
+    }
   }
 }
