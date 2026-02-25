@@ -11,6 +11,16 @@ import {
   AlertDescription,
   AlertTitle,
 } from "@essencia/ui/components/alert";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@essencia/ui/components/alert-dialog";
 import { Button } from "@essencia/ui/components/button";
 import {
   Card,
@@ -32,6 +42,7 @@ import {
   Loader2,
   MessageSquare,
   Send,
+  Undo2,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
@@ -60,7 +71,7 @@ interface PlanoContentProps {
  * Verifica se o status permite edicao (upload/delete de documentos)
  */
 function canEdit(status: PlanoAulaStatus): boolean {
-  return ["RASCUNHO", "DEVOLVIDO_ANALISTA", "DEVOLVIDO_COORDENADORA"].includes(
+  return ["RASCUNHO", "RECUPERADO", "DEVOLVIDO_ANALISTA", "DEVOLVIDO_COORDENADORA"].includes(
     status,
   );
 }
@@ -96,6 +107,9 @@ export function PlanoContent({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [showRecuperarDialog, setShowRecuperarDialog] = useState(false);
+  const [recuperando, setRecuperando] = useState(false);
+
   const {
     loading: actionLoading,
     criarPlano,
@@ -104,6 +118,7 @@ export function PlanoContent({
     addLink,
     imprimirDocumento,
     submeterPlano,
+    recuperarPlano,
   } = usePlanoAula();
 
   /**
@@ -155,17 +170,11 @@ export function PlanoContent({
    */
   const handleUpload = useCallback(
     async (file: File) => {
-      if (!plano?.id) return;
+      if (!plano?.id) throw new Error("Plano não encontrado");
 
-      try {
-        await uploadDocumento(plano.id, file);
-        await refetchPlano();
-      } catch (err) {
-        console.error("Erro no upload:", err);
-        throw err;
-      }
+      return await uploadDocumento(plano.id, file);
     },
-    [plano?.id, uploadDocumento, refetchPlano],
+    [plano?.id, uploadDocumento],
   );
 
   /**
@@ -274,6 +283,27 @@ export function PlanoContent({
       setSubmitting(false);
     }
   }, [plano?.id, submeterPlano, refetchPlano]);
+
+  /**
+   * Handler para recuperar plano da fila de analise
+   */
+  const handleRecuperar = useCallback(async () => {
+    if (!plano?.id) return;
+    setRecuperando(true);
+    try {
+      await recuperarPlano(plano.id);
+      await refetchPlano();
+      setShowRecuperarDialog(false);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Erro ao recuperar plano. Tente novamente.",
+      );
+    } finally {
+      setRecuperando(false);
+    }
+  }, [plano?.id, recuperarPlano, refetchPlano]);
 
   // Carrega o plano na montagem do componente
   useEffect(() => {
@@ -424,6 +454,28 @@ export function PlanoContent({
                   : "Seu plano esta aguardando aprovacao da Coordenadora."}
               </AlertDescription>
             </Alert>
+            {plano.status === "AGUARDANDO_ANALISTA" && plano.user?.id === userId && (
+              <div className="mt-4">
+                <Button
+                  variant="outline"
+                  className="gap-2 border-amber-300 text-amber-700 hover:bg-amber-50"
+                  onClick={() => setShowRecuperarDialog(true)}
+                  disabled={recuperando}
+                >
+                  {recuperando ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Recuperando...
+                    </>
+                  ) : (
+                    <>
+                      <Undo2 className="h-4 w-4" />
+                      Recuperar Plano
+                    </>
+                  )}
+                </Button>
+              </div>
+            )}
           </CardContent>
         )}
       </Card>
@@ -455,6 +507,7 @@ export function PlanoContent({
                 <DocumentoUpload
                   onUpload={handleUpload}
                   onAddLink={handleAddLink}
+                  onAllUploadsComplete={refetchPlano}
                   disabled={actionLoading}
                 />
               )}
@@ -524,6 +577,24 @@ export function PlanoContent({
           </CardContent>
         </Card>
       )}
+
+      <AlertDialog open={showRecuperarDialog} onOpenChange={setShowRecuperarDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Recuperar Plano de Aula?</AlertDialogTitle>
+            <AlertDialogDescription>
+              O plano sera retirado da fila de analise e voltara para edicao.
+              Voce precisara envia-lo novamente quando estiver pronto.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleRecuperar} disabled={recuperando}>
+              {recuperando ? "Recuperando..." : "Recuperar"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
