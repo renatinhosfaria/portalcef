@@ -148,6 +148,20 @@
       "when": 1771597237151,
       "tag": "0020_bumpy_namora",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1772056848412,
+      "tag": "0021_wealthy_zaladane",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1772666242013,
+      "tag": "0022_material_human_torch",
+      "breakpoints": true
     }
   ]
 }
