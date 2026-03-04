@@ -11,6 +11,8 @@ export interface ConversaoDocumentoJob {
   storageKey: string;
   mimeType: string;
   fileName: string;
+  /** Tabela de origem do documento. Default: "plano_documento" (retrocompatível) */
+  tabela?: "plano_documento" | "prova_documento";
 }
 
 /**

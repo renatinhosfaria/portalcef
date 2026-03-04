@@ -22,6 +22,7 @@ import { Public } from "../../common/decorators/public.decorator";
 import { Roles } from "../../common/decorators/roles.decorator";
 import { AuthGuard } from "../../common/guards/auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
+import { DocumentosConversaoQueueService } from "../../common/queues/documentos-conversao.queue";
 import { StorageService } from "../../common/storage/storage.service";
 import {
   type CreateProvaDto,
@@ -97,6 +98,7 @@ export class ProvaController {
     private readonly storageService: StorageService,
     private readonly historicoService: ProvaHistoricoService,
     private readonly configService: ConfigService,
+    private readonly conversaoQueue: DocumentosConversaoQueueService,
   ) {}
 
   // ============================================
@@ -303,6 +305,13 @@ export class ProvaController {
       // Upload para MinIO
       const uploadResult = await this.storageService.uploadFile(data);
 
+      // Verificar se o documento precisa de conversão para PDF (DOC/DOCX)
+      const isWord =
+        data.mimetype?.includes("word") ||
+        data.mimetype?.includes("msword") ||
+        data.filename?.match(/\.docx?$/i);
+      const previewStatus = isWord ? "PENDENTE" : undefined;
+
       // Salvar documento no banco via service
       const documento = await this.provaService.adicionarDocumentoUpload(
         provaId,
@@ -313,8 +322,24 @@ export class ProvaController {
           fileUrl: uploadResult.url,
           fileSize: buffer.length,
           mimeType: data.mimetype,
+          previewStatus: previewStatus as "PENDENTE" | undefined,
         },
       );
+
+      // Enfileirar conversão DOC/DOCX → PDF para o worker
+      if (isWord && documento.id) {
+        await this.conversaoQueue.enfileirar({
+          documentoId: documento.id,
+          planoId: provaId,
+          storageKey: uploadResult.key,
+          mimeType: data.mimetype,
+          fileName: uploadResult.name,
+          tabela: "prova_documento",
+        });
+        this.logger.log(
+          `Documento ${documento.id} enfileirado para conversão (prova_documento)`,
+        );
+      }
 
       return {
         success: true,
