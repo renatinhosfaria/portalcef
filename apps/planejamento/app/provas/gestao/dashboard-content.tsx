@@ -19,6 +19,7 @@ import { Skeleton } from "@essencia/ui/components/skeleton";
 import { cn } from "@essencia/ui/lib/utils";
 import {
   AlertCircle,
+  CalendarClock,
   CheckCircle2,
   ClipboardCheck,
   Clock,
@@ -28,6 +29,7 @@ import {
   Send,
   Users,
 } from "lucide-react";
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useProvaDashboard } from "../../../features/prova";
@@ -329,6 +331,12 @@ export function DashboardProvasContent() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <Link href="/provas/gestao/ciclos">
+            <Button variant="outline" className="gap-2">
+              <CalendarClock className="h-4 w-4" />
+              Configurar Prazos
+            </Button>
+          </Link>
           <Button
             variant="outline"
             onClick={handleRefresh}
