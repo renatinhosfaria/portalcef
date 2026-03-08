@@ -10,17 +10,36 @@ import {
 import { useState } from "react";
 
 import { TarefasGrid } from "@/features/tarefas-list/components/tarefas-grid";
+import {
+  TarefasFiltros,
+  type FiltrosAtivos,
+} from "@/features/tarefas-list/components/tarefas-filtros";
+import { TarefasPaginacao } from "@/features/tarefas-list/components/tarefas-paginacao";
 import { useTarefas } from "@/features/tarefas-list/hooks/use-tarefas";
 
 type TipoFiltro = "atribuidas" | "criadas" | "todas";
 
 export function DashboardContent() {
   const [tipo, setTipo] = useState<TipoFiltro>("todas");
+  const [filtros, setFiltros] = useState<FiltrosAtivos>({});
+  const [page, setPage] = useState(1);
 
-  const { tarefas, stats, isLoading, concluir } = useTarefas({
-    status: "PENDENTE",
+  const { tarefas, stats, paginacao, isLoading, concluir } = useTarefas({
     tipo,
+    page,
+    limit: 20,
+    ...filtros,
   });
+
+  const handleFiltrosChange = (novosFiltros: FiltrosAtivos) => {
+    setFiltros(novosFiltros);
+    setPage(1);
+  };
+
+  const handleTipoChange = (novoTipo: TipoFiltro) => {
+    setTipo(novoTipo);
+    setPage(1);
+  };
 
   if (isLoading) {
     return (
@@ -86,32 +105,48 @@ export function DashboardContent() {
       </div>
 
       {/* Filtros Section */}
-      <div className="flex items-center gap-2 border-b pb-4">
-        <Button
-          variant={tipo === "todas" ? "default" : "outline"}
-          size="sm"
-          onClick={() => setTipo("todas")}
-        >
-          Todas
-        </Button>
-        <Button
-          variant={tipo === "atribuidas" ? "default" : "outline"}
-          size="sm"
-          onClick={() => setTipo("atribuidas")}
-        >
-          Minhas Tarefas
-        </Button>
-        <Button
-          variant={tipo === "criadas" ? "default" : "outline"}
-          size="sm"
-          onClick={() => setTipo("criadas")}
-        >
-          Criadas por Mim
-        </Button>
+      <div className="space-y-3">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            variant={tipo === "todas" ? "default" : "outline"}
+            size="sm"
+            onClick={() => handleTipoChange("todas")}
+          >
+            Todas
+          </Button>
+          <Button
+            variant={tipo === "atribuidas" ? "default" : "outline"}
+            size="sm"
+            onClick={() => handleTipoChange("atribuidas")}
+          >
+            Minhas Tarefas
+          </Button>
+          <Button
+            variant={tipo === "criadas" ? "default" : "outline"}
+            size="sm"
+            onClick={() => handleTipoChange("criadas")}
+          >
+            Criadas por Mim
+          </Button>
+          <div className="ml-auto">
+            <TarefasFiltros filtros={filtros} onChange={handleFiltrosChange} />
+          </div>
+        </div>
       </div>
 
       {/* Grid de Tarefas */}
       <TarefasGrid tarefas={tarefas} onConcluir={concluir} />
+
+      {/* Paginação */}
+      {paginacao && (
+        <TarefasPaginacao
+          paginaAtual={paginacao.page}
+          totalPaginas={paginacao.totalPages}
+          total={paginacao.total}
+          limit={paginacao.limit}
+          onPageChange={setPage}
+        />
+      )}
     </div>
   );
 }
