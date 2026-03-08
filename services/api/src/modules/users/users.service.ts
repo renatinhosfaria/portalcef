@@ -261,6 +261,35 @@ export class UsersService {
     return updated;
   }
 
+  async buscarParaAtribuicao(params: {
+    schoolId: string;
+    busca?: string;
+    roles?: string[];
+  }): Promise<{ id: string; nome: string; role: string }[]> {
+    const db = getDb();
+    const conditions = [eq(usersTable.schoolId, params.schoolId)];
+    const resultado: { id: string; name: string; role: string }[] =
+      await db.query.users.findMany({
+        columns: { id: true, name: true, role: true },
+        where: and(...conditions),
+        orderBy: [asc(usersTable.name)],
+      });
+    return resultado
+      .filter((u: { id: string; name: string; role: string }) => {
+        const matchRole =
+          !params.roles?.length || params.roles.includes(u.role);
+        const matchBusca =
+          !params.busca ||
+          u.name.toLowerCase().includes(params.busca.toLowerCase());
+        return matchRole && matchBusca;
+      })
+      .map((u: { id: string; name: string; role: string }) => ({
+        id: u.id,
+        nome: u.name,
+        role: u.role,
+      }));
+  }
+
   async delete(id: string, currentUser: CurrentUser): Promise<void> {
     const db = getDb();
 
