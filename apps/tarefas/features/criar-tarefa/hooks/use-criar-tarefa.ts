@@ -11,13 +11,13 @@ export interface CriarTarefaData {
   prioridade: "ALTA" | "MEDIA" | "BAIXA";
   prazo: string;
   responsavel: string;
-  contextos: {
+  contextos: Array<{
     modulo: string;
     quinzenaId?: string;
     etapaId?: string;
     turmaId?: string;
     professoraId?: string;
-  };
+  }>;
 }
 
 export function useCriarTarefa() {
