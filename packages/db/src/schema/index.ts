@@ -16,3 +16,7 @@ export * from "./users.js";
 export * from "./turmas-relations";
 export * from "./quinzena-documents.js";
 export * from "./plano-aula-periodo.js";
+export * from "./suporte.js";
+export * from "./prova-ciclo.js";
+export * from "./prova.js";
+export * from "./prova-historico.js";

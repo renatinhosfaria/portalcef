@@ -241,6 +241,36 @@ export class UsersService {
     return updated;
   }
 
+  /**
+   * Busca usuários para atribuição em tarefas
+   * Filtra por nome e roles elegíveis
+   */
+  async buscarParaAtribuicao(params: {
+    schoolId: string;
+    busca?: string;
+    roles?: string[];
+  }): Promise<{ id: string; nome: string; role: string }[]> {
+    const db = getDb();
+
+    const resultado: { id: string; name: string; role: string }[] =
+      await db.query.users.findMany({
+        columns: { id: true, name: true, role: true },
+        where: eq(usersTable.schoolId, params.schoolId),
+        orderBy: [asc(usersTable.name)],
+      });
+
+    return resultado
+      .filter((u) => {
+        const matchRole =
+          !params.roles?.length || params.roles.includes(u.role);
+        const matchBusca =
+          !params.busca ||
+          u.name.toLowerCase().includes(params.busca.toLowerCase());
+        return matchRole && matchBusca;
+      })
+      .map((u) => ({ id: u.id, nome: u.name, role: u.role }));
+  }
+
   async delete(id: string, currentUser: CurrentUser): Promise<void> {
     const db = getDb();
 

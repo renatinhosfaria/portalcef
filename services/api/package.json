@@ -18,7 +18,8 @@
     "test:cov": "jest --coverage --passWithNoTests"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.958.0",
+    "@aws-sdk/client-s3": "^3.997.0",
+    "@aws-sdk/s3-request-presigner": "^3.997.0",
     "@essencia/db": "workspace:*",
     "@essencia/shared": "workspace:*",
     "@fastify/cookie": "^9.4.0",
@@ -36,6 +37,7 @@
     "class-validator": "^0.14.3",
     "fastify": "^4.28.1",
     "ioredis": "^5.4.2",
+    "jsonwebtoken": "^9.0.3",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "stripe": "^20.1.2",
@@ -49,6 +51,7 @@
     "@types/bcrypt": "^5.0.2",
     "@types/express": "^5.0.6",
     "@types/jest": "^30.0.0",
+    "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^22.10.2",
     "jest": "^29.7.0",
     "ts-jest": "^29.2.5",

@@ -9,6 +9,7 @@ import {
 } from "@nestjs/platform-fastify";
 import type { FastifyPluginCallback } from "fastify";
 
+import { IoAdapter } from "@nestjs/platform-socket.io";
 import { AppModule } from "./app.module";
 import { ApiExceptionFilter } from "./common/filters/api-exception.filter";
 import { LoggingInterceptor } from "./common/interceptors/logging.interceptor";
@@ -19,9 +20,12 @@ async function bootstrap() {
     AppModule,
     new FastifyAdapter({
       logger: true,
-      bodyLimit: 50 * 1024 * 1024, // 50MB body limit for file uploads
+      bodyLimit: 100 * 1024 * 1024, // 100MB body limit for file uploads
     }),
   );
+
+  // Configurar WebSocket adapter (Socket.IO)
+  app.useWebSocketAdapter(new IoAdapter(app));
 
   app.useGlobalFilters(new ApiExceptionFilter());
 
@@ -56,7 +60,7 @@ async function bootstrap() {
       fieldNameSize: 100, // Max field name size in bytes
       fieldSize: 1000000, // Max field value size in bytes (1MB)
       fields: 10, // Max number of non-file fields
-      fileSize: 50 * 1024 * 1024, // 50MB max file size
+      fileSize: 100 * 1024 * 1024, // 100MB max file size
       files: 5, // Max number of file fields
       headerPairs: 2000, // Max number of header key=>value pairs
     },

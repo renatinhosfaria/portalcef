@@ -237,19 +237,11 @@ export function RevisaoContent({ planoId }: RevisaoContentProps) {
    */
   const handleUploadDocumento = useCallback(
     async (file: File) => {
-      if (!plano) return;
-      try {
-        await uploadDocumento(plano.id, file);
-        await refetch();
-        setSuccessMessage("Documento enviado com sucesso!");
-        setTimeout(() => setSuccessMessage(null), 3000);
-      } catch (err) {
-        const message =
-          err instanceof Error ? err.message : "Erro ao enviar documento";
-        setActionError(message);
-      }
+      if (!plano) throw new Error("Plano não encontrado");
+
+      return await uploadDocumento(plano.id, file);
     },
-    [plano, uploadDocumento, refetch],
+    [plano, uploadDocumento],
   );
 
   /**
@@ -571,6 +563,7 @@ export function RevisaoContent({ planoId }: RevisaoContentProps) {
                 <DocumentoUpload
                   onUpload={handleUploadDocumento}
                   onAddLink={handleAddLink}
+                  onAllUploadsComplete={refetch}
                   disabled={!plano}
                 />
               </div>

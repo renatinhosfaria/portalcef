@@ -11,6 +11,7 @@ import {
   Param,
   Post,
   Put,
+  Query,
   UseGuards,
 } from "@nestjs/common";
 
@@ -88,6 +89,48 @@ export class UsersController {
       success: true,
       data,
     };
+  }
+
+  @Get("buscar")
+  @Roles(
+    "master",
+    "diretora_geral",
+    "gerente_unidade",
+    "coordenadora_geral",
+    "coordenadora_bercario",
+    "coordenadora_infantil",
+    "coordenadora_fundamental_i",
+    "coordenadora_fundamental_ii",
+    "coordenadora_medio",
+    "analista_pedagogico",
+    "professora",
+    "auxiliar_sala",
+  )
+  async buscarParaAtribuicao(
+    @CurrentUser()
+    currentUser: {
+      userId: string;
+      role: string;
+      schoolId: string;
+      unitId: string;
+      stageId: string | null;
+    },
+    @Query("busca") busca?: string,
+    @Query("roles") rolesParam?: string,
+  ) {
+    if (!currentUser.schoolId) {
+      return {
+        success: false,
+        error: { code: "FORBIDDEN", message: "Escola não encontrada" },
+      };
+    }
+    const roles = rolesParam ? rolesParam.split(",") : undefined;
+    const resultado = await this.usersService.buscarParaAtribuicao({
+      schoolId: currentUser.schoolId,
+      busca,
+      roles,
+    });
+    return { success: true, data: resultado };
   }
 
   @Get(":id")

@@ -14,12 +14,12 @@ import {
   Req,
   UseGuards,
 } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { FastifyRequest } from "fastify";
 
 import { Roles } from "../../common/decorators/roles.decorator";
 import { AuthGuard } from "../../common/guards/auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
-import { DocumentosConversaoQueueService } from "../../common/queues/documentos-conversao.queue";
 import { StorageService } from "../../common/storage/storage.service";
 import {
   type AddComentarioDto,
@@ -101,7 +101,7 @@ export class PlanoAulaController {
     private readonly planoAulaService: PlanoAulaService,
     private readonly storageService: StorageService,
     private readonly historicoService: PlanoAulaHistoricoService,
-    private readonly documentosConversaoQueue: DocumentosConversaoQueueService,
+    private readonly configService: ConfigService,
   ) {}
 
   // ============================================
@@ -211,6 +211,23 @@ export class PlanoAulaController {
   }
 
   /**
+   * POST /plano-aula/:id/recuperar
+   * Recupera plano submetido antes da análise ser iniciada
+   */
+  @Post(":id/recuperar")
+  @Roles(...PROFESSORA_ACCESS)
+  async recuperarPlano(
+    @Req() req: { user: UserContext },
+    @Param("id") id: string,
+  ) {
+    const plano = await this.planoAulaService.recuperarPlano(req.user, id);
+    return {
+      success: true,
+      data: plano,
+    };
+  }
+
+  /**
    * POST /plano-aula/:id/documentos/upload
    * Upload de arquivo para o plano (multipart/form-data)
    */
@@ -275,13 +292,13 @@ export class PlanoAulaController {
       });
     }
 
-    // Validar tamanho (10MB max)
-    const MAX_SIZE = 10 * 1024 * 1024;
+    // Validar tamanho (100MB max)
+    const MAX_SIZE = 100 * 1024 * 1024; // 100MB
     const buffer = await data.toBuffer();
     if (buffer.length > MAX_SIZE) {
       throw new BadRequestException({
         code: "FILE_TOO_LARGE",
-        message: "Arquivo muito grande. Tamanho máximo: 10MB",
+        message: "Arquivo muito grande. Tamanho máximo: 100MB",
       });
     }
 
@@ -289,13 +306,8 @@ export class PlanoAulaController {
       // Upload para MinIO
       const uploadResult = await this.storageService.uploadFile(data);
 
-      // Verificar se precisa converter (DOC/DOCX)
-      const precisaConverter = [
-        "application/msword",
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      ].includes(data.mimetype);
-
       // Salvar documento no banco via service
+      // Conversão doc→PDF desabilitada (OnlyOffice é usado para visualização/edição)
       const documento = await this.planoAulaService.adicionarDocumentoUpload(
         planoId,
         {
@@ -305,20 +317,8 @@ export class PlanoAulaController {
           fileUrl: uploadResult.url,
           fileSize: buffer.length,
           mimeType: data.mimetype,
-          previewStatus: precisaConverter ? "PENDENTE" : undefined,
         },
       );
-
-      // Enfileirar conversão assíncrona se necessário
-      if (precisaConverter) {
-        await this.documentosConversaoQueue.enfileirar({
-          documentoId: documento.id,
-          planoId,
-          storageKey: uploadResult.key,
-          mimeType: data.mimetype,
-          fileName: uploadResult.name,
-        });
-      }
 
       return {
         success: true,
@@ -333,6 +333,165 @@ export class PlanoAulaController {
         message: "Erro ao fazer upload do arquivo",
       });
     }
+  }
+
+  /**
+   * GET /plano-aula/:id/documentos/:docId/editor-config
+   * Retorna configuração do OnlyOffice para abrir o editor
+   */
+  @Get(":id/documentos/:docId/editor-config")
+  @Roles(...VISUALIZAR_ACCESS)
+  async getEditorConfig(
+    @Req() req: { user: UserContext },
+    @Param("id") planoId: string,
+    @Param("docId") docId: string,
+    @Query("mode") mode: string = "view",
+  ) {
+    if (mode !== "edit" && mode !== "view") {
+      throw new BadRequestException("Mode deve ser 'edit' ou 'view'");
+    }
+
+    const documento = await this.planoAulaService.getDocumentoById(planoId, docId);
+
+    if (!documento.storageKey) {
+      throw new BadRequestException("Documento sem arquivo associado");
+    }
+
+    const isWord =
+      documento.mimeType?.includes("word") ||
+      documento.mimeType?.includes("msword");
+    if (!isWord) {
+      throw new BadRequestException(
+        "Apenas documentos .doc/.docx podem ser abertos no editor",
+      );
+    }
+
+    const fileUrl = await this.storageService.getPresignedUrl(
+      documento.storageKey,
+      3600,
+    );
+
+    const onlyofficeUrl =
+      this.configService.get<string>("ONLYOFFICE_PUBLIC_URL") ||
+      "https://www.portalcef.com.br/onlyoffice";
+    const jwtSecret = this.configService.get<string>("ONLYOFFICE_JWT_SECRET");
+
+    const apiBaseUrl =
+      this.configService.get<string>("NEXT_PUBLIC_API_URL") ||
+      "https://www.portalcef.com.br/api";
+    const callbackUrl = `${apiBaseUrl}/plano-aula/${planoId}/documentos/${docId}/onlyoffice-callback`;
+
+    const config = {
+      document: {
+        fileType: documento.fileName?.endsWith(".doc") ? "doc" : "docx",
+        key: `${docId}-${documento.updatedAt ? new Date(documento.updatedAt).getTime() : Date.now()}`,
+        title: documento.fileName || "Documento",
+        url: fileUrl,
+      },
+      documentType: "word",
+      editorConfig: {
+        mode: mode,
+        lang: "pt",
+        callbackUrl: mode === "edit" ? callbackUrl : undefined,
+        customization: {
+          autosave: true,
+          forcesave: true,
+        },
+        user: {
+          id: req.user.userId,
+          name: "Usuário",
+        },
+      },
+    };
+
+    let token: string | undefined;
+    if (jwtSecret) {
+      const jwt = await import("jsonwebtoken");
+      token = jwt.default.sign(config, jwtSecret);
+    }
+
+    return {
+      success: true,
+      data: {
+        documentServerUrl: onlyofficeUrl,
+        config: { ...config, token },
+      },
+    };
+  }
+
+  /**
+   * POST /plano-aula/:id/documentos/:docId/onlyoffice-callback
+   * Recebe callback do OnlyOffice após salvamento (server-to-server, sem sessão)
+   */
+  @Post(":id/documentos/:docId/onlyoffice-callback")
+  @UseGuards() // Sobrescreve AuthGuard/RolesGuard do controller — autenticação via JWT do OnlyOffice
+  async onlyofficeCallback(
+    @Req() req: FastifyRequest,
+    @Param("id") planoId: string,
+    @Param("docId") docId: string,
+    @Body() body: { status: number; url?: string; key?: string },
+  ) {
+    // Validar JWT do OnlyOffice no header Authorization
+    const jwtSecret = this.configService.get<string>("ONLYOFFICE_JWT_SECRET");
+    if (jwtSecret) {
+      const authHeader = req.headers.authorization;
+      if (!authHeader) {
+        this.logger.warn("OnlyOffice callback sem header Authorization");
+        return { error: 1 };
+      }
+      try {
+        const jwt = await import("jsonwebtoken");
+        const token = authHeader.replace("Bearer ", "");
+        jwt.default.verify(token, jwtSecret);
+      } catch {
+        this.logger.warn("OnlyOffice callback com JWT inválido");
+        return { error: 1 };
+      }
+    }
+
+    // Status codes do OnlyOffice:
+    // 0 - sem alteração, 1 - editando, 2 - pronto para salvar
+    // 3 - erro, 4 - fechado sem mudanças, 6 - forcesave, 7 - erro forcesave
+    if (body.status === 2 || body.status === 6) {
+      if (!body.url) {
+        this.logger.warn(`OnlyOffice callback sem URL para doc ${docId}`);
+        return { error: 0 };
+      }
+
+      try {
+        const documento = await this.planoAulaService.getDocumentoById(
+          planoId,
+          docId,
+        );
+
+        const response = await fetch(body.url);
+        if (!response.ok) {
+          throw new Error(
+            `Falha ao baixar documento do OnlyOffice: ${response.status}`,
+          );
+        }
+        const buffer = Buffer.from(await response.arrayBuffer());
+
+        await this.storageService.replaceFile(
+          documento.storageKey!,
+          buffer,
+          documento.mimeType ||
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          documento.fileName || "documento.docx",
+        );
+
+        await this.planoAulaService.atualizarDocumento(docId, {
+          fileSize: buffer.length,
+          updatedAt: new Date(),
+        });
+
+        this.logger.log(`Documento ${docId} atualizado via OnlyOffice`);
+      } catch (error) {
+        this.logger.error(`Erro ao salvar callback OnlyOffice: ${error}`);
+      }
+    }
+
+    return { error: 0 };
   }
 
   /**

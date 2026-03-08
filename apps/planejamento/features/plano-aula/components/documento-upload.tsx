@@ -2,8 +2,8 @@
 
 /**
  * DocumentoUpload Component
- * Componente de upload de arquivos e links do YouTube para planos de aula
- * Task 3.2: Criar componentes de upload e lista de documentos
+ * Componente de upload múltiplo de arquivos e links do YouTube para planos de aula
+ * Suporta fila de uploads com progresso individual e retentativas automáticas
  */
 
 import { Button } from "@essencia/ui/components/button";
@@ -11,17 +11,32 @@ import { Input } from "@essencia/ui/components/input";
 import { cn } from "@essencia/ui/lib/utils";
 import {
   AlertCircle,
+  CheckCircle2,
   Link,
   Loader2,
+  RotateCcw,
   Upload,
   UploadCloud,
   X,
 } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+
+import type { PlanoDocumento } from "../types";
+
+type FileUploadStatus = "pendente" | "enviando" | "sucesso" | "erro";
+
+interface FileUploadItem {
+  id: string;
+  file: File;
+  status: FileUploadStatus;
+  tentativas: number;
+  erro?: string;
+}
 
 interface DocumentoUploadProps {
-  onUpload: (file: File) => void | Promise<void>;
+  onUpload: (file: File) => Promise<PlanoDocumento>;
   onAddLink: (url: string) => void | Promise<void>;
+  onAllUploadsComplete?: () => void;
   disabled?: boolean;
 }
 
@@ -40,34 +55,55 @@ const ACCEPTED_FILE_TYPES = {
 };
 
 const ACCEPTED_EXTENSIONS = ".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg";
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
+const MAX_UPLOADS_SIMULTANEOS = 10;
+const MAX_TENTATIVAS = 5;
+const TEMPO_REMOVER_SUCESSO = 2000;
+
+function gerarId(): string {
+  return `upload-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function validateFile(file: File): string | null {
+  const acceptedTypes = Object.keys(ACCEPTED_FILE_TYPES);
+  if (!acceptedTypes.includes(file.type)) {
+    return "Tipo de arquivo não permitido. Use PDF, DOC, DOCX, XLS, XLSX, PNG ou JPG.";
+  }
+  if (file.size > MAX_FILE_SIZE) {
+    return "Arquivo muito grande. Tamanho máximo: 100MB.";
+  }
+  return null;
+}
+
+/** Truncar nome do arquivo para exibição */
+function truncarNome(nome: string, maxLength = 30): string {
+  if (nome.length <= maxLength) return nome;
+  const dotIndex = nome.lastIndexOf(".");
+  const extensao = dotIndex !== -1 ? nome.slice(dotIndex) : "";
+  const nomeBase = dotIndex !== -1 ? nome.slice(0, dotIndex) : nome;
+  const maxBase = Math.max(1, maxLength - extensao.length - 3);
+  return `${nomeBase.slice(0, maxBase)}...${extensao}`;
+}
 
 export function DocumentoUpload({
   onUpload,
   onAddLink,
+  onAllUploadsComplete,
   disabled = false,
 }: DocumentoUploadProps) {
-  const [isUploading, setIsUploading] = useState(false);
+  const [uploadQueue, setUploadQueue] = useState<FileUploadItem[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showLinkInput, setShowLinkInput] = useState(false);
   const [linkUrl, setLinkUrl] = useState("");
   const [isAddingLink, setIsAddingLink] = useState(false);
 
-  const validateFile = (file: File): string | null => {
-    // Validar tipo
-    const acceptedTypes = Object.keys(ACCEPTED_FILE_TYPES);
-    if (!acceptedTypes.includes(file.type)) {
-      return "Tipo de arquivo nao permitido. Use PDF, DOC, DOCX, XLS, XLSX, PNG ou JPG.";
-    }
+  // Ref para rastrear itens que já estão sendo processados (evita re-processamento)
+  const processandoRef = useRef<Set<string>>(new Set());
 
-    // Validar tamanho
-    if (file.size > MAX_FILE_SIZE) {
-      return "Arquivo muito grande. Tamanho maximo: 10MB.";
-    }
-
-    return null;
-  };
+  const isUploading = uploadQueue.some(
+    (i) => i.status === "enviando" || i.status === "pendente",
+  );
 
   const validateYouTubeUrl = (url: string): boolean => {
     const youtubeRegex =
@@ -75,33 +111,141 @@ export function DocumentoUpload({
     return youtubeRegex.test(url);
   };
 
-  const uploadFile = useCallback(
-    async (file: File) => {
+  const adicionarArquivosNaFila = useCallback((files: File[]) => {
+    setError(null);
+    const novosItens: FileUploadItem[] = [];
+    const errosValidacao: string[] = [];
+
+    for (const file of files) {
       const validationError = validateFile(file);
       if (validationError) {
-        setError(validationError);
-        return;
+        errosValidacao.push(`${file.name}: ${validationError}`);
+      } else {
+        novosItens.push({
+          id: gerarId(),
+          file,
+          status: "pendente",
+          tentativas: 0,
+        });
       }
+    }
 
-      setIsUploading(true);
-      setError(null);
+    if (errosValidacao.length > 0) {
+      setError(errosValidacao.join("\n"));
+    }
+
+    if (novosItens.length > 0) {
+      setUploadQueue((prev) => [...prev, ...novosItens]);
+    }
+  }, []);
+
+  const processarUpload = useCallback(
+    async (item: FileUploadItem) => {
+      // Marcar como enviando
+      setUploadQueue((prev) =>
+        prev.map((i) =>
+          i.id === item.id ? { ...i, status: "enviando" as const } : i,
+        ),
+      );
 
       try {
-        await onUpload(file);
+        await onUpload(item.file);
+
+        // Marcar como sucesso
+        setUploadQueue((prev) =>
+          prev.map((i) =>
+            i.id === item.id ? { ...i, status: "sucesso" as const } : i,
+          ),
+        );
+
+        // Remover item de sucesso após delay
+        setTimeout(() => {
+          setUploadQueue((prev) => prev.filter((i) => i.id !== item.id));
+        }, TEMPO_REMOVER_SUCESSO);
       } catch (err) {
-        console.error("Upload failed:", err);
-        setError("Erro ao enviar arquivo. Tente novamente.");
+        const novaTentativa = item.tentativas + 1;
+
+        if (novaTentativa < MAX_TENTATIVAS) {
+          // Recolocar como pendente para nova tentativa
+          setUploadQueue((prev) =>
+            prev.map((i) =>
+              i.id === item.id
+                ? {
+                    ...i,
+                    status: "pendente" as const,
+                    tentativas: novaTentativa,
+                  }
+                : i,
+            ),
+          );
+        } else {
+          // Marcar como erro definitivo
+          setUploadQueue((prev) =>
+            prev.map((i) =>
+              i.id === item.id
+                ? {
+                    ...i,
+                    status: "erro" as const,
+                    tentativas: novaTentativa,
+                    erro: "Erro ao enviar arquivo. Tente novamente.",
+                  }
+                : i,
+            ),
+          );
+        }
       } finally {
-        setIsUploading(false);
+        processandoRef.current.delete(item.id);
       }
     },
     [onUpload],
   );
 
+  // Processar fila de uploads
+  useEffect(() => {
+    const enviando = uploadQueue.filter((i) => i.status === "enviando").length;
+    const pendentes = uploadQueue.filter((i) => i.status === "pendente");
+
+    const vagasDisponiveis = MAX_UPLOADS_SIMULTANEOS - enviando;
+
+    const proximosParaProcessar = pendentes.slice(0, vagasDisponiveis);
+    for (const item of proximosParaProcessar) {
+      // Evitar processar o mesmo item duas vezes
+      if (!processandoRef.current.has(item.id)) {
+        processandoRef.current.add(item.id);
+        processarUpload(item);
+      }
+    }
+  }, [uploadQueue, processarUpload]);
+
+  // Chamar onAllUploadsComplete quando todos finalizarem e pelo menos um teve sucesso
+  useEffect(() => {
+    if (uploadQueue.length === 0) return;
+
+    const todosFinalizados = uploadQueue.every(
+      (i) => i.status === "sucesso" || i.status === "erro",
+    );
+    const algumSucesso = uploadQueue.some((i) => i.status === "sucesso");
+
+    if (todosFinalizados && algumSucesso && onAllUploadsComplete) {
+      onAllUploadsComplete();
+    }
+  }, [uploadQueue, onAllUploadsComplete]);
+
+  const handleRetry = useCallback((itemId: string) => {
+    processandoRef.current.delete(itemId);
+    setUploadQueue((prev) =>
+      prev.map((i) =>
+        i.id === itemId
+          ? { ...i, status: "pendente" as const, tentativas: 0, erro: undefined }
+          : i,
+      ),
+    );
+  }, []);
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      uploadFile(file);
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      adicionarArquivosNaFila(Array.from(files));
     }
     // Reset input para permitir selecionar o mesmo arquivo novamente
     e.target.value = "";
@@ -125,9 +269,9 @@ export function DocumentoUpload({
 
     if (disabled) return;
 
-    const file = e.dataTransfer.files[0];
-    if (file) {
-      uploadFile(file);
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+      adicionarArquivosNaFila(Array.from(files));
     }
   };
 
@@ -169,15 +313,16 @@ export function DocumentoUpload({
           isDragging
             ? "border-primary bg-primary/5"
             : "border-muted-foreground/25 hover:border-primary/50 hover:bg-muted/30",
-          (isUploading || disabled) && "pointer-events-none opacity-60",
+          disabled && "pointer-events-none opacity-60",
           !disabled && "cursor-pointer",
         )}
       >
         <input
           type="file"
+          multiple
           className="absolute inset-0 cursor-pointer opacity-0"
           onChange={handleFileChange}
-          disabled={isUploading || disabled}
+          disabled={disabled}
           accept={ACCEPTED_EXTENSIONS}
         />
 
@@ -201,15 +346,73 @@ export function DocumentoUpload({
 
         <p className="text-sm font-medium text-center">
           {isDragging
-            ? "Solte o arquivo aqui"
+            ? "Solte os arquivos aqui"
             : isUploading
               ? "Enviando..."
-              : "Arraste um arquivo ou clique para selecionar"}
+              : "Arraste arquivos ou clique para selecionar"}
         </p>
         <p className="text-xs text-muted-foreground mt-1">
-          PDF, DOC, DOCX, XLS, XLSX, PNG, JPG (max. 10MB)
+          PDF, DOC, DOCX, XLS, XLSX, PNG, JPG (max. 100MB)
         </p>
       </div>
+
+      {/* Lista de progresso dos uploads */}
+      {uploadQueue.length > 0 && (
+        <div className="space-y-2">
+          {uploadQueue.map((item) => (
+            <div
+              key={item.id}
+              className={cn(
+                "flex items-center gap-3 rounded-md px-3 py-2 text-sm",
+                item.status === "enviando" && "bg-blue-50 text-blue-700",
+                item.status === "sucesso" && "bg-green-50 text-green-700",
+                item.status === "pendente" && "bg-muted",
+                item.status === "erro" && "bg-destructive/10 text-destructive",
+              )}
+            >
+              {/* Ícone de status */}
+              {item.status === "enviando" && (
+                <Loader2 className="h-4 w-4 flex-shrink-0 animate-spin" />
+              )}
+              {item.status === "sucesso" && (
+                <CheckCircle2 className="h-4 w-4 flex-shrink-0" />
+              )}
+              {item.status === "pendente" && (
+                <Upload className="h-4 w-4 flex-shrink-0" />
+              )}
+              {item.status === "erro" && (
+                <AlertCircle className="h-4 w-4 flex-shrink-0" />
+              )}
+
+              {/* Nome do arquivo */}
+              <span className="flex-1 truncate" title={item.file.name}>
+                {truncarNome(item.file.name)}
+              </span>
+
+              {/* Texto de status */}
+              <span className="text-xs flex-shrink-0">
+                {item.status === "enviando" && "Enviando..."}
+                {item.status === "sucesso" && "Enviado"}
+                {item.status === "pendente" && "Aguardando"}
+                {item.status === "erro" && (item.erro || "Erro")}
+              </span>
+
+              {/* Botão de retentativa para itens com erro de upload (não validação) */}
+              {item.status === "erro" && item.tentativas > 0 && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 px-2 text-destructive hover:text-destructive"
+                  onClick={() => handleRetry(item.id)}
+                >
+                  <RotateCcw className="h-3 w-3" />
+                </Button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Action Buttons */}
       <div className="flex gap-2">
@@ -217,14 +420,17 @@ export function DocumentoUpload({
           type="button"
           variant="outline"
           size="sm"
-          disabled={disabled || isUploading}
+          disabled={disabled}
           onClick={() => {
             const input = document.createElement("input");
             input.type = "file";
+            input.multiple = true;
             input.accept = ACCEPTED_EXTENSIONS;
             input.onchange = (e) => {
-              const file = (e.target as HTMLInputElement).files?.[0];
-              if (file) uploadFile(file);
+              const files = (e.target as HTMLInputElement).files;
+              if (files && files.length > 0) {
+                adicionarArquivosNaFila(Array.from(files));
+              }
             };
             input.click();
           }}

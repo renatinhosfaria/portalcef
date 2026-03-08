@@ -9,16 +9,26 @@ import type {
 } from "@essencia/shared/types";
 import { apiGet, apiPatch } from "../../../lib/api";
 
+export interface Paginacao {
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
 export interface UseTarefasParams {
   status?: TarefaStatus;
   prioridade?: TarefaPrioridade;
   modulo?: string;
   quinzenaId?: string;
   tipo?: "criadas" | "atribuidas" | "todas";
+  page?: number;
+  limit?: number;
 }
 
 export function useTarefas(params: UseTarefasParams = {}) {
   const [tarefas, setTarefas] = useState<TarefaEnriquecida[]>([]);
+  const [paginacao, setPaginacao] = useState<Paginacao | null>(null);
   const [stats, setStats] = useState<TarefaStats>({
     total: 0,
     pendentes: 0,
@@ -52,18 +62,36 @@ export function useTarefas(params: UseTarefasParams = {}) {
       if (params.tipo) {
         queryParams.append("tipo", params.tipo);
       }
+      if (params.page) {
+        queryParams.append("page", String(params.page));
+      }
+      if (params.limit) {
+        queryParams.append("limit", String(params.limit));
+      }
 
-      const response = await apiGet<{ data: TarefaEnriquecida[] }>(
-        `tarefas?${queryParams.toString()}`,
-      );
+      const response = await apiGet<{
+        data: TarefaEnriquecida[];
+        pagination: Paginacao;
+      }>(`tarefas?${queryParams.toString()}`);
 
       setTarefas(response.data);
+      if (response.pagination) {
+        setPaginacao(response.pagination);
+      }
     } catch (err) {
       setError(err instanceof Error ? err : new Error("Erro desconhecido"));
     } finally {
       setIsLoading(false);
     }
-  }, [params.status, params.prioridade, params.modulo, params.quinzenaId, params.tipo]);
+  }, [
+    params.status,
+    params.prioridade,
+    params.modulo,
+    params.quinzenaId,
+    params.tipo,
+    params.page,
+    params.limit,
+  ]);
 
   const fetchStats = useCallback(async () => {
     try {
@@ -81,7 +109,9 @@ export function useTarefas(params: UseTarefasParams = {}) {
         await fetchTarefas();
         await fetchStats();
       } catch (err) {
-        throw err instanceof Error ? err : new Error("Erro ao concluir tarefa");
+        throw err instanceof Error
+          ? err
+          : new Error("Erro ao concluir tarefa");
       }
     },
     [fetchTarefas, fetchStats],
@@ -95,6 +125,7 @@ export function useTarefas(params: UseTarefasParams = {}) {
   return {
     tarefas,
     stats,
+    paginacao,
     isLoading,
     error,
     refetch: fetchTarefas,

@@ -1,5 +1,5 @@
 import { Worker } from "bullmq";
-import { getDb, planoDocumento, eq } from "@essencia/db";
+import { getDb, planoDocumento, provaDocumento, eq } from "@essencia/db";
 import { createServer } from "node:http";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -8,12 +8,26 @@ import { join } from "node:path";
 import { converterDocParaPdf, normalizarNomeArquivo } from "./conversao/conversor";
 import { baixarArquivo, enviarPdf } from "./storage/minio-client";
 
+type TabelaDocumento = "plano_documento" | "prova_documento";
+
 interface ConversaoDocumentoJob {
   documentoId: string;
   planoId: string;
   storageKey: string;
   mimeType: string;
   fileName: string;
+  /** Tabela de origem do documento. Default: "plano_documento" (retrocompatível) */
+  tabela?: TabelaDocumento;
+}
+
+/**
+ * Retorna a referência da tabela Drizzle com base no nome da tabela.
+ */
+function getTabelaDocumento(tabela: TabelaDocumento) {
+  if (tabela === "prova_documento") {
+    return provaDocumento;
+  }
+  return planoDocumento;
 }
 
 const redisUrl = process.env.REDIS_URL ?? "redis://localhost:6379";
@@ -26,7 +40,11 @@ const worker = new Worker<ConversaoDocumentoJob>(
   "documentos-conversao",
   async (job) => {
     const { documentoId, storageKey, fileName } = job.data;
+    const tabela = job.data.tabela ?? "plano_documento";
+    const tabelaRef = getTabelaDocumento(tabela);
     const db = getDb();
+
+    console.log(`[worker] Processando documento ${documentoId} da tabela ${tabela}`);
 
     const pastaTemp = await mkdtemp(join(tmpdir(), "doc-conversao-"));
     const nomeSeguro = normalizarNomeArquivo(fileName, `${documentoId}.docx`);
@@ -41,7 +59,7 @@ const worker = new Worker<ConversaoDocumentoJob>(
       const preview = await enviarPdf(caminhoPdf, fileName);
 
       await db
-        .update(planoDocumento)
+        .update(tabelaRef)
         .set({
           previewKey: preview.key,
           previewUrl: preview.url,
@@ -50,16 +68,16 @@ const worker = new Worker<ConversaoDocumentoJob>(
           previewError: null,
           updatedAt: new Date(),
         })
-        .where(eq(planoDocumento.id, documentoId));
+        .where(eq(tabelaRef.id, documentoId));
     } catch (error) {
       await db
-        .update(planoDocumento)
+        .update(tabelaRef)
         .set({
           previewStatus: "ERRO",
           previewError: error instanceof Error ? error.message : String(error),
           updatedAt: new Date(),
         })
-        .where(eq(planoDocumento.id, documentoId));
+        .where(eq(tabelaRef.id, documentoId));
 
       throw error;
     } finally {

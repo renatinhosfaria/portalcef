@@ -1,71 +1,62 @@
 "use client";
 
+import { useTenant } from "@essencia/shared/providers/tenant";
 import { Button } from "@essencia/ui/components/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@essencia/ui/components/card";
-import { Input } from "@essencia/ui/components/input";
-import { Label } from "@essencia/ui/components/label";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@essencia/ui/components/select";
-import { Textarea } from "@essencia/ui/components/textarea";
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@essencia/ui/components/card";
 import { useState } from "react";
 
 import { useCriarTarefa } from "@/features/criar-tarefa/hooks/use-criar-tarefa";
+import {
+  TarefaFormFields,
+  type TarefaFormData,
+} from "@/features/criar-tarefa/components/tarefa-form-fields";
 
 export function CriarTarefaForm() {
+  const session = useTenant();
   const { criar, isLoading, error } = useCriarTarefa();
+  const bloqueadoProfessora = session.role === "professora";
 
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<TarefaFormData>({
     titulo: "",
     descricao: "",
-    prioridade: "MEDIA" as const,
+    prioridade: "MEDIA",
     prazo: "",
-    responsavel: "",
-    contextos: {
-      modulo: "planejamento",
-      quinzenaId: "",
-    },
+    responsavel: bloqueadoProfessora ? session.userId : "",
+    responsavelNome: bloqueadoProfessora ? session.name || "Você" : "",
+    quinzenaId: "",
   });
+
+  const handleChange = (field: keyof TarefaFormData, value: string) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     try {
       await criar({
-        ...formData,
+        titulo: formData.titulo,
+        descricao: formData.descricao,
         prioridade: formData.prioridade,
+        prazo: new Date(formData.prazo).toISOString(),
+        responsavel: formData.responsavel,
+        contextos: formData.quinzenaId
+          ? [
+              {
+                modulo: "PLANEJAMENTO" as const,
+                quinzenaId: formData.quinzenaId,
+              },
+            ]
+          : [],
       });
     } catch (err) {
-      // Error is already handled by the hook
       console.error("Erro ao criar tarefa:", err);
     }
-  };
-
-  const handleChange = (
-    field: string,
-    value: string,
-  ) => {
-    setFormData((prev) => ({
-      ...prev,
-      [field]: value,
-    }));
-  };
-
-  const handleContextChange = (
-    field: string,
-    value: string,
-  ) => {
-    setFormData((prev) => ({
-      ...prev,
-      contextos: {
-        ...prev.contextos,
-        [field]: value,
-      },
-    }));
   };
 
   return (
@@ -75,86 +66,17 @@ export function CriarTarefaForm() {
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <Label htmlFor="titulo">Título *</Label>
-            <Input
-              id="titulo"
-              value={formData.titulo}
-              onChange={(e) => handleChange("titulo", e.target.value)}
-              placeholder="Ex: Revisar plano da Turma Infantil II"
-              required
-            />
-          </div>
-
-          <div>
-            <Label htmlFor="descricao">Descrição</Label>
-            <Textarea
-              id="descricao"
-              value={formData.descricao}
-              onChange={(e) => handleChange("descricao", e.target.value)}
-              placeholder="Detalhes adicionais sobre a tarefa"
-              rows={4}
-            />
-          </div>
-
-          <div>
-            <Label htmlFor="prioridade">Prioridade *</Label>
-            <Select
-              value={formData.prioridade}
-              onValueChange={(value) => handleChange("prioridade", value)}
-            >
-              <SelectTrigger id="prioridade">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ALTA">Alta</SelectItem>
-                <SelectItem value="MEDIA">Média</SelectItem>
-                <SelectItem value="BAIXA">Baixa</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div>
-            <Label htmlFor="prazo">Prazo *</Label>
-            <Input
-              id="prazo"
-              type="datetime-local"
-              value={formData.prazo}
-              onChange={(e) => handleChange("prazo", e.target.value)}
-              required
-            />
-          </div>
-
-          <div>
-            <Label htmlFor="responsavel">Responsável (UUID) *</Label>
-            <Input
-              id="responsavel"
-              value={formData.responsavel}
-              onChange={(e) => handleChange("responsavel", e.target.value)}
-              placeholder="UUID do responsável"
-              required
-            />
-            <p className="text-sm text-muted-foreground mt-1">
-              TODO: Substituir por seletor de usuário
-            </p>
-          </div>
-
-          <div>
-            <Label htmlFor="quinzenaId">ID da Quinzena</Label>
-            <Input
-              id="quinzenaId"
-              value={formData.contextos.quinzenaId}
-              onChange={(e) => handleContextChange("quinzenaId", e.target.value)}
-              placeholder="UUID da quinzena (opcional)"
-            />
-          </div>
-
+          <TarefaFormFields
+            data={formData}
+            onChange={handleChange}
+            roleAtual={session.role}
+            bloqueadoProfessora={bloqueadoProfessora}
+          />
           {error && (
             <div className="text-sm text-destructive">
               Erro ao criar tarefa: {error.message}
             </div>
           )}
-
           <div className="flex gap-4 pt-4">
             <Button type="submit" disabled={isLoading}>
               {isLoading ? "Criando..." : "Criar Tarefa"}
