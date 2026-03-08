@@ -15,6 +15,7 @@ import {
   educationStages,
 } from "@essencia/db";
 import { TarefaHistoricoService } from "./tarefa-historico.service";
+import { TarefasGateway } from "./tarefas.gateway";
 import type {
   Tarefa,
   TarefaEnriquecida,
@@ -69,6 +70,7 @@ export class TarefasService {
   constructor(
     private readonly db: DatabaseService,
     private readonly historicoService: TarefaHistoricoService,
+    private readonly gateway: TarefasGateway,
   ) {}
 
   /**
@@ -248,7 +250,15 @@ export class TarefasService {
         acao: "CRIADA",
       });
 
-      return this.mapTarefaToDto(tarefaCriada);
+      const dto = this.mapTarefaToDto(tarefaCriada);
+
+      // Notificar responsável via WebSocket
+      this.gateway.emitirParaUsuario(params.responsavel, "tarefa:criada", dto);
+      if (params.criadoPor !== params.responsavel) {
+        this.gateway.emitirParaUsuario(params.criadoPor, "tarefa:criada", dto);
+      }
+
+      return dto;
     });
   }
 
@@ -462,7 +472,15 @@ export class TarefasService {
         });
       }
 
-      return this.mapTarefaToDto(tarefaAtualizada);
+      const dto = this.mapTarefaToDto(tarefaAtualizada);
+
+      // Notificar envolvidos via WebSocket
+      this.gateway.emitirParaUsuario(tarefaAtualizada.responsavel, "tarefa:atualizada", dto);
+      if (tarefaAtualizada.criadoPor !== tarefaAtualizada.responsavel) {
+        this.gateway.emitirParaUsuario(tarefaAtualizada.criadoPor, "tarefa:atualizada", dto);
+      }
+
+      return dto;
     });
   }
 
@@ -513,7 +531,15 @@ export class TarefasService {
         acao: "CANCELADA",
       });
 
-      return this.mapTarefaToDto(tarefaAtualizada);
+      const dto = this.mapTarefaToDto(tarefaAtualizada);
+
+      // Notificar envolvidos via WebSocket
+      this.gateway.emitirParaUsuario(tarefaAtualizada.responsavel, "tarefa:cancelada", dto);
+      if (tarefaAtualizada.criadoPor !== tarefaAtualizada.responsavel) {
+        this.gateway.emitirParaUsuario(tarefaAtualizada.criadoPor, "tarefa:cancelada", dto);
+      }
+
+      return dto;
     });
   }
 
@@ -572,7 +598,15 @@ export class TarefasService {
         acao: "CONCLUIDA",
       });
 
-      return this.mapTarefaToDto(tarefaAtualizada);
+      const dto = this.mapTarefaToDto(tarefaAtualizada);
+
+      // Notificar envolvidos via WebSocket
+      this.gateway.emitirParaUsuario(tarefaAtualizada.responsavel, "tarefa:concluida", dto);
+      if (tarefaAtualizada.criadoPor !== tarefaAtualizada.responsavel) {
+        this.gateway.emitirParaUsuario(tarefaAtualizada.criadoPor, "tarefa:concluida", dto);
+      }
+
+      return dto;
     });
   }
 

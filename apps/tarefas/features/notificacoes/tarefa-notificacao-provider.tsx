@@ -1,15 +1,24 @@
 "use client";
 
-import { useEffect, useState, type PropsWithChildren } from "react";
+import { useCallback, useEffect, useState, type PropsWithChildren } from "react";
 import { toast } from "@essencia/ui/components/toaster";
+import type { Tarefa } from "@essencia/shared/types";
 import { useTarefas } from "../tarefas-list/hooks/use-tarefas";
+import { useTarefasSocket } from "./hooks/use-tarefas-socket";
 import { isAtrasada } from "@/lib/prazo-utils";
+
+const LABELS_EVENTO: Record<string, { titulo: string; tipo: "success" | "info" | "error" }> = {
+  "tarefa:criada": { titulo: "Nova tarefa atribuída", tipo: "info" },
+  "tarefa:atualizada": { titulo: "Tarefa atualizada", tipo: "info" },
+  "tarefa:concluida": { titulo: "Tarefa concluída", tipo: "success" },
+  "tarefa:cancelada": { titulo: "Tarefa cancelada", tipo: "error" },
+};
 
 export function TarefaNotificacaoProvider({ children }: PropsWithChildren) {
   const [mostradas, setMostradas] = useState<Set<string>>(new Set());
-  const { stats, tarefas } = useTarefas({ status: "PENDENTE" });
+  const { stats, tarefas, refetch } = useTarefas({ status: "PENDENTE" });
 
-  // Notificação inicial ao montar
+  // Notificação inicial ao montar (tarefas atrasadas)
   useEffect(() => {
     if (stats.atrasadas > 0) {
       toast.error(
@@ -20,25 +29,45 @@ export function TarefaNotificacaoProvider({ children }: PropsWithChildren) {
       );
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Roda apenas uma vez na montagem
+  }, []);
 
-  // Polling para novas tarefas atrasadas a cada 5 minutos
+  // Handler de eventos WebSocket
+  const handleEvento = useCallback(
+    (evento: string, tarefa: Tarefa) => {
+      const config = LABELS_EVENTO[evento];
+      if (!config) return;
+
+      if (config.tipo === "success") {
+        toast.success(config.titulo, { description: tarefa.titulo });
+      } else if (config.tipo === "error") {
+        toast.error(config.titulo, { description: tarefa.titulo });
+      } else {
+        toast.info(config.titulo, { description: tarefa.titulo });
+      }
+
+      // Refetch para atualizar lista e stats
+      void refetch();
+    },
+    [refetch],
+  );
+
+  // Conectar ao WebSocket
+  useTarefasSocket({ onEvento: handleEvento });
+
+  // Fallback: verificar tarefas atrasadas a cada 5 minutos
   useEffect(() => {
     const interval = setInterval(() => {
-      // Filtrar tarefas atrasadas que ainda não foram mostradas
       const novasAtrasadas = tarefas.filter(
         (t) => isAtrasada(t.prazo) && !mostradas.has(t.id)
       );
 
       novasAtrasadas.forEach((tarefa) => {
-        toast.error("⚠️ Tarefa Atrasada", {
+        toast.error("Tarefa Atrasada", {
           description: tarefa.titulo,
         });
-
-        // Adicionar ao conjunto de tarefas já mostradas
         setMostradas((prev) => new Set([...prev, tarefa.id]));
       });
-    }, 5 * 60 * 1000); // 5 minutos
+    }, 5 * 60 * 1000);
 
     return () => clearInterval(interval);
   }, [tarefas, mostradas]);

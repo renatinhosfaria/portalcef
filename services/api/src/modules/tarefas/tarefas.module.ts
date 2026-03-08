@@ -7,6 +7,7 @@ import { TarefasController } from "./tarefas.controller";
 import { TarefasService } from "./tarefas.service";
 import { TarefaHistoricoService } from "./tarefa-historico.service";
 import { TarefasEventosService } from "./tarefas-eventos.service";
+import { TarefasGateway } from "./tarefas.gateway";
 
 /**
  * TarefasModule
@@ -20,7 +21,7 @@ import { TarefasEventosService } from "./tarefas-eventos.service";
 @Module({
   imports: [AuthModule, DatabaseModule, EventEmitterModule],
   controllers: [TarefasController],
-  providers: [TarefasService, TarefaHistoricoService, TarefasEventosService],
+  providers: [TarefasService, TarefaHistoricoService, TarefasEventosService, TarefasGateway],
   exports: [TarefasService],
 })
 export class TarefasModule {}
