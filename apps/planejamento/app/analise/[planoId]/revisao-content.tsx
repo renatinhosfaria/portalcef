@@ -6,7 +6,6 @@
  * Task 4.3: Criar pagina onde a analista revisa e aprova/devolve um plano
  */
 
-import { api } from "@essencia/shared/fetchers/client";
 import {
   Alert,
   AlertDescription,
@@ -62,7 +61,7 @@ export function RevisaoContent({ planoId }: RevisaoContentProps) {
     refetch,
   } = usePlanoDetalhe();
   const { loading: loadingAction, aprovar, devolver } = useAnalistaActions();
-  const { uploadDocumento, addLink, aprovarDocumento, desaprovarDocumento, imprimirDocumento, editarComentario, deletarComentario } =
+  const { uploadDocumento, addLink, aprovarDocumento, desaprovarDocumento, imprimirDocumento } =
     usePlanoAula();
 
   // Buscar dados do período para exibir no header
@@ -70,21 +69,7 @@ export function RevisaoContent({ planoId }: RevisaoContentProps) {
 
   const [actionError, setActionError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [currentUserId, setCurrentUserId] = useState<string | undefined>();
   const [isTarefaFormOpen, setIsTarefaFormOpen] = useState(false);
-
-  // Carrega o usuario atual
-  useEffect(() => {
-    const fetchCurrentUser = async () => {
-      try {
-        const response = await api.get<{ user: { id: string } }>("/auth/me");
-        setCurrentUserId(response.user.id);
-      } catch (err) {
-        console.error("Erro ao buscar usuario atual:", err);
-      }
-    };
-    fetchCurrentUser();
-  }, []);
 
   // Carrega o plano na montagem
   useEffect(() => {
@@ -110,67 +95,6 @@ export function RevisaoContent({ planoId }: RevisaoContentProps) {
 
     return () => clearInterval(interval);
   }, [plano?.documentos, refetch]);
-
-  /**
-   * Adiciona comentario a um documento via API
-   */
-  const handleAddComentarioViaApi = useCallback(
-    async (documentoId: string, comentario: string) => {
-      try {
-        await api.post("/plano-aula/comentarios", {
-          documentoId,
-          comentario,
-        });
-        // Recarregar plano para mostrar novo comentario
-        await refetch();
-      } catch (err) {
-        const message =
-          err instanceof Error ? err.message : "Erro ao adicionar comentario";
-        setActionError(message);
-      }
-    },
-    [refetch],
-  );
-
-  /**
-   * Edita um comentario existente
-   */
-  const handleEditComentario = useCallback(
-    async (comentarioId: string, novoTexto: string) => {
-      try {
-        await editarComentario(comentarioId, novoTexto);
-        // Recarregar plano para mostrar comentario atualizado
-        await refetch();
-        setSuccessMessage("Comentário editado com sucesso!");
-        setTimeout(() => setSuccessMessage(null), 3000);
-      } catch (err) {
-        const message =
-          err instanceof Error ? err.message : "Erro ao editar comentário";
-        setActionError(message);
-      }
-    },
-    [editarComentario, refetch],
-  );
-
-  /**
-   * Deleta um comentario
-   */
-  const handleDeleteComentario = useCallback(
-    async (comentarioId: string) => {
-      try {
-        await deletarComentario(comentarioId);
-        // Recarregar plano para atualizar lista de comentarios
-        await refetch();
-        setSuccessMessage("Comentário deletado com sucesso!");
-        setTimeout(() => setSuccessMessage(null), 3000);
-      } catch (err) {
-        const message =
-          err instanceof Error ? err.message : "Erro ao deletar comentário";
-        setActionError(message);
-      }
-    },
-    [deletarComentario, refetch],
-  );
 
   /**
    * Aprova um documento individualmente
@@ -287,7 +211,7 @@ export function RevisaoContent({ planoId }: RevisaoContentProps) {
 
   /**
    * Devolve o plano para a professora
-   * Os comentarios devem ser adicionados via painel flutuante antes de devolver
+   * Os comentarios devem ser adicionados via botao "Comentar" nos documentos antes de devolver
    */
   const handleDevolver = useCallback(async () => {
     setActionError(null);
@@ -448,16 +372,12 @@ export function RevisaoContent({ planoId }: RevisaoContentProps) {
             <CardContent>
               <DocumentoList
                 documentos={plano.documentos}
-                showComments={true}
                 canDelete={false}
                 canAprovar={true}
-                onAddComentario={handleAddComentarioViaApi}
-                onEditComentario={handleEditComentario}
-                onDeleteComentario={handleDeleteComentario}
+                canComentar={true}
                 onAprovar={handleAprovarDocumento}
                 onDesaprovar={handleDesaprovarDocumento}
                 onImprimir={handleImprimirDocumento}
-                currentUserId={currentUserId}
               />
             </CardContent>
           </Card>
@@ -533,8 +453,8 @@ export function RevisaoContent({ planoId }: RevisaoContentProps) {
 
                   {/* Aviso sobre comentarios */}
                   <p className="text-xs text-muted-foreground text-center">
-                    Adicione comentarios aos documentos via painel flutuante
-                    antes de devolver.
+                    Adicione comentários aos documentos usando o botão
+                    &quot;Comentar&quot; antes de devolver.
                   </p>
                 </>
               ) : (

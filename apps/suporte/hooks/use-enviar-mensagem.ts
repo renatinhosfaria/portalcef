@@ -28,11 +28,11 @@ export function useEnviarMensagem() {
         formData.append("arquivos", arquivo);
       }
 
-      const result = await apiPost<OrdemServicoMensagem>(
+      const response = await apiPost<{ data: OrdemServicoMensagem[] }>(
         `suporte/${ordemServicoId}/mensagem`,
         formData,
       );
-      return result;
+      return response.data;
     } catch (err) {
       const error =
         err instanceof Error ? err : new Error("Erro ao enviar mensagem");

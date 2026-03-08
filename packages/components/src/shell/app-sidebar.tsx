@@ -240,6 +240,10 @@ export function AppSidebar({ tarefasBadge, suporteBadge }: AppSidebarProps = {})
 
   const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
 
+  const handleGoToSupport = () => {
+    window.location.href = `https://www.portalcef.com.br/suporte?data=${tenantPayload}`;
+  };
+
   const handleLogout = async () => {
     try {
       // Tenta invalidar sessão no backend via proxy do app atual
@@ -303,6 +307,15 @@ export function AppSidebar({ tarefasBadge, suporteBadge }: AppSidebarProps = {})
         />
 
         <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            title="Acessar Suporte"
+            className="flex-1 justify-center text-slate-500 hover:text-slate-900 hover:bg-slate-50 rounded-xl h-10 px-0"
+            onClick={handleGoToSupport}
+          >
+            <Headset className="w-5 h-5 flex-shrink-0" />
+          </Button>
+
           <Button
             variant="ghost"
             title="Alterar Senha"

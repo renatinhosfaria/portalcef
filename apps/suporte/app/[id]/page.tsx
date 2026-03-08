@@ -145,7 +145,7 @@ export default function SuporteDetalhePage() {
     return (
       <div className="container mx-auto py-8 space-y-6">
         <Link
-          href="/suporte"
+          href="/"
           className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
         >
           <ArrowLeft className="h-4 w-4" />
@@ -178,7 +178,7 @@ export default function SuporteDetalhePage() {
     return (
       <div className="container mx-auto py-8 space-y-6">
         <Link
-          href="/suporte"
+          href="/"
           className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
         >
           <ArrowLeft className="h-4 w-4" />
@@ -212,7 +212,7 @@ export default function SuporteDetalhePage() {
       {/* Botao Voltar */}
       {/* ============================================ */}
       <Link
-        href="/suporte"
+        href="/"
         className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
       >
         <ArrowLeft className="h-4 w-4" />

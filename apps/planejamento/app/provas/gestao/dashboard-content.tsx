@@ -25,8 +25,9 @@ import {
   Clock,
   FileEdit,
   FileSearch,
+  MessageCircle,
+  Printer,
   RefreshCcw,
-  Send,
   Users,
 } from "lucide-react";
 import Link from "next/link";
@@ -54,7 +55,8 @@ interface StatCardProps {
     | "warning"
     | "destructive"
     | "info"
-    | "purple";
+    | "purple"
+    | "orange";
   description?: string;
 }
 
@@ -95,6 +97,11 @@ function StatCard({
       card: "border-purple-500/50 bg-purple-50/50 dark:bg-purple-950/20",
       icon: "bg-purple-100 text-purple-600 dark:bg-purple-900/50 dark:text-purple-400",
       value: "text-purple-600 dark:text-purple-400",
+    },
+    orange: {
+      card: "border-orange-500/50 bg-orange-50/50 dark:bg-orange-950/20",
+      icon: "bg-orange-100 text-orange-600 dark:bg-orange-900/50 dark:text-orange-400",
+      value: "text-orange-600 dark:text-orange-400",
     },
   };
 
@@ -160,8 +167,8 @@ function DashboardSkeleton() {
         </div>
       </div>
 
-      <div className="grid gap-4 grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 mb-8">
-        {Array.from({ length: 6 }).map((_, i) => (
+      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 mb-8">
+        {Array.from({ length: 7 }).map((_, i) => (
           <Skeleton key={i} className="h-24" />
         ))}
       </div>
@@ -240,8 +247,9 @@ export function DashboardProvasContent() {
     const stats = data.stats || {
       total: 0,
       rascunho: 0,
+      aguardandoImpressao: 0,
+      aguardandoResposta: 0,
       aguardandoAnalista: 0,
-      aguardandoCoordenadora: 0,
       devolvidos: 0,
       aprovados: 0,
     };
@@ -249,7 +257,9 @@ export function DashboardProvasContent() {
 
     const totalDevolvidos = stats.devolvidos || 0;
     const totalPendentes =
-      (stats.aguardandoAnalista || 0) + (stats.aguardandoCoordenadora || 0);
+      (stats.aguardandoImpressao || 0) +
+      (stats.aguardandoResposta || 0) +
+      (stats.aguardandoAnalista || 0);
     const taxaAprovacao =
       (stats.total || 0) > 0
         ? Math.round(((stats.aprovados || 0) / stats.total) * 100)
@@ -352,7 +362,7 @@ export function DashboardProvasContent() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid gap-4 grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 mb-8">
+      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 mb-8">
         <StatCard
           title="Total de Provas"
           value={estatisticas.total}
@@ -368,18 +378,25 @@ export function DashboardProvasContent() {
           description="ainda nao enviadas"
         />
         <StatCard
+          title="Aguardando Impressao"
+          value={estatisticas.aguardandoImpressao}
+          icon={<Printer className="h-5 w-5" />}
+          variant="orange"
+          description="para impressao"
+        />
+        <StatCard
+          title="Aguardando Resposta"
+          value={estatisticas.aguardandoResposta}
+          icon={<MessageCircle className="h-5 w-5" />}
+          variant="purple"
+          description="aguardando respostas"
+        />
+        <StatCard
           title="Aguardando Analise"
           value={estatisticas.aguardandoAnalista}
           icon={<Clock className="h-5 w-5" />}
           variant="info"
           description="com a analista"
-        />
-        <StatCard
-          title="Aguardando Aprovacao"
-          value={estatisticas.aguardandoCoordenadora}
-          icon={<Send className="h-5 w-5" />}
-          variant="purple"
-          description="com a coordenadora"
         />
         <StatCard
           title="Devolvidas"
@@ -453,16 +470,22 @@ export function DashboardProvasContent() {
                 color="bg-gray-400"
               />
               <FlowSummaryBar
+                label="Aguardando Impressao"
+                value={estatisticas.aguardandoImpressao}
+                total={estatisticas.total}
+                color="bg-orange-500"
+              />
+              <FlowSummaryBar
+                label="Aguardando Resposta"
+                value={estatisticas.aguardandoResposta}
+                total={estatisticas.total}
+                color="bg-purple-500"
+              />
+              <FlowSummaryBar
                 label="Aguardando Analise"
                 value={estatisticas.aguardandoAnalista}
                 total={estatisticas.total}
                 color="bg-blue-500"
-              />
-              <FlowSummaryBar
-                label="Aguardando Aprovacao"
-                value={estatisticas.aguardandoCoordenadora}
-                total={estatisticas.total}
-                color="bg-purple-500"
               />
               <FlowSummaryBar
                 label="Devolvidas"

@@ -5,25 +5,25 @@ import {
   Controller,
   Delete,
   Get,
+  HttpCode,
   InternalServerErrorException,
   Logger,
   Param,
-  Patch,
   Post,
   Query,
   Req,
+  Res,
   UseGuards,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { FastifyRequest } from "fastify";
+import { FastifyReply, FastifyRequest } from "fastify";
 
+import { Public } from "../../common/decorators/public.decorator";
 import { Roles } from "../../common/decorators/roles.decorator";
 import { AuthGuard } from "../../common/guards/auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
 import { StorageService } from "../../common/storage/storage.service";
 import {
-  type AddComentarioDto,
-  addComentarioSchema,
   type CreatePlanoDto,
   createPlanoSchema,
   type DashboardQueryDto,
@@ -347,8 +347,8 @@ export class PlanoAulaController {
     @Param("docId") docId: string,
     @Query("mode") mode: string = "view",
   ) {
-    if (mode !== "edit" && mode !== "view") {
-      throw new BadRequestException("Mode deve ser 'edit' ou 'view'");
+    if (mode !== "edit" && mode !== "view" && mode !== "comentar") {
+      throw new BadRequestException("Mode deve ser 'edit', 'comentar' ou 'view'");
     }
 
     const documento = await this.planoAulaService.getDocumentoById(planoId, docId);
@@ -366,33 +366,48 @@ export class PlanoAulaController {
       );
     }
 
-    const fileUrl = await this.storageService.getPresignedUrl(
-      documento.storageKey,
-      3600,
-    );
+    // URL de download direto via API (evita presigned URL que o OnlyOffice não consegue baixar).
+    // O request-filtering-agent interno do OnlyOffice modifica requisições HTTP,
+    // causando erro 400 em presigned URLs tanto no MinIO direto quanto via nginx.
+    // Solução: o OnlyOffice baixa do endpoint da API, que faz proxy do MinIO.
+    const apiBaseUrl =
+      this.configService.get<string>("NEXT_PUBLIC_API_URL") ||
+      "https://www.portalcef.com.br/api";
+    const fileUrl = `${apiBaseUrl}/plano-aula/${planoId}/documentos/${docId}/download`;
 
     const onlyofficeUrl =
       this.configService.get<string>("ONLYOFFICE_PUBLIC_URL") ||
       "https://www.portalcef.com.br/onlyoffice";
     const jwtSecret = this.configService.get<string>("ONLYOFFICE_JWT_SECRET");
+    // Permissões baseadas no modo
+    const permissions: Record<string, boolean> = {
+      edit: mode === "edit",
+      comment: mode === "comentar",
+      download: true,
+      print: true,
+    };
 
-    const apiBaseUrl =
-      this.configService.get<string>("NEXT_PUBLIC_API_URL") ||
-      "https://www.portalcef.com.br/api";
-    const callbackUrl = `${apiBaseUrl}/plano-aula/${planoId}/documentos/${docId}/onlyoffice-callback`;
+    // OnlyOffice precisa de mode="edit" para comentários funcionarem
+    const editorMode = mode === "view" ? "view" : "edit";
+
+    // callbackUrl inclui modo para rastreamento de comentários
+    const callbackUrl = mode !== "view"
+      ? `${apiBaseUrl}/plano-aula/${planoId}/documentos/${docId}/onlyoffice-callback?mode=${mode}&userId=${req.user.userId}&userRole=${req.user.role}`
+      : undefined;
 
     const config = {
       document: {
         fileType: documento.fileName?.endsWith(".doc") ? "doc" : "docx",
-        key: `${docId}-${documento.updatedAt ? new Date(documento.updatedAt).getTime() : Date.now()}`,
+        key: `${docId}-${documento.createdAt ? new Date(documento.createdAt).getTime() : docId}`,
         title: documento.fileName || "Documento",
         url: fileUrl,
+        permissions,
       },
       documentType: "word",
       editorConfig: {
-        mode: mode,
+        mode: editorMode,
         lang: "pt",
-        callbackUrl: mode === "edit" ? callbackUrl : undefined,
+        callbackUrl,
         customization: {
           autosave: true,
           forcesave: true,
@@ -420,11 +435,48 @@ export class PlanoAulaController {
   }
 
   /**
+   * GET /plano-aula/:id/documentos/:docId/download
+   * Serve o arquivo diretamente do MinIO para o OnlyOffice Document Server.
+   * Sem autenticação de sessão — o OnlyOffice não envia JWT ao baixar document.url.
+   * Segurança: a URL é gerada server-side e requer UUIDs exatos (planoId + docId).
+   */
+  @Get(":id/documentos/:docId/download")
+  @Public() // Sem autenticação — endpoint server-to-server para o OnlyOffice
+  async downloadDocumento(
+    @Res() reply: FastifyReply,
+    @Param("id") planoId: string,
+    @Param("docId") docId: string,
+  ) {
+    const documento = await this.planoAulaService.getDocumentoById(planoId, docId);
+    if (!documento.storageKey) {
+      return reply.status(404).send({ error: "Arquivo não encontrado" });
+    }
+
+    try {
+      const s3Response = await this.storageService.getObject(documento.storageKey);
+      const contentType =
+        s3Response.ContentType ||
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+
+      reply.header("Content-Type", contentType);
+      if (s3Response.ContentLength) {
+        reply.header("Content-Length", s3Response.ContentLength);
+      }
+
+      return reply.send(s3Response.Body);
+    } catch (error) {
+      this.logger.error(`Erro ao baixar documento ${docId}: ${error}`);
+      return reply.status(500).send({ error: "Erro ao baixar arquivo" });
+    }
+  }
+
+  /**
    * POST /plano-aula/:id/documentos/:docId/onlyoffice-callback
    * Recebe callback do OnlyOffice após salvamento (server-to-server, sem sessão)
    */
   @Post(":id/documentos/:docId/onlyoffice-callback")
-  @UseGuards() // Sobrescreve AuthGuard/RolesGuard do controller — autenticação via JWT do OnlyOffice
+  @Public() // Sem autenticação de sessão — autenticação via JWT do OnlyOffice
+  @HttpCode(200) // OnlyOffice espera 200, NestJS POST retorna 201 por padrão
   async onlyofficeCallback(
     @Req() req: FastifyRequest,
     @Param("id") planoId: string,
@@ -486,6 +538,39 @@ export class PlanoAulaController {
         });
 
         this.logger.log(`Documento ${docId} atualizado via OnlyOffice`);
+
+        // Rastreamento de comentários: se callback veio do modo "comentar",
+        // marcar documento e registrar no histórico
+        const callbackMode = (req.query as Record<string, string>)?.mode;
+        const callbackUserId = (req.query as Record<string, string>)?.userId;
+
+        if (callbackMode === "comentar" && callbackUserId && body.status === 2) {
+          // Registrar apenas no fechamento do editor (status=2), não em cada forcesave (status=6),
+          // para evitar múltiplas entradas de histórico para a mesma sessão de comentários
+          await this.planoAulaService.marcarTemComentarios(docId);
+
+          const callbackUserRole = (req.query as Record<string, string>)?.userRole;
+          const userName = await this.planoAulaService.getUserNameById(callbackUserId);
+          const plano = await this.planoAulaService.getPlanoStatusById(planoId);
+          await this.historicoService.registrar({
+            planoId,
+            userId: callbackUserId,
+            userName,
+            userRole: callbackUserRole || "analista_pedagogico",
+            acao: "COMENTARIO_ADICIONADO",
+            statusAnterior: null,
+            statusNovo: plano?.status || "AGUARDANDO_ANALISTA",
+            detalhes: {
+              documentoId: docId,
+              documentoNome: documento.fileName || "Documento",
+            },
+          });
+
+          this.logger.log(`Comentário rastreado no documento ${docId}`);
+        } else if (callbackMode === "comentar") {
+          // Em forcesave (status=6), apenas marcar o documento sem registrar no histórico
+          await this.planoAulaService.marcarTemComentarios(docId);
+        }
       } catch (error) {
         this.logger.error(`Erro ao salvar callback OnlyOffice: ${error}`);
       }
@@ -621,13 +706,10 @@ export class PlanoAulaController {
   async devolverComoAnalista(
     @Req() req: { user: UserContext },
     @Param("id") id: string,
-    @Body()
-    body: { comentarios?: Array<{ documentoId: string; comentario: string }> },
   ) {
     const plano = await this.planoAulaService.devolverComoAnalista(
       req.user,
       id,
-      body.comentarios,
     );
     return {
       success: true,
@@ -828,83 +910,6 @@ export class PlanoAulaController {
     return {
       success: true,
       message: "Plano de aula excluído com sucesso",
-    };
-  }
-
-  // ============================================
-  // Endpoint de Comentários
-  // ============================================
-
-  /**
-   * POST /plano-aula/comentarios
-   * Adiciona comentário a um documento
-   */
-  @Post("comentarios")
-  @Roles(...ANALISTA_ACCESS, ...COORDENADORA_ACCESS)
-  async addComentario(
-    @Req() req: { user: UserContext },
-    @Body() body: AddComentarioDto,
-  ) {
-    // Validar DTO
-    const parsed = addComentarioSchema.safeParse(body);
-    if (!parsed.success) {
-      throw new BadRequestException({
-        code: "VALIDATION_ERROR",
-        message: "Dados inválidos",
-        errors: parsed.error.errors,
-      });
-    }
-
-    const comentario = await this.planoAulaService.addComentario(
-      req.user,
-      parsed.data,
-    );
-    return {
-      success: true,
-      data: comentario,
-    };
-  }
-
-  /**
-   * PATCH /plano-aula/comentarios/:id
-   * Edita um comentário (apenas autor)
-   */
-  @Patch("comentarios/:id")
-  @Roles(...ANALISTA_ACCESS, ...COORDENADORA_ACCESS)
-  async editarComentario(
-    @Req() req: { user: UserContext },
-    @Param("id") comentarioId: string,
-    @Body() body: { comentario: string },
-  ) {
-    if (!body.comentario || body.comentario.trim().length === 0) {
-      throw new BadRequestException("Comentário não pode estar vazio");
-    }
-
-    const comentario = await this.planoAulaService.editarComentario(
-      req.user,
-      comentarioId,
-      body.comentario,
-    );
-    return {
-      success: true,
-      data: comentario,
-    };
-  }
-
-  /**
-   * DELETE /plano-aula/comentarios/:id
-   * Deleta um comentário (apenas autor)
-   */
-  @Delete("comentarios/:id")
-  @Roles(...ANALISTA_ACCESS, ...COORDENADORA_ACCESS)
-  async deletarComentario(
-    @Req() req: { user: UserContext },
-    @Param("id") comentarioId: string,
-  ) {
-    await this.planoAulaService.deletarComentario(req.user, comentarioId);
-    return {
-      success: true,
-      message: "Comentário deletado com sucesso",
     };
   }
 

@@ -24,12 +24,17 @@ import type {
   AlterarStatusDto,
 } from "./dto/suporte.dto";
 import { DatabaseService } from "../../common/database/database.service";
+import type { UserRole } from "@essencia/shared/types";
 
 // ============================================
 // Constantes
 // ============================================
 
-const ADMIN_ROLES = ["master", "diretora_geral", "gerente_unidade"] as const;
+const ADMIN_ROLES = [
+  "master",
+  "diretora_geral",
+  "gerente_unidade",
+] as const satisfies readonly UserRole[];
 
 // ============================================
 // Types
@@ -126,6 +131,54 @@ export class SuporteService {
    */
   private isAdmin(role: string): boolean {
     return (ADMIN_ROLES as readonly string[]).includes(role);
+  }
+
+  /**
+   * Busca OS para envio de mensagem validando:
+   * - schoolId da sessao
+   * - existencia da OS na escola
+   * - permissao de acesso (admin ou criador)
+   * - status (nao pode estar fechada)
+   */
+  private async obterOrdemServicoParaMensagem(
+    ordemServicoId: string,
+    session: UserContext,
+  ) {
+    if (!session.schoolId) {
+      throw new BadRequestException(
+        "Sessao invalida: schoolId e obrigatorio",
+      );
+    }
+
+    const db = this.database.db;
+
+    const [osDb] = await db
+      .select()
+      .from(ordemServico)
+      .where(
+        and(
+          eq(ordemServico.id, ordemServicoId),
+          eq(ordemServico.schoolId, session.schoolId),
+        ),
+      );
+
+    if (!osDb) {
+      throw new NotFoundException("Ordem de servico nao encontrada");
+    }
+
+    if (!this.isAdmin(session.role) && osDb.criadoPor !== session.userId) {
+      throw new ForbiddenException(
+        "Voce nao tem permissao para enviar mensagens nesta ordem de servico",
+      );
+    }
+
+    if (osDb.status === "FECHADA") {
+      throw new BadRequestException(
+        "Nao e possivel enviar mensagens em uma ordem de servico fechada",
+      );
+    }
+
+    return osDb;
   }
 
   /**
@@ -450,42 +503,8 @@ export class SuporteService {
     arquivos: ArquivoUpload[],
     session: UserContext,
   ) {
-    if (!session.schoolId) {
-      throw new BadRequestException(
-        "Sessao invalida: schoolId e obrigatorio",
-      );
-    }
-
     const db = this.database.db;
-
-    // Buscar OS
-    const [osDb] = await db
-      .select()
-      .from(ordemServico)
-      .where(
-        and(
-          eq(ordemServico.id, ordemServicoId),
-          eq(ordemServico.schoolId, session.schoolId),
-        ),
-      );
-
-    if (!osDb) {
-      throw new NotFoundException("Ordem de servico nao encontrada");
-    }
-
-    // Verificar acesso: admin OU criador da OS
-    if (!this.isAdmin(session.role) && osDb.criadoPor !== session.userId) {
-      throw new ForbiddenException(
-        "Voce nao tem permissao para enviar mensagens nesta ordem de servico",
-      );
-    }
-
-    // Nao permitir envio em OS fechada
-    if (osDb.status === "FECHADA") {
-      throw new BadRequestException(
-        "Nao e possivel enviar mensagens em uma ordem de servico fechada",
-      );
-    }
+    await this.obterOrdemServicoParaMensagem(ordemServicoId, session);
 
     // Validar que tem conteudo ou arquivo
     if (!dto.conteudo && arquivos.length === 0) {
@@ -494,78 +513,88 @@ export class SuporteService {
       );
     }
 
-    const mensagensCriadas: Array<{
-      id: string;
-      ordemServicoId: string;
-      conteudo: string | null;
-      tipo: string;
-      arquivoUrl: string | null;
-      arquivoNome: string | null;
-      criadoPor: string;
-      createdAt: string;
-    }> = [];
+    return await db.transaction(async (tx: DbTransaction) => {
+      const mensagensCriadas: Array<{
+        id: string;
+        ordemServicoId: string;
+        conteudo: string | null;
+        tipo: string;
+        arquivoUrl: string | null;
+        arquivoNome: string | null;
+        criadoPor: string;
+        createdAt: string;
+      }> = [];
 
-    // Inserir mensagem de texto se houver conteudo
-    if (dto.conteudo) {
-      const [msgTexto] = await db
-        .insert(ordemServicoMensagem)
-        .values({
-          ordemServicoId,
-          conteudo: dto.conteudo,
-          tipo: "TEXTO",
-          criadoPor: session.userId,
-        })
-        .returning();
+      // Inserir mensagem de texto se houver conteudo
+      if (dto.conteudo) {
+        const [msgTexto] = await tx
+          .insert(ordemServicoMensagem)
+          .values({
+            ordemServicoId,
+            conteudo: dto.conteudo,
+            tipo: "TEXTO",
+            criadoPor: session.userId,
+          })
+          .returning();
 
-      if (msgTexto) {
-        mensagensCriadas.push({
-          id: msgTexto.id,
-          ordemServicoId: msgTexto.ordemServicoId,
-          conteudo: msgTexto.conteudo,
-          tipo: msgTexto.tipo,
-          arquivoUrl: msgTexto.arquivoUrl,
-          arquivoNome: msgTexto.arquivoNome,
-          criadoPor: msgTexto.criadoPor,
-          createdAt: msgTexto.createdAt.toISOString(),
-        });
+        if (msgTexto) {
+          mensagensCriadas.push({
+            id: msgTexto.id,
+            ordemServicoId: msgTexto.ordemServicoId,
+            conteudo: msgTexto.conteudo,
+            tipo: msgTexto.tipo,
+            arquivoUrl: msgTexto.arquivoUrl,
+            arquivoNome: msgTexto.arquivoNome,
+            criadoPor: msgTexto.criadoPor,
+            createdAt: msgTexto.createdAt.toISOString(),
+          });
+        }
       }
-    }
 
-    // Inserir mensagens de midia para cada arquivo
-    for (const arquivo of arquivos) {
-      const [msgArquivo] = await db
-        .insert(ordemServicoMensagem)
-        .values({
-          ordemServicoId,
-          conteudo: null,
-          tipo: this.getTipoFromMimetype(arquivo.mimetype),
-          arquivoUrl: arquivo.url,
-          arquivoNome: arquivo.nome,
-          criadoPor: session.userId,
-        })
-        .returning();
+      // Inserir mensagens de midia para cada arquivo
+      for (const arquivo of arquivos) {
+        const [msgArquivo] = await tx
+          .insert(ordemServicoMensagem)
+          .values({
+            ordemServicoId,
+            conteudo: null,
+            tipo: this.getTipoFromMimetype(arquivo.mimetype),
+            arquivoUrl: arquivo.url,
+            arquivoNome: arquivo.nome,
+            criadoPor: session.userId,
+          })
+          .returning();
 
-      if (msgArquivo) {
-        mensagensCriadas.push({
-          id: msgArquivo.id,
-          ordemServicoId: msgArquivo.ordemServicoId,
-          conteudo: msgArquivo.conteudo,
-          tipo: msgArquivo.tipo,
-          arquivoUrl: msgArquivo.arquivoUrl,
-          arquivoNome: msgArquivo.arquivoNome,
-          criadoPor: msgArquivo.criadoPor,
-          createdAt: msgArquivo.createdAt.toISOString(),
-        });
+        if (msgArquivo) {
+          mensagensCriadas.push({
+            id: msgArquivo.id,
+            ordemServicoId: msgArquivo.ordemServicoId,
+            conteudo: msgArquivo.conteudo,
+            tipo: msgArquivo.tipo,
+            arquivoUrl: msgArquivo.arquivoUrl,
+            arquivoNome: msgArquivo.arquivoNome,
+            criadoPor: msgArquivo.criadoPor,
+            createdAt: msgArquivo.createdAt.toISOString(),
+          });
+        }
       }
-    }
 
-    // Atualizar updatedAt da OS
-    await db
-      .update(ordemServico)
-      .set({ updatedAt: new Date() })
-      .where(eq(ordemServico.id, ordemServicoId));
+      // Atualizar updatedAt da OS
+      await tx
+        .update(ordemServico)
+        .set({ updatedAt: new Date() })
+        .where(eq(ordemServico.id, ordemServicoId));
 
-    return mensagensCriadas;
+      return mensagensCriadas;
+    });
+  }
+
+  /**
+   * Valida permissao/estado para envio de mensagem sem persistir dados.
+   * Usado pelo controller para evitar upload antes de autorizacao.
+   */
+  async validarEnvioMensagem(ordemServicoId: string, session: UserContext) {
+    await this.obterOrdemServicoParaMensagem(ordemServicoId, session);
   }
 
   /**
@@ -638,6 +667,48 @@ export class SuporteService {
       createdAt: osAtualizada.createdAt.toISOString(),
       updatedAt: osAtualizada.updatedAt.toISOString(),
     };
+  }
+
+  /**
+   * Exclui uma ordem de servico
+   *
+   * Permissao:
+   * - Administradores podem excluir qualquer OS da escola
+   * - Usuarios comuns podem excluir apenas OS criadas por eles
+   */
+  async excluir(id: string, session: UserContext): Promise<void> {
+    if (!session.schoolId) {
+      throw new BadRequestException(
+        "Sessao invalida: schoolId e obrigatorio",
+      );
+    }
+
+    const db = this.database.db;
+
+    const [osDb] = await db
+      .select({
+        id: ordemServico.id,
+        criadoPor: ordemServico.criadoPor,
+      })
+      .from(ordemServico)
+      .where(
+        and(
+          eq(ordemServico.id, id),
+          eq(ordemServico.schoolId, session.schoolId),
+        ),
+      );
+
+    if (!osDb) {
+      throw new NotFoundException("Ordem de servico nao encontrada");
+    }
+
+    if (!this.isAdmin(session.role) && osDb.criadoPor !== session.userId) {
+      throw new ForbiddenException(
+        "Voce nao tem permissao para excluir esta ordem de servico",
+      );
+    }
+
+    await db.delete(ordemServico).where(eq(ordemServico.id, id));
   }
 
   /**

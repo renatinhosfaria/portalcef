@@ -22,7 +22,7 @@ FROM base AS pruner
 
 COPY . .
 
-RUN pnpm dlx turbo prune --scope=@essencia/worker --docker
+RUN pnpm dlx turbo@2.6.3 prune --scope=@essencia/worker --docker
 
 # =============================================================================
 # STAGE 3: DEPS - Instalar dependências

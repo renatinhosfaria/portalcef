@@ -71,7 +71,6 @@ export const atualizarTarefaSchema = z.object({
     .string()
     .uuid("Responsável deve ser um UUID válido")
     .optional(),
-  status: z.enum(["PENDENTE", "CONCLUIDA", "CANCELADA"]).optional(),
 });
 
 export type AtualizarTarefaDto = z.infer<typeof atualizarTarefaSchema>;
@@ -128,8 +127,8 @@ export type ConcluirTarefaDto = z.infer<typeof concluirTarefaSchema>;
 export const cancelarTarefaSchema = z.object({
   motivo: z
     .string()
-    .min(3, "Motivo deve ter no mínimo 3 caracteres")
-    .max(500, "Motivo não pode exceder 500 caracteres"),
+    .max(500, "Motivo não pode exceder 500 caracteres")
+    .optional(),
 });
 
 export type CancelarTarefaDto = z.infer<typeof cancelarTarefaSchema>;

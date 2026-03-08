@@ -24,7 +24,7 @@ COPY . .
 
 ARG APP_NAME
 ARG PACKAGE_NAME=${APP_NAME}
-RUN pnpm dlx turbo prune --scope=${PACKAGE_NAME} --docker
+RUN pnpm dlx turbo@2.6.3 prune --scope=${PACKAGE_NAME} --docker
 
 # =============================================================================
 # STAGE 3: DEPS - Instalar dependências com cache mount

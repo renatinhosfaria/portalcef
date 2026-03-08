@@ -32,8 +32,8 @@ export function useCriarOs() {
         formData.append("arquivos", arquivo);
       }
 
-      const result = await apiPost<OrdemServico>("suporte", formData);
-      return result;
+      const response = await apiPost<{ data: OrdemServico }>("suporte", formData);
+      return response.data;
     } catch (err) {
       const error =
         err instanceof Error

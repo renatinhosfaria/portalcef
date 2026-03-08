@@ -31,7 +31,6 @@ import { PlanoAulaHistoricoService } from "./plano-aula-historico.service";
 
 import {
   type CreatePlanoDto,
-  type AddComentarioDto,
   type DevolverPlanoDto,
   type SetDeadlineDto,
   type ListarPlanosGestaoDto,
@@ -527,7 +526,6 @@ export class PlanoAulaService {
   async devolverComoAnalista(
     user: UserContext,
     planoId: string,
-    comentarios?: Array<{ documentoId: string; comentario: string }>,
   ): Promise<PlanoAula> {
     const db = getDb();
 
@@ -557,11 +555,6 @@ export class PlanoAulaService {
 
     const statusAnterior = plano.status;
 
-    // Inserir comentários se fornecidos
-    if (comentarios && comentarios.length > 0) {
-      await this.inserirComentarios(user.userId, comentarios);
-    }
-
     const [atualizado] = await db
       .update(planoAula)
       .set({
@@ -581,7 +574,6 @@ export class PlanoAulaService {
       acao: "DEVOLVIDO_ANALISTA",
       statusAnterior,
       statusNovo: "DEVOLVIDO_ANALISTA",
-      detalhes: comentarios ? { comentariosCount: comentarios.length } : null,
     });
 
     return atualizado;
@@ -761,11 +753,6 @@ export class PlanoAulaService {
 
     const statusAnterior = plano.status;
 
-    // Inserir comentários se fornecidos
-    if (dto.comentarios && dto.comentarios.length > 0) {
-      await this.inserirComentarios(user.userId, dto.comentarios);
-    }
-
     // Determinar status baseado no destino
     const novoStatus: PlanoAulaStatus =
       dto.destino === "ANALISTA"
@@ -793,7 +780,6 @@ export class PlanoAulaService {
       statusNovo: novoStatus,
       detalhes: {
         destino: dto.destino,
-        comentariosCount: dto.comentarios?.length || 0,
       },
     });
 
@@ -1159,112 +1145,33 @@ export class PlanoAulaService {
   }
 
   /**
-   * Adiciona comentário a um documento
+   * Marca documento como tendo comentários (OnlyOffice)
    */
-  async addComentario(
-    user: UserContext,
-    dto: AddComentarioDto,
-  ): Promise<DocumentoComentario> {
+  async marcarTemComentarios(documentoId: string): Promise<void> {
     const db = getDb();
-
-    // Verificar se documento existe e usuário tem acesso
-    const documento = await db.query.planoDocumento.findFirst({
-      where: eq(planoDocumento.id, dto.documentoId),
-      with: { plano: true },
-    });
-
-    if (!documento) {
-      throw new NotFoundException("Documento não encontrado");
-    }
-
-    // Verificar acesso ao plano
-    if (documento.plano.unitId !== user.unitId) {
-      throw new ForbiddenException(
-        "Você não tem permissão para comentar neste documento",
-      );
-    }
-
-    const [comentario] = await db
-      .insert(documentoComentario)
-      .values({
-        documentoId: dto.documentoId,
-        autorId: user.userId,
-        comentario: dto.comentario,
-      })
-      .returning();
-
-    return comentario;
-  }
-
-  /**
-   * Edita um comentário existente
-   * Apenas o autor pode editar
-   */
-  async editarComentario(
-    user: UserContext,
-    comentarioId: string,
-    novoTexto: string,
-  ): Promise<DocumentoComentario> {
-    const db = getDb();
-
-    // Buscar comentário
-    const comentario = await db.query.documentoComentario.findFirst({
-      where: eq(documentoComentario.id, comentarioId),
-    });
-
-    if (!comentario) {
-      throw new NotFoundException("Comentário não encontrado");
-    }
-
-    // Verificar se usuário é o autor
-    if (comentario.autorId !== user.userId) {
-      throw new ForbiddenException(
-        "Você não tem permissão para editar este comentário",
-      );
-    }
-
-    // Atualizar comentário
-    const [comentarioAtualizado] = await db
-      .update(documentoComentario)
-      .set({
-        comentario: novoTexto,
-      })
-      .where(eq(documentoComentario.id, comentarioId))
-      .returning();
-
-    return comentarioAtualizado;
-  }
-
-  /**
-   * Deleta um comentário
-   * Apenas o autor pode deletar
-   */
-  async deletarComentario(
-    user: UserContext,
-    comentarioId: string,
-  ): Promise<void> {
-    const db = getDb();
-
-    // Buscar comentário
-    const comentario = await db.query.documentoComentario.findFirst({
-      where: eq(documentoComentario.id, comentarioId),
-    });
-
-    if (!comentario) {
-      throw new NotFoundException("Comentário não encontrado");
-    }
-
-    // Verificar se usuário é o autor
-    if (comentario.autorId !== user.userId) {
-      throw new ForbiddenException(
-        "Você não tem permissão para deletar este comentário",
-      );
-    }
-
-    // Deletar comentário
     await db
-      .delete(documentoComentario)
-      .where(eq(documentoComentario.id, comentarioId));
+      .update(planoDocumento)
+      .set({ temComentarios: true })
+      .where(eq(planoDocumento.id, documentoId));
+  }
+
+  /**
+   * Busca nome do usuário por ID (público para uso no controller)
+   */
+  async getUserNameById(userId: string): Promise<string> {
+    return this.getUserName(userId);
+  }
+
+  /**
+   * Busca status do plano por ID (para uso no callback)
+   */
+  async getPlanoStatusById(planoId: string): Promise<{ status: string } | null> {
+    const db = getDb();
+    const plano = await db.query.planoAula.findFirst({
+      where: eq(planoAula.id, planoId),
+      columns: { status: true },
+    });
+    return plano || null;
   }
 
   /**
@@ -1430,24 +1337,6 @@ export class PlanoAulaService {
     });
 
     return documentoAtualizado;
-  }
-
-  /**
-   * Insere múltiplos comentários (usado ao devolver plano)
-   */
-  private async inserirComentarios(
-    autorId: string,
-    comentarios: Array<{ documentoId: string; comentario: string }>,
-  ): Promise<void> {
-    const db = getDb();
-
-    for (const c of comentarios) {
-      await db.insert(documentoComentario).values({
-        documentoId: c.documentoId,
-        autorId,
-        comentario: c.comentario,
-      });
-    }
   }
 
   /**

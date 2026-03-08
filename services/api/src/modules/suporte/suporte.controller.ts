@@ -1,8 +1,9 @@
-import { MultipartFile } from "@fastify/multipart";
+import { Multipart } from "@fastify/multipart";
 import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   InternalServerErrorException,
   Logger,
@@ -14,6 +15,7 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { FastifyRequest } from "fastify";
+import type { UserRole } from "@essencia/shared/types";
 
 import { Roles } from "../../common/decorators/roles.decorator";
 import { AuthGuard } from "../../common/guards/auth.guard";
@@ -39,8 +41,14 @@ import {
 
 interface FastifyMultipartRequest extends FastifyRequest {
   isMultipart: () => boolean;
-  file: () => Promise<MultipartFile>;
+  parts: () => AsyncIterableIterator<Multipart>;
   user: UserContext;
+}
+
+interface ArquivoMultipart {
+  buffer: Buffer;
+  nomeOriginal: string;
+  mimetype: string;
 }
 
 // ============================================
@@ -56,19 +64,21 @@ const TODOS_ROLES = [
   "coordenadora_geral",
   "coordenadora_bercario",
   "coordenadora_infantil",
-  "coordenadora_fundamental",
+  "coordenadora_fundamental_i",
+  "coordenadora_fundamental_ii",
+  "coordenadora_medio",
   "analista_pedagogico",
   "professora",
+  "auxiliar_administrativo",
   "auxiliar_sala",
-  "auxiliar_desenvolvimento",
-] as const;
+] as const satisfies readonly UserRole[];
 
 /** Roles de administracao que podem alterar status */
 const ADMIN_ROLES = [
   "master",
   "diretora_geral",
   "gerente_unidade",
-] as const;
+] as const satisfies readonly UserRole[];
 
 // ============================================
 // Controller
@@ -104,16 +114,16 @@ export class SuporteController {
 
   /**
    * Processa request multipart do Fastify, extraindo campos e arquivos.
-   * Os arquivos sao enviados ao storage com prefixo "suporte".
+   * Neste momento os arquivos ficam apenas em memoria (sem upload).
    *
    * @param req Request Fastify multipart
-   * @returns Campos de texto e arquivos ja enviados ao storage
+   * @returns Campos de texto e arquivos brutos para upload posterior
    */
   private async processarMultipart(
     req: FastifyMultipartRequest,
-  ): Promise<{ campos: Record<string, string>; arquivos: ArquivoUpload[] }> {
+  ): Promise<{ campos: Record<string, string>; arquivos: ArquivoMultipart[] }> {
     const campos: Record<string, string> = {};
-    const arquivos: ArquivoUpload[] = [];
+    const arquivos: ArquivoMultipart[] = [];
 
     const parts = req.parts();
 
@@ -122,7 +132,7 @@ export class SuporteController {
         // Campo de texto
         campos[part.fieldname] = String(part.value);
       } else if (part.type === "file") {
-        // Arquivo - enviar ao storage
+        // Arquivo - ler para upload posterior
         const buffer = await part.toBuffer();
 
         // Ignorar campos de arquivo vazios (sem conteudo enviado)
@@ -130,32 +140,70 @@ export class SuporteController {
           continue;
         }
 
-        try {
-          const resultado = await this.storageService.uploadBuffer(
-            buffer,
-            part.filename,
-            part.mimetype,
-            "suporte",
-          );
-
-          arquivos.push({
-            url: resultado.url,
-            nome: resultado.name,
-            mimetype: part.mimetype,
-          });
-        } catch (error) {
-          this.logger.error(
-            `Erro ao fazer upload de arquivo: ${error instanceof Error ? error.message : String(error)}`,
-          );
-          throw new InternalServerErrorException({
-            code: "UPLOAD_FAILED",
-            message: "Erro ao fazer upload do arquivo",
-          });
-        }
+        arquivos.push({
+          buffer,
+          nomeOriginal: part.filename,
+          mimetype: part.mimetype,
+        });
       }
     }
 
     return { campos, arquivos };
+  }
+
+  /**
+   * Valida se o mimetype e permitido para anexos do suporte.
+   */
+  private isMimetypePermitido(mimetype: string): boolean {
+    return (
+      mimetype.startsWith("image/") ||
+      mimetype.startsWith("video/") ||
+      mimetype.startsWith("audio/")
+    );
+  }
+
+  /**
+   * Envia os arquivos para o storage somente apos validacao/autorizacao.
+   */
+  private async uploadArquivos(
+    arquivos: ArquivoMultipart[],
+  ): Promise<ArquivoUpload[]> {
+    const arquivosUpload: ArquivoUpload[] = [];
+
+    for (const arquivo of arquivos) {
+      if (!this.isMimetypePermitido(arquivo.mimetype)) {
+        throw new BadRequestException({
+          code: "INVALID_FILE_TYPE",
+          message:
+            "Tipo de arquivo nao permitido. Use apenas imagem, video ou audio.",
+        });
+      }
+
+      try {
+        const resultado = await this.storageService.uploadBuffer(
+          arquivo.buffer,
+          arquivo.nomeOriginal,
+          arquivo.mimetype,
+          "suporte",
+        );
+
+        arquivosUpload.push({
+          url: resultado.url,
+          nome: resultado.name,
+          mimetype: arquivo.mimetype,
+        });
+      } catch (error) {
+        this.logger.error(
+          `Erro ao fazer upload de arquivo: ${error instanceof Error ? error.message : String(error)}`,
+        );
+        throw new InternalServerErrorException({
+          code: "UPLOAD_FAILED",
+          message: "Erro ao fazer upload do arquivo",
+        });
+      }
+    }
+
+    return arquivosUpload;
   }
 
   // ============================================
@@ -196,9 +244,18 @@ export class SuporteController {
       });
     }
 
+    if (!req.user.schoolId) {
+      throw new BadRequestException({
+        code: "INVALID_SESSION",
+        message: "Sessao invalida: schoolId e obrigatorio",
+      });
+    }
+
+    const arquivosUpload = await this.uploadArquivos(arquivos);
+
     const os = await this.suporteService.criar(
       parsed.data,
-      arquivos,
+      arquivosUpload,
       req.user,
     );
 
@@ -324,10 +381,14 @@ export class SuporteController {
       });
     }
 
+    await this.suporteService.validarEnvioMensagem(id, req.user);
+
+    const arquivosUpload = await this.uploadArquivos(arquivos);
+
     const mensagens = await this.suporteService.enviarMensagem(
       id,
       parsed.data,
-      arquivos,
+      arquivosUpload,
       req.user,
     );
 
@@ -367,6 +428,28 @@ export class SuporteController {
     return {
       success: true,
       data: os,
+    };
+  }
+
+  /**
+   * DELETE /suporte/:id
+   * Exclui uma ordem de servico
+   *
+   * Permissao:
+   * - Administradores podem excluir qualquer OS da escola
+   * - Usuarios comuns apenas suas proprias OS
+   */
+  @Delete(":id")
+  @Roles(...TODOS_ROLES)
+  async excluirOrdemServico(
+    @Param("id") id: string,
+    @Req() req: { user: UserContext },
+  ) {
+    await this.suporteService.excluir(id, req.user);
+
+    return {
+      success: true,
+      data: null,
     };
   }
 }

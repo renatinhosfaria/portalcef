@@ -2,7 +2,7 @@ export { useCiclos, useCiclosDaTurma } from "./use-ciclos";
 export {
   useProva,
   useAnalistaProvaActions,
-  useCoordenadoraProvaActions,
+  useGestaoImpressao,
   useProvaDashboard,
   useGestaoProvas,
   useProvaDetalhe,

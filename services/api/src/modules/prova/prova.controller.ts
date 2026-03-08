@@ -29,8 +29,6 @@ import {
   createProvaSchema,
   type DashboardProvasQueryDto,
   dashboardProvasQuerySchema,
-  type DevolverProvaDto,
-  devolverProvaSchema,
   type ListarProvasGestaoDto,
   listarProvasGestaoSchema,
   GESTAO_ROLES,
@@ -83,10 +81,9 @@ const VISUALIZAR_ACCESS = [
  * ProvaController
  *
  * Controller para o workflow de provas com:
- * - Professora: criar, submeter, anexar documentos
- * - Analista: revisar, aprovar/devolver
- * - Coordenadora: aprovar final/devolver
- * - Gestão: dashboard
+ * - Professora: criar, enviar p/ impressao, enviar p/ analise, recuperar
+ * - Gestao: imprimir docs, enviar p/ responder, dashboard
+ * - Analista: revisar, aprovar/devolver (aprovacao final)
  */
 @Controller("prova")
 @UseGuards(AuthGuard, RolesGuard)
@@ -191,16 +188,16 @@ export class ProvaController {
   }
 
   /**
-   * POST /prova/:id/submeter
-   * Submete prova para análise
+   * POST /prova/:id/enviar-impressao
+   * Envia prova para impressao pela gestao
    */
-  @Post(":id/submeter")
+  @Post(":id/enviar-impressao")
   @Roles(...PROFESSORA_ACCESS)
-  async submeterProva(
+  async enviarParaImpressao(
     @Req() req: { user: UserContext },
     @Param("id") id: string,
   ) {
-    const provaResult = await this.provaService.submeterProva(req.user, id);
+    const provaResult = await this.provaService.enviarParaImpressao(req.user, id);
     return {
       success: true,
       data: provaResult,
@@ -218,6 +215,40 @@ export class ProvaController {
     @Param("id") id: string,
   ) {
     const provaResult = await this.provaService.recuperarProva(req.user, id);
+    return {
+      success: true,
+      data: provaResult,
+    };
+  }
+
+  /**
+   * POST /prova/:id/enviar-analise
+   * Professora confirma que respondeu e envia para analista
+   */
+  @Post(":id/enviar-analise")
+  @Roles(...PROFESSORA_ACCESS)
+  async enviarParaAnalise(
+    @Req() req: { user: UserContext },
+    @Param("id") id: string,
+  ) {
+    const provaResult = await this.provaService.enviarParaAnalise(req.user, id);
+    return {
+      success: true,
+      data: provaResult,
+    };
+  }
+
+  /**
+   * POST /prova/:id/reenviar-analise
+   * Professora reenvia prova devolvida para analista
+   */
+  @Post(":id/reenviar-analise")
+  @Roles(...PROFESSORA_ACCESS)
+  async reenviarParaAnalise(
+    @Req() req: { user: UserContext },
+    @Param("id") id: string,
+  ) {
+    const provaResult = await this.provaService.reenviarParaAnalise(req.user, id);
     return {
       success: true,
       data: provaResult,
@@ -419,7 +450,7 @@ export class ProvaController {
     const config = {
       document: {
         fileType: documento.fileName?.endsWith(".doc") ? "doc" : "docx",
-        key: `${docId}-${documento.updatedAt ? new Date(documento.updatedAt).getTime() : Date.now()}`,
+        key: `${docId}-${documento.createdAt ? new Date(documento.createdAt).getTime() : docId}`,
         title: documento.fileName || "Documento",
         url: fileUrl,
         permissions,
@@ -737,80 +768,25 @@ export class ProvaController {
   }
 
   // ============================================
-  // Endpoints da Coordenadora
-  // ============================================
-
-  /**
-   * GET /prova/coordenadora/pendentes
-   * Lista provas pendentes para coordenadora
-   */
-  @Get("coordenadora/pendentes")
-  @Roles(...COORDENADORA_ACCESS)
-  async listarPendentesCoordenadora(@Req() req: { user: UserContext }) {
-    const provas = await this.provaService.listarPendentesCoordenadora(
-      req.user,
-    );
-    return {
-      success: true,
-      data: provas,
-    };
-  }
-
-  /**
-   * POST /prova/:id/coordenadora/aprovar
-   * Aprova prova como coordenadora (aprovação final)
-   */
-  @Post(":id/coordenadora/aprovar")
-  @Roles(...COORDENADORA_ACCESS)
-  async aprovarComoCoordenadora(
-    @Req() req: { user: UserContext },
-    @Param("id") id: string,
-  ) {
-    const provaResult = await this.provaService.aprovarComoCoordenadora(
-      req.user,
-      id,
-    );
-    return {
-      success: true,
-      data: provaResult,
-    };
-  }
-
-  /**
-   * POST /prova/:id/coordenadora/devolver
-   * Devolve prova como coordenadora
-   */
-  @Post(":id/coordenadora/devolver")
-  @Roles(...COORDENADORA_ACCESS)
-  async devolverComoCoordenadora(
-    @Req() req: { user: UserContext },
-    @Param("id") id: string,
-    @Body() body: DevolverProvaDto,
-  ) {
-    // Validar DTO
-    const parsed = devolverProvaSchema.safeParse(body);
-    if (!parsed.success) {
-      throw new BadRequestException({
-        code: "VALIDATION_ERROR",
-        message: "Dados inválidos",
-        errors: parsed.error.errors,
-      });
-    }
-
-    const provaResult = await this.provaService.devolverComoCoordenadora(
-      req.user,
-      id,
-      parsed.data,
-    );
-    return {
-      success: true,
-      data: provaResult,
-    };
-  }
-
-  // ============================================
   // Endpoints de Gestão
   // ============================================
+
+  /**
+   * POST /prova/:id/enviar-responder
+   * Gestao confirma que imprimiu e envia para professora responder
+   */
+  @Post(":id/enviar-responder")
+  @Roles(...GESTAO_ACCESS, ...COORDENADORA_ACCESS)
+  async enviarParaResponder(
+    @Req() req: { user: UserContext },
+    @Param("id") id: string,
+  ) {
+    const provaResult = await this.provaService.enviarParaResponder(req.user, id);
+    return {
+      success: true,
+      data: provaResult,
+    };
+  }
 
   /**
    * GET /prova/dashboard

@@ -72,17 +72,22 @@ export function useOrdensServico(params: UseOrdensServicoParams = {}) {
 
   const fetchContagem = useCallback(async () => {
     try {
-      const contagemData = await apiGet<SuporteContagem>("suporte/contagem");
-      setContagem(contagemData);
+      const response = await apiGet<{ data: SuporteContagem }>(
+        "suporte/contagem",
+      );
+      setContagem(response.data);
     } catch (err) {
       console.error("Erro ao buscar contagem:", err);
     }
   }, []);
 
-  useEffect(() => {
-    void fetchOrdens();
-    void fetchContagem();
+  const refetchTudo = useCallback(async () => {
+    await Promise.all([fetchOrdens(), fetchContagem()]);
   }, [fetchOrdens, fetchContagem]);
+
+  useEffect(() => {
+    void refetchTudo();
+  }, [refetchTudo]);
 
   return {
     ordens,
@@ -90,6 +95,6 @@ export function useOrdensServico(params: UseOrdensServicoParams = {}) {
     contagem,
     isLoading,
     error,
-    refetch: fetchOrdens,
+    refetch: refetchTudo,
   };
 }

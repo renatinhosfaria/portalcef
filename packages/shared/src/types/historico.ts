@@ -9,7 +9,14 @@ export type AcaoHistorico =
   | "DEVOLVIDO_ANALISTA"
   | "APROVADO_COORDENADORA"
   | "DEVOLVIDO_COORDENADORA"
-  | "DOCUMENTO_IMPRESSO";
+  | "DOCUMENTO_IMPRESSO"
+  | "RECUPERADO"
+  | "COMENTARIO_ADICIONADO"
+  // Ações específicas do módulo de provas
+  | "SUBMETIDO_IMPRESSAO"
+  | "ENVIADO_RESPONDER"
+  | "SUBMETIDO_ANALISTA"
+  | "RESUBMETIDO_ANALISTA";
 
 export interface HistoricoEntry {
   id: string;

@@ -39,7 +39,6 @@ import {
   HistoricoTimeline,
   type PlanoDocumento,
 } from "../../../../features/plano-aula";
-
 import {
   ProvaHeader,
   useAnalistaProvaActions,
@@ -185,7 +184,7 @@ export function RevisaoProvaContent({ provaId }: RevisaoProvaContentProps) {
   );
 
   /**
-   * Aprova a prova e envia para a coordenacao
+   * Aprova a prova (aprovacao final da analista)
    */
   const handleAprovar = useCallback(async () => {
     setActionError(null);

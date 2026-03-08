@@ -58,6 +58,10 @@ function getAcaoIcon(acao: AcaoHistorico) {
       return <Undo className="h-4 w-4" />;
     case "DOCUMENTO_IMPRESSO":
       return <Printer className="h-4 w-4" />;
+    case "RECUPERADO":
+      return <Undo className="h-4 w-4" />;
+    case "COMENTARIO_ADICIONADO":
+      return <MessageSquare className="h-4 w-4" />;
     default:
       return <Check className="h-4 w-4" />;
   }
@@ -80,6 +84,10 @@ function getAcaoColor(acao: AcaoHistorico): string {
       return "bg-red-100 text-red-600";
     case "DOCUMENTO_IMPRESSO":
       return "bg-indigo-100 text-indigo-600";
+    case "RECUPERADO":
+      return "bg-amber-100 text-amber-600";
+    case "COMENTARIO_ADICIONADO":
+      return "bg-blue-100 text-blue-600";
     default:
       return "bg-gray-100 text-gray-600";
   }
@@ -104,6 +112,10 @@ function getAcaoLabel(acao: AcaoHistorico): string {
       return "Devolvido pela coordenadora";
     case "DOCUMENTO_IMPRESSO":
       return "Documento impresso";
+    case "RECUPERADO":
+      return "Plano recuperado pela professora";
+    case "COMENTARIO_ADICIONADO":
+      return "Comentário adicionado";
     default:
       return acao;
   }
@@ -140,6 +152,14 @@ function getDetalhesMensagem(entry: HistoricoEntry): string | null {
     }
 
     return `${documentoNome} impresso`;
+  }
+
+  if (entry.acao === "COMENTARIO_ADICIONADO") {
+    const documentoNome =
+      typeof entry.detalhes?.documentoNome === "string"
+        ? entry.detalhes.documentoNome
+        : "Documento";
+    return `Comentário adicionado ao documento "${documentoNome}"`;
   }
 
   return null;

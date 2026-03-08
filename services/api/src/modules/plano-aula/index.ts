@@ -10,14 +10,12 @@ export {
 export {
   // DTOs
   type CreatePlanoDto,
-  type AddComentarioDto,
   type DevolverPlanoDto,
   type SetDeadlineDto,
   type ListPlanosQueryDto,
   type DashboardQueryDto,
   // Schemas (Zod)
   createPlanoSchema,
-  addComentarioSchema,
   devolverPlanoSchema,
   setDeadlineSchema,
   listPlanosQuerySchema,

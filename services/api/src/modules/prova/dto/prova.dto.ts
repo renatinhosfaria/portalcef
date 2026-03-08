@@ -1,16 +1,19 @@
 import { z } from "zod";
 
 /**
- * DTOs para o módulo prova (workflow de aprovação de provas)
+ * DTOs para o módulo prova (workflow de provas com impressão)
  *
  * Status Flow:
- * RASCUNHO -> AGUARDANDO_ANALISTA -> AGUARDANDO_COORDENADORA -> APROVADO
- *                    |                        |
- *                    v                        v
- *           DEVOLVIDO_ANALISTA    DEVOLVIDO_COORDENADORA
- *                    |                        |
- *                    v                        v
- *            REVISAO_ANALISTA         (volta para PROFESSORA ou ANALISTA)
+ * RASCUNHO -> AGUARDANDO_IMPRESSAO -> AGUARDANDO_RESPOSTA -> AGUARDANDO_ANALISTA -> APROVADO
+ *                                                                    |
+ *                                                                    v
+ *                                                           DEVOLVIDO_ANALISTA
+ *                                                                    |
+ *                                                                    v
+ *                                                              RECUPERADO
+ *                                                                    |
+ *                                                                    v
+ *                                                         (volta para RASCUNHO)
  */
 
 // ============================================
@@ -46,11 +49,10 @@ export type CreateProvaDto = z.infer<typeof createProvaSchema>;
 
 /**
  * Schema para devolver prova para ajustes
- * Coordenadora pode devolver para PROFESSORA ou ANALISTA
+ * Analista devolve para a professora corrigir
  */
 export const devolverProvaSchema = z.object({
   motivo: z.string().optional(),
-  destino: z.enum(["PROFESSORA", "ANALISTA"]).optional(),
 });
 
 export type DevolverProvaDto = z.infer<typeof devolverProvaSchema>;
@@ -63,11 +65,10 @@ export const listProvasQuerySchema = z.object({
   status: z
     .enum([
       "RASCUNHO",
+      "AGUARDANDO_IMPRESSAO",
+      "AGUARDANDO_RESPOSTA",
       "AGUARDANDO_ANALISTA",
-      "AGUARDANDO_COORDENADORA",
       "DEVOLVIDO_ANALISTA",
-      "DEVOLVIDO_COORDENADORA",
-      "REVISAO_ANALISTA",
       "APROVADO",
       "RECUPERADO",
     ])
@@ -99,8 +100,9 @@ export const listarProvasGestaoSchema = z.object({
     .enum([
       "todos",
       "rascunho",
+      "aguardando-impressao",
+      "aguardando-resposta",
       "aguardando-analise",
-      "aguardando-aprovacao",
       "devolvidos",
       "aprovados",
     ])
@@ -123,8 +125,9 @@ export type ListarProvasGestaoDto = z.infer<typeof listarProvasGestaoSchema>;
 export const PROVA_STATUS_URL_MAP: Record<string, string[]> = {
   todos: [],
   rascunho: ["RASCUNHO", "RECUPERADO"],
-  "aguardando-analise": ["AGUARDANDO_ANALISTA", "REVISAO_ANALISTA"],
-  "aguardando-aprovacao": ["AGUARDANDO_COORDENADORA"],
-  devolvidos: ["DEVOLVIDO_ANALISTA", "DEVOLVIDO_COORDENADORA"],
+  "aguardando-impressao": ["AGUARDANDO_IMPRESSAO"],
+  "aguardando-resposta": ["AGUARDANDO_RESPOSTA"],
+  "aguardando-analise": ["AGUARDANDO_ANALISTA"],
+  devolvidos: ["DEVOLVIDO_ANALISTA"],
   aprovados: ["APROVADO"],
 };

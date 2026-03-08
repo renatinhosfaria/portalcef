@@ -32,7 +32,6 @@ import { toast } from "@essencia/ui/toaster";
 import { Loader2, Paperclip } from "lucide-react";
 import { useCriarOs } from "@/hooks/use-criar-os";
 import { UploadArquivo } from "@/features/midia/components/upload-arquivo";
-import { GravadorTela } from "@/features/midia/components/gravador-tela";
 import { GravadorAudio } from "@/features/midia/components/gravador-audio";
 
 // ============================================
@@ -364,18 +363,7 @@ export function NovaOsDialog({
               </TabsContent>
 
               {/* Tab: Video */}
-              <TabsContent value="video" className="space-y-4">
-                <GravadorTela onRecordingComplete={handleGravacaoCompleta} />
-                <div className="relative">
-                  <div className="absolute inset-0 flex items-center">
-                    <span className="w-full border-t" />
-                  </div>
-                  <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-background px-2 text-muted-foreground">
-                      ou envie um arquivo
-                    </span>
-                  </div>
-                </div>
+              <TabsContent value="video">
                 <UploadArquivo
                   accept="video/*"
                   maxFiles={3}

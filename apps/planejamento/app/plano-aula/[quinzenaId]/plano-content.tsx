@@ -5,7 +5,6 @@
  * Task 23: Atualizado para usar periodoId (UUID) ao invés de quinzenaId (número)
  */
 
-import { api } from "@essencia/shared/fetchers/client";
 import {
   Alert,
   AlertDescription,
@@ -55,11 +54,6 @@ import {
   type PlanoAula,
   type PlanoAulaStatus,
 } from "../../../features/plano-aula";
-
-interface ComentarioApiPayload {
-  documentoId: string;
-  comentario: string;
-}
 
 interface PlanoContentProps {
   periodoId: string; // UUID do período (não mais número hardcoded)
@@ -193,57 +187,6 @@ export function PlanoContent({
       }
     },
     [plano?.id, addLink, refetchPlano],
-  );
-
-  /**
-   * Handler para adicionar comentário a um documento via API
-   */
-  const handleAddComentario = useCallback(
-    async (documentoId: string, comentario: string) => {
-      try {
-        const payload: ComentarioApiPayload = { documentoId, comentario };
-        await api.post("/plano-aula/comentarios", payload);
-        await refetchPlano();
-      } catch (err) {
-        console.error("Erro ao adicionar comentário:", err);
-        throw err;
-      }
-    },
-    [refetchPlano],
-  );
-
-  /**
-   * Handler para editar comentário existente
-   */
-  const handleEditComentario = useCallback(
-    async (comentarioId: string, novoTexto: string) => {
-      try {
-        await api.patch(`/plano-aula/comentarios/${comentarioId}`, {
-          comentario: novoTexto,
-        });
-        await refetchPlano();
-      } catch (err) {
-        console.error("Erro ao editar comentário:", err);
-        throw err;
-      }
-    },
-    [refetchPlano],
-  );
-
-  /**
-   * Handler para deletar comentário
-   */
-  const handleDeleteComentario = useCallback(
-    async (comentarioId: string) => {
-      try {
-        await api.delete(`/plano-aula/comentarios/${comentarioId}`);
-        await refetchPlano();
-      } catch (err) {
-        console.error("Erro ao deletar comentário:", err);
-        throw err;
-      }
-    },
-    [refetchPlano],
   );
 
   /**
@@ -516,13 +459,8 @@ export function PlanoContent({
               {/* NOTA: Professoras NÃO podem excluir documentos após o upload */}
               <DocumentoList
                 documentos={plano.documentos}
-                onAddComentario={handleAddComentario}
-                onEditComentario={handleEditComentario}
-                onDeleteComentario={handleDeleteComentario}
                 onImprimir={handleImprimirDocumento}
-                showComments={showFeedback}
                 canDelete={false}
-                currentUserId={userId ?? undefined}
               />
             </TabsContent>
 

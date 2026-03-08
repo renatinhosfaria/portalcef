@@ -14,7 +14,6 @@ const ADMIN_ROLES = [
   "master",
   "diretora_geral",
   "gerente_unidade",
-  "coordenadora_geral",
 ];
 
 // ============================================

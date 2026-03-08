@@ -28,6 +28,7 @@ export const planoAulaStatusEnum = [
   "DEVOLVIDO_COORDENADORA", // Coordenadora solicitou ajustes
   "REVISAO_ANALISTA", // Em revisão pelo analista após correções
   "APROVADO", // Aprovado pela coordenação
+  "RECUPERADO", // Recuperado pela professora antes da análise
 ] as const;
 export type PlanoAulaStatus = (typeof planoAulaStatusEnum)[number];
 
@@ -160,6 +161,9 @@ export const planoDocumento = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
+
+    // Indicador de comentários (OnlyOffice)
+    temComentarios: boolean("tem_comentarios").notNull().default(false),
   },
   (table) => ({
     planoIdIdx: index("plano_documento_plano_id_idx").on(table.planoId),

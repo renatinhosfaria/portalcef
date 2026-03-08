@@ -11,6 +11,7 @@ import { differenceInDays, format, isPast } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { CheckCircle2, Clock, FileText, Lock } from "lucide-react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 
 interface PlanoAulaCardProps {
   periodo: {
@@ -74,6 +75,8 @@ export function PlanoAulaCard({
   planoExistente,
   isLocked = false,
 }: PlanoAulaCardProps) {
+  const searchParams = useSearchParams();
+  const turmaId = searchParams.get("turmaId");
   const deadlineStatus = getDeadlineStatus(periodo.dataMaximaEntrega);
   const isCompleted = planoExistente?.status === "APROVADO";
   const colorClass = getCardColorClass(deadlineStatus, isCompleted, isLocked);
@@ -182,5 +185,9 @@ export function PlanoAulaCard({
     return <div>{cardContent}</div>;
   }
 
-  return <Link href={`/plano-aula/${periodo.id}`}>{cardContent}</Link>;
+  const planoHref = turmaId
+    ? `/plano-aula/${periodo.id}?turmaId=${turmaId}`
+    : `/plano-aula/${periodo.id}`;
+
+  return <Link href={planoHref}>{cardContent}</Link>;
 }

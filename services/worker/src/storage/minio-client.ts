@@ -1,4 +1,4 @@
-import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { randomUUID } from "node:crypto";
 import { createWriteStream } from "node:fs";
 import { readFile } from "node:fs/promises";
@@ -43,13 +43,68 @@ export async function baixarArquivo(storageKey: string, destino: string) {
   await pipeline(bodyStream, createWriteStream(destino));
 }
 
+/**
+ * Codifica o Content-Disposition de forma segura para S3/MinIO.
+ * Caracteres não-ASCII (acentos, ç, etc.) causam erro de assinatura
+ * no MinIO quando enviados diretamente no header.
+ * Usa RFC 5987 (filename*=UTF-8''...) para nomes com caracteres especiais.
+ */
+function buildContentDisposition(filename: string): string {
+  const hasNonAscii = /[^\x20-\x7E]/.test(filename);
+  if (!hasNonAscii) {
+    return `inline; filename="${filename}"`;
+  }
+  const encoded = encodeURIComponent(filename);
+  return `inline; filename="${encoded}"; filename*=UTF-8''${encoded}`;
+}
+
+/**
+ * Verifica se uma key já existe no bucket.
+ */
+async function keyExiste(key: string): Promise<boolean> {
+  try {
+    await s3Client.send(
+      new HeadObjectCommand({ Bucket: bucketName, Key: key }),
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Gera uma key unica no bucket baseada no nome do arquivo.
+ * Se "documento.pdf" já existir, tenta "documento (1).pdf", "documento (2).pdf", etc.
+ */
+async function gerarKeyUnica(nomePdf: string): Promise<string> {
+  if (!(await keyExiste(nomePdf))) {
+    return nomePdf;
+  }
+
+  const pontoIndex = nomePdf.lastIndexOf(".");
+  const base = pontoIndex > 0 ? nomePdf.slice(0, pontoIndex) : nomePdf;
+  const ext = pontoIndex > 0 ? nomePdf.slice(pontoIndex) : "";
+
+  for (let i = 1; i <= 100; i++) {
+    const candidata = `${base} (${i})${ext}`;
+    if (!(await keyExiste(candidata))) {
+      return candidata;
+    }
+  }
+
+  return `${randomUUID()}.pdf`;
+}
+
 export async function enviarPdf(caminho: string, nomeOriginal?: string) {
   const buffer = await readFile(caminho);
-  const key = `${randomUUID()}.pdf`;
 
   const nomePdf = nomeOriginal
     ? nomeOriginal.replace(/\.(docx?|odt)$/i, ".pdf")
     : undefined;
+
+  const key = nomePdf
+    ? await gerarKeyUnica(nomePdf)
+    : `${randomUUID()}.pdf`;
 
   await s3Client.send(
     new PutObjectCommand({
@@ -57,7 +112,7 @@ export async function enviarPdf(caminho: string, nomeOriginal?: string) {
       Key: key,
       Body: buffer,
       ContentType: "application/pdf",
-      ...(nomePdf && { ContentDisposition: `inline; filename="${nomePdf}"` }),
+      ...(nomePdf && { ContentDisposition: buildContentDisposition(nomePdf) }),
     }),
   );
 

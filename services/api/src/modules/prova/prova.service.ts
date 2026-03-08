@@ -9,7 +9,6 @@ import {
   getDb,
   and,
   eq,
-  or,
   desc,
   gte,
   lte,
@@ -22,14 +21,13 @@ import {
   users,
   type Prova,
   type ProvaDocumento,
-  type PlanoAulaStatus,
+  type ProvaStatus,
 } from "@essencia/db";
 
 import { ProvaHistoricoService } from "./prova-historico.service";
 
 import {
   type CreateProvaDto,
-  type DevolverProvaDto,
   type ListarProvasGestaoDto,
   PROVA_STATUS_URL_MAP,
   isAnalista,
@@ -66,7 +64,7 @@ export interface ProvaComDocumentos extends Prova {
  * Item do dashboard de status
  */
 export interface DashboardItem {
-  status: PlanoAulaStatus;
+  status: ProvaStatus;
   count: number;
   segmento?: string;
 }
@@ -78,11 +76,11 @@ export interface DashboardItem {
 /**
  * ProvaService
  *
- * Implementa o workflow de aprovação de provas:
- * - Professora: cria/submete prova
- * - Analista: revisa/aprova/devolve para professora
- * - Coordenadora: aprova final/devolve para professora ou analista
- * - Gestão: visualiza dashboard
+ * Implementa o workflow de provas:
+ * - Professora: cria, envia p/ impressao, envia p/ analise, recupera
+ * - Gestao: imprime docs, envia p/ responder
+ * - Analista: revisa, aprova/devolve (aprovacao final)
+ * - Dashboard: estatisticas
  */
 @Injectable()
 export class ProvaService {
@@ -223,9 +221,9 @@ export class ProvaService {
   }
 
   /**
-   * Submete prova para análise (RASCUNHO -> AGUARDANDO_ANALISTA)
+   * Envia prova para impressao (RASCUNHO -> AGUARDANDO_IMPRESSAO)
    */
-  async submeterProva(user: UserContext, provaId: string): Promise<Prova> {
+  async enviarParaImpressao(user: UserContext, provaId: string): Promise<Prova> {
     const db = getDb();
 
     const provaEncontrada = await db.query.prova.findFirst({
@@ -234,64 +232,51 @@ export class ProvaService {
     });
 
     if (!provaEncontrada) {
-      throw new NotFoundException("Prova não encontrada");
+      throw new NotFoundException("Prova nao encontrada");
     }
 
     if (provaEncontrada.userId !== user.userId) {
-      throw new ForbiddenException("Apenas o autor pode submeter a prova");
+      throw new ForbiddenException("Apenas o autor pode enviar a prova para impressao");
     }
 
-    // Verificar se tem documentos anexados
     if (!provaEncontrada.documentos || provaEncontrada.documentos.length === 0) {
+      throw new BadRequestException("Prova precisa ter pelo menos um documento anexado");
+    }
+
+    if (provaEncontrada.status !== "RASCUNHO" && provaEncontrada.status !== "RECUPERADO") {
       throw new BadRequestException(
-        "Prova precisa ter pelo menos um documento anexado",
+        `Nao e possivel enviar para impressao prova com status ${provaEncontrada.status}`,
       );
     }
 
-    // Verificar status permite submissão
-    const statusPermitidos: PlanoAulaStatus[] = [
-      "RASCUNHO",
-      "DEVOLVIDO_ANALISTA",
-      "DEVOLVIDO_COORDENADORA",
-      "RECUPERADO",
-    ];
-    if (!statusPermitidos.includes(provaEncontrada.status)) {
-      throw new BadRequestException(
-        `Não é possível submeter prova com status ${provaEncontrada.status}`,
-      );
-    }
-
-    const novoStatus: PlanoAulaStatus = "AGUARDANDO_ANALISTA";
     const statusAnterior = provaEncontrada.status;
 
     const [atualizada] = await db
       .update(prova)
       .set({
-        status: novoStatus,
+        status: "AGUARDANDO_IMPRESSAO",
         submittedAt: new Date(),
         updatedAt: new Date(),
       })
       .where(eq(prova.id, provaId))
       .returning();
 
-    // Registrar no histórico
     const userName = await this.getUserName(user.userId);
     await this.historicoService.registrar({
       provaId,
       userId: user.userId,
       userName,
       userRole: user.role,
-      acao: "SUBMETIDO",
+      acao: "SUBMETIDO_IMPRESSAO",
       statusAnterior,
-      statusNovo: novoStatus,
+      statusNovo: "AGUARDANDO_IMPRESSAO",
     });
 
     return atualizada;
   }
 
   /**
-   * Recupera prova submetida (AGUARDANDO_ANALISTA -> RECUPERADO)
-   * Permite que a professora recupere a prova antes da analista iniciar a análise
+   * Recupera prova antes da gestao imprimir (AGUARDANDO_IMPRESSAO -> RASCUNHO)
    */
   async recuperarProva(user: UserContext, provaId: string): Promise<Prova> {
     const db = getDb();
@@ -301,31 +286,29 @@ export class ProvaService {
     });
 
     if (!provaEncontrada) {
-      throw new NotFoundException("Prova não encontrada");
+      throw new NotFoundException("Prova nao encontrada");
     }
 
     if (provaEncontrada.userId !== user.userId) {
       throw new ForbiddenException("Apenas o autor pode recuperar a prova");
     }
 
-    if (provaEncontrada.status !== "AGUARDANDO_ANALISTA") {
+    if (provaEncontrada.status !== "AGUARDANDO_IMPRESSAO") {
       throw new ConflictException(
-        `Não é possível recuperar prova com status ${provaEncontrada.status}`,
+        `Nao e possivel recuperar prova com status ${provaEncontrada.status}`,
       );
     }
 
-    // Verificar se a analista já iniciou a análise
-    // 1. Algum documento com aprovação?
-    const documentoAprovado = await db.query.provaDocumento.findFirst({
+    const documentoImpresso = await db.query.provaDocumento.findFirst({
       where: and(
         eq(provaDocumento.provaId, provaId),
-        isNotNull(provaDocumento.approvedBy),
+        isNotNull(provaDocumento.printedBy),
       ),
     });
 
-    if (documentoAprovado) {
+    if (documentoImpresso) {
       throw new ConflictException(
-        "A analista pedagógica já iniciou a análise desta prova. Não é mais possível recuperá-la.",
+        "A gestao ja iniciou a impressao desta prova. Nao e mais possivel recupera-la.",
       );
     }
 
@@ -334,14 +317,13 @@ export class ProvaService {
     const [atualizada] = await db
       .update(prova)
       .set({
-        status: "RECUPERADO",
+        status: "RASCUNHO",
         submittedAt: null,
         updatedAt: new Date(),
       })
       .where(eq(prova.id, provaId))
       .returning();
 
-    // Registrar no histórico
     const userName = await this.getUserName(user.userId);
     await this.historicoService.registrar({
       provaId,
@@ -350,7 +332,158 @@ export class ProvaService {
       userRole: user.role,
       acao: "RECUPERADO",
       statusAnterior,
-      statusNovo: "RECUPERADO",
+      statusNovo: "RASCUNHO",
+    });
+
+    return atualizada;
+  }
+
+  /**
+   * Envia prova respondida para analise (AGUARDANDO_RESPOSTA -> AGUARDANDO_ANALISTA)
+   */
+  async enviarParaAnalise(user: UserContext, provaId: string): Promise<Prova> {
+    const db = getDb();
+
+    const provaEncontrada = await db.query.prova.findFirst({
+      where: eq(prova.id, provaId),
+    });
+
+    if (!provaEncontrada) {
+      throw new NotFoundException("Prova nao encontrada");
+    }
+
+    if (provaEncontrada.userId !== user.userId) {
+      throw new ForbiddenException("Apenas o autor pode enviar para analise");
+    }
+
+    if (provaEncontrada.status !== "AGUARDANDO_RESPOSTA") {
+      throw new BadRequestException(
+        `Nao e possivel enviar para analise prova com status ${provaEncontrada.status}`,
+      );
+    }
+
+    const statusAnterior = provaEncontrada.status;
+
+    const [atualizada] = await db
+      .update(prova)
+      .set({
+        status: "AGUARDANDO_ANALISTA",
+        updatedAt: new Date(),
+      })
+      .where(eq(prova.id, provaId))
+      .returning();
+
+    const userName = await this.getUserName(user.userId);
+    await this.historicoService.registrar({
+      provaId,
+      userId: user.userId,
+      userName,
+      userRole: user.role,
+      acao: "SUBMETIDO_ANALISTA",
+      statusAnterior,
+      statusNovo: "AGUARDANDO_ANALISTA",
+    });
+
+    return atualizada;
+  }
+
+  /**
+   * Reenvia prova devolvida para analise (DEVOLVIDO_ANALISTA -> AGUARDANDO_ANALISTA)
+   */
+  async reenviarParaAnalise(user: UserContext, provaId: string): Promise<Prova> {
+    const db = getDb();
+
+    const provaEncontrada = await db.query.prova.findFirst({
+      where: eq(prova.id, provaId),
+    });
+
+    if (!provaEncontrada) {
+      throw new NotFoundException("Prova nao encontrada");
+    }
+
+    if (provaEncontrada.userId !== user.userId) {
+      throw new ForbiddenException("Apenas o autor pode reenviar a prova");
+    }
+
+    if (provaEncontrada.status !== "DEVOLVIDO_ANALISTA") {
+      throw new BadRequestException(
+        `Nao e possivel reenviar prova com status ${provaEncontrada.status}`,
+      );
+    }
+
+    const statusAnterior = provaEncontrada.status;
+
+    const [atualizada] = await db
+      .update(prova)
+      .set({
+        status: "AGUARDANDO_ANALISTA",
+        updatedAt: new Date(),
+      })
+      .where(eq(prova.id, provaId))
+      .returning();
+
+    const userName = await this.getUserName(user.userId);
+    await this.historicoService.registrar({
+      provaId,
+      userId: user.userId,
+      userName,
+      userRole: user.role,
+      acao: "RESUBMETIDO_ANALISTA",
+      statusAnterior,
+      statusNovo: "AGUARDANDO_ANALISTA",
+    });
+
+    return atualizada;
+  }
+
+  // ============================================
+  // Metodos da Gestao (Impressao)
+  // ============================================
+
+  /**
+   * Marca prova como enviada para responder (AGUARDANDO_IMPRESSAO -> AGUARDANDO_RESPOSTA)
+   */
+  async enviarParaResponder(user: UserContext, provaId: string): Promise<Prova> {
+    const db = getDb();
+
+    const provaEncontrada = await db.query.prova.findFirst({
+      where: eq(prova.id, provaId),
+    });
+
+    if (!provaEncontrada) {
+      throw new NotFoundException("Prova nao encontrada");
+    }
+
+    if (provaEncontrada.unitId !== user.unitId) {
+      throw new ForbiddenException("Voce so pode gerenciar provas da sua unidade");
+    }
+
+    if (provaEncontrada.status !== "AGUARDANDO_IMPRESSAO") {
+      throw new BadRequestException(
+        `Nao e possivel enviar para responder prova com status ${provaEncontrada.status}`,
+      );
+    }
+
+    const statusAnterior = provaEncontrada.status;
+
+    const [atualizada] = await db
+      .update(prova)
+      .set({
+        status: "AGUARDANDO_RESPOSTA",
+        updatedAt: new Date(),
+      })
+      .where(eq(prova.id, provaId))
+      .returning();
+
+    const userName = await this.getUserName(user.userId);
+    await this.historicoService.registrar({
+      provaId,
+      userId: user.userId,
+      userName,
+      userRole: user.role,
+      acao: "ENVIADO_RESPONDER",
+      statusAnterior,
+      statusNovo: "AGUARDANDO_RESPOSTA",
     });
 
     return atualizada;
@@ -388,46 +521,34 @@ export class ProvaService {
 
   /**
    * Lista provas pendentes para analista
-   * Status: AGUARDANDO_ANALISTA ou REVISAO_ANALISTA
+   * Status: AGUARDANDO_ANALISTA
    */
   async listarPendentesAnalista(user: UserContext) {
     const db = getDb();
 
     if (!user.unitId) {
-      throw new BadRequestException("Usuário não possui unidade associada");
+      throw new BadRequestException("Usuario nao possui unidade associada");
     }
 
     const provas = await db.query.prova.findMany({
       where: and(
         eq(prova.unitId, user.unitId),
-        or(
-          eq(prova.status, "AGUARDANDO_ANALISTA"),
-          eq(prova.status, "REVISAO_ANALISTA"),
-        ),
+        eq(prova.status, "AGUARDANDO_ANALISTA"),
       ),
       with: {
         user: true,
-        turma: {
-          with: {
-            stage: true,
-          },
-        },
+        turma: { with: { stage: true } },
       },
       orderBy: [desc(prova.submittedAt)],
     });
 
-    return provas.map((p: (typeof provas)[number]) =>
-      this.mapToProvaSummary(p),
-    );
+    return provas.map((p: (typeof provas)[number]) => this.mapToProvaSummary(p));
   }
 
   /**
-   * Aprova prova como analista (-> AGUARDANDO_COORDENADORA)
+   * Aprova prova como analista (-> APROVADO) - aprovacao final
    */
-  async aprovarComoAnalista(
-    user: UserContext,
-    provaId: string,
-  ): Promise<Prova> {
+  async aprovarComoAnalista(user: UserContext, provaId: string): Promise<Prova> {
     const db = getDb();
 
     const provaEncontrada = await db.query.prova.findFirst({
@@ -435,22 +556,16 @@ export class ProvaService {
     });
 
     if (!provaEncontrada) {
-      throw new NotFoundException("Prova não encontrada");
+      throw new NotFoundException("Prova nao encontrada");
     }
 
     if (provaEncontrada.unitId !== user.unitId) {
-      throw new ForbiddenException(
-        "Você só pode aprovar provas da sua unidade",
-      );
+      throw new ForbiddenException("Voce so pode aprovar provas da sua unidade");
     }
 
-    const statusPermitidos: PlanoAulaStatus[] = [
-      "AGUARDANDO_ANALISTA",
-      "REVISAO_ANALISTA",
-    ];
-    if (!statusPermitidos.includes(provaEncontrada.status)) {
+    if (provaEncontrada.status !== "AGUARDANDO_ANALISTA") {
       throw new BadRequestException(
-        `Não é possível aprovar prova com status ${provaEncontrada.status}`,
+        `Nao e possivel aprovar prova com status ${provaEncontrada.status}`,
       );
     }
 
@@ -459,13 +574,13 @@ export class ProvaService {
     const [atualizada] = await db
       .update(prova)
       .set({
-        status: "AGUARDANDO_COORDENADORA",
+        status: "APROVADO",
+        approvedAt: new Date(),
         updatedAt: new Date(),
       })
       .where(eq(prova.id, provaId))
       .returning();
 
-    // Registrar no histórico
     const userName = await this.getUserName(user.userId);
     await this.historicoService.registrar({
       provaId,
@@ -474,7 +589,7 @@ export class ProvaService {
       userRole: user.role,
       acao: "APROVADO_ANALISTA",
       statusAnterior,
-      statusNovo: "AGUARDANDO_COORDENADORA",
+      statusNovo: "APROVADO",
     });
 
     return atualizada;
@@ -495,22 +610,18 @@ export class ProvaService {
     });
 
     if (!provaEncontrada) {
-      throw new NotFoundException("Prova não encontrada");
+      throw new NotFoundException("Prova nao encontrada");
     }
 
     if (provaEncontrada.unitId !== user.unitId) {
       throw new ForbiddenException(
-        "Você só pode devolver provas da sua unidade",
+        "Voce so pode devolver provas da sua unidade",
       );
     }
 
-    const statusPermitidos: PlanoAulaStatus[] = [
-      "AGUARDANDO_ANALISTA",
-      "REVISAO_ANALISTA",
-    ];
-    if (!statusPermitidos.includes(provaEncontrada.status)) {
+    if (provaEncontrada.status !== "AGUARDANDO_ANALISTA") {
       throw new BadRequestException(
-        `Não é possível devolver prova com status ${provaEncontrada.status}`,
+        `Nao e possivel devolver prova com status ${provaEncontrada.status}`,
       );
     }
 
@@ -525,7 +636,6 @@ export class ProvaService {
       .where(eq(prova.id, provaId))
       .returning();
 
-    // Registrar no histórico
     const userName = await this.getUserName(user.userId);
     await this.historicoService.registrar({
       provaId,
@@ -536,217 +646,6 @@ export class ProvaService {
       statusAnterior,
       statusNovo: "DEVOLVIDO_ANALISTA",
       detalhes: motivo ? { motivo } : null,
-    });
-
-    return atualizada;
-  }
-
-  // ============================================
-  // Métodos da Coordenadora
-  // ============================================
-
-  /**
-   * Lista provas pendentes para coordenadora
-   * Filtrado por segmento da coordenadora
-   */
-  async listarPendentesCoordenadora(user: UserContext) {
-    const db = getDb();
-
-    if (!user.unitId) {
-      throw new BadRequestException("Usuário não possui unidade associada");
-    }
-
-    // Buscar provas AGUARDANDO_COORDENADORA da unidade
-    const provasBase = await db.query.prova.findMany({
-      where: and(
-        eq(prova.unitId, user.unitId),
-        eq(prova.status, "AGUARDANDO_COORDENADORA"),
-      ),
-      with: {
-        user: true,
-        turma: {
-          with: {
-            stage: true,
-          },
-        },
-      },
-      orderBy: [desc(prova.submittedAt)],
-    });
-
-    // Filtrar por segmento da coordenadora
-    const segmentosPermitidos = getSegmentosPermitidos(user.role);
-
-    let provasFiltradas = provasBase;
-
-    if (segmentosPermitidos !== null) {
-      type ProvaComTurmaStage = (typeof provasBase)[number];
-      provasFiltradas = provasBase.filter((p: ProvaComTurmaStage) => {
-        const turmaComStage = p.turma as { stage?: { code: string } };
-        return segmentosPermitidos.includes(turmaComStage?.stage?.code || "");
-      });
-    }
-
-    return provasFiltradas.map((p: (typeof provasFiltradas)[number]) =>
-      this.mapToProvaSummary(p),
-    );
-  }
-
-  /**
-   * Aprova prova como coordenadora (-> APROVADO)
-   */
-  async aprovarComoCoordenadora(
-    user: UserContext,
-    provaId: string,
-  ): Promise<Prova> {
-    const db = getDb();
-
-    const provaEncontrada = await db.query.prova.findFirst({
-      where: eq(prova.id, provaId),
-      with: {
-        turma: {
-          with: { stage: true },
-        },
-      },
-    });
-
-    if (!provaEncontrada) {
-      throw new NotFoundException("Prova não encontrada");
-    }
-
-    if (provaEncontrada.unitId !== user.unitId) {
-      throw new ForbiddenException(
-        "Você só pode aprovar provas da sua unidade",
-      );
-    }
-
-    // Verificar segmento
-    const turmaComStage = provaEncontrada.turma as {
-      stage?: { code: string };
-    };
-    const segmentosPermitidos = getSegmentosPermitidos(user.role);
-    if (
-      segmentosPermitidos !== null &&
-      !segmentosPermitidos.includes(turmaComStage?.stage?.code || "")
-    ) {
-      throw new ForbiddenException(
-        "Você só pode aprovar provas do seu segmento",
-      );
-    }
-
-    if (provaEncontrada.status !== "AGUARDANDO_COORDENADORA") {
-      throw new BadRequestException(
-        `Não é possível aprovar prova com status ${provaEncontrada.status}`,
-      );
-    }
-
-    const statusAnterior = provaEncontrada.status;
-
-    const [atualizada] = await db
-      .update(prova)
-      .set({
-        status: "APROVADO",
-        approvedAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .where(eq(prova.id, provaId))
-      .returning();
-
-    // Registrar no histórico
-    const userName = await this.getUserName(user.userId);
-    await this.historicoService.registrar({
-      provaId,
-      userId: user.userId,
-      userName,
-      userRole: user.role,
-      acao: "APROVADO_COORDENADORA",
-      statusAnterior,
-      statusNovo: "APROVADO",
-    });
-
-    return atualizada;
-  }
-
-  /**
-   * Devolve prova como coordenadora
-   * Pode devolver para PROFESSORA ou ANALISTA
-   */
-  async devolverComoCoordenadora(
-    user: UserContext,
-    provaId: string,
-    dto: DevolverProvaDto,
-  ): Promise<Prova> {
-    const db = getDb();
-
-    const provaEncontrada = await db.query.prova.findFirst({
-      where: eq(prova.id, provaId),
-      with: {
-        turma: {
-          with: { stage: true },
-        },
-      },
-    });
-
-    if (!provaEncontrada) {
-      throw new NotFoundException("Prova não encontrada");
-    }
-
-    if (provaEncontrada.unitId !== user.unitId) {
-      throw new ForbiddenException(
-        "Você só pode devolver provas da sua unidade",
-      );
-    }
-
-    // Verificar segmento
-    const turmaComStage = provaEncontrada.turma as {
-      stage?: { code: string };
-    };
-    const segmentosPermitidos = getSegmentosPermitidos(user.role);
-    if (
-      segmentosPermitidos !== null &&
-      !segmentosPermitidos.includes(turmaComStage?.stage?.code || "")
-    ) {
-      throw new ForbiddenException(
-        "Você só pode devolver provas do seu segmento",
-      );
-    }
-
-    if (provaEncontrada.status !== "AGUARDANDO_COORDENADORA") {
-      throw new BadRequestException(
-        `Não é possível devolver prova com status ${provaEncontrada.status}`,
-      );
-    }
-
-    const statusAnterior = provaEncontrada.status;
-
-    // Determinar status baseado no destino
-    const novoStatus: PlanoAulaStatus =
-      dto.destino === "ANALISTA"
-        ? "AGUARDANDO_ANALISTA" // Volta para reanálise
-        : "DEVOLVIDO_COORDENADORA"; // Volta para professora
-
-    const [atualizada] = await db
-      .update(prova)
-      .set({
-        status: novoStatus,
-        updatedAt: new Date(),
-      })
-      .where(eq(prova.id, provaId))
-      .returning();
-
-    // Registrar no histórico
-    const userName = await this.getUserName(user.userId);
-    await this.historicoService.registrar({
-      provaId,
-      userId: user.userId,
-      userName,
-      userRole: user.role,
-      acao: "DEVOLVIDO_COORDENADORA",
-      statusAnterior,
-      statusNovo: novoStatus,
-      detalhes: {
-        destino: dto.destino,
-        ...(dto.motivo && { motivo: dto.motivo }),
-      },
     });
 
     return atualizada;
@@ -807,7 +706,7 @@ export class ProvaService {
     }
 
     for (const [status, count] of Object.entries(statusCount)) {
-      totais.push({ status: status as PlanoAulaStatus, count });
+      totais.push({ status: status as ProvaStatus, count });
     }
 
     // Agrupar por segmento
@@ -853,7 +752,7 @@ export class ProvaService {
       turmaName: string;
       segmento: string;
       provaCicloId: string;
-      status: PlanoAulaStatus;
+      status: ProvaStatus;
       submittedAt: string | null;
       createdAt: string;
       updatedAt: string;
@@ -891,7 +790,7 @@ export class ProvaService {
       const statusDb = PROVA_STATUS_URL_MAP[dto.status];
       if (statusDb && statusDb.length > 0) {
         conditions.push(
-          inArray(prova.status, statusDb as PlanoAulaStatus[]),
+          inArray(prova.status, statusDb as ProvaStatus[]),
         );
       }
     }
@@ -1337,7 +1236,7 @@ export class ProvaService {
   }
 
   /**
-   * Registra impressão de um documento aprovado
+   * Registra impressão de um documento
    */
   async registrarImpressaoDocumento(
     user: UserContext,
@@ -1362,24 +1261,6 @@ export class ProvaService {
 
     // Reaproveita a validação completa de acesso à prova
     await this.getProvaById(user, documento.provaId);
-
-    if (!documento.approvedBy || !documento.approvedAt) {
-      throw new BadRequestException(
-        "Somente documentos aprovados podem ser impressos",
-      );
-    }
-
-    // Documento imprimível precisa ter PDF nativo ou preview convertido disponível
-    const possuiPdfNativo =
-      documento.mimeType === "application/pdf" && !!documento.url;
-    const possuiPdfConvertido =
-      documento.previewStatus === "PRONTO" && !!documento.previewUrl;
-
-    if (!possuiPdfNativo && !possuiPdfConvertido) {
-      throw new BadRequestException(
-        "Documento não possui versão em PDF disponível para impressão",
-      );
-    }
 
     const impressoEm = new Date();
 

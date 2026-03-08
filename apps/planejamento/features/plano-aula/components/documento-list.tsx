@@ -17,6 +17,7 @@ import {
   FileSpreadsheet,
   FileText,
   Image,
+  MessageSquare,
   Pencil,
   Printer,
   Trash2,
@@ -25,23 +26,17 @@ import {
 } from "lucide-react";
 
 import type { PlanoDocumento } from "../types";
-import { DocumentoComentarios } from "./documento-comentarios";
 import { DocumentoEditorModal } from "./documento-editor";
-import { DocumentoPreviewModal } from "./documento-preview-modal";
 
 interface DocumentoListProps {
   documentos: PlanoDocumento[];
   onDelete?: (docId: string) => void;
-  onAddComentario?: (documentoId: string, comentario: string) => Promise<void>;
-  onEditComentario?: (comentarioId: string, novoTexto: string) => Promise<void>;
-  onDeleteComentario?: (comentarioId: string) => Promise<void>;
   onAprovar?: (docId: string) => Promise<void>;
   onDesaprovar?: (docId: string) => Promise<void>;
   onImprimir?: (docId: string) => Promise<void>;
-  showComments?: boolean;
   canDelete?: boolean;
   canAprovar?: boolean;
-  currentUserId?: string;
+  canComentar?: boolean;
 }
 
 function formatFileSize(bytes: number | null | undefined): string {
@@ -176,20 +171,15 @@ function getDocumentName(documento: PlanoDocumento): string {
 export function DocumentoList({
   documentos,
   onDelete,
-  onAddComentario,
-  onEditComentario,
-  onDeleteComentario,
   onAprovar,
   onDesaprovar,
   onImprimir,
-  showComments = false,
   canDelete = false,
   canAprovar = false,
-  currentUserId,
+  canComentar = false,
 }: DocumentoListProps) {
-  const [openDocId, setOpenDocId] = useState<string | null>(null);
   const [editorDocId, setEditorDocId] = useState<string | null>(null);
-  const [editorMode, setEditorMode] = useState<"edit" | "view">("view");
+  const [editorMode, setEditorMode] = useState<"edit" | "view" | "comentar">("view");
   const [aprovandoId, setAprovandoId] = useState<string | null>(null);
   const [imprimindoId, setImprimindoId] = useState<string | null>(null);
   const [desaprovandoId, setDesaprovandoId] = useState<string | null>(null);
@@ -256,19 +246,13 @@ export function DocumentoList({
         const url = getDocumentUrl(documento);
         const pdfUrl = getDocumentPdfUrl(documento);
         const name = getDocumentName(documento);
-        const hasUnresolvedComments = documento.comentarios?.some(
-          (c) => !c.resolved,
-        );
         const podeImprimir =
           !!documento.approvedAt && !!documento.approvedBy && !!onImprimir;
 
         return (
           <div
             key={documento.id}
-            className={cn(
-              "rounded-lg border bg-card transition-colors",
-              hasUnresolvedComments && "border-yellow-400 bg-yellow-50/50",
-            )}
+            className="rounded-lg border bg-card transition-colors"
           >
             <div className="flex items-center justify-between p-4">
               <div className="flex items-center gap-4 min-w-0">
@@ -339,11 +323,12 @@ export function DocumentoList({
                         </span>
                       </>
                     )}
-                    {hasUnresolvedComments && (
+                    {documento.temComentarios && (
                       <>
                         <span>*</span>
-                        <span className="text-yellow-600 font-medium">
-                          Comentarios pendentes
+                        <MessageSquare className="h-3 w-3 text-blue-600" />
+                        <span className="text-blue-600 font-medium">
+                          Contém comentários
                         </span>
                       </>
                     )}
@@ -387,7 +372,7 @@ export function DocumentoList({
 
               {/* Actions */}
               <div className="flex items-center gap-2 flex-shrink-0">
-                {/* Ver Documento */}
+                {/* Ver */}
                 {isWordDocument(documento) ? (
                   <Button
                     variant="ghost"
@@ -399,19 +384,19 @@ export function DocumentoList({
                     }}
                   >
                     <Eye className="h-4 w-4" />
-                    Ver Documento
+                    Ver
                   </Button>
-                ) : (
+                ) : url ? (
                   <Button
                     variant="ghost"
                     size="sm"
                     className="h-8 gap-1"
-                    onClick={() => setOpenDocId(documento.id)}
+                    onClick={() => window.open(url, "_blank")}
                   >
                     <Eye className="h-4 w-4" />
-                    Ver Documento
+                    Ver
                   </Button>
-                )}
+                ) : null}
 
                 {/* Editar - apenas para .doc/.docx */}
                 {isWordDocument(documento) && (
@@ -427,6 +412,23 @@ export function DocumentoList({
                   >
                     <Pencil className="h-4 w-4" />
                     Editar
+                  </Button>
+                )}
+
+                {/* Comentar - apenas para analista/coordenadora em documentos Word */}
+                {canComentar && isWordDocument(documento) && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 gap-1 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                    onClick={() => {
+                      setEditorMode("comentar");
+                      setEditorDocId(documento.id);
+                    }}
+                    title="Adicionar comentários ao documento"
+                  >
+                    <MessageSquare className="h-4 w-4" />
+                    Comentar
                   </Button>
                 )}
 
@@ -495,17 +497,6 @@ export function DocumentoList({
               </div>
             </div>
 
-            {/* Modal de Preview (PDF/Imagem) */}
-            <DocumentoPreviewModal
-              documento={documento}
-              open={openDocId === documento.id}
-              onOpenChange={(open) => setOpenDocId(open ? documento.id : null)}
-              onAddComentario={onAddComentario}
-              onEditComentario={onEditComentario}
-              onDeleteComentario={onDeleteComentario}
-              currentUserId={currentUserId}
-            />
-
             {/* Modal do Editor OnlyOffice (Word) */}
             {isWordDocument(documento) && (
               <DocumentoEditorModal
@@ -517,13 +508,6 @@ export function DocumentoList({
                   setEditorDocId(open ? documento.id : null)
                 }
               />
-            )}
-
-            {/* Comments Section */}
-            {showComments && documento.comentarios.length > 0 && (
-              <div className="border-t px-4 py-3 bg-muted/30">
-                <DocumentoComentarios comentarios={documento.comentarios} />
-              </div>
             )}
           </div>
         );

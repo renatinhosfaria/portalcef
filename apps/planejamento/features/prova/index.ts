@@ -14,7 +14,7 @@ export type {
   ListagemProvasResponse,
 } from "./types";
 
-export { STATUS_LABELS, STATUS_COLORS, STATUS_FILTER_OPTIONS } from "./types";
+export { PROVA_STATUS_LABELS, PROVA_STATUS_COLORS } from "./types";
 
 // Hooks
 export {
@@ -22,7 +22,7 @@ export {
   useCiclosDaTurma,
   useProva,
   useAnalistaProvaActions,
-  useCoordenadoraProvaActions,
+  useGestaoImpressao,
   useProvaDashboard,
   useGestaoProvas,
   useProvaDetalhe,

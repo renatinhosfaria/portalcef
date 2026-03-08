@@ -26,7 +26,7 @@ ARG SCOPE
 ENV SCOPE=${SCOPE}
 
 # Executar turbo prune - cria output otimizado em /app/out
-RUN pnpm dlx turbo prune --scope=${SCOPE} --docker
+RUN pnpm dlx turbo@2.6.3 prune --scope=${SCOPE} --docker
 
 # =============================================================================
 # STAGE: INSTALLER - Instalar dependências com cache mount

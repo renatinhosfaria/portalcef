@@ -17,6 +17,9 @@ interface PageProps {
   params: Promise<{
     quinzenaId: string; // Na verdade é periodoId (UUID) agora
   }>;
+  searchParams: Promise<{
+    turmaId?: string;
+  }>;
 }
 
 interface UserData {
@@ -132,8 +135,9 @@ async function getPeriodo(
   }
 }
 
-export default async function PlanoAulaPage({ params }: PageProps) {
+export default async function PlanoAulaPage({ params, searchParams }: PageProps) {
   const { quinzenaId } = await params;
+  const { turmaId: turmaIdParam } = await searchParams;
   // Alias para clareza: quinzenaId na rota, mas é periodoId (UUID)
   const periodoId = quinzenaId;
 
@@ -147,10 +151,17 @@ export default async function PlanoAulaPage({ params }: PageProps) {
   ]);
 
   // Determinar turma e etapa do usuario
-  const primaryTurma = userTurmas.length > 0 ? userTurmas[0] : null;
+  const primaryTurma = turmaIdParam
+    ? userTurmas.find((t) => t.id === turmaIdParam) || userTurmas[0] || null
+    : userTurmas[0] || null;
   const userStage =
     stages.find((s) => s.id === currentUser?.stageId) ||
     (primaryTurma ? stages.find((s) => s.id === primaryTurma.stageId) : null);
+
+  // URL de volta: para seleção de turma se múltiplas, ou para painel
+  const voltarUrl = userTurmas.length > 1 && primaryTurma
+    ? `/planejamentos?turmaId=${primaryTurma.id}`
+    : "/planejamentos";
 
   // Formatar nome da turma para exibicao
   const turmaDisplay = primaryTurma
@@ -178,7 +189,7 @@ export default async function PlanoAulaPage({ params }: PageProps) {
       <div className="container mx-auto max-w-7xl px-4 py-8">
         <div className="mb-6">
           <Link
-            href="/planejamentos"
+            href={voltarUrl}
             className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
           >
             <ArrowLeft className="mr-2 h-4 w-4" />
@@ -202,7 +213,7 @@ export default async function PlanoAulaPage({ params }: PageProps) {
       {/* Back Button */}
       <div className="mb-6">
         <Link
-          href="/planejamentos"
+          href={voltarUrl}
           className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="mr-2 h-4 w-4" />

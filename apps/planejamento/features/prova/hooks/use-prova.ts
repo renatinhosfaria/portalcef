@@ -21,10 +21,7 @@ import type {
 interface UseProvaReturn {
   loading: boolean;
   error: string | null;
-  criarProva: (
-    turmaId: string,
-    provaCicloId: string,
-  ) => Promise<CriarProvaResult>;
+  criarProva: (turmaId: string, provaCicloId: string) => Promise<CriarProvaResult>;
   getProva: (id: string) => Promise<Prova>;
   uploadDocumento: (provaId: string, file: File) => Promise<ProvaDocumento>;
   addLink: (provaId: string, url: string) => Promise<ProvaDocumento>;
@@ -32,8 +29,10 @@ interface UseProvaReturn {
   aprovarDocumento: (documentoId: string) => Promise<ProvaDocumento>;
   desaprovarDocumento: (documentoId: string) => Promise<ProvaDocumento>;
   imprimirDocumento: (documentoId: string) => Promise<ProvaDocumento>;
-  submeterProva: (provaId: string) => Promise<{ success: boolean }>;
+  enviarParaImpressao: (provaId: string) => Promise<{ success: boolean }>;
   recuperarProva: (provaId: string) => Promise<{ success: boolean }>;
+  enviarParaAnalise: (provaId: string) => Promise<{ success: boolean }>;
+  reenviarParaAnalise: (provaId: string) => Promise<{ success: boolean }>;
 }
 
 /**
@@ -56,7 +55,7 @@ export function useProva(): UseProvaReturn {
       try {
         const result = await api.post<CriarProvaResult>("/prova", {
           turmaId,
-          provaCicloId,
+          cicloId: provaCicloId,
         });
         return result;
       } catch (err) {
@@ -218,19 +217,63 @@ export function useProva(): UseProvaReturn {
     [],
   );
 
-  const submeterProva = useCallback(
+  const enviarParaImpressao = useCallback(
     async (provaId: string): Promise<{ success: boolean }> => {
       setLoading(true);
       setError(null);
       try {
         const result = await api.post<{ success: boolean }>(
-          `/prova/${provaId}/submeter`,
+          `/prova/${provaId}/enviar-impressao`,
           {},
         );
         return result;
       } catch (err) {
         const message =
-          err instanceof Error ? err.message : "Erro ao submeter prova";
+          err instanceof Error ? err.message : "Erro ao enviar para impressao";
+        setError(message);
+        throw err;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [],
+  );
+
+  const enviarParaAnalise = useCallback(
+    async (provaId: string): Promise<{ success: boolean }> => {
+      setLoading(true);
+      setError(null);
+      try {
+        const result = await api.post<{ success: boolean }>(
+          `/prova/${provaId}/enviar-analise`,
+          {},
+        );
+        return result;
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "Erro ao enviar para analise";
+        setError(message);
+        throw err;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [],
+  );
+
+  const reenviarParaAnalise = useCallback(
+    async (provaId: string): Promise<{ success: boolean }> => {
+      setLoading(true);
+      setError(null);
+      try {
+        const result = await api.post<{ success: boolean }>(
+          `/prova/${provaId}/reenviar-analise`,
+          {},
+        );
+        return result;
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "Erro ao reenviar para analise";
         setError(message);
         throw err;
       } finally {
@@ -273,8 +316,10 @@ export function useProva(): UseProvaReturn {
     aprovarDocumento,
     desaprovarDocumento,
     imprimirDocumento,
-    submeterProva,
+    enviarParaImpressao,
     recuperarProva,
+    enviarParaAnalise,
+    reenviarParaAnalise,
   };
 }
 
@@ -330,54 +375,26 @@ export function useAnalistaProvaActions(): UseAnalistaProvaActionsReturn {
 }
 
 // ============================================
-// Hook para Coordenadora de Segmento (Provas)
+// Hook para Gestao (Impressao de Provas)
 // ============================================
 
-interface UseCoordenadoraProvaActionsReturn {
+interface UseGestaoImpressaoReturn {
   loading: boolean;
-  listarPendentes: () => Promise<ProvaSummary[]>;
-  aprovar: (provaId: string) => Promise<void>;
-  devolver: (
-    provaId: string,
-    destino: "PROFESSORA" | "ANALISTA",
-  ) => Promise<void>;
+  enviarParaResponder: (provaId: string) => Promise<void>;
 }
 
 /**
- * Hook para acoes da Coordenadora de Segmento em provas
- * - Listar provas pendentes de aprovacao
- * - Aprovar prova (aprovacao final)
- * - Devolver prova (para professora ou analista)
+ * Hook para acoes da Gestao no fluxo de impressao
+ * - Enviar para responder (apos imprimir)
  */
-export function useCoordenadoraProvaActions(): UseCoordenadoraProvaActionsReturn {
+export function useGestaoImpressao(): UseGestaoImpressaoReturn {
   const [loading, setLoading] = useState(false);
 
-  const listarPendentes = useCallback(async (): Promise<ProvaSummary[]> => {
-    const result = await api.get<ProvaSummary[]>(
-      "/prova/coordenadora/pendentes",
-    );
-    return result || [];
-  }, []);
-
-  const aprovar = useCallback(async (provaId: string): Promise<void> => {
-    setLoading(true);
-    try {
-      await api.post(`/prova/${provaId}/coordenadora/aprovar`, {});
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  const devolver = useCallback(
-    async (
-      provaId: string,
-      destino: "PROFESSORA" | "ANALISTA",
-    ): Promise<void> => {
+  const enviarParaResponder = useCallback(
+    async (provaId: string): Promise<void> => {
       setLoading(true);
       try {
-        await api.post(`/prova/${provaId}/coordenadora/devolver`, {
-          destino,
-        });
+        await api.post(`/prova/${provaId}/enviar-responder`, {});
       } finally {
         setLoading(false);
       }
@@ -385,7 +402,7 @@ export function useCoordenadoraProvaActions(): UseCoordenadoraProvaActionsReturn
     [],
   );
 
-  return { loading, listarPendentes, aprovar, devolver };
+  return { loading, enviarParaResponder };
 }
 
 // ============================================
@@ -415,8 +432,9 @@ interface DashboardApiLegado {
 const DASHBOARD_STATS_VAZIAS: ProvaDashboardData["stats"] = {
   total: 0,
   rascunho: 0,
+  aguardandoImpressao: 0,
+  aguardandoResposta: 0,
   aguardandoAnalista: 0,
-  aguardandoCoordenadora: 0,
   devolvidos: 0,
   aprovados: 0,
 };
@@ -445,18 +463,11 @@ function normalizarDashboardData(
       ? payload.stats
       : {
           total: totais.reduce((acumulado, item) => acumulado + item.count, 0),
-          rascunho: somarStatus(totais, ["RASCUNHO"]),
-          aguardandoAnalista: somarStatus(totais, [
-            "AGUARDANDO_ANALISTA",
-            "REVISAO_ANALISTA",
-          ]),
-          aguardandoCoordenadora: somarStatus(totais, [
-            "AGUARDANDO_COORDENADORA",
-          ]),
-          devolvidos: somarStatus(totais, [
-            "DEVOLVIDO_ANALISTA",
-            "DEVOLVIDO_COORDENADORA",
-          ]),
+          rascunho: somarStatus(totais, ["RASCUNHO", "RECUPERADO"]),
+          aguardandoImpressao: somarStatus(totais, ["AGUARDANDO_IMPRESSAO"]),
+          aguardandoResposta: somarStatus(totais, ["AGUARDANDO_RESPOSTA"]),
+          aguardandoAnalista: somarStatus(totais, ["AGUARDANDO_ANALISTA"]),
+          devolvidos: somarStatus(totais, ["DEVOLVIDO_ANALISTA"]),
           aprovados: somarStatus(totais, ["APROVADO"]),
         };
 

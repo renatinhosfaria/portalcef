@@ -1,18 +1,44 @@
 /**
  * Tipos para o modulo de Provas
- * Fluxo: Professora -> Analista -> Coordenadora -> Aprovado
- * (Mesmo fluxo do Plano de Aula, adaptado para provas)
+ * Novo fluxo: Professora -> Impressao -> Resposta -> Analista -> Aprovado
  */
 
-import type { PlanoAulaStatus, DocumentoTipo, DocumentoPreviewStatus } from "../plano-aula/types";
-
-// Re-exportar constantes compartilhadas do plano-aula
-export { STATUS_LABELS, STATUS_COLORS, STATUS_FILTER_OPTIONS } from "../plano-aula/types";
+import type { DocumentoTipo, DocumentoPreviewStatus } from "../plano-aula/types";
 
 /**
- * Status possiveis de uma prova (mesmos valores do PlanoAulaStatus)
+ * Status possiveis de uma prova
  */
-export type ProvaStatus = PlanoAulaStatus;
+export type ProvaStatus =
+  | "RASCUNHO"
+  | "AGUARDANDO_IMPRESSAO"
+  | "AGUARDANDO_RESPOSTA"
+  | "AGUARDANDO_ANALISTA"
+  | "DEVOLVIDO_ANALISTA"
+  | "APROVADO"
+  | "RECUPERADO";
+
+/**
+ * Labels para status de prova
+ */
+export const PROVA_STATUS_LABELS: Record<ProvaStatus, string> = {
+  RASCUNHO: "Rascunho",
+  AGUARDANDO_IMPRESSAO: "Aguardando Impressao",
+  AGUARDANDO_RESPOSTA: "Aguardando Resposta",
+  AGUARDANDO_ANALISTA: "Aguardando Analise",
+  DEVOLVIDO_ANALISTA: "Devolvido",
+  APROVADO: "Aprovado",
+  RECUPERADO: "Recuperado",
+};
+
+export const PROVA_STATUS_COLORS: Record<ProvaStatus, string> = {
+  RASCUNHO: "bg-gray-100 text-gray-800",
+  AGUARDANDO_IMPRESSAO: "bg-orange-100 text-orange-800",
+  AGUARDANDO_RESPOSTA: "bg-purple-100 text-purple-800",
+  AGUARDANDO_ANALISTA: "bg-blue-100 text-blue-800",
+  DEVOLVIDO_ANALISTA: "bg-yellow-100 text-yellow-800",
+  APROVADO: "bg-green-100 text-green-800",
+  RECUPERADO: "bg-gray-100 text-gray-800",
+};
 
 /**
  * Documento anexado a prova
@@ -109,8 +135,9 @@ export interface ProvaSummary {
 export interface ProvaDashboardStats {
   total: number;
   rascunho: number;
+  aguardandoImpressao: number;
+  aguardandoResposta: number;
   aguardandoAnalista: number;
-  aguardandoCoordenadora: number;
   devolvidos: number;
   aprovados: number;
 }
@@ -135,7 +162,7 @@ export interface CriarProvaResult {
  * DTO para devolver prova
  */
 export interface DevolverProvaDto {
-  destino?: "PROFESSORA" | "ANALISTA";
+  motivo?: string;
 }
 
 /**

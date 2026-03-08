@@ -13,7 +13,7 @@ import { Skeleton } from "@essencia/ui/components/skeleton";
 import { Calendar, Clock, User } from "lucide-react";
 
 import type { ProvaStatus } from "../types";
-import { STATUS_COLORS, STATUS_LABELS } from "../types";
+import { PROVA_STATUS_COLORS, PROVA_STATUS_LABELS } from "../types";
 import { Badge } from "@essencia/ui/components/badge";
 import { cn } from "@essencia/ui/lib/utils";
 
@@ -64,13 +64,13 @@ function formatarDataSubmissao(data: string): string {
 }
 
 function ProvaStatusBadge({ status, className }: { status: ProvaStatus; className?: string }) {
-  const colors = STATUS_COLORS[status];
-  const label = STATUS_LABELS[status];
+  const colors = PROVA_STATUS_COLORS[status];
+  const label = PROVA_STATUS_LABELS[status];
 
   return (
     <Badge
       variant="outline"
-      className={cn(colors.bg, colors.text, colors.border, "border", className)}
+      className={cn(colors, "border", className)}
     >
       {label}
     </Badge>

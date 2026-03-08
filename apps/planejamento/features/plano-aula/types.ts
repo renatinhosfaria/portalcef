@@ -13,7 +13,8 @@ export type PlanoAulaStatus =
   | "DEVOLVIDO_ANALISTA"
   | "DEVOLVIDO_COORDENADORA"
   | "REVISAO_ANALISTA"
-  | "APROVADO";
+  | "APROVADO"
+  | "RECUPERADO";
 
 /**
  * Tipo do documento anexado ao plano
@@ -24,18 +25,6 @@ export type DocumentoTipo = "ARQUIVO" | "LINK_YOUTUBE";
  * Status da conversão de preview de documento
  */
 export type DocumentoPreviewStatus = "PENDENTE" | "PRONTO" | "ERRO";
-
-/**
- * Comentário em um documento (feedback da analista/coordenadora)
- */
-export interface DocumentoComentario {
-  id: string;
-  comentario: string;
-  resolved: boolean;
-  createdAt: string;
-  autorId: string;
-  autorName: string;
-}
 
 /**
  * Documento anexado ao plano de aula
@@ -51,7 +40,6 @@ export interface PlanoDocumento {
   mimeType?: string;
   createdAt: string;
   updatedAt?: string;
-  comentarios: DocumentoComentario[];
   // Campos de preview (conversão assíncrona)
   previewKey?: string;
   previewUrl?: string;
@@ -64,6 +52,8 @@ export interface PlanoDocumento {
   // Campos de impressão
   printedBy?: string;
   printedAt?: string;
+  // Indicador de comentários (OnlyOffice)
+  temComentarios?: boolean;
 }
 
 /**
@@ -136,19 +126,10 @@ export interface CriarPlanoResult {
 }
 
 /**
- * DTO para criar comentário
- */
-export interface AddComentarioDto {
-  documentoId: string;
-  comentario: string;
-}
-
-/**
  * DTO para devolver plano
  */
 export interface DevolverPlanoDto {
   destino?: "PROFESSORA" | "ANALISTA";
-  comentarios?: AddComentarioDto[];
 }
 
 /**
@@ -175,6 +156,7 @@ export const STATUS_LABELS: Record<PlanoAulaStatus, string> = {
   DEVOLVIDO_COORDENADORA: "Devolvido pela Coordenadora",
   REVISAO_ANALISTA: "Em Revisão (Analista)",
   APROVADO: "Aprovado",
+  RECUPERADO: "Recuperado",
 };
 
 /**
@@ -218,6 +200,11 @@ export const STATUS_COLORS: Record<
     bg: "bg-green-100",
     text: "text-green-700",
     border: "border-green-300",
+  },
+  RECUPERADO: {
+    bg: "bg-amber-100",
+    text: "text-amber-700",
+    border: "border-amber-300",
   },
 };
 

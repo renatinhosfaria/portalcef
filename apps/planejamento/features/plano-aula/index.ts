@@ -2,14 +2,12 @@
 export type {
   PlanoAulaStatus,
   DocumentoTipo,
-  DocumentoComentario,
   PlanoDocumento,
   PlanoAula,
   PlanoAulaSummary,
   DashboardStats,
   DashboardData,
   CriarPlanoResult,
-  AddComentarioDto,
   DevolverPlanoDto,
   QuinzenaConfig,
   PlanoAulaListItem,
@@ -35,7 +33,6 @@ export {
 export {
   DocumentoUpload,
   DocumentoList,
-  DocumentoComentarios,
   PlanoStatusBadge,
   HistoricoTimeline,
   PlanoHeader,

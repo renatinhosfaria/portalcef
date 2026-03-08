@@ -2,12 +2,14 @@
 
 import { useTenant } from "@essencia/shared/providers/tenant";
 import type {
+  OrdemServicoEnriquecida,
   OrdemServicoCategoria,
   OrdemServicoStatus,
 } from "@essencia/shared/types";
 import { Button } from "@essencia/ui/components/button";
 import { Card, CardContent, CardHeader } from "@essencia/ui/components/card";
 import { Skeleton } from "@essencia/ui/components/skeleton";
+import { toast } from "@essencia/ui/toaster";
 import {
   AlertCircle,
   ChevronLeft,
@@ -22,6 +24,7 @@ import { NovaOsDialog } from "@/features/suporte-list/components/nova-os-dialog"
 import { OsCard } from "@/features/suporte-list/components/os-card";
 import { OsFiltros } from "@/features/suporte-list/components/os-filtros";
 import { useOrdensServico } from "@/hooks/use-ordens-servico";
+import { apiDelete } from "@/lib/api";
 
 // ============================================
 // Roles administrativas que veem o nome do criador
@@ -30,7 +33,6 @@ const ADMIN_ROLES = [
   "master",
   "diretora_geral",
   "gerente_unidade",
-  "coordenadora_geral",
 ];
 
 // ============================================
@@ -61,7 +63,7 @@ function OsCardSkeleton() {
 // Pagina principal
 // ============================================
 export default function SuportePage() {
-  const { role } = useTenant();
+  const { role, userId } = useTenant();
   const isAdmin = ADMIN_ROLES.includes(role);
 
   // Estado dos filtros
@@ -75,6 +77,7 @@ export default function SuportePage() {
 
   // Estado do dialog
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [ordemExcluindoId, setOrdemExcluindoId] = useState<string | null>(null);
 
   // Buscar ordens de servico
   const { ordens, pagination, contagem, isLoading, error, refetch } =
@@ -105,6 +108,34 @@ export default function SuportePage() {
   const handleNovaOsSucesso = useCallback(() => {
     void refetch();
   }, [refetch]);
+
+  const handleExcluirOs = useCallback(
+    async (ordem: OrdemServicoEnriquecida) => {
+      const confirmar = window.confirm(
+        `Deseja realmente excluir a OS-${ordem.numero}? Esta acao nao pode ser desfeita.`,
+      );
+
+      if (!confirmar) {
+        return;
+      }
+
+      try {
+        setOrdemExcluindoId(ordem.id);
+        await apiDelete(`suporte/${ordem.id}`);
+        toast.success("Ordem de servico excluida com sucesso.");
+        await refetch();
+      } catch (err) {
+        toast.error(
+          err instanceof Error
+            ? err.message
+            : "Erro ao excluir ordem de servico.",
+        );
+      } finally {
+        setOrdemExcluindoId(null);
+      }
+    },
+    [refetch],
+  );
 
   return (
     <>
@@ -181,7 +212,16 @@ export default function SuportePage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {ordens.map((ordem) => (
-              <OsCard key={ordem.id} ordem={ordem} isAdmin={isAdmin} />
+              <OsCard
+                key={ordem.id}
+                ordem={ordem}
+                isAdmin={isAdmin}
+                podeExcluir={isAdmin || ordem.criadoPor === userId}
+                excluindo={ordemExcluindoId === ordem.id}
+                onExcluir={(ordemSelecionada) => {
+                  void handleExcluirOs(ordemSelecionada);
+                }}
+              />
             ))}
           </div>
         )}

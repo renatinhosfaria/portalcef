@@ -49,16 +49,17 @@ import {
   DocumentoUpload,
   DocumentoList,
   HistoricoTimeline,
-  PlanoStatusBadge,
   type PlanoDocumento,
 } from "../../../features/plano-aula";
-import type { PlanoAulaStatus } from "../../../features/plano-aula";
-
 import {
   useProva,
   type Prova,
   type ProvaStatus,
 } from "../../../features/prova";
+import {
+  PROVA_STATUS_LABELS,
+  PROVA_STATUS_COLORS,
+} from "../../../features/prova/types";
 
 interface ProvaDetailContentProps {
   cicloId: string;
@@ -67,33 +68,10 @@ interface ProvaDetailContentProps {
 }
 
 /**
- * Verifica se o status permite edicao
+ * Verifica se o status permite edicao (upload de docs)
  */
 function canEdit(status: ProvaStatus): boolean {
-  return ["RASCUNHO", "RECUPERADO", "DEVOLVIDO_ANALISTA", "DEVOLVIDO_COORDENADORA"].includes(
-    status,
-  );
-}
-
-/**
- * Verifica se o status e de devolucao
- */
-function isDevolvido(status: ProvaStatus): boolean {
-  return ["DEVOLVIDO_ANALISTA", "DEVOLVIDO_COORDENADORA"].includes(status);
-}
-
-/**
- * Obtem mensagem de feedback baseada no status
- */
-function getFeedbackMessage(status: ProvaStatus): string | null {
-  switch (status) {
-    case "DEVOLVIDO_ANALISTA":
-      return "Sua prova foi devolvida pela Analista Pedagogica com comentarios para ajustes. Verifique os comentarios nos documentos abaixo.";
-    case "DEVOLVIDO_COORDENADORA":
-      return "Sua prova foi devolvida pela Coordenadora com comentarios para ajustes. Verifique os comentarios nos documentos abaixo.";
-    default:
-      return null;
-  }
+  return ["RASCUNHO", "RECUPERADO"].includes(status);
 }
 
 export function ProvaDetailContent({
@@ -116,8 +94,10 @@ export function ProvaDetailContent({
     uploadDocumento,
     addLink,
     imprimirDocumento,
-    submeterProva,
+    enviarParaImpressao,
     recuperarProva,
+    enviarParaAnalise,
+    reenviarParaAnalise,
   } = useProva();
 
   /**
@@ -208,27 +188,50 @@ export function ProvaDetailContent({
     [imprimirDocumento, refetchProva],
   );
 
-  /**
-   * Handler para submeter prova para analise
-   */
-  const handleSubmit = useCallback(async () => {
+  const handleEnviarImpressao = useCallback(async () => {
     if (!prova?.id) return;
-
     setSubmitting(true);
     try {
-      await submeterProva(prova.id);
+      await enviarParaImpressao(prova.id);
       await refetchProva();
     } catch (err) {
-      console.error("Erro ao submeter prova:", err);
       setError(
-        err instanceof Error
-          ? err.message
-          : "Erro ao enviar prova. Tente novamente.",
+        err instanceof Error ? err.message : "Erro ao enviar para impressao. Tente novamente.",
       );
     } finally {
       setSubmitting(false);
     }
-  }, [prova?.id, submeterProva, refetchProva]);
+  }, [prova?.id, enviarParaImpressao, refetchProva]);
+
+  const handleEnviarAnalise = useCallback(async () => {
+    if (!prova?.id) return;
+    setSubmitting(true);
+    try {
+      await enviarParaAnalise(prova.id);
+      await refetchProva();
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Erro ao enviar para analise. Tente novamente.",
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }, [prova?.id, enviarParaAnalise, refetchProva]);
+
+  const handleReenviarAnalise = useCallback(async () => {
+    if (!prova?.id) return;
+    setSubmitting(true);
+    try {
+      await reenviarParaAnalise(prova.id);
+      await refetchProva();
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Erro ao reenviar para analise. Tente novamente.",
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }, [prova?.id, reenviarParaAnalise, refetchProva]);
 
   /**
    * Handler para recuperar prova da fila de analise
@@ -334,10 +337,7 @@ export function ProvaDetailContent({
   }
 
   const isEditable = canEdit(prova.status);
-  const showFeedback = isDevolvido(prova.status);
-  const feedbackMessage = getFeedbackMessage(prova.status);
   const hasDocuments = prova.documentos.length > 0;
-  const canSubmit = isEditable && hasDocuments && !actionLoading && !submitting;
 
   // Adaptar documentos da prova para o formato esperado pelo DocumentoList (PlanoDocumento)
   const documentosAdaptados: PlanoDocumento[] = prova.documentos.map((doc) => ({
@@ -355,56 +355,23 @@ export function ProvaDetailContent({
               <ClipboardCheck className="h-5 w-5" />
               Status da Prova
             </CardTitle>
-            <PlanoStatusBadge status={prova.status as PlanoAulaStatus} />
+            <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${PROVA_STATUS_COLORS[prova.status]}`}>
+              {PROVA_STATUS_LABELS[prova.status]}
+            </span>
           </div>
         </CardHeader>
 
-        {/* Feedback Alert para status DEVOLVIDO */}
-        {showFeedback && feedbackMessage && (
+        {/* Status Aguardando Impressao */}
+        {prova.status === "AGUARDANDO_IMPRESSAO" && (
           <CardContent className="pt-0">
-            <Alert variant="default" className="border-yellow-400 bg-yellow-50">
-              <MessageSquare className="h-4 w-4 text-yellow-600" />
-              <AlertTitle className="text-yellow-800">
-                Ajustes Solicitados
-              </AlertTitle>
-              <AlertDescription className="text-yellow-700">
-                {feedbackMessage}
+            <Alert variant="default" className="border-orange-400 bg-orange-50">
+              <Loader2 className="h-4 w-4 animate-spin text-orange-600" />
+              <AlertTitle className="text-orange-800">Aguardando Impressao</AlertTitle>
+              <AlertDescription className="text-orange-700">
+                Sua prova foi enviada para impressao pela gestao. Aguarde a impressao.
               </AlertDescription>
             </Alert>
-          </CardContent>
-        )}
-
-        {/* Status Aprovado */}
-        {prova.status === "APROVADO" && (
-          <CardContent className="pt-0">
-            <Alert variant="default" className="border-green-400 bg-green-50">
-              <CheckCircle2 className="h-4 w-4 text-green-600" />
-              <AlertTitle className="text-green-800">
-                Prova Aprovada!
-              </AlertTitle>
-              <AlertDescription className="text-green-700">
-                Sua prova foi aprovada pela coordenacao.
-                {prova.approvedAt &&
-                  ` Data da aprovacao: ${new Date(prova.approvedAt).toLocaleDateString("pt-BR")}`}
-              </AlertDescription>
-            </Alert>
-          </CardContent>
-        )}
-
-        {/* Status Aguardando */}
-        {(prova.status === "AGUARDANDO_ANALISTA" ||
-          prova.status === "AGUARDANDO_COORDENADORA") && (
-          <CardContent className="pt-0">
-            <Alert variant="default" className="border-blue-400 bg-blue-50">
-              <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
-              <AlertTitle className="text-blue-800">Em Analise</AlertTitle>
-              <AlertDescription className="text-blue-700">
-                {prova.status === "AGUARDANDO_ANALISTA"
-                  ? "Sua prova esta aguardando analise da Analista Pedagogica."
-                  : "Sua prova esta aguardando aprovacao da Coordenadora."}
-              </AlertDescription>
-            </Alert>
-            {prova.status === "AGUARDANDO_ANALISTA" && prova.user?.id === userId && (
+            {prova.user?.id === userId && (
               <div className="mt-4">
                 <Button
                   variant="outline"
@@ -426,6 +393,62 @@ export function ProvaDetailContent({
                 </Button>
               </div>
             )}
+          </CardContent>
+        )}
+
+        {/* Status Aguardando Resposta */}
+        {prova.status === "AGUARDANDO_RESPOSTA" && (
+          <CardContent className="pt-0">
+            <Alert variant="default" className="border-purple-400 bg-purple-50">
+              <ClipboardCheck className="h-4 w-4 text-purple-600" />
+              <AlertTitle className="text-purple-800">Prova Impressa</AlertTitle>
+              <AlertDescription className="text-purple-700">
+                Sua prova foi impressa. Responda as questoes no documento fisico e clique em &quot;Enviar para Analise&quot; quando terminar.
+              </AlertDescription>
+            </Alert>
+          </CardContent>
+        )}
+
+        {/* Status Aguardando Analista */}
+        {prova.status === "AGUARDANDO_ANALISTA" && (
+          <CardContent className="pt-0">
+            <Alert variant="default" className="border-blue-400 bg-blue-50">
+              <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+              <AlertTitle className="text-blue-800">Em Analise</AlertTitle>
+              <AlertDescription className="text-blue-700">
+                Sua prova esta aguardando analise da Analista Pedagogica.
+              </AlertDescription>
+            </Alert>
+          </CardContent>
+        )}
+
+        {/* Status Devolvido pela Analista */}
+        {prova.status === "DEVOLVIDO_ANALISTA" && (
+          <CardContent className="pt-0">
+            <Alert variant="default" className="border-yellow-400 bg-yellow-50">
+              <MessageSquare className="h-4 w-4 text-yellow-600" />
+              <AlertTitle className="text-yellow-800">Ajustes Solicitados</AlertTitle>
+              <AlertDescription className="text-yellow-700">
+                Sua prova foi devolvida pela Analista Pedagogica. Corrija no documento fisico e reenvie para analise.
+              </AlertDescription>
+            </Alert>
+          </CardContent>
+        )}
+
+        {/* Status Aprovado */}
+        {prova.status === "APROVADO" && (
+          <CardContent className="pt-0">
+            <Alert variant="default" className="border-green-400 bg-green-50">
+              <CheckCircle2 className="h-4 w-4 text-green-600" />
+              <AlertTitle className="text-green-800">
+                Prova Aprovada!
+              </AlertTitle>
+              <AlertDescription className="text-green-700">
+                Sua prova foi aprovada pela Analista Pedagogica.
+                {prova.approvedAt &&
+                  ` Data da aprovacao: ${new Date(prova.approvedAt).toLocaleDateString("pt-BR")}`}
+              </AlertDescription>
+            </Alert>
           </CardContent>
         )}
       </Card>
@@ -478,10 +501,9 @@ export function ProvaDetailContent({
       </Card>
 
       {/* Action Buttons */}
-      {isEditable && (
+      {(canEdit(prova.status) || prova.status === "AGUARDANDO_RESPOSTA" || prova.status === "DEVOLVIDO_ANALISTA") && (
         <Card>
           <CardContent className="flex flex-col gap-4 py-6 sm:flex-row sm:items-center sm:justify-end">
-            {/* Erro de submissao */}
             {error && (
               <Alert variant="destructive" className="mb-0 flex-1">
                 <AlertCircle className="h-4 w-4" />
@@ -490,28 +512,71 @@ export function ProvaDetailContent({
             )}
 
             <div className="flex gap-3">
-              <Button
-                onClick={handleSubmit}
-                disabled={!canSubmit}
-                className="gap-2"
-              >
-                {submitting ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Enviando...
-                  </>
-                ) : (
-                  <>
-                    <Send className="h-4 w-4" />
-                    {isDevolvido(prova.status)
-                      ? "Reenviar para Analise"
-                      : "Enviar para Analise"}
-                  </>
-                )}
-              </Button>
+              {/* RASCUNHO/RECUPERADO: Enviar para Impressao */}
+              {canEdit(prova.status) && (
+                <Button
+                  onClick={handleEnviarImpressao}
+                  disabled={!hasDocuments || actionLoading || submitting}
+                  className="gap-2"
+                >
+                  {submitting ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Enviando...
+                    </>
+                  ) : (
+                    <>
+                      <Send className="h-4 w-4" />
+                      Enviar para Impressao
+                    </>
+                  )}
+                </Button>
+              )}
+
+              {/* AGUARDANDO_RESPOSTA: Enviar para Analise */}
+              {prova.status === "AGUARDANDO_RESPOSTA" && (
+                <Button
+                  onClick={handleEnviarAnalise}
+                  disabled={actionLoading || submitting}
+                  className="gap-2"
+                >
+                  {submitting ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Enviando...
+                    </>
+                  ) : (
+                    <>
+                      <Send className="h-4 w-4" />
+                      Enviar para Analise
+                    </>
+                  )}
+                </Button>
+              )}
+
+              {/* DEVOLVIDO_ANALISTA: Reenviar para Analise */}
+              {prova.status === "DEVOLVIDO_ANALISTA" && (
+                <Button
+                  onClick={handleReenviarAnalise}
+                  disabled={actionLoading || submitting}
+                  className="gap-2"
+                >
+                  {submitting ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Reenviando...
+                    </>
+                  ) : (
+                    <>
+                      <Send className="h-4 w-4" />
+                      Reenviar para Analise
+                    </>
+                  )}
+                </Button>
+              )}
             </div>
 
-            {!hasDocuments && (
+            {canEdit(prova.status) && !hasDocuments && (
               <p className="text-sm text-muted-foreground">
                 Anexe pelo menos um documento para enviar a prova.
               </p>

@@ -64,3 +64,20 @@ export async function apiPatch<T>(
 
   return response.json();
 }
+
+/**
+ * Realiza uma requisição DELETE
+ */
+export async function apiDelete<T = { success: boolean; data: null }>(
+  endpoint: string,
+): Promise<T> {
+  const response = await fetch(`/api/${endpoint}`, {
+    method: "DELETE",
+  });
+
+  if (!response.ok) {
+    throw new Error(`Erro na requisição: ${response.statusText}`);
+  }
+
+  return response.json();
+}

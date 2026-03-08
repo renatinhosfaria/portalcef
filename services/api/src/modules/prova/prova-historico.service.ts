@@ -4,7 +4,7 @@ import {
   provaHistorico,
   eq,
   desc,
-  type PlanoAulaHistoricoAcao,
+  type ProvaHistoricoAcao,
 } from "@essencia/db";
 import type { HistoricoEntry } from "@essencia/shared/types";
 
@@ -24,7 +24,7 @@ export class ProvaHistoricoService {
     userId: string;
     userName: string;
     userRole: string;
-    acao: PlanoAulaHistoricoAcao;
+    acao: ProvaHistoricoAcao;
     statusAnterior: string | null;
     statusNovo: string;
     detalhes?: Record<string, unknown> | null;
@@ -100,7 +100,7 @@ export class ProvaHistoricoService {
       userId: entry.userId,
       userName: entry.userName,
       userRole: entry.userRole,
-      acao: entry.acao as PlanoAulaHistoricoAcao,
+      acao: entry.acao as ProvaHistoricoAcao,
       statusAnterior: entry.statusAnterior,
       statusNovo: entry.statusNovo,
       detalhes: entry.detalhes as Record<string, unknown> | null,

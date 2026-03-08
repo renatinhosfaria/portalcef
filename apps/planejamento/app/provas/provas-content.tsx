@@ -21,8 +21,8 @@ import {
   useCiclosDaTurma,
   type ProvaCiclo,
   type ProvaStatus,
-  STATUS_COLORS,
-  STATUS_LABELS,
+  PROVA_STATUS_COLORS,
+  PROVA_STATUS_LABELS,
 } from "../../features/prova";
 
 interface Turma {
@@ -45,15 +45,15 @@ interface ProvaExistente {
 }
 
 function ProvaStatusBadge({ status }: { status: ProvaStatus }) {
-  const colors = STATUS_COLORS[status];
-  const label = STATUS_LABELS[status];
+  const colors = PROVA_STATUS_COLORS[status];
+  const label = PROVA_STATUS_LABELS[status];
 
   if (!colors) return null;
 
   return (
     <Badge
       variant="outline"
-      className={cn(colors.bg, colors.text, colors.border, "border")}
+      className={cn(colors, "border")}
     >
       {label}
     </Badge>

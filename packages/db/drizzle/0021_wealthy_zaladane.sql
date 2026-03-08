@@ -1,0 +1,1 @@
+ALTER TABLE "plano_documento" ADD COLUMN "tem_comentarios" boolean DEFAULT false NOT NULL;

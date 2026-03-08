@@ -52,8 +52,6 @@ export interface OrdemServicoMensagem {
 // ============================================
 export interface OrdemServicoEnriquecida extends OrdemServico {
   criadoPorNome: string;
-  totalMensagens: number;
-  ultimaMensagemEm: string | null;
 }
 
 export interface OrdemServicoDetalhe extends OrdemServico {

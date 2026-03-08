@@ -1,16 +1,15 @@
 "use client";
 
 import { api } from "@essencia/shared/fetchers/client";
-import { LayoutDashboard, Loader2 } from "lucide-react";
+import { ArrowLeft, LayoutDashboard, Loader2 } from "lucide-react";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { PeriodosEmptyState } from "../../features/periodos/components/periodos-empty-state";
 import { PlanoAulaGrid } from "../../features/periodos/components/plano-aula-grid";
 import { usePeriodosDaTurma } from "../../features/periodos/hooks/use-periodos";
 
-/**
- * Interface da turma do usuário
- */
 interface Turma {
   id: string;
   name: string;
@@ -18,18 +17,12 @@ interface Turma {
   stageId: string;
 }
 
-/**
- * Interface da etapa (stage)
- */
 interface Stage {
   id: string;
   name: string;
   code: string;
 }
 
-/**
- * Interface do plano de aula existente da professora
- */
 interface PlanoExistente {
   id: string;
   planoAulaPeriodoId?: string;
@@ -37,23 +30,21 @@ interface PlanoExistente {
   status: string;
 }
 
-/**
- * Interface da resposta da API de férias
- */
 interface FeriasResponse {
   success: boolean;
   data?: { startDate: string };
 }
 
 export function PlanejamentosContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const turmaIdParam = searchParams.get("turmaId");
+
   const [turma, setTurma] = useState<Turma | null>(null);
   const [stage, setStage] = useState<Stage | null>(null);
-  const [planosExistentes, setPlanosExistentes] = useState<PlanoExistente[]>(
-    [],
-  );
-  const [dataInicioFeriasJulho, setDataInicioFeriasJulho] = useState<
-    string | undefined
-  >(undefined);
+  const [temMultiplasTurmas, setTemMultiplasTurmas] = useState(false);
+  const [planosExistentes, setPlanosExistentes] = useState<PlanoExistente[]>([]);
+  const [dataInicioFeriasJulho, setDataInicioFeriasJulho] = useState<string | undefined>(undefined);
   const [isLoadingTurma, setIsLoadingTurma] = useState(true);
   const [isLoadingPlanos, setIsLoadingPlanos] = useState(true);
   const [errorTurma, setErrorTurma] = useState<string | null>(null);
@@ -65,42 +56,60 @@ export function PlanejamentosContent() {
         setIsLoadingTurma(true);
         setErrorTurma(null);
 
-        // Buscar turmas do usuário
         const turmas = await api.get<Turma[]>("/plannings/turmas");
-        const primaryTurma: Turma | null =
-          (Array.isArray(turmas) && turmas.length > 0 ? turmas[0] : null) ??
-          null;
-        setTurma(primaryTurma);
+        const turmasList = Array.isArray(turmas) ? turmas : [];
 
-        // Buscar etapa da turma
-        if (primaryTurma) {
+        setTemMultiplasTurmas(turmasList.length > 1);
+
+        // Determinar turma: pelo param da URL ou a primeira (única)
+        let selectedTurma: Turma | null = null;
+
+        if (turmaIdParam) {
+          selectedTurma = turmasList.find((t) => t.id === turmaIdParam) || null;
+          // turmaId inválido → redireciona para seleção
+          if (!selectedTurma && turmasList.length > 1) {
+            router.replace("/planejamentos/turmas");
+            return;
+          }
+        }
+
+        // Sem param e múltiplas turmas → seleção
+        if (!turmaIdParam && turmasList.length > 1) {
+          router.replace("/planejamentos/turmas");
+          return;
+        }
+
+        // Sem param e 1 turma → usa a única
+        if (!selectedTurma && turmasList.length > 0) {
+          selectedTurma = turmasList[0] ?? null;
+        }
+
+        setTurma(selectedTurma);
+
+        if (selectedTurma) {
           const stages = await api.get<Stage[]>("/stages");
           const userStage = Array.isArray(stages)
-            ? stages.find((s) => s.id === primaryTurma.stageId)
+            ? stages.find((s) => s.id === selectedTurma!.stageId)
             : null;
           setStage(userStage || null);
         }
       } catch (err) {
         console.error("Erro ao buscar dados do usuário:", err);
-        setErrorTurma(
-          err instanceof Error ? err.message : "Erro ao buscar turma",
-        );
+        setErrorTurma(err instanceof Error ? err.message : "Erro ao buscar turma");
       } finally {
         setIsLoadingTurma(false);
       }
     }
 
     fetchUserData();
-  }, []);
+  }, [turmaIdParam, router]);
 
   // Buscar planos existentes da professora
   useEffect(() => {
     async function fetchPlanosExistentes() {
       try {
         setIsLoadingPlanos(true);
-        const response = await api.get<{ data: PlanoExistente[] }>(
-          "/plano-aula/meus",
-        );
+        const response = await api.get<{ data: PlanoExistente[] }>("/plano-aula/meus");
         if (response && Array.isArray(response.data)) {
           setPlanosExistentes(response.data);
         } else if (Array.isArray(response)) {
@@ -131,7 +140,6 @@ export function PlanejamentosContent() {
         }
       } catch (err) {
         console.error("Erro ao buscar data de férias:", err);
-        // Fallback já está no componente, não precisa fazer nada
       }
     }
 
@@ -152,6 +160,17 @@ export function PlanejamentosContent() {
     <div className="container mx-auto max-w-7xl px-4 py-8">
       {/* Header */}
       <div className="mb-8">
+        {temMultiplasTurmas && (
+          <div className="mb-4">
+            <Link
+              href="/planejamentos/turmas"
+              className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
+            >
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Minhas Turmas
+            </Link>
+          </div>
+        )}
         <div className="flex items-center gap-3 mb-2">
           <div className="p-2 rounded-lg bg-primary/10">
             <LayoutDashboard className="h-6 w-6 text-primary" />

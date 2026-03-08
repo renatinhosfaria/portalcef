@@ -40,6 +40,11 @@ export class StorageService {
       region,
       endpoint,
       forcePathStyle: true, // Required for MinIO
+      // Evita adicionar x-amz-checksum-mode=ENABLED nas presigned URLs de GetObject.
+      // O ONLYOFFICE (request-filtering interno) pode alterar a requisição e
+      // causar 400/assinatura inválida no MinIO.
+      requestChecksumCalculation: "WHEN_REQUIRED",
+      responseChecksumValidation: "WHEN_REQUIRED",
       credentials: {
         accessKeyId,
         secretAccessKey,
@@ -154,6 +159,14 @@ export class StorageService {
       Key: key,
     });
     return getSignedUrl(this.s3Client, command, { expiresIn });
+  }
+
+  async getObject(key: string) {
+    const command = new GetObjectCommand({
+      Bucket: this.bucketName,
+      Key: key,
+    });
+    return this.s3Client.send(command);
   }
 
   async replaceFile(

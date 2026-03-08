@@ -29,33 +29,11 @@ export const createPlanoSchema = z.object({
 export type CreatePlanoDto = z.infer<typeof createPlanoSchema>;
 
 /**
- * Schema para adicionar comentário a um documento
- * Analista ou Coordenadora adiciona feedback
- */
-export const addComentarioSchema = z.object({
-  documentoId: z.string().uuid("documentoId deve ser um UUID válido"),
-  comentario: z
-    .string()
-    .min(1, "Comentário não pode estar vazio")
-    .max(2000, "Comentário não pode exceder 2000 caracteres"),
-});
-
-export type AddComentarioDto = z.infer<typeof addComentarioSchema>;
-
-/**
  * Schema para devolver plano para ajustes
  * Coordenadora pode devolver para PROFESSORA ou ANALISTA
  */
 export const devolverPlanoSchema = z.object({
   destino: z.enum(["PROFESSORA", "ANALISTA"]).optional(),
-  comentarios: z
-    .array(
-      z.object({
-        documentoId: z.string().uuid("documentoId deve ser um UUID válido"),
-        comentario: z.string().min(1, "Comentário não pode estar vazio"),
-      }),
-    )
-    .optional(),
 });
 
 export type DevolverPlanoDto = z.infer<typeof devolverPlanoSchema>;
@@ -85,6 +63,7 @@ export const listPlanosQuerySchema = z.object({
       "DEVOLVIDO_COORDENADORA",
       "REVISAO_ANALISTA",
       "APROVADO",
+      "RECUPERADO",
     ])
     .optional(),
   turmaId: z.string().uuid().optional(),
@@ -219,7 +198,7 @@ export type ListarPlanosGestaoDto = z.infer<typeof listarPlanosGestaoSchema>;
  */
 export const STATUS_URL_MAP: Record<string, string[]> = {
   todos: [],
-  rascunho: ["RASCUNHO"],
+  rascunho: ["RASCUNHO", "RECUPERADO"],
   "aguardando-analise": ["AGUARDANDO_ANALISTA", "REVISAO_ANALISTA"],
   "aguardando-aprovacao": ["AGUARDANDO_COORDENADORA"],
   devolvidos: ["DEVOLVIDO_ANALISTA", "DEVOLVIDO_COORDENADORA"],

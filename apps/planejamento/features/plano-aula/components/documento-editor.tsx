@@ -1,7 +1,8 @@
 "use client";
 
 import { DocumentEditor } from "@onlyoffice/document-editor-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { toast } from "@essencia/ui/toaster";
 
 import {
   Dialog,
@@ -12,7 +13,7 @@ import {
 interface DocumentoEditorProps {
   planoId: string;
   documentoId: string;
-  mode: "edit" | "view";
+  mode: "edit" | "view" | "comentar";
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -32,6 +33,23 @@ export function DocumentoEditorModal({
   const [editorConfig, setEditorConfig] =
     useState<EditorConfigResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const hadChangesRef = useRef(false);
+
+  // Quando o estado do documento muda:
+  // data === true  → há alterações não salvas
+  // data === false → documento salvo (sem alterações pendentes)
+  const onDocumentStateChange = useCallback(
+    (event: object) => {
+      const changed = (event as { data: boolean }).data;
+      if (changed) {
+        hadChangesRef.current = true;
+      } else if (hadChangesRef.current) {
+        hadChangesRef.current = false;
+        toast.success("Documento salvo com sucesso");
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!open) {
@@ -64,7 +82,7 @@ export function DocumentoEditorModal({
         aria-describedby={undefined}
       >
         <DialogTitle className="sr-only">
-          {mode === "edit" ? "Editar" : "Visualizar"} documento
+          {mode === "edit" ? "Editar" : mode === "comentar" ? "Comentar" : "Visualizar"} documento
         </DialogTitle>
         {error && (
           <div className="flex items-center justify-center h-full text-destructive">
@@ -82,6 +100,7 @@ export function DocumentoEditorModal({
               id={`editor-${documentoId}`}
               documentServerUrl={editorConfig.documentServerUrl}
               config={editorConfig.config}
+              events_onDocumentStateChange={onDocumentStateChange}
             />
           </div>
         )}

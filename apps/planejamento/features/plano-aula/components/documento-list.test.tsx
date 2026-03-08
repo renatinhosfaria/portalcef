@@ -33,19 +33,19 @@ describe("DocumentoList", () => {
     previewUrl: undefined,
   };
 
-  it("abre modal ao clicar em Ver Documento quando status é PRONTO", async () => {
+  it("abre modal ao clicar em Ver quando status é PRONTO", async () => {
     const user = userEvent.setup();
     render(<DocumentoList documentos={[mockDocumentoPronto]} />);
 
-    await user.click(screen.getByRole("button", { name: /ver documento/i }));
+    await user.click(screen.getByRole("button", { name: /^ver$/i }));
 
     expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
 
-  it("desabilita botão Ver Documento quando status é PENDENTE", () => {
+  it("desabilita botão Ver quando status é PENDENTE", () => {
     render(<DocumentoList documentos={[mockDocumentoPendente]} />);
 
-    const botao = screen.getByRole("button", { name: /ver documento/i });
+    const botao = screen.getByRole("button", { name: /^ver$/i });
     expect(botao).toBeDisabled();
   });
 
@@ -59,7 +59,7 @@ describe("DocumentoList", () => {
     const user = userEvent.setup();
     render(<DocumentoList documentos={[mockDocumentoPronto]} />);
 
-    await user.click(screen.getByRole("button", { name: /ver documento/i }));
+    await user.click(screen.getByRole("button", { name: /^ver$/i }));
     expect(screen.getByRole("dialog")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /fechar/i }));
@@ -72,7 +72,7 @@ describe("DocumentoList", () => {
     expect(screen.getByText(/nenhum documento anexado/i)).toBeInTheDocument();
   });
 
-  it("habilita botão Ver Documento para PDF nativo (sem conversão)", () => {
+  it("habilita botão Ver para PDF nativo (sem conversão)", () => {
     const mockPdf = {
       ...mockDocumentoPronto,
       mimeType: "application/pdf",
@@ -82,7 +82,7 @@ describe("DocumentoList", () => {
 
     render(<DocumentoList documentos={[mockPdf]} />);
 
-    const botao = screen.getByRole("button", { name: /ver documento/i });
+    const botao = screen.getByRole("button", { name: /^ver$/i });
     expect(botao).not.toBeDisabled();
   });
 

@@ -102,7 +102,7 @@ Dockerfile*
 .prettierrc*
 .eslintrc*
 .editorconfig
-.npmrc
+# .npmrc é necessário para pnpm (auto-install-peers, strict-peer-dependencies)
 .nvmrc
 renovate.json
 .husky/

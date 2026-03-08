@@ -48,17 +48,19 @@ export interface TarefaContexto {
   professoraId: string | null;
 }
 
+export interface TarefaContextoEnriquecido extends TarefaContexto {
+  turmaName?: string;
+  etapaName?: string;
+  professoraName?: string;
+}
+
 // ============================================
 // Enriched Tarefa (with related data)
 // ============================================
 export interface TarefaEnriquecida extends Tarefa {
   criadoPorNome: string;
   responsavelNome: string;
-  contextos: TarefaContexto[];
-  // Optional enriched context data
-  turmaName?: string;
-  etapaName?: string;
-  professoraName?: string;
+  contextos: TarefaContextoEnriquecido[];
 }
 
 // ============================================

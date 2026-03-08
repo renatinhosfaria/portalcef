@@ -13,7 +13,6 @@ import {
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 
 import {
-  planoAulaStatusEnum,
   documentoTipoEnum,
   documentoPreviewStatusEnum,
 } from "./plano-aula.js";
@@ -22,12 +21,20 @@ import { turmas } from "./turmas.js";
 import { units } from "./units.js";
 import { users } from "./users.js";
 
-// Re-exportar enums para conveniência
-export {
-  planoAulaStatusEnum as provaStatusEnum,
-  documentoTipoEnum,
-  documentoPreviewStatusEnum,
-} from "./plano-aula.js";
+// Enum de status próprio para provas (desacoplado do plano-aula)
+export const provaStatusEnum = [
+  "RASCUNHO",
+  "AGUARDANDO_IMPRESSAO",
+  "AGUARDANDO_RESPOSTA",
+  "AGUARDANDO_ANALISTA",
+  "DEVOLVIDO_ANALISTA",
+  "APROVADO",
+  "RECUPERADO",
+] as const;
+export type ProvaStatus = (typeof provaStatusEnum)[number];
+
+// Re-exportar enums de documento para conveniência
+export { documentoTipoEnum, documentoPreviewStatusEnum } from "./plano-aula.js";
 
 // ============================================
 // Table: prova (Mestre)
@@ -52,7 +59,7 @@ export const prova = pgTable(
       .references(() => provaCiclo.id, { onDelete: "cascade" }),
 
     // Status e fluxo
-    status: text("status", { enum: planoAulaStatusEnum })
+    status: text("status", { enum: provaStatusEnum })
       .notNull()
       .default("RASCUNHO"),
 

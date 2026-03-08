@@ -128,13 +128,13 @@ export class QuinzenaDocumentsController {
       });
     }
 
-    // Validar tamanho (10MB max)
-    const MAX_SIZE = 10 * 1024 * 1024; // 10MB
+    // Validar tamanho (100MB max)
+    const MAX_SIZE = 100 * 1024 * 1024; // 100MB
     const buffer = await data.toBuffer();
     if (buffer.length > MAX_SIZE) {
       throw new BadRequestException({
         code: "FILE_TOO_LARGE",
-        message: "Arquivo muito grande. Tamanho máximo: 10MB",
+        message: "Arquivo muito grande. Tamanho máximo: 100MB",
       });
     }
 

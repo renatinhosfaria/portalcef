@@ -9,12 +9,23 @@ import {
 } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 
-import { planoAulaHistoricoAcaoEnum } from "./plano-aula-historico.js";
 import { prova } from "./prova.js";
 import { users } from "./users.js";
 
-// Re-exportar enum para conveniência
-export { planoAulaHistoricoAcaoEnum as provaHistoricoAcaoEnum } from "./plano-aula-historico.js";
+// Enum de ações próprio para histórico de provas (desacoplado do plano-aula)
+export const provaHistoricoAcaoEnum = [
+  "CRIADO",
+  "SUBMETIDO_IMPRESSAO",
+  "ENVIADO_RESPONDER",
+  "SUBMETIDO_ANALISTA",
+  "RESUBMETIDO_ANALISTA",
+  "APROVADO_ANALISTA",
+  "DEVOLVIDO_ANALISTA",
+  "DOCUMENTO_IMPRESSO",
+  "RECUPERADO",
+  "COMENTARIO_ADICIONADO",
+] as const;
+export type ProvaHistoricoAcao = (typeof provaHistoricoAcaoEnum)[number];
 
 // ============================================
 // Table: prova_historico
@@ -37,7 +48,7 @@ export const provaHistorico = pgTable(
     userRole: text("user_role").notNull(),
 
     // Ação e status
-    acao: text("acao", { enum: planoAulaHistoricoAcaoEnum }).notNull(),
+    acao: text("acao", { enum: provaHistoricoAcaoEnum }).notNull(),
     statusAnterior: text("status_anterior"),
     statusNovo: text("status_novo").notNull(),
 
