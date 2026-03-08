@@ -154,6 +154,49 @@ export type NewTarefaContexto = typeof tarefaContextos.$inferInsert;
 // ============================================
 // Drizzle Relations
 // ============================================
+// ============================================
+// Table: tarefa_historico
+// ============================================
+export const tarefaAcaoEnum = [
+  "CRIADA",
+  "EDITADA",
+  "CONCLUIDA",
+  "CANCELADA",
+] as const;
+export type TarefaAcao = (typeof tarefaAcaoEnum)[number];
+
+export const tarefaHistorico = pgTable(
+  "tarefa_historico",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tarefaId: uuid("tarefa_id")
+      .notNull()
+      .references(() => tarefas.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id),
+    userName: text("user_name").notNull(),
+    userRole: text("user_role").notNull(),
+    acao: text("acao", { enum: tarefaAcaoEnum }).notNull(),
+    campoAlterado: text("campo_alterado"),
+    valorAnterior: text("valor_anterior"),
+    valorNovo: text("valor_novo"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    tarefaIdIdx: index("idx_tarefa_historico_tarefa_id").on(table.tarefaId),
+    createdAtIdx: index("idx_tarefa_historico_created_at").on(table.createdAt),
+  }),
+);
+
+export type TarefaHistorico = typeof tarefaHistorico.$inferSelect;
+export type NewTarefaHistorico = typeof tarefaHistorico.$inferInsert;
+
+// ============================================
+// Drizzle Relations
+// ============================================
 export const tarefasRelations = relations(tarefas, ({ one, many }) => ({
   school: one(schools, {
     fields: [tarefas.schoolId],
@@ -174,6 +217,7 @@ export const tarefasRelations = relations(tarefas, ({ one, many }) => ({
     relationName: "tarefasResponsavelUsuario",
   }),
   contextos: many(tarefaContextos),
+  historico: many(tarefaHistorico),
 }));
 
 export const tarefaContextosRelations = relations(
@@ -193,6 +237,20 @@ export const tarefaContextosRelations = relations(
     }),
     professora: one(users, {
       fields: [tarefaContextos.professoraId],
+      references: [users.id],
+    }),
+  }),
+);
+
+export const tarefaHistoricoRelations = relations(
+  tarefaHistorico,
+  ({ one }) => ({
+    tarefa: one(tarefas, {
+      fields: [tarefaHistorico.tarefaId],
+      references: [tarefas.id],
+    }),
+    user: one(users, {
+      fields: [tarefaHistorico.userId],
       references: [users.id],
     }),
   }),
