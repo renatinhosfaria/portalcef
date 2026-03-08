@@ -23,6 +23,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { TarefaHistoricoTimeline } from "@/features/tarefa-detalhe/components/tarefa-historico-timeline";
 import { useCancelarTarefa } from "@/features/tarefa-detalhe/hooks/use-cancelar-tarefa";
 import { useTarefa } from "@/features/tarefa-detalhe/hooks/use-tarefa";
 import { apiPatch } from "@/lib/api";
@@ -205,6 +206,8 @@ export function TarefaDetalheContent({ id }: Props) {
           )}
         </CardContent>
       </Card>
+
+      <TarefaHistoricoTimeline tarefaId={id} />
     </div>
   );
 }
