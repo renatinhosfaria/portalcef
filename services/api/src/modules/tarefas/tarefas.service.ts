@@ -6,16 +6,32 @@ import {
   BadRequestException,
 } from "@nestjs/common";
 import { eq, and, or, desc, inArray, sql } from "@essencia/db";
-import { tarefas, tarefaContextos, users } from "@essencia/db";
+import {
+  tarefas,
+  tarefaContextos,
+  tarefaHistorico,
+  users,
+  turmas,
+  educationStages,
+} from "@essencia/db";
 import type {
   Tarefa,
   TarefaEnriquecida,
+  TarefaContextoEnriquecido,
   TarefaPrioridade,
   TarefaTipoOrigem,
   TarefaContextoModulo,
 } from "@essencia/shared/types";
+
+type ContextoComRelacoes = typeof tarefaContextos.$inferSelect & {
+  turma: typeof turmas.$inferSelect | null;
+  etapa: typeof educationStages.$inferSelect | null;
+  professora: typeof users.$inferSelect | null;
+};
+import type { AtualizarTarefaDto } from "./dto/tarefas.dto";
 import { DatabaseService } from "../../common/database/database.service";
 import { validarContextosPorRole } from "./utils/validacoes";
+import { TarefaHistoricoService } from "./tarefa-historico.service";
 
 /**
  * Tipos auxiliares para transações do Drizzle
@@ -50,7 +66,10 @@ export interface UserContext {
  */
 @Injectable()
 export class TarefasService {
-  constructor(private readonly db: DatabaseService) {}
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly historicoService: TarefaHistoricoService,
+  ) {}
 
   /**
    * Cria tarefa manual com validações de role e permissões
@@ -116,6 +135,7 @@ export class TarefasService {
       responsavel: dto.responsavel,
       tipoOrigem: "MANUAL",
       contextos: dto.contextos,
+      session: { userId: session.userId, role: session.role },
     });
   }
 
@@ -183,6 +203,7 @@ export class TarefasService {
       turmaId?: string | null;
       professoraId?: string | null;
     }>;
+    session?: { userId: string; role: string };
   }): Promise<Tarefa> {
     const db = this.db.db;
 
@@ -224,6 +245,18 @@ export class TarefasService {
         await tx.insert(tarefaContextos).values(contextosValues);
       }
 
+      // Registrar historico de criacao
+      if (params.session) {
+        const userName = await this.getUserName(params.session.userId);
+        await this.historicoService.registrar(tx, {
+          tarefaId: tarefaCriada.id,
+          userId: params.session.userId,
+          userName,
+          userRole: params.session.role,
+          acao: "CRIADA",
+        });
+      }
+
       return this.mapTarefaToDto(tarefaCriada);
     });
   }
@@ -263,13 +296,227 @@ export class TarefasService {
   }
 
   /**
+   * Busca tarefa por ID com dados enriquecidos (nomes, contextos, turma/etapa/professora)
+   *
+   * @param id ID da tarefa
+   * @returns TarefaEnriquecida ou null
+   */
+  async findByIdEnriquecido(id: string): Promise<TarefaEnriquecida | null> {
+    const db = this.db.db;
+
+    const tarefaDb = await db.query.tarefas.findFirst({
+      where: eq(tarefas.id, id),
+      with: {
+        criadoPorUser: true,
+        responsavelUser: true,
+        contextos: {
+          with: {
+            turma: true,
+            etapa: true,
+            professora: true,
+          },
+        },
+      },
+    });
+
+    if (!tarefaDb) {
+      return null;
+    }
+
+    const contextosMapeados: TarefaContextoEnriquecido[] = (
+      tarefaDb.contextos as ContextoComRelacoes[]
+    ).map((c) => ({
+      id: c.id,
+      tarefaId: c.tarefaId,
+      modulo: c.modulo as TarefaContextoEnriquecido["modulo"],
+      quinzenaId: c.quinzenaId ?? null,
+      etapaId: c.etapaId ?? null,
+      turmaId: c.turmaId ?? null,
+      professoraId: c.professoraId ?? null,
+      turmaName: c.turma?.name ?? undefined,
+      etapaName: c.etapa?.name ?? undefined,
+      professoraName: c.professora?.name ?? undefined,
+    }));
+
+    return {
+      ...this.mapTarefaToDto(tarefaDb),
+      criadoPorNome: tarefaDb.criadoPorUser.name,
+      responsavelNome: tarefaDb.responsavelUser.name,
+      contextos: contextosMapeados,
+    };
+  }
+
+  /**
+   * Atualiza campos de uma tarefa existente
+   *
+   * @param id ID da tarefa
+   * @param dto Campos a atualizar (parcial)
+   * @returns Tarefa atualizada
+   */
+  async atualizar(
+    id: string,
+    dto: AtualizarTarefaDto,
+    userId: string,
+    userRole: string,
+  ): Promise<Tarefa> {
+    const db = this.db.db;
+
+    const tarefaDb = await db.query.tarefas.findFirst({
+      where: eq(tarefas.id, id),
+    });
+
+    if (!tarefaDb) {
+      throw new NotFoundException("Tarefa não encontrada");
+    }
+
+    if (tarefaDb.criadoPor !== userId && tarefaDb.responsavel !== userId) {
+      throw new ForbiddenException(
+        "Somente o criador ou responsável pode editar esta tarefa",
+      );
+    }
+
+    if (tarefaDb.status === "CONCLUIDA" || tarefaDb.status === "CANCELADA") {
+      throw new ConflictException(
+        "Tarefa concluída ou cancelada não pode ser editada",
+      );
+    }
+
+    if (dto.responsavel) {
+      const responsavelDb = await db.query.users.findFirst({
+        where: eq(users.id, dto.responsavel),
+      });
+      if (!responsavelDb) {
+        throw new NotFoundException("Responsável não encontrado");
+      }
+    }
+
+    if (dto.prazo) {
+      const agoraInicioDoDia = new Date();
+      agoraInicioDoDia.setHours(0, 0, 0, 0);
+      const prazoInicioDoDia = new Date(dto.prazo);
+      prazoInicioDoDia.setHours(0, 0, 0, 0);
+      if (prazoInicioDoDia < agoraInicioDoDia) {
+        throw new BadRequestException("Prazo não pode estar no passado");
+      }
+    }
+
+    const setCampos: Partial<typeof tarefas.$inferInsert> = {
+      updatedAt: new Date(),
+    };
+    if (dto.titulo !== undefined) setCampos.titulo = dto.titulo;
+    if (dto.descricao !== undefined) setCampos.descricao = dto.descricao;
+    if (dto.prioridade !== undefined) setCampos.prioridade = dto.prioridade;
+    if (dto.prazo !== undefined) setCampos.prazo = new Date(dto.prazo);
+    if (dto.responsavel !== undefined) setCampos.responsavel = dto.responsavel;
+
+    return await db.transaction(async (tx: DbTransaction) => {
+      const [tarefaAtualizada] = await tx
+        .update(tarefas)
+        .set(setCampos)
+        .where(eq(tarefas.id, id))
+        .returning();
+
+      if (!tarefaAtualizada) {
+        throw new ConflictException("Falha ao atualizar tarefa");
+      }
+
+      // Registrar historico para cada campo alterado
+      const userName = await this.getUserName(userId);
+      const campos: Array<{ campo: string; anterior: string; novo: string }> = [];
+
+      if (dto.titulo !== undefined && dto.titulo !== tarefaDb.titulo) {
+        campos.push({ campo: "titulo", anterior: tarefaDb.titulo, novo: dto.titulo });
+      }
+      if (dto.descricao !== undefined && (dto.descricao || "") !== (tarefaDb.descricao || "")) {
+        campos.push({ campo: "descricao", anterior: tarefaDb.descricao || "", novo: dto.descricao || "" });
+      }
+      if (dto.prioridade !== undefined && dto.prioridade !== tarefaDb.prioridade) {
+        campos.push({ campo: "prioridade", anterior: tarefaDb.prioridade, novo: dto.prioridade });
+      }
+      if (dto.prazo !== undefined && dto.prazo !== tarefaDb.prazo.toISOString()) {
+        campos.push({ campo: "prazo", anterior: tarefaDb.prazo.toISOString(), novo: dto.prazo });
+      }
+      if (dto.responsavel !== undefined && dto.responsavel !== tarefaDb.responsavel) {
+        campos.push({ campo: "responsavel", anterior: tarefaDb.responsavel, novo: dto.responsavel });
+      }
+
+      for (const campo of campos) {
+        await this.historicoService.registrar(tx, {
+          tarefaId: id,
+          userId,
+          userName,
+          userRole,
+          acao: "EDITADA",
+          campoAlterado: campo.campo,
+          valorAnterior: campo.anterior,
+          valorNovo: campo.novo,
+        });
+      }
+
+      return this.mapTarefaToDto(tarefaAtualizada);
+    });
+  }
+
+  /**
+   * Cancela uma tarefa
+   *
+   * @param tarefaId ID da tarefa
+   * @returns Tarefa cancelada
+   */
+  async cancelar(tarefaId: string, userId: string, userRole: string): Promise<Tarefa> {
+    const db = this.db.db;
+
+    const tarefaDb = await db.query.tarefas.findFirst({
+      where: eq(tarefas.id, tarefaId),
+    });
+
+    if (!tarefaDb) {
+      throw new NotFoundException("Tarefa não encontrada");
+    }
+
+    if (tarefaDb.criadoPor !== userId && tarefaDb.responsavel !== userId) {
+      throw new ForbiddenException(
+        "Somente o criador ou responsável pode cancelar esta tarefa",
+      );
+    }
+
+    if (tarefaDb.status === "CONCLUIDA" || tarefaDb.status === "CANCELADA") {
+      throw new ConflictException("Tarefa já foi concluída ou cancelada");
+    }
+
+    return await db.transaction(async (tx: DbTransaction) => {
+      const [tarefaAtualizada] = await tx
+        .update(tarefas)
+        .set({ status: "CANCELADA", updatedAt: new Date() })
+        .where(eq(tarefas.id, tarefaId))
+        .returning();
+
+      if (!tarefaAtualizada) {
+        throw new ConflictException("Falha ao cancelar tarefa");
+      }
+
+      // Registrar historico de cancelamento
+      const userName = await this.getUserName(userId);
+      await this.historicoService.registrar(tx, {
+        tarefaId,
+        userId,
+        userName,
+        userRole,
+        acao: "CANCELADA",
+      });
+
+      return this.mapTarefaToDto(tarefaAtualizada);
+    });
+  }
+
+  /**
    * Conclui uma tarefa
    *
    * @param tarefaId ID da tarefa
    * @param userId ID do usuário que está concluindo
    * @returns Tarefa atualizada
    */
-  async concluir(tarefaId: string, userId: string): Promise<Tarefa> {
+  async concluir(tarefaId: string, userId: string, userRole: string): Promise<Tarefa> {
     const db = this.db.db;
 
     // Usar transação para evitar race conditions
@@ -307,6 +554,16 @@ export class TarefasService {
       if (!tarefaAtualizada) {
         throw new ConflictException("Falha ao concluir tarefa");
       }
+
+      // Registrar historico de conclusao
+      const userName = await this.getUserName(userId);
+      await this.historicoService.registrar(tx, {
+        tarefaId,
+        userId,
+        userName,
+        userRole,
+        acao: "CONCLUIDA",
+      });
 
       return this.mapTarefaToDto(tarefaAtualizada);
     });
@@ -505,6 +762,33 @@ export class TarefasService {
       concluidasHoje,
       concluidasSemana,
     };
+  }
+
+
+  /**
+   * Busca historico de acoes de uma tarefa
+   *
+   * @param tarefaId ID da tarefa
+   * @returns Lista de entradas do historico ordenadas por data
+   */
+  async buscarHistorico(tarefaId: string) {
+    const db = this.db.db;
+    return db
+      .select()
+      .from(tarefaHistorico)
+      .where(eq(tarefaHistorico.tarefaId, tarefaId))
+      .orderBy(desc(tarefaHistorico.createdAt));
+  }
+
+  /**
+   * Busca nome do usuario por ID
+   */
+  private async getUserName(userId: string): Promise<string> {
+    const db = this.db.db;
+    const user = await db.query.users.findFirst({
+      where: eq(users.id, userId),
+    });
+    return user?.name || "Usuario Desconhecido";
   }
 
   /**

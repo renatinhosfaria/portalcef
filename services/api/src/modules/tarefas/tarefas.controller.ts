@@ -9,6 +9,7 @@ import {
   Query,
   Req,
   BadRequestException,
+  NotFoundException,
 } from "@nestjs/common";
 
 import { Roles } from "../../common/decorators/roles.decorator";
@@ -21,6 +22,8 @@ import {
   criarTarefaSchema,
   type ListarTarefasDto,
   listarTarefasSchema,
+  type AtualizarTarefaDto,
+  atualizarTarefaSchema,
 } from "./dto/tarefas.dto";
 
 // ============================================
@@ -192,9 +195,46 @@ export class TarefasController {
     @Req() req: { user: UserContext },
     @Param("id") id: string,
   ) {
-    const tarefa = await this.tarefasService.findById(id);
+    const tarefa = await this.tarefasService.findByIdEnriquecido(id);
 
-    // Guard já validou autorização e existência da tarefa
+    if (!tarefa) {
+      throw new NotFoundException("Tarefa não encontrada");
+    }
+
+    return {
+      success: true,
+      data: tarefa,
+    };
+  }
+
+  /**
+   * PATCH /tarefas/:id
+   * Atualiza campos de uma tarefa
+   */
+  @Patch(":id")
+  @Roles(...VISUALIZAR_ACCESS)
+  @UseGuards(TarefaAccessGuard)
+  async atualizarTarefa(
+    @Req() req: { user: UserContext },
+    @Param("id") id: string,
+    @Body() body: AtualizarTarefaDto,
+  ) {
+    const parsed = atualizarTarefaSchema.safeParse(body);
+    if (!parsed.success) {
+      throw new BadRequestException({
+        code: "VALIDATION_ERROR",
+        message: "Dados inválidos",
+        errors: parsed.error.errors,
+      });
+    }
+
+    const tarefa = await this.tarefasService.atualizar(
+      id,
+      parsed.data,
+      req.user.userId,
+      req.user.role,
+    );
+
     return {
       success: true,
       data: tarefa,
@@ -212,12 +252,51 @@ export class TarefasController {
     @Req() req: { user: UserContext },
     @Param("id") id: string,
   ) {
-    const tarefa = await this.tarefasService.concluir(id, req.user.userId);
+    const tarefa = await this.tarefasService.concluir(id, req.user.userId, req.user.role);
 
     return {
       success: true,
       message: "Tarefa concluída com sucesso",
       data: tarefa,
+    };
+  }
+
+  /**
+   * PATCH /tarefas/:id/cancelar
+   * Cancela uma tarefa
+   */
+  @Patch(":id/cancelar")
+  @Roles(...VISUALIZAR_ACCESS)
+  @UseGuards(TarefaAccessGuard)
+  async cancelarTarefa(
+    @Req() req: { user: UserContext },
+    @Param("id") id: string,
+  ) {
+    const tarefa = await this.tarefasService.cancelar(id, req.user.userId, req.user.role);
+
+    return {
+      success: true,
+      message: "Tarefa cancelada com sucesso",
+      data: tarefa,
+    };
+  }
+
+  /**
+   * GET /tarefas/:id/historico
+   * Retorna historico de acoes da tarefa
+   */
+  @Get(":id/historico")
+  @Roles(...VISUALIZAR_ACCESS)
+  @UseGuards(TarefaAccessGuard)
+  async getHistorico(
+    @Req() req: { user: UserContext },
+    @Param("id") id: string,
+  ) {
+    const historico = await this.tarefasService.buscarHistorico(id);
+
+    return {
+      success: true,
+      data: historico,
     };
   }
 }

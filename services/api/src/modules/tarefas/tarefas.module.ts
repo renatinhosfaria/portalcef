@@ -6,6 +6,7 @@ import { DatabaseModule } from "../../common/database/database.module";
 import { TarefasController } from "./tarefas.controller";
 import { TarefasService } from "./tarefas.service";
 import { TarefasEventosService } from "./tarefas-eventos.service";
+import { TarefaHistoricoService } from "./tarefa-historico.service";
 
 /**
  * TarefasModule
@@ -19,7 +20,7 @@ import { TarefasEventosService } from "./tarefas-eventos.service";
 @Module({
   imports: [AuthModule, DatabaseModule, EventEmitterModule],
   controllers: [TarefasController],
-  providers: [TarefasService, TarefasEventosService],
+  providers: [TarefasService, TarefasEventosService, TarefaHistoricoService],
   exports: [TarefasService],
 })
 export class TarefasModule {}

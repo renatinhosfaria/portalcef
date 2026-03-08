@@ -1,13 +1,14 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import { DatabaseService } from "../../common/database/database.service";
 import { TarefasService } from "./tarefas.service";
+import { TarefaHistoricoService } from "./tarefa-historico.service";
 
 // Mock do @essencia/db
 const mockDb: Record<string, unknown> & {
   insert: jest.Mock;
   values: jest.Mock;
   returning: jest.Mock;
-  query: { tarefas: { findFirst: jest.Mock } };
+  query: { tarefas: { findFirst: jest.Mock }; users: { findFirst: jest.Mock } };
   select: jest.Mock;
   from: jest.Mock;
   update: jest.Mock;
@@ -21,6 +22,9 @@ const mockDb: Record<string, unknown> & {
   query: {
     tarefas: {
       findFirst: jest.fn(),
+    },
+    users: {
+      findFirst: jest.fn().mockResolvedValue({ name: "Teste" }),
     },
   },
   update: jest.fn().mockReturnThis(),
@@ -39,6 +43,7 @@ mockDb.transaction.mockImplementation(
 jest.mock("@essencia/db", () => ({
   tarefas: {},
   tarefaContextos: {},
+  tarefaHistorico: {},
   users: { id: "users.id", name: "users.name" },
   eq: jest.fn(),
   and: jest.fn(),
@@ -52,6 +57,12 @@ describe("TarefasService", () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         TarefasService,
+        {
+          provide: TarefaHistoricoService,
+          useValue: {
+            registrar: jest.fn(),
+          },
+        },
         {
           provide: DatabaseService,
           useValue: {
@@ -339,7 +350,7 @@ describe("TarefasService", () => {
       mockDb.returning.mockResolvedValue([mockTarefaAtualizada]);
       mockDb.query.tarefas.findFirst.mockResolvedValue(mockTarefaDb);
 
-      const resultado = await service.concluir("tarefa-uuid-1", "user-uuid-2");
+      const resultado = await service.concluir("tarefa-uuid-1", "user-uuid-2", "professora");
 
       expect(resultado).toBeDefined();
       expect(resultado.status).toBe("CONCLUIDA");
@@ -356,7 +367,7 @@ describe("TarefasService", () => {
       mockDb.query.tarefas.findFirst.mockResolvedValue(null);
 
       await expect(
-        service.concluir("00000000-0000-0000-0000-999999999999", "user-uuid-1"),
+        service.concluir("00000000-0000-0000-0000-999999999999", "user-uuid-1", "professora"),
       ).rejects.toThrow("Tarefa não encontrada");
     });
 
@@ -381,7 +392,7 @@ describe("TarefasService", () => {
       mockDb.query.tarefas.findFirst.mockResolvedValue(mockTarefaDb);
 
       await expect(
-        service.concluir("tarefa-uuid-1", "user-uuid-999"),
+        service.concluir("tarefa-uuid-1", "user-uuid-999", "professora"),
       ).rejects.toThrow("Usuário não é responsável pela tarefa");
     });
 
@@ -406,7 +417,7 @@ describe("TarefasService", () => {
       mockDb.query.tarefas.findFirst.mockResolvedValue(mockTarefaDb);
 
       await expect(
-        service.concluir("tarefa-uuid-1", "user-uuid-2"),
+        service.concluir("tarefa-uuid-1", "user-uuid-2", "professora"),
       ).rejects.toThrow("Tarefa já foi concluída");
     });
   });
