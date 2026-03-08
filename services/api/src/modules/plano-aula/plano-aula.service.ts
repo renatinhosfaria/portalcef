@@ -70,7 +70,7 @@ export interface PlanoComDocumentos extends PlanoAula {
     }
   >;
   user: { id: string; name: string };
-  turma: { id: string; name: string; code: string };
+  turma: { id: string; name: string; code: string; stageId: string };
 }
 
 /**
@@ -1378,6 +1378,7 @@ export class PlanoAulaService {
         id: plano.turma.id,
         name: plano.turma.name,
         code: plano.turma.code,
+        stageId: plano.turma.stageId,
       },
       documentos: (plano.documentos || []).map((doc: DocType) => ({
         ...doc,

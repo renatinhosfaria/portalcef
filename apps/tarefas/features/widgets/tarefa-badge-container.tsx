@@ -14,7 +14,7 @@ export function TarefaBadgeContainer() {
   const { stats } = useTarefas({ status: "PENDENTE" });
 
   const handleClick = () => {
-    router.push("/tarefas");
+    router.push("/");
   };
 
   return (

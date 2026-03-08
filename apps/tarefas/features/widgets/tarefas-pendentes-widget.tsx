@@ -70,7 +70,7 @@ export function TarefasPendentesWidget({
               <div
                 key={tarefa.id}
                 className="flex items-start justify-between p-2 rounded border hover:bg-accent cursor-pointer"
-                onClick={() => router.push(`/tarefas/${tarefa.id}`)}
+                onClick={() => router.push(`/${tarefa.id}`)}
               >
                 <div className="flex-1">
                   <div className="text-sm font-medium">{tarefa.titulo}</div>
@@ -90,7 +90,7 @@ export function TarefasPendentesWidget({
         <Button
           variant="link"
           className="w-full mt-4"
-          onClick={() => router.push("/tarefas")}
+          onClick={() => router.push("/")}
         >
           Ver todas as tarefas →
         </Button>

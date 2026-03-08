@@ -79,7 +79,7 @@ export interface PlanoAula {
   deadline?: string;
   // Objetos aninhados (vindos do endpoint de detalhe GET /plano-aula/:id)
   user?: { id: string; name: string };
-  turma?: { id: string; name: string; code: string };
+  turma?: { id: string; name: string; code: string; stageId?: string };
 }
 
 /**

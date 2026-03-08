@@ -497,7 +497,7 @@ export function RevisaoContent({ planoId }: RevisaoContentProps) {
         onClose={() => setIsTarefaFormOpen(false)}
         initialContexts={{
           quinzenaId: plano?.quinzenaId,
-          etapaId: plano?.stageId,
+          etapaId: plano?.turma?.stageId,
           turmaId: plano?.turmaId,
           professoraId: plano?.userId,
         }}

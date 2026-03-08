@@ -43,3 +43,4 @@ tmpclaude-*
 worktrees/
 .worktrees/
 .github/
+.claude/settings.local.json

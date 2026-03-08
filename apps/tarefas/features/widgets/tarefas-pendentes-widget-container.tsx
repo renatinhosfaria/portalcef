@@ -40,11 +40,11 @@ export function TarefasPendentesWidgetContainer({
     .slice(0, 5);
 
   const handleTarefaClick = (tarefaId: string) => {
-    router.push(`/tarefas/${tarefaId}`);
+    router.push(`/${tarefaId}`);
   };
 
   const handleVerTodas = () => {
-    router.push("/tarefas");
+    router.push("/");
   };
 
   return (

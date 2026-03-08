@@ -31,7 +31,7 @@ export function useCriarTarefa() {
 
     try {
       await apiPost<Tarefa>("tarefas", data);
-      router.push("/tarefas");
+      router.push("/");
     } catch (err) {
       const error = err instanceof Error ? err : new Error("Erro ao criar tarefa");
       setError(error);

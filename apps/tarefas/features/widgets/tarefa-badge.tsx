@@ -26,7 +26,7 @@ export function TarefaBadge() {
   }
 
   const handleClick = () => {
-    router.push("/tarefas");
+    router.push("/");
   };
 
   return (

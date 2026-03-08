@@ -30,7 +30,7 @@ export function TarefaCard({ tarefa, onConcluir }: TarefaCardProps) {
   };
 
   return (
-    <Link href={`/tarefas/${tarefa.id}`} className="block">
+    <Link href={`/${tarefa.id}`} className="block">
       <Card
         className={cn(
           atrasada && "border-destructive",

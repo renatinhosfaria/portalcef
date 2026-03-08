@@ -5,10 +5,11 @@ import {
   ConflictException,
   BadRequestException,
 } from "@nestjs/common";
-import { eq, and, or, desc, sql } from "@essencia/db";
-import { tarefas, tarefaContextos } from "@essencia/db";
+import { eq, and, or, desc, inArray, sql } from "@essencia/db";
+import { tarefas, tarefaContextos, users } from "@essencia/db";
 import type {
   Tarefa,
+  TarefaEnriquecida,
   TarefaPrioridade,
   TarefaTipoOrigem,
   TarefaContextoModulo,
@@ -229,7 +230,7 @@ export class TarefasService {
    * @param id ID da tarefa
    * @returns Tarefa encontrada ou null
    */
-  async findById(id: string): Promise<Tarefa | null> {
+  async findById(id: string): Promise<TarefaEnriquecida | null> {
     const db = this.db.db;
 
     const tarefaDb = await db.query.tarefas.findFirst({
@@ -240,7 +241,21 @@ export class TarefasService {
       return null;
     }
 
-    return this.mapTarefaToDto(tarefaDb);
+    const userIds = [...new Set([tarefaDb.criadoPor, tarefaDb.responsavel])];
+    const usersData = (await db
+      .select({ id: users.id, name: users.name })
+      .from(users)
+      .where(inArray(users.id, userIds))) as { id: string; name: string }[];
+    const userMap = new Map<string, string>(
+      usersData.map((u) => [u.id, u.name]),
+    );
+
+    return {
+      ...this.mapTarefaToDto(tarefaDb),
+      criadoPorNome: userMap.get(tarefaDb.criadoPor) ?? "",
+      responsavelNome: userMap.get(tarefaDb.responsavel) ?? "",
+      contextos: [],
+    };
   }
 
   /**
@@ -312,7 +327,7 @@ export class TarefasService {
       limit?: number;
     },
   ): Promise<{
-    data: Tarefa[];
+    data: TarefaEnriquecida[];
     pagination: {
       total: number;
       page: number;
@@ -371,10 +386,30 @@ export class TarefasService {
       .from(tarefas)
       .where(and(...conditions));
 
+    // Buscar nomes dos usuários em lote
+    const userIds = [
+      ...new Set(tarefasDb.flatMap((t) => [t.criadoPor, t.responsavel])),
+    ];
+    const usersData: { id: string; name: string }[] =
+      userIds.length > 0
+        ? ((await db
+            .select({ id: users.id, name: users.name })
+            .from(users)
+            .where(inArray(users.id, userIds))) as { id: string; name: string }[])
+        : [];
+    const userMap = new Map<string, string>(
+      usersData.map((u) => [u.id, u.name]),
+    );
+
     const totalPages = Math.ceil(count / limit);
 
     return {
-      data: tarefasDb.map((t) => this.mapTarefaToDto(t)),
+      data: tarefasDb.map((t) => ({
+        ...this.mapTarefaToDto(t),
+        criadoPorNome: userMap.get(t.criadoPor) ?? "",
+        responsavelNome: userMap.get(t.responsavel) ?? "",
+        contextos: [],
+      })),
       pagination: {
         total: count,
         page,
