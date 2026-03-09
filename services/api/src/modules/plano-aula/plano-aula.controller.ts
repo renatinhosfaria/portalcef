@@ -565,10 +565,33 @@ export class PlanoAulaController {
           documento.fileName || "documento.docx",
         );
 
+        const precisaReconverter = (MIME_TYPES_QUE_PRECISAM_CONVERTER as readonly string[]).includes(
+          documento.mimeType || "",
+        );
+
         await this.planoAulaService.atualizarDocumento(docId, {
           fileSize: buffer.length,
           updatedAt: new Date(),
+          ...(precisaReconverter && { previewStatus: "PENDENTE" }),
         });
+
+        // Re-enfileirar conversão para PDF após edição via OnlyOffice
+        // Falha no enfileiramento não bloqueia o callback — o preview ficará PENDENTE.
+        if (precisaReconverter) {
+          try {
+            await this.documentosConversaoQueue.enfileirar({
+              documentoId: docId,
+              planoId,
+              storageKey: documento.storageKey!,
+              mimeType: documento.mimeType || "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+              fileName: documento.fileName || "documento.docx",
+            });
+          } catch (enfileirarError) {
+            this.logger.error(
+              `Falha ao reenfileirar conversão do documento ${docId}: ${enfileirarError instanceof Error ? enfileirarError.message : String(enfileirarError)}`,
+            );
+          }
+        }
 
         this.logger.log(`Documento ${docId} atualizado via OnlyOffice`);
 
