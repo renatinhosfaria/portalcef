@@ -22,6 +22,7 @@ import { Public } from "../../common/decorators/public.decorator";
 import { Roles } from "../../common/decorators/roles.decorator";
 import { AuthGuard } from "../../common/guards/auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
+import { DocumentosConversaoQueueService } from "../../common/queues/documentos-conversao.queue";
 import { StorageService } from "../../common/storage/storage.service";
 import {
   type CreatePlanoDto,
@@ -102,6 +103,7 @@ export class PlanoAulaController {
     private readonly storageService: StorageService,
     private readonly historicoService: PlanoAulaHistoricoService,
     private readonly configService: ConfigService,
+    private readonly documentosConversaoQueue: DocumentosConversaoQueueService,
   ) {}
 
   // ============================================
@@ -306,8 +308,16 @@ export class PlanoAulaController {
       // Upload para MinIO
       const uploadResult = await this.storageService.uploadFile(data);
 
+      // Tipos que precisam de conversão para PDF (exceto PDF nativo)
+      const precisaConverter = [
+        "application/msword",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "image/png",
+        "image/jpeg",
+        "image/jpg",
+      ].includes(data.mimetype);
+
       // Salvar documento no banco via service
-      // Conversão doc→PDF desabilitada (OnlyOffice é usado para visualização/edição)
       const documento = await this.planoAulaService.adicionarDocumentoUpload(
         planoId,
         {
@@ -317,8 +327,20 @@ export class PlanoAulaController {
           fileUrl: uploadResult.url,
           fileSize: buffer.length,
           mimeType: data.mimetype,
+          ...(precisaConverter && { previewStatus: "PENDENTE" }),
         },
       );
+
+      // Enfileirar conversão assíncrona para PDF
+      if (precisaConverter) {
+        await this.documentosConversaoQueue.enfileirar({
+          documentoId: documento.id,
+          planoId,
+          storageKey: uploadResult.key,
+          mimeType: data.mimetype,
+          fileName: uploadResult.name,
+        });
+      }
 
       return {
         success: true,
