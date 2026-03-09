@@ -99,7 +99,7 @@ export async function enviarPdf(caminho: string, nomeOriginal?: string) {
   const buffer = await readFile(caminho);
 
   const nomePdf = nomeOriginal
-    ? nomeOriginal.replace(/\.(docx?|odt)$/i, ".pdf")
+    ? nomeOriginal.replace(/\.(docx?|odt|jpe?g|png)$/i, ".pdf")
     : undefined;
 
   const key = nomePdf

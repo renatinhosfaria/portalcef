@@ -264,12 +264,12 @@ export async function converterDocParaPdf(
   pastaSaida: string,
   options: ConverterDocParaPdfOptions = {},
 ): Promise<string> {
-  const caminhoPdf = caminhoSaidaPdf(entrada, pastaSaida);
-
   try {
     if (deveUsarLibreOfficeParaImagem({ mimeType: options.mimeType })) {
       return converterImagemParaPdfComLibreOffice(entrada, pastaSaida);
     }
+
+    const caminhoPdf = caminhoSaidaPdf(entrada, pastaSaida);
 
     if (
       deveUsarLibreOfficeParaDoc({
