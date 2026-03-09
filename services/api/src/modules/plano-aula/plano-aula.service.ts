@@ -1553,7 +1553,11 @@ export class PlanoAulaService {
    */
   async atualizarDocumento(
     documentoId: string,
-    dados: { fileSize?: number; updatedAt?: Date },
+    dados: {
+      fileSize?: number;
+      updatedAt?: Date;
+      previewStatus?: "PENDENTE" | "PRONTO" | "ERRO" | null;
+    },
   ) {
     const db = getDb();
     await db
