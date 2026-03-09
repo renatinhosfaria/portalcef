@@ -4,7 +4,9 @@ import {
   caminhoSaidaDocxIntermediario,
   caminhoSaidaPdf,
   deveUsarLibreOfficeParaDoc,
+  deveUsarLibreOfficeParaImagem,
   gerarArgsConversaoDocParaDocx,
+  gerarArgsConversaoImagemParaPdf,
   normalizarNomeArquivo,
 } from "./conversor";
 
@@ -71,6 +73,68 @@ describe("conversor", () => {
       "--outdir",
       "/tmp/saida",
       "/tmp/entrada.doc",
+      "-env:UserInstallation=file:///tmp/saida/libreoffice-profile",
+    ]);
+  });
+
+  it("gera caminho de saida pdf para imagem jpg", () => {
+    expect(caminhoSaidaPdf("/tmp/foto.jpg", "/tmp")).toBe("/tmp/foto.pdf");
+  });
+
+  it("gera caminho de saida pdf para imagem jpeg", () => {
+    expect(caminhoSaidaPdf("/tmp/foto.jpeg", "/tmp")).toBe("/tmp/foto.pdf");
+  });
+
+  it("gera caminho de saida pdf para imagem png", () => {
+    expect(caminhoSaidaPdf("/tmp/diagrama.png", "/tmp")).toBe(
+      "/tmp/diagrama.pdf",
+    );
+  });
+
+  it("detecta imagem jpeg como devendo usar LibreOffice para imagem", () => {
+    expect(
+      deveUsarLibreOfficeParaImagem({ mimeType: "image/jpeg" }),
+    ).toBe(true);
+  });
+
+  it("detecta imagem jpg como devendo usar LibreOffice para imagem", () => {
+    expect(
+      deveUsarLibreOfficeParaImagem({ mimeType: "image/jpg" }),
+    ).toBe(true);
+  });
+
+  it("detecta imagem png como devendo usar LibreOffice para imagem", () => {
+    expect(
+      deveUsarLibreOfficeParaImagem({ mimeType: "image/png" }),
+    ).toBe(true);
+  });
+
+  it("nao detecta docx como imagem", () => {
+    expect(
+      deveUsarLibreOfficeParaImagem({
+        mimeType:
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      }),
+    ).toBe(false);
+  });
+
+  it("gera args do LibreOffice para converter imagem em PDF com perfil isolado", () => {
+    const args = gerarArgsConversaoImagemParaPdf(
+      "/tmp/foto.jpg",
+      "/tmp/saida",
+      "/tmp/saida/libreoffice-profile",
+    );
+
+    expect(args).toContain(
+      "-env:UserInstallation=file:///tmp/saida/libreoffice-profile",
+    );
+    expect(args).toEqual([
+      "--headless",
+      "--convert-to",
+      "pdf",
+      "--outdir",
+      "/tmp/saida",
+      "/tmp/foto.jpg",
       "-env:UserInstallation=file:///tmp/saida/libreoffice-profile",
     ]);
   });

@@ -8,6 +8,12 @@ const MIME_TYPE_DOC = "application/msword";
 const EXTENSAO_DOC_REGEX = /\.doc$/i;
 const execFileAsync = promisify(execFile);
 
+const MIME_TYPES_IMAGEM = ["image/jpeg", "image/jpg", "image/png"] as const;
+
+interface ConversaoImagemOptions {
+  mimeType?: string;
+}
+
 interface ConversaoDocOptions {
   caminhoEntrada: string;
   mimeType?: string;
@@ -20,7 +26,7 @@ interface ConverterDocParaPdfOptions {
 }
 
 export function caminhoSaidaPdf(entrada: string, pastaSaida: string) {
-  const nomeBase = basename(entrada).replace(/\.(doc|docx)$/i, ".pdf");
+  const nomeBase = basename(entrada).replace(/\.(doc|docx|jpg|jpeg|png)$/i, ".pdf");
   return join(pastaSaida, nomeBase);
 }
 
@@ -57,6 +63,14 @@ export function deveUsarLibreOfficeParaDoc(
   ].filter(Boolean) as string[];
 
   return nomesArquivo.some((nomeArquivo) => EXTENSAO_DOC_REGEX.test(nomeArquivo));
+}
+
+export function deveUsarLibreOfficeParaImagem(
+  options: ConversaoImagemOptions,
+): boolean {
+  return MIME_TYPES_IMAGEM.includes(
+    options.mimeType?.toLowerCase() as (typeof MIME_TYPES_IMAGEM)[number],
+  );
 }
 
 async function converterDocParaDocxComLibreOffice(
@@ -110,6 +124,54 @@ export function gerarArgsConversaoDocParaDocx(
     entrada,
     `-env:UserInstallation=file://${pastaPerfilLibreOffice}`,
   ];
+}
+
+export function gerarArgsConversaoImagemParaPdf(
+  entrada: string,
+  pastaSaida: string,
+  pastaPerfilLibreOffice: string,
+) {
+  return [
+    "--headless",
+    "--convert-to",
+    "pdf",
+    "--outdir",
+    pastaSaida,
+    entrada,
+    `-env:UserInstallation=file://${pastaPerfilLibreOffice}`,
+  ];
+}
+
+async function converterImagemParaPdfComLibreOffice(
+  entrada: string,
+  pastaSaida: string,
+): Promise<string> {
+  const caminhoPdf = caminhoSaidaPdf(entrada, pastaSaida);
+
+  const pastaPerfilLibreOffice = join(
+    pastaSaida,
+    `libreoffice-profile-${randomUUID()}`,
+  );
+  await mkdir(pastaPerfilLibreOffice, { recursive: true });
+
+  const args = gerarArgsConversaoImagemParaPdf(
+    entrada,
+    pastaSaida,
+    pastaPerfilLibreOffice,
+  );
+  const comandoLibreOffice = process.env.LIBREOFFICE_BIN || "soffice";
+
+  try {
+    await execFileAsync(comandoLibreOffice, args);
+    await access(caminhoPdf);
+    return caminhoPdf;
+  } catch (error) {
+    const erroExec = error as { stderr?: string; stdout?: string; message?: string };
+    const detalhes = erroExec.stderr || erroExec.stdout || erroExec.message || String(error);
+    throw new Error(
+      `Falha na conversao imagem -> PDF via LibreOffice (${comandoLibreOffice}): ${detalhes}`,
+    );
+  }
 }
 
 async function converterDocxParaPdfComCarbone(
@@ -205,6 +267,10 @@ export async function converterDocParaPdf(
   const caminhoPdf = caminhoSaidaPdf(entrada, pastaSaida);
 
   try {
+    if (deveUsarLibreOfficeParaImagem({ mimeType: options.mimeType })) {
+      return converterImagemParaPdfComLibreOffice(entrada, pastaSaida);
+    }
+
     if (
       deveUsarLibreOfficeParaDoc({
         caminhoEntrada: entrada,
