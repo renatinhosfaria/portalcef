@@ -77,6 +77,15 @@ const VISUALIZAR_ACCESS = [
   ...GESTAO_ROLES,
 ] as const;
 
+/** MIME types que requerem conversão assíncrona para PDF */
+const MIME_TYPES_QUE_PRECISAM_CONVERTER = [
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "image/png",
+  "image/jpeg",
+  "image/jpg",
+] as const;
+
 // ============================================
 // Controller
 // ============================================
@@ -309,13 +318,7 @@ export class PlanoAulaController {
       const uploadResult = await this.storageService.uploadFile(data);
 
       // Tipos que precisam de conversão para PDF (exceto PDF nativo)
-      const precisaConverter = [
-        "application/msword",
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        "image/png",
-        "image/jpeg",
-        "image/jpg",
-      ].includes(data.mimetype);
+      const precisaConverter = (MIME_TYPES_QUE_PRECISAM_CONVERTER as readonly string[]).includes(data.mimetype);
 
       // Salvar documento no banco via service
       const documento = await this.planoAulaService.adicionarDocumentoUpload(
@@ -332,14 +335,22 @@ export class PlanoAulaController {
       );
 
       // Enfileirar conversão assíncrona para PDF
+      // Falha no enfileiramento não deve retornar erro ao cliente — o documento
+      // já foi salvo; o preview ficará PENDENTE até reprocessamento.
       if (precisaConverter) {
-        await this.documentosConversaoQueue.enfileirar({
-          documentoId: documento.id,
-          planoId,
-          storageKey: uploadResult.key,
-          mimeType: data.mimetype,
-          fileName: uploadResult.name,
-        });
+        try {
+          await this.documentosConversaoQueue.enfileirar({
+            documentoId: documento.id,
+            planoId,
+            storageKey: uploadResult.key,
+            mimeType: data.mimetype,
+            fileName: uploadResult.name,
+          });
+        } catch (enfileirarError) {
+          this.logger.error(
+            `Falha ao enfileirar conversão do documento ${documento.id}: ${enfileirarError instanceof Error ? enfileirarError.message : String(enfileirarError)}`,
+          );
+        }
       }
 
       return {
