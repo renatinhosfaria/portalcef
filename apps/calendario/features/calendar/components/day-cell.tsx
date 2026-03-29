@@ -1,12 +1,12 @@
 "use client";
 
+import { obterDia } from "@essencia/shared/formatar-data";
 import type {
   CalendarEvent,
   CalendarEventType,
 } from "@essencia/shared/schemas/calendar";
 import { eventTypeConfig } from "@essencia/shared/types/calendar";
 import {
-  format,
   getDay,
   isAfter,
   isBefore,
@@ -14,7 +14,6 @@ import {
   isSameMonth,
   isToday,
   isWeekend,
-  parseISO,
 } from "date-fns";
 
 import { cn } from "@essencia/ui/lib/utils";
@@ -63,7 +62,7 @@ export function DayCell({
   const isCurrentMonth = isSameMonth(date, currentMonth);
   const isTodayDate = isToday(date);
   const isWeekendDay = isWeekend(date);
-  const dayNumber = format(date, "d");
+  const dayNumber = String(obterDia(date));
   const dayOfWeek = getDay(date);
 
   // Helper para converter data sem problemas de timezone

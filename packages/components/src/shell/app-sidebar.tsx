@@ -10,6 +10,8 @@ import {
   Headset,
   LayoutDashboard,
   LogOut,
+  PanelLeftClose,
+  PanelLeftOpen,
   School,
   ShoppingBag,
   Users,
@@ -19,6 +21,7 @@ import { useEffect, useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
 
 import { useTenant } from "@essencia/shared/providers/tenant";
+import { SIDEBAR_KEY } from "./shell";
 
 type ActivePage =
   | "home"
@@ -96,12 +99,15 @@ interface SidebarItemProps {
   label: string;
   href: string;
   active?: boolean;
+  collapsed?: boolean;
+  onNavigate?: () => void;
 }
 
-function SidebarItem({ icon: Icon, label, href, active }: SidebarItemProps) {
+function SidebarItem({ icon: Icon, label, href, active, collapsed, onNavigate }: SidebarItemProps) {
   return (
     <a
       href={href}
+      onClick={onNavigate}
       className={cn(
         "flex items-center gap-4 px-4 py-4 rounded-2xl w-full transition-all duration-200 group relative overflow-hidden text-left",
         active
@@ -112,8 +118,8 @@ function SidebarItem({ icon: Icon, label, href, active }: SidebarItemProps) {
       {active && (
         <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-[#A3D154] rounded-r-full" />
       )}
-      <Icon className="w-5 h-5 relative z-10" />
-      <span className="hidden lg:block relative z-10">{label}</span>
+      <Icon className="w-5 h-5 relative z-10 flex-shrink-0" />
+      <span className={cn("relative z-10 whitespace-nowrap transition-opacity duration-200", collapsed ? "hidden" : "hidden lg:block")}>{label}</span>
     </a>
   );
 }
@@ -123,9 +129,15 @@ export interface AppSidebarProps {
   tarefasBadge?: React.ReactNode;
   /** Widget de suporte (opcional) para exibir ao lado do item Suporte */
   suporteBadge?: React.ReactNode;
+  /** Se o sidebar está colapsado (apenas ícones) */
+  collapsed?: boolean;
+  /** Callback para alternar collapsed */
+  onToggle?: () => void;
+  /** Callback para colapsar o sidebar */
+  onCollapse?: () => void;
 }
 
-export function AppSidebar({ tarefasBadge, suporteBadge }: AppSidebarProps = {}) {
+export function AppSidebar({ tarefasBadge, suporteBadge, collapsed = false, onToggle, onCollapse }: AppSidebarProps = {}) {
   const { role, name, schoolId, unitId, email } = useTenant();
   const pathname = usePathname();
   const [activePage, setActivePage] = useState<ActivePage | null>(null);
@@ -252,21 +264,48 @@ export function AppSidebar({ tarefasBadge, suporteBadge }: AppSidebarProps = {})
       console.warn("Logout API call failed, continuing with local cleanup");
     } finally {
       localStorage.removeItem("tenant");
+      localStorage.removeItem(SIDEBAR_KEY);
       window.location.href = "https://www.portalcef.com.br/login";
     }
   };
 
   return (
-    <aside className="fixed inset-y-0 left-0 z-20 hidden w-20 flex-col items-center py-8 border-r border-slate-200/60 bg-white/80 backdrop-blur-xl sm:flex lg:w-72 transition-all duration-500 ease-in-out">
+    <aside className={cn(
+      "fixed inset-y-0 left-0 z-20 hidden w-20 flex-col items-center py-8 border-r border-slate-200/60 bg-white/80 backdrop-blur-xl sm:flex transition-all duration-300 ease-in-out",
+      collapsed ? "" : "lg:w-72",
+    )}>
       <div className="flex items-center gap-3 px-6 mb-12 w-full">
-        <div className="relative flex items-center justify-center w-10 h-10 rounded-xl bg-[#A3D154] shadow-lg shadow-[#A3D154]/20">
+        <div className="relative flex items-center justify-center w-10 h-10 rounded-xl bg-[#A3D154] shadow-lg shadow-[#A3D154]/20 flex-shrink-0">
           <span className="text-white font-bold text-xl">E</span>
           <div className="absolute inset-0 bg-white/20 rounded-xl animate-pulse" />
         </div>
-        <span className="hidden lg:block text-2xl font-bold tracking-tight text-slate-800">
+        <span className={cn("text-2xl font-bold tracking-tight text-slate-800 whitespace-nowrap transition-opacity duration-200", collapsed ? "hidden" : "hidden lg:block")}>
           Portal CEF
         </span>
+        <Button
+          variant="ghost"
+          size="icon"
+          title={collapsed ? "Expandir menu" : "Recolher menu"}
+          className={cn("text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl h-8 w-8 flex-shrink-0 transition-opacity duration-200", collapsed ? "hidden" : "hidden lg:flex ml-auto")}
+          onClick={onToggle}
+        >
+          <PanelLeftClose className="w-4 h-4" />
+        </Button>
       </div>
+
+      {collapsed && (
+        <div className="hidden lg:flex w-full px-4 mb-4 justify-center">
+          <Button
+            variant="ghost"
+            size="icon"
+            title="Expandir menu"
+            className="text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl h-8 w-8"
+            onClick={onToggle}
+          >
+            <PanelLeftOpen className="w-4 h-4" />
+          </Button>
+        </div>
+      )}
 
       <nav className="flex flex-col gap-2 w-full px-4 flex-1 overflow-y-auto py-4">
         {visibleMenuItems.map((item) => (
@@ -276,14 +315,16 @@ export function AppSidebar({ tarefasBadge, suporteBadge }: AppSidebarProps = {})
               label={item.label}
               href={item.href}
               active={activePage === item.activePage}
+              collapsed={collapsed}
+              onNavigate={onCollapse}
             />
-            {item.key === "tarefas" && tarefasBadge && (
-              <div className="absolute right-2 top-1/2 -translate-y-1/2">
+            {item.key === "tarefas" && tarefasBadge && !collapsed && (
+              <div className="absolute right-2 top-1/2 -translate-y-1/2 hidden lg:block">
                 {tarefasBadge}
               </div>
             )}
-            {item.key === "suporte" && suporteBadge && (
-              <div className="absolute right-2 top-1/2 -translate-y-1/2">
+            {item.key === "suporte" && suporteBadge && !collapsed && (
+              <div className="absolute right-2 top-1/2 -translate-y-1/2 hidden lg:block">
                 {suporteBadge}
               </div>
             )}
@@ -292,7 +333,7 @@ export function AppSidebar({ tarefasBadge, suporteBadge }: AppSidebarProps = {})
       </nav>
 
       <div className="mt-auto flex flex-col gap-4 w-full px-6 py-6 border-t border-slate-100/50">
-        <div className="flex flex-col gap-1 hidden lg:flex">
+        <div className={cn("flex-col gap-1", collapsed ? "hidden" : "hidden lg:flex")}>
           <p className="text-sm font-bold text-slate-800">
             {name || "Usuário"}
           </p>

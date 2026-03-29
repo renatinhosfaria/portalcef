@@ -5,6 +5,7 @@
  * Espelha o layout da tela da professora (page.tsx)
  */
 
+import { formatarData, formatarDataLonga, formatarDataHoraLonga } from "@essencia/shared/formatar-data";
 import {
   Card,
   CardHeader,
@@ -29,37 +30,6 @@ interface PlanoHeaderProps {
   status: PlanoAulaStatus;
   submittedAt?: string;
   isLoadingPeriodo?: boolean;
-}
-
-/**
- * Formata uma data ISO para exibicao em pt-BR (dd/MM/yyyy)
- */
-function formatarData(dataIso: string): string {
-  return new Date(dataIso).toLocaleDateString("pt-BR");
-}
-
-/**
- * Formata o prazo de entrega em formato longo (ex: "20 de fevereiro de 2026")
- */
-function formatarPrazo(dataIso: string): string {
-  return new Date(dataIso).toLocaleDateString("pt-BR", {
-    day: "2-digit",
-    month: "long",
-    year: "numeric",
-  });
-}
-
-/**
- * Formata a data de submissao
- */
-function formatarDataSubmissao(data: string): string {
-  return new Date(data).toLocaleDateString("pt-BR", {
-    day: "2-digit",
-    month: "long",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
 }
 
 export function PlanoHeader({
@@ -146,7 +116,7 @@ export function PlanoHeader({
                   <Clock className="h-3.5 w-3.5" />
                   Enviado em:{" "}
                   <span className="font-medium text-foreground">
-                    {formatarDataSubmissao(submittedAt)}
+                    {formatarDataHoraLonga(submittedAt)}
                   </span>
                 </p>
               )}
@@ -169,7 +139,7 @@ export function PlanoHeader({
                     Prazo de Entrega
                   </span>
                   <span className="font-medium text-foreground">
-                    {formatarPrazo(prazoEntrega)}
+                    {formatarDataLonga(prazoEntrega)}
                   </span>
                 </div>
               )

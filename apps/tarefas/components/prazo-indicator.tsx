@@ -1,5 +1,5 @@
+import { formatarDataHora } from "@essencia/shared/formatar-data";
 import { cn } from "@essencia/ui/lib/utils";
-import { format } from "date-fns";
 import { Clock, AlertTriangle } from "lucide-react";
 
 import {
@@ -45,8 +45,7 @@ export function PrazoIndicator({ prazo, compact = false }: PrazoIndicatorProps) 
     );
   }
 
-  const prazoDate = new Date(prazo);
-  const prazoFormatado = format(prazoDate, "dd/MM/yyyy HH:mm");
+  const prazoFormatado = formatarDataHora(prazo);
 
   return (
     <div className={cn("flex items-center gap-2", colorClass)}>

@@ -4,6 +4,7 @@
  */
 
 import { serverApi } from "@essencia/shared/fetchers/server";
+import { formatarData, formatarDataLonga } from "@essencia/shared/formatar-data";
 import { ArrowLeft, Calendar, Clock } from "lucide-react";
 import { cookies } from "next/headers";
 import Link from "next/link";
@@ -160,15 +161,11 @@ export default async function ProvaDetalheServerPage({ params, searchParams }: P
   const stageDisplay = userStage ? userStage.name : "Etapa nao definida";
 
   const cicloDisplay = cicloData
-    ? `${new Date(cicloData.dataInicio).toLocaleDateString("pt-BR")} - ${new Date(cicloData.dataFim).toLocaleDateString("pt-BR")}`
+    ? `${formatarData(cicloData.dataInicio)} - ${formatarData(cicloData.dataFim)}`
     : "Ciclo nao encontrado";
 
   const deadlineDisplay = cicloData
-    ? new Date(cicloData.dataMaximaEntrega).toLocaleDateString("pt-BR", {
-        day: "2-digit",
-        month: "long",
-        year: "numeric",
-      })
+    ? formatarDataLonga(cicloData.dataMaximaEntrega)
     : null;
 
   if (!cicloData) {

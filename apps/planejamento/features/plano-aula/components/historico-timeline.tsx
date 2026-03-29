@@ -6,6 +6,7 @@
  * Task 21: Frontend - Histórico Timeline
  */
 
+import { formatarDataHora } from "@essencia/shared/formatar-data";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
@@ -138,13 +139,7 @@ function getDetalhesMensagem(entry: HistoricoEntry): string | null {
 
     const impressoEm =
       typeof entry.detalhes.impressoEm === "string"
-        ? new Date(entry.detalhes.impressoEm).toLocaleString("pt-BR", {
-            day: "2-digit",
-            month: "2-digit",
-            year: "numeric",
-            hour: "2-digit",
-            minute: "2-digit",
-          })
+        ? formatarDataHora(entry.detalhes.impressoEm)
         : null;
 
     if (impressoEm) {

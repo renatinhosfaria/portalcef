@@ -1,5 +1,6 @@
 'use client';
 
+import { formatarDataHora } from '@essencia/shared/formatar-data';
 import { Phone, Mail, Check, Sparkles, Users, Clock } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
@@ -56,7 +57,7 @@ export default function InteressePage() {
     }, [loadRequests]);
 
     const formatDate = (dateStr: string) => {
-        return new Date(dateStr).toLocaleString('pt-BR');
+        return formatarDataHora(dateStr);
     };
 
     const formatPhone = (phone: string) => {

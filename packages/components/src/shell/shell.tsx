@@ -2,8 +2,34 @@
 
 import { Button } from "@essencia/ui/components/button";
 import { Menu, Search } from "lucide-react";
+import { useEffect, useState } from "react";
 
 import { AppSidebar, type AppSidebarProps } from "./app-sidebar";
+
+const SIDEBAR_KEY = "sidebar-collapsed";
+
+function useSidebarCollapsed() {
+  const [collapsed, setCollapsed] = useState(false);
+
+  useEffect(() => {
+    const stored = localStorage.getItem(SIDEBAR_KEY);
+    if (stored === "true") setCollapsed(true);
+  }, []);
+
+  const toggle = () => {
+    setCollapsed((prev) => {
+      localStorage.setItem(SIDEBAR_KEY, String(!prev));
+      return !prev;
+    });
+  };
+
+  const collapse = () => {
+    setCollapsed(true);
+    localStorage.setItem(SIDEBAR_KEY, "true");
+  };
+
+  return { collapsed, toggle, collapse };
+}
 
 function TopBar() {
   return (
@@ -44,11 +70,15 @@ export interface ShellProps {
   sidebarProps?: AppSidebarProps;
 }
 
+export { SIDEBAR_KEY };
+
 export function Shell({ children, sidebarProps }: ShellProps) {
+  const { collapsed, toggle, collapse } = useSidebarCollapsed();
+
   return (
     <div className="flex min-h-screen bg-[#F8FAFC] font-sans selection:bg-[#A3D154]/20">
-      <AppSidebar {...sidebarProps} />
-      <div className="flex-1 sm:pl-20 lg:pl-72 flex flex-col min-h-screen relative overflow-hidden">
+      <AppSidebar {...sidebarProps} collapsed={collapsed} onToggle={toggle} onCollapse={collapse} />
+      <div className={`flex-1 flex flex-col min-h-screen relative overflow-hidden transition-all duration-300 ease-in-out sm:pl-20 ${collapsed ? "" : "lg:pl-72"}`}>
         {/* Abstract Background Elements */}
         <div className="absolute top-[-20%] right-[-10%] w-[800px] h-[800px] bg-gradient-to-br from-[#A3D154]/20 to-[#A3D154]/5 rounded-full blur-3xl pointer-events-none opacity-60"></div>
         <div className="absolute top-[20%] left-[-10%] w-[600px] h-[600px] bg-orange-400/5 rounded-full blur-3xl pointer-events-none"></div>

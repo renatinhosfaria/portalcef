@@ -1,7 +1,6 @@
 "use client";
 
-import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
+import { formatarMesAno } from "@essencia/shared/formatar-data";
 import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
 
 import { Button } from "@essencia/ui/components/button";
@@ -23,7 +22,7 @@ export function CalendarHeader({
   onNewEvent,
   canCreate = false,
 }: CalendarHeaderProps) {
-  const monthYear = format(currentDate, "MMMM yyyy", { locale: ptBR });
+  const monthYear = formatarMesAno(currentDate);
 
   return (
     <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">

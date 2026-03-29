@@ -1,5 +1,6 @@
 'use client';
 
+import { formatarDataHora } from '@essencia/shared/formatar-data';
 import { Search, Eye, Check, ChevronDown, ChevronRight, Globe, Store, CreditCard, X, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { Fragment, useCallback, useEffect, useState } from 'react';
@@ -117,7 +118,7 @@ export default function PedidosPage() {
     };
 
     const formatDate = (dateStr: string) => {
-        return new Date(dateStr).toLocaleString('pt-BR');
+        return formatarDataHora(dateStr);
     };
 
     const formatPhone = (phone: string | undefined | null) => {

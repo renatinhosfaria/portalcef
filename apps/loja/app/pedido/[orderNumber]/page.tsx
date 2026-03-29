@@ -1,5 +1,6 @@
 'use client';
 
+import { formatarData } from '@essencia/shared/formatar-data';
 import { pdf } from '@react-pdf/renderer';
 import Link from 'next/link';
 import { use, useEffect, useState } from 'react';
@@ -208,7 +209,7 @@ ${itemsList}
 
 🔗 *Link online:* ${link}
 
-_Válido até ${new Date(order.expiresAt).toLocaleDateString('pt-BR')}_`;
+_Válido até ${formatarData(order.expiresAt)}_`;
 
         const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
 
@@ -272,8 +273,8 @@ _Válido até ${new Date(order.expiresAt).toLocaleDateString('pt-BR')}_`;
   }
 
   const totalReais = order.totalAmount / 100;
-  const createdDate = new Date(order.createdAt).toLocaleDateString('pt-BR');
-  const expiresDate = new Date(order.expiresAt).toLocaleDateString('pt-BR');
+  const createdDate = formatarData(order.createdAt);
+  const expiresDate = formatarData(order.expiresAt);
 
   return (
     <div className="min-h-screen bg-slate-50">

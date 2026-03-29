@@ -6,9 +6,8 @@ import {
   CardTitle,
 } from "@essencia/ui/components/card";
 import { Badge } from "@essencia/ui/components/badge";
+import { formatarData } from "@essencia/shared/formatar-data";
 import { Pencil, Trash2 } from "lucide-react";
-import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
 
 interface Periodo {
   id: string;
@@ -88,20 +87,14 @@ export function PeriodosList({
               <div>
                 <span className="font-medium">Período:</span>
                 <br />
-                {format(new Date(periodo.dataInicio), "dd/MM/yyyy", {
-                  locale: ptBR,
-                })}{" "}
+                {formatarData(periodo.dataInicio)}{" "}
                 até{" "}
-                {format(new Date(periodo.dataFim), "dd/MM/yyyy", {
-                  locale: ptBR,
-                })}
+                {formatarData(periodo.dataFim)}
               </div>
               <div>
                 <span className="font-medium">Prazo de Entrega:</span>
                 <br />
-                {format(new Date(periodo.dataMaximaEntrega), "dd/MM/yyyy", {
-                  locale: ptBR,
-                })}
+                {formatarData(periodo.dataMaximaEntrega)}
               </div>
             </div>
           </CardContent>

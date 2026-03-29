@@ -1,8 +1,7 @@
 "use client";
 
+import { formatarDataCurta } from "@essencia/shared/formatar-data";
 import { cn } from "@essencia/ui/lib/utils";
-import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
 import { CheckCircle2, Clock, Lock } from "lucide-react";
 import Link from "next/link";
 import { getDeadlineColor } from "../utils";
@@ -43,8 +42,8 @@ export function QuinzenaCard({ quinzena }: QuinzenaCardProps) {
                 isLocked ? "text-muted-foreground" : "opacity-70",
               )}
             >
-              ({format(quinzena.startDate, "dd/MM", { locale: ptBR })} -{" "}
-              {format(quinzena.endDate, "dd/MM", { locale: ptBR })})
+              ({formatarDataCurta(quinzena.startDate)} -{" "}
+              {formatarDataCurta(quinzena.endDate)})
             </span>
           </div>
         </div>
@@ -76,7 +75,7 @@ export function QuinzenaCard({ quinzena }: QuinzenaCardProps) {
           <div className="flex items-center gap-2 text-sm font-medium">
             <Clock className="h-3 w-3" />
             <span>
-              Entrega: {format(quinzena.deadline, "dd/MM", { locale: ptBR })}
+              Entrega: {formatarDataCurta(quinzena.deadline)}
             </span>
           </div>
         )}

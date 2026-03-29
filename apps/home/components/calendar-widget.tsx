@@ -1,5 +1,6 @@
 "use client";
 
+import { formatarDataDiaSemana } from "@essencia/shared/formatar-data";
 import {
   Card,
   CardContent,
@@ -10,12 +11,7 @@ import { Calendar as CalendarIcon, Clock } from "lucide-react";
 
 export function CalendarWidget() {
   const today = new Date();
-  const options: Intl.DateTimeFormatOptions = {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-  };
-  const dateStr = today.toLocaleDateString("pt-BR", options);
+  const dateStr = formatarDataDiaSemana(today);
 
   return (
     <Card className="border-none shadow-sm bg-white/50 backdrop-blur-sm">

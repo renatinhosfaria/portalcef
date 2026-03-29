@@ -1,0 +1,16 @@
+{
+  "services": {
+    "CoAuthoring": {
+      "server": {
+        "workerpercpu": 1
+      }
+    },
+    "FileConverter": {
+      "converter": {
+        "maxprocesscount": 0.5,
+        "maxdownloadbytes": 104857600,
+        "downloadTimeout": 120000
+      }
+    }
+  }
+}

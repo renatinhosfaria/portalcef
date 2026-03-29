@@ -132,7 +132,7 @@ async function migrarPlanoDocumento(): Promise<ResultadoMigracao> {
   console.log("\n--- plano_documento ---");
 
   const documentos = await sql`
-    SELECT storage_key, file_name, preview_key
+    SELECT storage_key, file_name
     FROM plano_documento
     WHERE storage_key IS NOT NULL
       AND file_name IS NOT NULL
@@ -150,7 +150,6 @@ async function migrarPlanoDocumento(): Promise<ResultadoMigracao> {
   for (const doc of documentos) {
     const storageKey = doc.storage_key as string;
     const fileName = doc.file_name as string;
-    const previewKey = doc.preview_key as string | null;
 
     // Atualizar arquivo original
     try {
@@ -166,25 +165,6 @@ async function migrarPlanoDocumento(): Promise<ResultadoMigracao> {
       }
     } catch {
       resultado.erros++;
-    }
-
-    // Atualizar preview (PDF convertido)
-    if (previewKey) {
-      const nomePdf = fileName.replace(/\.(docx?|odt)$/i, ".pdf");
-      try {
-        const atualizado = await atualizarContentDisposition(
-          previewKey,
-          nomePdf,
-        );
-        if (atualizado) {
-          resultado.atualizados++;
-          console.log(`  ✓ ${previewKey} → "${nomePdf}" (preview)`);
-        } else {
-          resultado.jaCorretos++;
-        }
-      } catch {
-        resultado.erros++;
-      }
     }
   }
 

@@ -7,6 +7,7 @@
  */
 
 import { serverApi } from "@essencia/shared/fetchers/server";
+import { formatarData, formatarDataLonga } from "@essencia/shared/formatar-data";
 import { ArrowLeft, Calendar, Clock } from "lucide-react";
 import { cookies } from "next/headers";
 import Link from "next/link";
@@ -171,16 +172,12 @@ export default async function PlanoAulaPage({ params, searchParams }: PageProps)
 
   // Formatar periodo baseado nos dados do período
   const periodoDisplay = periodoData
-    ? `${new Date(periodoData.dataInicio).toLocaleDateString("pt-BR")} - ${new Date(periodoData.dataFim).toLocaleDateString("pt-BR")}`
+    ? `${formatarData(periodoData.dataInicio)} - ${formatarData(periodoData.dataFim)}`
     : "Periodo nao encontrado";
 
   // Formatar deadline
   const deadlineDisplay = periodoData
-    ? new Date(periodoData.dataMaximaEntrega).toLocaleDateString("pt-BR", {
-        day: "2-digit",
-        month: "long",
-        year: "numeric",
-      })
+    ? formatarDataLonga(periodoData.dataMaximaEntrega)
     : null;
 
   // Validar se período existe

@@ -8,6 +8,7 @@
  * TODO: Refatorar para usar períodos dinâmicos da API /plano-aula-periodo
  */
 
+import { formatarData, formatarDataCurta } from "@essencia/shared/formatar-data";
 import { Button } from "@essencia/ui/components/button";
 import {
   Card,
@@ -42,28 +43,6 @@ interface PrazoEditState {
   error: string | null;
 }
 
-/**
- * Formata data ISO para exibicao no formato brasileiro
- */
-function formatarData(dataIso: string): string {
-  const data = new Date(dataIso + "T12:00:00");
-  return data.toLocaleDateString("pt-BR", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
-}
-
-/**
- * Formata data ISO para exibicao curta (DD/MM)
- */
-function formatarDataCurta(dataIso: string): string {
-  const data = new Date(dataIso + "T12:00:00");
-  return data.toLocaleDateString("pt-BR", {
-    day: "2-digit",
-    month: "2-digit",
-  });
-}
 
 /**
  * Formata datetime ISO para input datetime-local

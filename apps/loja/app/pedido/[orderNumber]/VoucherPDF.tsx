@@ -1,4 +1,5 @@
 
+import { formatarData, formatarHora } from '@essencia/shared/formatar-data';
 import { Document, Image, Page, StyleSheet, Text, View, Font } from '@react-pdf/renderer';
 
 Font.register({
@@ -214,7 +215,7 @@ const formatCurrency = (value: number) => {
 };
 
 const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('pt-BR');
+    return formatarData(dateString);
 };
 
 const getStatusColor = (status: Order['status']) => {
@@ -343,8 +344,8 @@ export const VoucherPDF = ({ order }: VoucherPDFProps) => {
 
                 {/* Footer */}
                 <Text style={styles.footer}>
-                    Colégio Essência - Portal Digital • Gerado em {new Date().toLocaleDateString('pt-BR')} às{' '}
-                    {new Date().toLocaleTimeString('pt-BR')}
+                    Colégio Essência - Portal Digital • Gerado em {formatarData(new Date())} às{' '}
+                    {formatarHora(new Date())}
                 </Text>
             </Page>
         </Document>

@@ -129,8 +129,7 @@ describe("PlanoAulaService", () => {
         fileName: "Plano semanal.docx",
         mimeType:
           "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        previewStatus: "PRONTO",
-        previewUrl: "https://cdn.exemplo.com/doc-2.pdf",
+        url: "https://cdn.exemplo.com/doc-2.docx",
         approvedBy: null,
         approvedAt: null,
         plano: {

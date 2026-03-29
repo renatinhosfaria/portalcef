@@ -81,7 +81,6 @@ check_internal() {
 
 # Verificar endpoints internos
 check_internal "API" "essencia-api" "3002" "/health"
-check_internal "Worker" "essencia-worker" "3100" "/health"
 check_internal "Home" "essencia-home" "3000" "/"
 check_internal "Login" "essencia-login" "3003" "/login"
 check_internal "Usuários" "essencia-usuarios" "3004" "/usuarios"
@@ -181,6 +180,15 @@ fi
 # MinIO
 echo -n "  MinIO: "
 if docker exec essencia-minio curl -sf http://localhost:9000/minio/health/live > /dev/null 2>&1; then
+    echo -e "${GREEN}OK${NC}"
+else
+    echo -e "${RED}Erro${NC}"
+    FAILED=1
+fi
+
+# OnlyOffice
+echo -n "  OnlyOffice: "
+if docker exec essencia-onlyoffice curl -sf --max-time 10 http://localhost/healthcheck > /dev/null 2>&1; then
     echo -e "${GREEN}OK${NC}"
 else
     echo -e "${RED}Erro${NC}"

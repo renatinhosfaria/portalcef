@@ -1029,7 +1029,6 @@ export class ProvaService {
       fileUrl: string;
       fileSize: number;
       mimeType: string;
-      previewStatus?: "PENDENTE" | "PRONTO" | "ERRO";
     },
   ): Promise<ProvaDocumento> {
     const db = getDb();
@@ -1053,7 +1052,6 @@ export class ProvaService {
         url: dados.fileUrl,
         fileSize: dados.fileSize,
         mimeType: dados.mimeType,
-        ...(dados.previewStatus && { previewStatus: dados.previewStatus }),
       })
       .returning();
 

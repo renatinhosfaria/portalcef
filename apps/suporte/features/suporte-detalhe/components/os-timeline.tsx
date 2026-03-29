@@ -1,9 +1,10 @@
 "use client";
 
+import { formatarDataHora } from "@essencia/shared/formatar-data";
 import type { MensagemEnriquecida } from "@essencia/shared/types";
 import { cn } from "@essencia/ui/lib/utils";
 import { Badge } from "@essencia/ui/components/badge";
-import { formatDistanceToNow, format } from "date-fns";
+import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Shield, Image as ImageIcon, Video, Mic, FileText } from "lucide-react";
 
@@ -44,7 +45,7 @@ function getIconePorTipo(tipo: string) {
   }
 }
 
-function formatarData(dateStr: string): string {
+function formatarDataLocal(dateStr: string): string {
   const date = new Date(dateStr);
   const agora = new Date();
   const diffMs = agora.getTime() - date.getTime();
@@ -57,7 +58,7 @@ function formatarData(dateStr: string): string {
     });
   }
 
-  return format(date, "dd/MM/yyyy 'as' HH:mm", { locale: ptBR });
+  return formatarDataHora(date);
 }
 
 // ============================================
@@ -100,7 +101,7 @@ function MensagemItem({
             </Badge>
           )}
           <span className="text-xs text-muted-foreground ml-auto">
-            {formatarData(mensagem.createdAt)}
+            {formatarDataLocal(mensagem.createdAt)}
           </span>
         </div>
 

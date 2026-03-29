@@ -6,9 +6,9 @@
 
 "use client";
 
+import { formatarDataCurta } from "@essencia/shared/formatar-data";
 import { cn } from "@essencia/ui/lib/utils";
-import { differenceInDays, format, isPast } from "date-fns";
-import { ptBR } from "date-fns/locale";
+import { differenceInDays, isPast } from "date-fns";
 import { CheckCircle2, Clock, FileText, Lock } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -108,8 +108,8 @@ export function PlanoAulaCard({
                 isLocked ? "text-muted-foreground" : "opacity-70",
               )}
             >
-              ({format(new Date(periodo.dataInicio), "dd/MM", { locale: ptBR })}{" "}
-              - {format(new Date(periodo.dataFim), "dd/MM", { locale: ptBR })})
+              ({formatarDataCurta(periodo.dataInicio)}{" "}
+              - {formatarDataCurta(periodo.dataFim)})
             </span>
           </div>
           {periodo.descricao && (
@@ -153,9 +153,7 @@ export function PlanoAulaCard({
               <Clock className="h-3 w-3" />
               <span>
                 Entrega:{" "}
-                {format(new Date(periodo.dataMaximaEntrega), "dd/MM", {
-                  locale: ptBR,
-                })}
+                {formatarDataCurta(periodo.dataMaximaEntrega)}
               </span>
             </div>
             {planoExistente && (

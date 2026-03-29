@@ -6,9 +6,8 @@ import {
   CardTitle,
 } from "@essencia/ui/components/card";
 import { Badge } from "@essencia/ui/components/badge";
+import { formatarData } from "@essencia/shared/formatar-data";
 import { Pencil, Trash2 } from "lucide-react";
-import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
 
 import type { ProvaCiclo } from "../types";
 
@@ -76,20 +75,14 @@ export function CiclosList({
               <div>
                 <span className="font-medium">Periodo:</span>
                 <br />
-                {format(new Date(ciclo.dataInicio), "dd/MM/yyyy", {
-                  locale: ptBR,
-                })}{" "}
+                {formatarData(ciclo.dataInicio)}{" "}
                 ate{" "}
-                {format(new Date(ciclo.dataFim), "dd/MM/yyyy", {
-                  locale: ptBR,
-                })}
+                {formatarData(ciclo.dataFim)}
               </div>
               <div>
                 <span className="font-medium">Prazo de Entrega:</span>
                 <br />
-                {format(new Date(ciclo.dataMaximaEntrega), "dd/MM/yyyy", {
-                  locale: ptBR,
-                })}
+                {formatarData(ciclo.dataMaximaEntrega)}
               </div>
             </div>
           </CardContent>

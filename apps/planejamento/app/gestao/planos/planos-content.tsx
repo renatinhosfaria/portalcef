@@ -1,5 +1,6 @@
 "use client";
 
+import { formatarData } from "@essencia/shared/formatar-data";
 import { Button } from "@essencia/ui/components/button";
 import {
   Card,
@@ -491,8 +492,8 @@ export function PlanosContent({
                                 {periodo.descricao || `${periodo.numero}º Plano`}
                               </span>
                               <span className="text-muted-foreground text-xs block">
-                                {new Date(periodo.dataInicio).toLocaleDateString("pt-BR")} -{" "}
-                                {new Date(periodo.dataFim).toLocaleDateString("pt-BR")}
+                                {formatarData(periodo.dataInicio)} -{" "}
+                                {formatarData(periodo.dataFim)}
                               </span>
                             </div>
                           );
@@ -508,9 +509,7 @@ export function PlanosContent({
                     </TableCell>
                     <TableCell>
                       {plano.submittedAt
-                        ? new Date(plano.submittedAt).toLocaleDateString(
-                            "pt-BR",
-                          )
+                        ? formatarData(plano.submittedAt)
                         : "-"}
                     </TableCell>
                     <TableCell className="text-center">

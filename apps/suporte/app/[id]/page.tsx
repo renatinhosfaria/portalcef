@@ -1,5 +1,6 @@
 "use client";
 
+import { formatarDataHora } from "@essencia/shared/formatar-data";
 import { useTenant } from "@essencia/shared/providers/tenant";
 import type { OrdemServicoStatus } from "@essencia/shared/types";
 import { STATUS_LABELS } from "@essencia/shared/types";
@@ -17,8 +18,6 @@ import {
 } from "@essencia/ui/components/dropdown-menu";
 import { Skeleton } from "@essencia/ui/components/skeleton";
 import { toast } from "@essencia/ui/toaster";
-import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
 import {
   AlertCircle,
   ArrowLeft,
@@ -200,11 +199,7 @@ export default function SuporteDetalhePage() {
   // ============================================
   const statusTransitions = STATUS_TRANSITIONS[ordem.status];
   const isFechada = ordem.status === "FECHADA";
-  const dataAbertura = format(
-    new Date(ordem.createdAt),
-    "dd/MM/yyyy 'as' HH:mm",
-    { locale: ptBR },
-  );
+  const dataAbertura = formatarDataHora(ordem.createdAt);
 
   return (
     <div className="container mx-auto py-8 space-y-6">

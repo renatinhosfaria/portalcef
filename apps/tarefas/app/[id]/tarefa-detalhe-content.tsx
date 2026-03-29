@@ -1,5 +1,6 @@
 "use client";
 
+import { formatarDataHora } from "@essencia/shared/formatar-data";
 import type { TarefaEnriquecida } from "@essencia/shared/types";
 import { Button } from "@essencia/ui/components/button";
 import {
@@ -45,13 +46,7 @@ const STATUS_LABELS: Record<TarefaEnriquecida["status"], string> = {
 };
 
 function formatarData(iso: string) {
-  return new Date(iso).toLocaleString("pt-BR", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return formatarDataHora(iso);
 }
 
 interface Props {

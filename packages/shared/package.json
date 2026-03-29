@@ -64,6 +64,12 @@
       "import": "./src/config/quinzenas-2026.ts",
       "require": "./dist/config/quinzenas-2026.js",
       "default": "./dist/config/quinzenas-2026.js"
+    },
+    "./formatar-data": {
+      "types": "./dist/formatar-data.d.ts",
+      "import": "./src/formatar-data.ts",
+      "require": "./dist/formatar-data.js",
+      "default": "./dist/formatar-data.js"
     }
   },
   "scripts": {

@@ -12,10 +12,10 @@ import {
   CardHeader,
   CardTitle,
 } from "@essencia/ui/components/card";
+import { formatarData } from "@essencia/shared/formatar-data";
 import { Button } from "@essencia/ui/components/button";
 import { Badge } from "@essencia/ui/components/badge";
-import { format, isPast, differenceInDays } from "date-fns";
-import { ptBR } from "date-fns/locale";
+import { isPast, differenceInDays } from "date-fns";
 import { useRouter } from "next/navigation";
 import { cn } from "@essencia/ui/lib/utils";
 
@@ -67,17 +67,15 @@ export function PeriodoCardProfessora({
           <div>
             <span className="font-medium">Período:</span>
             <br />
-            {format(new Date(periodo.dataInicio), "dd/MM/yyyy", {
-              locale: ptBR,
-            })}{" "}
+            {formatarData(periodo.dataInicio)}{" "}
             até{" "}
-            {format(new Date(periodo.dataFim), "dd/MM/yyyy", { locale: ptBR })}
+            {formatarData(periodo.dataFim)}
           </div>
           <div>
             <span className="font-medium">Prazo de Entrega:</span>
             <br />
             <div className="flex items-center gap-2">
-              {format(dataMaxima, "dd/MM/yyyy", { locale: ptBR })}
+              {formatarData(dataMaxima)}
               {prazoProximo && (
                 <Badge
                   variant="default"

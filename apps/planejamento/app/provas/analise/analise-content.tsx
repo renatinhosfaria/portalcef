@@ -6,6 +6,7 @@
  * Espelha o AnaliseContent adaptado para provas
  */
 
+import { formatarData, formatarDataHora } from "@essencia/shared/formatar-data";
 import {
   Card,
   CardContent,
@@ -53,14 +54,7 @@ type SegmentoValue = (typeof segmentos)[number]["value"];
  */
 function formatarDataEnvio(data?: string): string {
   if (!data) return "-";
-  const date = new Date(data);
-  return date.toLocaleDateString("pt-BR", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return formatarDataHora(data);
 }
 
 export function AnaliseProvasContent() {
@@ -287,8 +281,8 @@ export function AnaliseProvasContent() {
                                 {ciclo.descricao || `${ciclo.numero}a Prova`}
                               </span>
                               <span className="text-muted-foreground text-xs block">
-                                {new Date(ciclo.dataInicio).toLocaleDateString("pt-BR")} -{" "}
-                                {new Date(ciclo.dataFim).toLocaleDateString("pt-BR")}
+                                {formatarData(ciclo.dataInicio)} -{" "}
+                                {formatarData(ciclo.dataFim)}
                               </span>
                             </div>
                           );

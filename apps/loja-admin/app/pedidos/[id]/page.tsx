@@ -1,5 +1,6 @@
 'use client';
 
+import { formatarDataHora } from '@essencia/shared/formatar-data';
 import { ArrowLeft, Calendar, User, Phone, DollarSign, Package, Clock, CheckCircle2, XCircle, Store, Globe } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
@@ -92,7 +93,7 @@ export default function OrderDetailsPage() {
     };
 
     const formatDate = (dateStr: string) => {
-        return new Date(dateStr).toLocaleString('pt-BR');
+        return formatarDataHora(dateStr);
     };
 
     const formatPhone = (phone: string | undefined | null) => {

@@ -6,6 +6,7 @@
  */
 
 import { api } from "@essencia/shared/fetchers/client";
+import { formatarData, formatarDiaMes } from "@essencia/shared/formatar-data";
 import { Badge } from "@essencia/ui/components/badge";
 import {
   Card,
@@ -167,13 +168,6 @@ export function ProvasContent() {
   const isLoading = isLoadingTurma || isLoadingCiclos || isLoadingProvas;
   const error = errorTurma || errorCiclos;
 
-  /**
-   * Formata data para exibicao
-   */
-  function formatarData(dataIso: string): string {
-    return new Date(dataIso).toLocaleDateString("pt-BR");
-  }
-
   return (
     <div className="container mx-auto max-w-7xl px-4 py-8">
       {/* Header */}
@@ -252,7 +246,6 @@ export function ProvasContent() {
                 ciclo={ciclo}
                 provaExistente={provaExistente}
                 turmaId={turma?.id || ""}
-                formatarData={formatarData}
               />
             );
           })}
@@ -266,10 +259,9 @@ interface CicloCardProps {
   ciclo: ProvaCiclo;
   provaExistente?: ProvaExistente;
   turmaId: string;
-  formatarData: (data: string) => string;
 }
 
-function CicloCard({ ciclo, provaExistente, turmaId, formatarData }: CicloCardProps) {
+function CicloCard({ ciclo, provaExistente, turmaId }: CicloCardProps) {
   const router = useRouter();
 
   return (
@@ -303,10 +295,7 @@ function CicloCard({ ciclo, provaExistente, turmaId, formatarData }: CicloCardPr
           <Clock className="h-3.5 w-3.5" />
           <span>
             Prazo:{" "}
-            {new Date(ciclo.dataMaximaEntrega).toLocaleDateString("pt-BR", {
-              day: "2-digit",
-              month: "long",
-            })}
+            {formatarDiaMes(ciclo.dataMaximaEntrega)}
           </span>
         </div>
       </CardContent>

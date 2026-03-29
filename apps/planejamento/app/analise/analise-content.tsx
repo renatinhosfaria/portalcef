@@ -6,6 +6,7 @@
  * Task 4.2: Exibe lista de planos pendentes com filtro por segmento
  */
 
+import { formatarData, formatarDataHora } from "@essencia/shared/formatar-data";
 import {
   Card,
   CardContent,
@@ -51,14 +52,7 @@ type SegmentoValue = (typeof segmentos)[number]["value"];
  */
 function formatarDataEnvio(data?: string): string {
   if (!data) return "-";
-  const date = new Date(data);
-  return date.toLocaleDateString("pt-BR", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return formatarDataHora(data);
 }
 
 export function AnaliseContent() {
@@ -285,8 +279,8 @@ export function AnaliseContent() {
                                 {periodo.descricao || `${periodo.numero}º Plano`}
                               </span>
                               <span className="text-muted-foreground text-xs block">
-                                {new Date(periodo.dataInicio).toLocaleDateString("pt-BR")} -{" "}
-                                {new Date(periodo.dataFim).toLocaleDateString("pt-BR")}
+                                {formatarData(periodo.dataInicio)} -{" "}
+                                {formatarData(periodo.dataFim)}
                               </span>
                             </div>
                           );

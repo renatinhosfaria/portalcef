@@ -1,9 +1,9 @@
 "use client";
 
+import { formatarDiaMes, formatarDataCurta } from "@essencia/shared/formatar-data";
 import type { CalendarEvent } from "@essencia/shared/schemas/calendar";
 import { eventTypeConfig } from "@essencia/shared/types/calendar";
-import { format, isSameDay } from "date-fns";
-import { ptBR } from "date-fns/locale";
+import { isSameDay } from "date-fns";
 import { Pencil, Trash2 } from "lucide-react";
 
 import { Button } from "@essencia/ui/components/button";
@@ -64,8 +64,8 @@ export function EventCard({
           </h4>
           <p className="text-xs text-slate-500 mt-0.5">
             {isSingleDay
-              ? format(startDate, "dd 'de' MMMM", { locale: ptBR })
-              : `${format(startDate, "dd/MM")} - ${format(endDate, "dd/MM")}`}
+              ? formatarDiaMes(startDate)
+              : `${formatarDataCurta(startDate)} - ${formatarDataCurta(endDate)}`}
           </p>
           {event.description && (
             <p className="text-xs text-slate-600 mt-1 line-clamp-2">

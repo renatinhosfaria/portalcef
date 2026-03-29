@@ -1,12 +1,12 @@
 "use client";
 
+import { formatarDataISO } from "@essencia/shared/formatar-data";
 import type {
   CalendarEvent,
   CalendarEventType,
 } from "@essencia/shared/schemas/calendar";
 import { eventTypeConfig } from "@essencia/shared/types/calendar";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { format } from "date-fns";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 
@@ -101,15 +101,15 @@ export function EventForm({
       description: event?.description ?? "",
       eventType: event?.eventType ?? "DIA_LETIVO",
       startDate: event
-        ? format(new Date(event.startDate), "yyyy-MM-dd")
+        ? formatarDataISO(event.startDate)
         : defaultDate
-          ? format(defaultDate, "yyyy-MM-dd")
-          : format(new Date(), "yyyy-MM-dd"),
+          ? formatarDataISO(defaultDate)
+          : formatarDataISO(new Date()),
       endDate: event
-        ? format(new Date(event.endDate), "yyyy-MM-dd")
+        ? formatarDataISO(event.endDate)
         : defaultDate
-          ? format(defaultDate, "yyyy-MM-dd")
-          : format(new Date(), "yyyy-MM-dd"),
+          ? formatarDataISO(defaultDate)
+          : formatarDataISO(new Date()),
       isSchoolDay: event?.isSchoolDay ?? true,
       isRecurringAnnually: event?.isRecurringAnnually ?? false,
     },

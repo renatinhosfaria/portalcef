@@ -1292,15 +1292,10 @@ export class PlanoAulaService {
       );
     }
 
-    // Documento imprimível precisa ter PDF nativo ou preview convertido disponível
-    const possuiPdfNativo =
-      documento.mimeType === "application/pdf" && !!documento.url;
-    const possuiPdfConvertido =
-      documento.previewStatus === "PRONTO" && !!documento.previewUrl;
-
-    if (!possuiPdfNativo && !possuiPdfConvertido) {
+    // Documento imprimível precisa ter URL disponível
+    if (!documento.url) {
       throw new BadRequestException(
-        "Documento não possui versão em PDF disponível para impressão",
+        "Documento não possui arquivo disponível para impressão",
       );
     }
 
@@ -1436,7 +1431,6 @@ export class PlanoAulaService {
       fileUrl: string;
       fileSize: number;
       mimeType: string;
-      previewStatus?: "PENDENTE" | "PRONTO" | "ERRO";
     },
   ): Promise<PlanoDocumento> {
     const db = getDb();
@@ -1460,7 +1454,6 @@ export class PlanoAulaService {
         url: dados.fileUrl,
         fileSize: dados.fileSize,
         mimeType: dados.mimeType,
-        ...(dados.previewStatus && { previewStatus: dados.previewStatus }),
       })
       .returning();
 
