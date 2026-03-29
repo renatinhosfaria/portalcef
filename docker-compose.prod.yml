@@ -309,6 +309,11 @@ services:
       ONLYOFFICE_JWT_SECRET: ${ONLYOFFICE_JWT_SECRET}
       ONLYOFFICE_URL: http://essencia-onlyoffice
       ONLYOFFICE_PUBLIC_URL: https://www.portalcef.com.br/onlyoffice
+      AZURE_TENANT_ID: ${AZURE_TENANT_ID}
+      AZURE_CLIENT_ID: ${AZURE_CLIENT_ID}
+      AZURE_CLIENT_SECRET: ${AZURE_CLIENT_SECRET}
+      SHAREPOINT_SITE_ID: ${SHAREPOINT_SITE_ID}
+      SHAREPOINT_DRIVE_ID: ${SHAREPOINT_DRIVE_ID}
     depends_on:
       postgres:
         condition: service_healthy
@@ -328,22 +333,11 @@ services:
           memory: 512M
 
   # ===========================================================================
-  # CARBONE - Document Conversion Service
-  # ===========================================================================
-
-  carbone:
-    image: carbone/carbone-ee:latest
-    container_name: essencia-carbone
-    <<: *common
-    environment:
-      CARBONE_WORKERS: 4
-
-  # ===========================================================================
   # ONLYOFFICE - Document Editor
   # ===========================================================================
 
   onlyoffice:
-    image: onlyoffice/documentserver:latest
+    image: onlyoffice/documentserver:9.2.1
     container_name: essencia-onlyoffice
     <<: *common
     environment:
@@ -351,6 +345,11 @@ services:
       JWT_SECRET: ${ONLYOFFICE_JWT_SECRET}
       ALLOW_PRIVATE_IP_ADDRESS: "true"
       ALLOW_META_IP_ADDRESS: "true"
+    volumes:
+      - essencia-onlyoffice-data:/var/www/onlyoffice/Data
+      - essencia-onlyoffice-log:/var/log/onlyoffice
+      - essencia-onlyoffice-lib:/var/lib/onlyoffice
+      - essencia-onlyoffice-conf:/etc/onlyoffice
     deploy:
       resources:
         limits:
@@ -361,36 +360,6 @@ services:
       <<: *healthcheck
       test: ["CMD", "curl", "-f", "http://localhost/healthcheck"]
       start_period: 60s
-
-  # ===========================================================================
-  # WORKER BULLMQ
-  # ===========================================================================
-
-  worker:
-    image: essencia-worker:latest
-    container_name: essencia-worker
-    <<: *common
-    environment:
-      NODE_ENV: production
-      DATABASE_URL: ${DATABASE_URL}
-      REDIS_URL: redis://redis:6379
-      MINIO_ENDPOINT: http://minio:9000
-      MINIO_PUBLIC_ENDPOINT: https://www.portalcef.com.br/storage
-      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
-      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
-      MINIO_BUCKET: ${MINIO_BUCKET:-essencia-uploads}
-      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-2}
-      CARBONE_URL: ${CARBONE_URL:-http://carbone:4000}
-    depends_on:
-      redis:
-        condition: service_healthy
-      postgres:
-        condition: service_healthy
-      carbone:
-        condition: service_started
-    healthcheck:
-      <<: *healthcheck
-      test: [ "CMD", "curl", "-f", "http://localhost:3100/health" ]
 
 # =============================================================================
 # NETWORKS
@@ -421,3 +390,13 @@ volumes:
     external: true
   essencia-nginx-cache:
     name: essencia-nginx-cache
+
+  # OnlyOffice (persistência de estado entre restarts)
+  essencia-onlyoffice-data:
+    name: essencia-onlyoffice-data
+  essencia-onlyoffice-log:
+    name: essencia-onlyoffice-log
+  essencia-onlyoffice-lib:
+    name: essencia-onlyoffice-lib
+  essencia-onlyoffice-conf:
+    name: essencia-onlyoffice-conf
