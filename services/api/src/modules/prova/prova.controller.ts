@@ -370,6 +370,7 @@ export class ProvaController {
   @Get(":id/documentos/:docId/editar-word")
   @Roles(...PROFESSORA_ACCESS, ...ANALISTA_ACCESS)
   async editarWord(
+    @Req() req: { user: UserContext },
     @Param("id") provaId: string,
     @Param("docId") docId: string,
   ) {
@@ -377,6 +378,19 @@ export class ProvaController {
       throw new BadRequestException({
         code: "SHAREPOINT_NOT_CONFIGURED",
         message: "Edição via Word não está disponível. SharePoint não configurado.",
+      });
+    }
+
+    const user = req.user;
+    const provaResult = await this.provaService.getProvaById(user, provaId);
+    const isOwner = provaResult.user.id === user.userId;
+    const isAnalistaUser = ANALISTA_ROLES.includes(
+      user.role as (typeof ANALISTA_ROLES)[number],
+    );
+    if (!isOwner && !isAnalistaUser) {
+      throw new BadRequestException({
+        code: "NOT_AUTHORIZED",
+        message: "Você não tem permissão para editar documentos desta prova",
       });
     }
 
@@ -394,6 +408,26 @@ export class ProvaController {
       throw new BadRequestException(
         "Apenas documentos .doc/.docx podem ser editados no Word",
       );
+    }
+
+    // Verificar se já existe uma edição ativa
+    if (documento.sharepointItemId && documento.editandoDesde) {
+      const expirado = new Date();
+      expirado.setHours(expirado.getHours() - 2);
+
+      if (documento.editandoDesde > expirado) {
+        // Edição ainda ativa — retornar URL existente
+        const msWordUrl = this.sharePointService.construirMsWordUrl(
+          documento.sharepointEditUrl!,
+        );
+        return {
+          success: true,
+          data: { url: msWordUrl },
+        };
+      }
+
+      // Edição expirada — limpar antes de criar nova
+      await this.sharePointService.removerArquivo(documento.sharepointItemId);
     }
 
     // Upload para SharePoint e criar link de compartilhamento
@@ -541,7 +575,7 @@ export class ProvaController {
     const config = {
       document: {
         fileType: documento.fileName?.endsWith(".doc") ? "doc" : "docx",
-        key: `${docId}-${documento.createdAt ? new Date(documento.createdAt).getTime() : docId}`,
+        key: `${docId}-${documento.updatedAt ? new Date(documento.updatedAt).getTime() : docId}`,
         title: documento.fileName || "Documento",
         url: fileUrl,
         permissions: {

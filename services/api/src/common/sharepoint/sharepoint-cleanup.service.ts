@@ -1,4 +1,5 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { Cron, CronExpression } from "@nestjs/schedule";
 import {
   getDb,
@@ -25,13 +26,62 @@ import { SharePointService } from "./sharepoint.service";
  * temporários do SharePoint.
  */
 @Injectable()
-export class SharePointCleanupService {
+export class SharePointCleanupService implements OnModuleInit {
   private readonly logger = new Logger(SharePointCleanupService.name);
+  private subscriptionId: string | null = null;
 
   constructor(
     private readonly sharePointService: SharePointService,
     private readonly storageService: StorageService,
+    private readonly configService: ConfigService,
   ) {}
+
+  async onModuleInit(): Promise<void> {
+    if (!this.sharePointService.isConfigurado()) return;
+
+    try {
+      const apiBaseUrl =
+        this.configService.get<string>("API_BASE_URL") ||
+        "https://www.portalcef.com.br/api";
+      const callbackUrl = `${apiBaseUrl}/webhooks/graph`;
+
+      this.subscriptionId = await this.sharePointService.criarSubscription(callbackUrl);
+      this.logger.log(`Webhook subscription criada: ${this.subscriptionId}`);
+    } catch (error) {
+      this.logger.warn(
+        `Falha ao criar subscription do Graph (webhook indisponível — sincronização via cron): ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
+  @Cron(CronExpression.EVERY_DAY_AT_3AM)
+  async renovarSubscription(): Promise<void> {
+    if (!this.subscriptionId || !this.sharePointService.isConfigurado()) return;
+
+    try {
+      await this.sharePointService.renovarSubscription(this.subscriptionId);
+      this.logger.log(`Subscription ${this.subscriptionId} renovada`);
+    } catch (error) {
+      this.logger.warn(
+        `Falha ao renovar subscription: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      // Tentar recriar
+      try {
+        const apiBaseUrl =
+          this.configService.get<string>("API_BASE_URL") ||
+          "https://www.portalcef.com.br/api";
+        this.subscriptionId = await this.sharePointService.criarSubscription(
+          `${apiBaseUrl}/webhooks/graph`,
+        );
+        this.logger.log(`Subscription recriada: ${this.subscriptionId}`);
+      } catch (recriarError) {
+        this.logger.error(
+          `Falha ao recriar subscription: ${recriarError instanceof Error ? recriarError.message : String(recriarError)}`,
+        );
+        this.subscriptionId = null;
+      }
+    }
+  }
 
   @Cron(CronExpression.EVERY_30_MINUTES)
   async limparEdicoesExpiradas(): Promise<void> {
@@ -147,7 +197,7 @@ export class SharePointCleanupService {
         );
       }
 
-      // Remover do SharePoint
+      // Remover do SharePoint (link de compartilhamento é invalidado ao remover o arquivo)
       await this.sharePointService.removerArquivo(documento.sharepointItemId);
     } catch (error) {
       this.logger.error(

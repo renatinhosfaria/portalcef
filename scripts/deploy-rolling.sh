@@ -46,7 +46,6 @@ export IMAGE_TAG="$TAG"
 # Lista de serviços para deploy (ordem importa: API primeiro, depois apps)
 SERVICES=(
     "api"
-    "worker"
     "home"
     "login"
     "usuarios"

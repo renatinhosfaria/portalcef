@@ -1157,21 +1157,6 @@ export class ProvaService {
   }
 
   /**
-   * Busca documento por ID sem necessidade do provaId
-   * Usado pelo webhook do SharePoint
-   */
-  async getDocumentoByIdDireto(documentoId: string) {
-    const db = getDb();
-    const documento = await db.query.provaDocumento.findFirst({
-      where: eq(provaDocumento.id, documentoId),
-    });
-    if (!documento) {
-      throw new NotFoundException("Documento não encontrado");
-    }
-    return documento;
-  }
-
-  /**
    * Aprova um documento individualmente
    * Apenas analista_pedagogico pode aprovar
    */

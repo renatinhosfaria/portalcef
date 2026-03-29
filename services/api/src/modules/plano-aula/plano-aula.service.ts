@@ -1561,18 +1561,4 @@ export class PlanoAulaService {
       .where(eq(planoDocumento.id, documentoId));
   }
 
-  /**
-   * Busca documento por ID sem necessidade do planoId
-   * Usado pelo webhook do SharePoint
-   */
-  async getDocumentoByIdDireto(documentoId: string) {
-    const db = getDb();
-    const documento = await db.query.planoDocumento.findFirst({
-      where: eq(planoDocumento.id, documentoId),
-    });
-    if (!documento) {
-      throw new NotFoundException("Documento não encontrado");
-    }
-    return documento;
-  }
 }

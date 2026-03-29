@@ -203,6 +203,7 @@ export class SharePointWebhookController {
       }
 
       // Remover arquivo temporário do SharePoint
+      // Nota: o link de compartilhamento é invalidado automaticamente ao remover o arquivo
       await this.sharePointService.removerArquivo(documento.sharepointItemId);
 
       this.logger.log(
