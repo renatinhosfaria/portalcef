@@ -38,16 +38,6 @@ export type PlanoAulaStatus = (typeof planoAulaStatusEnum)[number];
 export const documentoTipoEnum = ["ARQUIVO", "LINK_YOUTUBE"] as const;
 export type DocumentoTipo = (typeof documentoTipoEnum)[number];
 
-// ============================================
-// Documento Preview Status Enum
-// ============================================
-export const documentoPreviewStatusEnum = [
-  "PENDENTE",
-  "PRONTO",
-  "ERRO",
-] as const;
-export type DocumentoPreviewStatus =
-  (typeof documentoPreviewStatusEnum)[number];
 
 // ============================================
 // Table: plano_aula (Mestre)
@@ -135,12 +125,10 @@ export const planoDocumento = pgTable(
     fileSize: integer("file_size"), // Tamanho em bytes
     mimeType: varchar("mime_type", { length: 100 }), // Tipo MIME do arquivo
 
-    // Preview (conversão assíncrona)
-    previewKey: varchar("preview_key", { length: 500 }), // Key do preview no storage (PDF)
-    previewUrl: varchar("preview_url", { length: 1000 }), // URL pública do preview
-    previewMimeType: varchar("preview_mime_type", { length: 100 }), // Tipo MIME do preview
-    previewStatus: text("preview_status", { enum: documentoPreviewStatusEnum }), // Status da conversão
-    previewError: text("preview_error"), // Mensagem de erro (se houver)
+    // Edição via SharePoint (campos temporários — preenchidos durante edição, limpos após sincronização)
+    sharepointItemId: text("sharepoint_item_id"), // ID do arquivo no SharePoint
+    sharepointEditUrl: text("sharepoint_edit_url"), // URL de edição gerada
+    editandoDesde: timestamp("editando_desde", { withTimezone: true }), // Quando a edição foi iniciada
 
     // Aprovação pelo Analista Pedagógico
     approvedBy: uuid("approved_by").references(() => users.id, {
