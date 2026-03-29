@@ -1,13 +1,14 @@
 import { MiddlewareConsumer, Module, NestModule } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import { EventEmitterModule } from "@nestjs/event-emitter";
+import { ScheduleModule } from "@nestjs/schedule";
 import { ThrottlerModule, ThrottlerGuard } from "@nestjs/throttler";
 import { APP_GUARD } from "@nestjs/core";
 
 import { CorrelationIdMiddleware } from "./common/middleware/correlation-id.middleware";
 import { DatabaseModule } from "./common/database/database.module";
+import { SharePointModule } from "./common/sharepoint/sharepoint.module";
 import { StorageModule } from "./common/storage/storage.module";
-import { DocumentosConversaoModule } from "./common/queues/documentos-conversao.module";
 import { AuthModule } from "./modules/auth/auth.module";
 import { CalendarModule } from "./modules/calendar/calendar.module";
 import { HealthModule } from "./modules/health/health.module";
@@ -58,10 +59,12 @@ import { SecurityModule } from "./modules/security/security.module";
         limit: 1000, // 1000 requisições por hora (desabilitado em dev)
       },
     ]),
+    // Agendamento de tarefas (cron jobs)
+    ScheduleModule.forRoot(),
     // Database (global module)
     DatabaseModule,
-    // Filas (BullMQ)
-    DocumentosConversaoModule,
+    // SharePoint (edição Word desktop + webhook + cleanup cron)
+    SharePointModule,
     HealthModule,
     SecurityModule,
     SetupModule,
