@@ -72,25 +72,6 @@ export function RevisaoProvaContent({ provaId }: RevisaoProvaContentProps) {
   }, [provaId, fetchProva]);
 
   /**
-   * Polling para atualizar preview de documentos em conversao
-   */
-  useEffect(() => {
-    if (!prova?.documentos) return;
-
-    const temDocumentosPendentes = prova.documentos.some(
-      (doc) => doc.previewStatus === "PENDENTE",
-    );
-
-    if (!temDocumentosPendentes) return;
-
-    const interval = setInterval(() => {
-      refetch();
-    }, 3000);
-
-    return () => clearInterval(interval);
-  }, [prova?.documentos, refetch]);
-
-  /**
    * Aprova um documento individualmente
    */
   const handleAprovarDocumento = useCallback(

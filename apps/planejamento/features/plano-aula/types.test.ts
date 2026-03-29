@@ -1,23 +1,29 @@
 import { describe, expect, it } from "vitest";
-import type { DocumentoPreviewStatus, PlanoDocumento } from "./types";
+import type { PlanoDocumento } from "./types";
 
 describe("PlanoDocumento", () => {
-  it("aceita campos de preview", () => {
+  it("aceita campos de edição via SharePoint", () => {
     const doc: PlanoDocumento = {
       id: "doc-1",
       planoId: "plano-1",
       tipo: "ARQUIVO",
       createdAt: "2026-01-23T10:00:00.000Z",
-      comentarios: [],
-      previewStatus: "PENDENTE",
-      previewUrl: "https://cdn/preview.pdf",
+      sharepointItemId: "item-123",
+      sharepointEditUrl: "https://sharepoint/edit/item-123",
+      editandoDesde: "2026-01-23T10:00:00.000Z",
     };
 
-    expect(doc.previewStatus).toBe("PENDENTE");
+    expect(doc.sharepointItemId).toBe("item-123");
   });
 
-  it("valida tipo DocumentoPreviewStatus", () => {
-    const status: DocumentoPreviewStatus = "PRONTO";
-    expect(["PENDENTE", "PRONTO", "ERRO"]).toContain(status);
+  it("aceita documento sem campos SharePoint", () => {
+    const doc: PlanoDocumento = {
+      id: "doc-2",
+      planoId: "plano-1",
+      tipo: "ARQUIVO",
+      createdAt: "2026-01-23T10:00:00.000Z",
+    };
+
+    expect(doc.sharepointItemId).toBeUndefined();
   });
 });

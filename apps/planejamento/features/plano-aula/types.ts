@@ -22,11 +22,6 @@ export type PlanoAulaStatus =
 export type DocumentoTipo = "ARQUIVO" | "LINK_YOUTUBE";
 
 /**
- * Status da conversão de preview de documento
- */
-export type DocumentoPreviewStatus = "PENDENTE" | "PRONTO" | "ERRO";
-
-/**
  * Documento anexado ao plano de aula
  */
 export interface PlanoDocumento {
@@ -40,12 +35,10 @@ export interface PlanoDocumento {
   mimeType?: string;
   createdAt: string;
   updatedAt?: string;
-  // Campos de preview (conversão assíncrona)
-  previewKey?: string;
-  previewUrl?: string;
-  previewMimeType?: string;
-  previewStatus?: DocumentoPreviewStatus;
-  previewError?: string;
+  // Campos de edição via SharePoint (temporários)
+  sharepointItemId?: string;
+  sharepointEditUrl?: string;
+  editandoDesde?: string;
   // Campos de aprovação individual (analista_pedagogico)
   approvedBy?: string;
   approvedAt?: string;

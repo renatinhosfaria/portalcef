@@ -5,6 +5,7 @@
  * Task 23: Atualizado para usar periodoId (UUID) ao invés de quinzenaId (número)
  */
 
+import { formatarData } from "@essencia/shared/formatar-data";
 import {
   Alert,
   AlertDescription,
@@ -253,26 +254,6 @@ export function PlanoContent({
     loadOrCreatePlano();
   }, [loadOrCreatePlano]);
 
-  /**
-   * Polling para atualizar preview de documentos em conversao
-   * Verifica a cada 3 segundos se ha documentos PENDENTE
-   */
-  useEffect(() => {
-    if (!plano?.documentos) return;
-
-    const temDocumentosPendentes = plano.documentos.some(
-      (doc) => doc.previewStatus === "PENDENTE",
-    );
-
-    if (!temDocumentosPendentes) return;
-
-    const interval = setInterval(() => {
-      refetchPlano();
-    }, 3000); // Poll a cada 3 segundos
-
-    return () => clearInterval(interval);
-  }, [plano?.documentos, refetchPlano]);
-
   // Estado de carregamento inicial
   if (initialLoading) {
     return (
@@ -378,7 +359,7 @@ export function PlanoContent({
               <AlertDescription className="text-green-700">
                 Seu plano de aula foi aprovado pela coordenacao.
                 {plano.approvedAt &&
-                  ` Data da aprovacao: ${new Date(plano.approvedAt).toLocaleDateString("pt-BR")}`}
+                  ` Data da aprovacao: ${formatarData(plano.approvedAt)}`}
               </AlertDescription>
             </Alert>
           </CardContent>

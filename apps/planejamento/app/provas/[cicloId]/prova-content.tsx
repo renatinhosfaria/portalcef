@@ -5,6 +5,7 @@
  * Espelha o PlanoContent adaptado para o fluxo de provas
  */
 
+import { formatarData } from "@essencia/shared/formatar-data";
 import {
   Alert,
   AlertDescription,
@@ -259,25 +260,6 @@ export function ProvaDetailContent({
     loadOrCreateProva();
   }, [loadOrCreateProva]);
 
-  /**
-   * Polling para atualizar preview de documentos em conversao
-   */
-  useEffect(() => {
-    if (!prova?.documentos) return;
-
-    const temDocumentosPendentes = prova.documentos.some(
-      (doc) => doc.previewStatus === "PENDENTE",
-    );
-
-    if (!temDocumentosPendentes) return;
-
-    const interval = setInterval(() => {
-      refetchProva();
-    }, 3000);
-
-    return () => clearInterval(interval);
-  }, [prova?.documentos, refetchProva]);
-
   // Estado de carregamento inicial
   if (initialLoading) {
     return (
@@ -446,7 +428,7 @@ export function ProvaDetailContent({
               <AlertDescription className="text-green-700">
                 Sua prova foi aprovada pela Analista Pedagogica.
                 {prova.approvedAt &&
-                  ` Data da aprovacao: ${new Date(prova.approvedAt).toLocaleDateString("pt-BR")}`}
+                  ` Data da aprovacao: ${formatarData(prova.approvedAt)}`}
               </AlertDescription>
             </Alert>
           </CardContent>

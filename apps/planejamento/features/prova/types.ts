@@ -3,7 +3,7 @@
  * Novo fluxo: Professora -> Impressao -> Resposta -> Analista -> Aprovado
  */
 
-import type { DocumentoTipo, DocumentoPreviewStatus } from "../plano-aula/types";
+import type { DocumentoTipo } from "../plano-aula/types";
 
 /**
  * Status possiveis de uma prova
@@ -54,12 +54,10 @@ export interface ProvaDocumento {
   mimeType?: string;
   createdAt: string;
   updatedAt?: string;
-  // Campos de preview (conversao assincrona)
-  previewKey?: string;
-  previewUrl?: string;
-  previewMimeType?: string;
-  previewStatus?: DocumentoPreviewStatus;
-  previewError?: string;
+  // Campos de edição via SharePoint (temporários)
+  sharepointItemId?: string;
+  sharepointEditUrl?: string;
+  editandoDesde?: string;
   // Campos de aprovacao individual (analista_pedagogico)
   approvedBy?: string;
   approvedAt?: string;

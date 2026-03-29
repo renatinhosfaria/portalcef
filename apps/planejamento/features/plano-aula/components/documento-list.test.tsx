@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { DocumentoList } from "./documento-list";
 
 describe("DocumentoList", () => {
-  const mockDocumentoPronto = {
+  const mockDocumentoWord = {
     id: "doc-1",
     planoId: "plano-1",
     tipo: "ARQUIVO" as const,
@@ -13,56 +13,52 @@ describe("DocumentoList", () => {
     mimeType:
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     url: "https://cdn/teste.docx",
-    previewUrl: "https://cdn/teste.pdf",
-    previewStatus: "PRONTO" as const,
     createdAt: "2026-01-23T10:00:00.000Z",
-    comentarios: [],
   };
 
   const mockDocumentoAprovado = {
-    ...mockDocumentoPronto,
+    ...mockDocumentoWord,
     id: "doc-aprovado",
     approvedBy: "analista-1",
     approvedAt: "2026-02-06T15:30:00.000Z",
   };
 
-  const mockDocumentoPendente = {
-    ...mockDocumentoPronto,
-    id: "doc-2",
-    previewStatus: "PENDENTE" as const,
-    previewUrl: undefined,
+  const mockDocumentoPdf = {
+    ...mockDocumentoWord,
+    id: "doc-pdf",
+    fileName: "teste.pdf",
+    mimeType: "application/pdf",
+    url: "https://cdn/teste.pdf",
   };
 
-  it("abre modal ao clicar em Ver quando status é PRONTO", async () => {
-    const user = userEvent.setup();
-    render(<DocumentoList documentos={[mockDocumentoPronto]} />);
+  const mockDocumentoPdfAprovado = {
+    ...mockDocumentoPdf,
+    id: "doc-pdf-aprovado",
+    approvedBy: "analista-1",
+    approvedAt: "2026-02-06T15:30:00.000Z",
+  };
 
-    await user.click(screen.getByRole("button", { name: /^ver$/i }));
+  it("abre modal ao clicar em Visualizar para documento Word", async () => {
+    const user = userEvent.setup();
+    render(<DocumentoList documentos={[mockDocumentoWord]} />);
+
+    await user.click(
+      screen.getByRole("button", { name: /visualizar documento/i }),
+    );
 
     expect(screen.getByRole("dialog")).toBeInTheDocument();
-  });
-
-  it("desabilita botão Ver quando status é PENDENTE", () => {
-    render(<DocumentoList documentos={[mockDocumentoPendente]} />);
-
-    const botao = screen.getByRole("button", { name: /^ver$/i });
-    expect(botao).toBeDisabled();
-  });
-
-  it("mostra badge Convertendo quando status é PENDENTE", () => {
-    render(<DocumentoList documentos={[mockDocumentoPendente]} />);
-
-    expect(screen.getByText(/convertendo/i)).toBeInTheDocument();
   });
 
   it("fecha modal ao clicar no botão Fechar", async () => {
     const user = userEvent.setup();
-    render(<DocumentoList documentos={[mockDocumentoPronto]} />);
+    render(<DocumentoList documentos={[mockDocumentoWord]} />);
 
-    await user.click(screen.getByRole("button", { name: /^ver$/i }));
+    await user.click(
+      screen.getByRole("button", { name: /visualizar documento/i }),
+    );
     expect(screen.getByRole("dialog")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /fechar/i }));
+    await user.click(screen.getByRole("button", { name: /close/i }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
@@ -72,28 +68,24 @@ describe("DocumentoList", () => {
     expect(screen.getByText(/nenhum documento anexado/i)).toBeInTheDocument();
   });
 
-  it("habilita botão Ver para PDF nativo (sem conversão)", () => {
-    const mockPdf = {
-      ...mockDocumentoPronto,
-      mimeType: "application/pdf",
-      previewStatus: undefined,
-      previewUrl: undefined,
-    };
+  it("habilita botão Ver para PDF nativo", () => {
+    render(<DocumentoList documentos={[mockDocumentoPdf]} />);
 
-    render(<DocumentoList documentos={[mockPdf]} />);
-
-    const botao = screen.getByRole("button", { name: /^ver$/i });
+    const botao = screen.getByRole("button", {
+      name: /visualizar documento/i,
+    });
     expect(botao).not.toBeDisabled();
   });
 
-  it("exibe botão Imprimir apenas para documento aprovado", () => {
+  it("exibe botão Imprimir apenas para documento PDF aprovado", () => {
     const onImprimir = vi.fn().mockResolvedValue(undefined);
 
     render(
       <DocumentoList
         documentos={[
-          mockDocumentoAprovado,
-          { ...mockDocumentoPronto, id: "doc-nao-aprovado" },
+          mockDocumentoPdfAprovado,
+          { ...mockDocumentoPdf, id: "doc-nao-aprovado" },
+          mockDocumentoAprovado, // Word aprovado - não deve ter imprimir
         ]}
         onImprimir={onImprimir}
       />,
@@ -103,21 +95,69 @@ describe("DocumentoList", () => {
     expect(botoesImprimir).toHaveLength(1);
   });
 
-  it("chama callback onImprimir ao clicar no botão Imprimir", async () => {
+  it("chama callback onImprimir ao clicar no botão Imprimir e confirmar", async () => {
     const user = userEvent.setup();
     const onImprimir = vi.fn().mockResolvedValue(undefined);
 
     render(
       <DocumentoList
-        documentos={[mockDocumentoAprovado]}
+        documentos={[mockDocumentoPdfAprovado]}
         onImprimir={onImprimir}
       />,
     );
 
     await user.click(screen.getByRole("button", { name: /imprimir/i }));
 
+    // Apos clicar em imprimir, o dialog de confirmacao deve aparecer
+    expect(screen.getByText("O documento foi impresso com sucesso?")).toBeInTheDocument();
+
+    // Confirmar a impressao
+    await user.click(screen.getByRole("button", { name: /sim, foi impresso/i }));
+
     expect(onImprimir).toHaveBeenCalledTimes(1);
-    expect(onImprimir).toHaveBeenCalledWith("doc-aprovado");
+    expect(onImprimir).toHaveBeenCalledWith("doc-pdf-aprovado");
+  });
+
+  it("nao chama callback onImprimir ao cancelar confirmacao de impressao", async () => {
+    const user = userEvent.setup();
+    const onImprimir = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <DocumentoList
+        documentos={[mockDocumentoPdfAprovado]}
+        onImprimir={onImprimir}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /imprimir/i }));
+
+    // Cancelar a impressao
+    await user.click(screen.getByRole("button", { name: /nao, cancelar/i }));
+
+    expect(onImprimir).not.toHaveBeenCalled();
+  });
+
+  it("exibe as acoes de documento inline sem menu de overflow", () => {
+    const onAprovar = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <DocumentoList
+        documentos={[mockDocumentoWord]}
+        canAprovar={true}
+        onAprovar={onAprovar}
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: /visualizar documento/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /editar no word/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /aprovar documento/i }),
+    ).toBeInTheDocument();
+    expect(document.querySelector('[aria-haspopup="menu"]')).toBeNull();
   });
 
   it("mostra data e horário quando documento já foi impresso", () => {
@@ -132,6 +172,6 @@ describe("DocumentoList", () => {
       />,
     );
 
-    expect(screen.getByText(/impresso em/i)).toBeInTheDocument();
+    expect(screen.getByText(/impresso/i)).toBeInTheDocument();
   });
 });
