@@ -5,7 +5,6 @@ import {
   Controller,
   Delete,
   Get,
-  HttpCode,
   InternalServerErrorException,
   Logger,
   Param,
@@ -22,7 +21,7 @@ import { Public } from "../../common/decorators/public.decorator";
 import { Roles } from "../../common/decorators/roles.decorator";
 import { AuthGuard } from "../../common/guards/auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
-import { DocumentosConversaoQueueService } from "../../common/queues/documentos-conversao.queue";
+import { SharePointService } from "../../common/sharepoint/sharepoint.service";
 import { StorageService } from "../../common/storage/storage.service";
 import {
   type CreatePlanoDto,
@@ -77,15 +76,6 @@ const VISUALIZAR_ACCESS = [
   ...GESTAO_ROLES,
 ] as const;
 
-/** MIME types que requerem conversão assíncrona para PDF */
-const MIME_TYPES_QUE_PRECISAM_CONVERTER = [
-  "application/msword",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "image/png",
-  "image/jpeg",
-  "image/jpg",
-] as const;
-
 // ============================================
 // Controller
 // ============================================
@@ -112,7 +102,7 @@ export class PlanoAulaController {
     private readonly storageService: StorageService,
     private readonly historicoService: PlanoAulaHistoricoService,
     private readonly configService: ConfigService,
-    private readonly documentosConversaoQueue: DocumentosConversaoQueueService,
+    private readonly sharePointService: SharePointService,
   ) {}
 
   // ============================================
@@ -317,9 +307,6 @@ export class PlanoAulaController {
       // Upload para MinIO
       const uploadResult = await this.storageService.uploadFile(data);
 
-      // Tipos que precisam de conversão para PDF (exceto PDF nativo)
-      const precisaConverter = (MIME_TYPES_QUE_PRECISAM_CONVERTER as readonly string[]).includes(data.mimetype);
-
       // Salvar documento no banco via service
       const documento = await this.planoAulaService.adicionarDocumentoUpload(
         planoId,
@@ -330,28 +317,8 @@ export class PlanoAulaController {
           fileUrl: uploadResult.url,
           fileSize: buffer.length,
           mimeType: data.mimetype,
-          ...(precisaConverter && { previewStatus: "PENDENTE" }),
         },
       );
-
-      // Enfileirar conversão assíncrona para PDF
-      // Falha no enfileiramento não deve retornar erro ao cliente — o documento
-      // já foi salvo; o preview ficará PENDENTE até reprocessamento.
-      if (precisaConverter) {
-        try {
-          await this.documentosConversaoQueue.enfileirar({
-            documentoId: documento.id,
-            planoId,
-            storageKey: uploadResult.key,
-            mimeType: data.mimetype,
-            fileName: uploadResult.name,
-          });
-        } catch (enfileirarError) {
-          this.logger.error(
-            `Falha ao enfileirar conversão do documento ${documento.id}: ${enfileirarError instanceof Error ? enfileirarError.message : String(enfileirarError)}`,
-          );
-        }
-      }
 
       return {
         success: true,
@@ -369,8 +336,147 @@ export class PlanoAulaController {
   }
 
   /**
+   * GET /plano-aula/:id/documentos/:docId/editar-word
+   * Gera URL para edição via Word desktop (SharePoint)
+   */
+  @Get(":id/documentos/:docId/editar-word")
+  @Roles(...PROFESSORA_ACCESS, ...ANALISTA_ACCESS)
+  async editarWord(
+    @Param("id") planoId: string,
+    @Param("docId") docId: string,
+  ) {
+    if (!this.sharePointService.isConfigurado()) {
+      throw new BadRequestException({
+        code: "SHAREPOINT_NOT_CONFIGURED",
+        message: "Edição via Word não está disponível. SharePoint não configurado.",
+      });
+    }
+
+    const documento = await this.planoAulaService.getDocumentoById(planoId, docId);
+
+    if (!documento.storageKey) {
+      throw new BadRequestException("Documento sem arquivo associado");
+    }
+
+    const isWord =
+      documento.mimeType?.includes("word") ||
+      documento.mimeType?.includes("msword") ||
+      documento.fileName?.match(/\.docx?$/i);
+    if (!isWord) {
+      throw new BadRequestException(
+        "Apenas documentos .doc/.docx podem ser editados no Word",
+      );
+    }
+
+    // Upload para SharePoint e criar link de compartilhamento
+    const itemId = await this.sharePointService.uploadParaSharePoint(
+      documento.storageKey,
+      documento.fileName || "documento.docx",
+      docId,
+    );
+
+    const { url } = await this.sharePointService.criarLinkCompartilhamento(itemId);
+
+    // Atualizar documento com dados do SharePoint
+    await this.planoAulaService.atualizarDocumento(docId, {
+      sharepointItemId: itemId,
+      sharepointEditUrl: url,
+      editandoDesde: new Date(),
+    });
+
+    // Gerar URL ms-word: para abrir diretamente no Word desktop
+    const msWordUrl = this.sharePointService.construirMsWordUrl(url);
+
+    return {
+      success: true,
+      data: { url: msWordUrl },
+    };
+  }
+
+  /**
+   * POST /plano-aula/:id/documentos/:docId/atualizar
+   * Re-upload manual de documento (fallback quando ms-word: não funciona)
+   */
+  @Post(":id/documentos/:docId/atualizar")
+  @Roles(...PROFESSORA_ACCESS, ...ANALISTA_ACCESS)
+  async atualizarDocumento(
+    @Param("id") planoId: string,
+    @Param("docId") docId: string,
+    @Req() req: FastifyMultipartRequest,
+  ) {
+    if (!req.isMultipart()) {
+      throw new BadRequestException({
+        code: "INVALID_REQUEST",
+        message: "Request deve ser multipart/form-data",
+      });
+    }
+
+    const documento = await this.planoAulaService.getDocumentoById(planoId, docId);
+
+    if (!documento.storageKey) {
+      throw new BadRequestException("Documento sem arquivo associado");
+    }
+
+    const data = await req.file();
+    if (!data) {
+      throw new BadRequestException({
+        code: "NO_FILE",
+        message: "Nenhum arquivo enviado",
+      });
+    }
+
+    // Validar tipo de arquivo (apenas Word)
+    const wordMimeTypes = [
+      "application/msword",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ];
+    if (!wordMimeTypes.includes(data.mimetype)) {
+      throw new BadRequestException({
+        code: "INVALID_FILE_TYPE",
+        message: "Apenas arquivos .doc/.docx são permitidos para atualização",
+      });
+    }
+
+    const buffer = await data.toBuffer();
+    const MAX_SIZE = 100 * 1024 * 1024;
+    if (buffer.length > MAX_SIZE) {
+      throw new BadRequestException({
+        code: "FILE_TOO_LARGE",
+        message: "Arquivo muito grande. Tamanho máximo: 100MB",
+      });
+    }
+
+    try {
+      await this.storageService.replaceFile(
+        documento.storageKey,
+        buffer,
+        data.mimetype,
+        data.filename || documento.fileName || "documento.docx",
+      );
+
+      await this.planoAulaService.atualizarDocumento(docId, {
+        fileSize: buffer.length,
+        updatedAt: new Date(),
+      });
+
+      return {
+        success: true,
+        message: "Documento atualizado com sucesso",
+      };
+    } catch (error) {
+      this.logger.error(
+        `Erro ao atualizar documento ${docId}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      throw new InternalServerErrorException({
+        code: "UPDATE_FAILED",
+        message: "Erro ao atualizar o arquivo",
+      });
+    }
+  }
+
+  /**
    * GET /plano-aula/:id/documentos/:docId/editor-config
-   * Retorna configuração do OnlyOffice para abrir o editor
+   * Retorna configuração do OnlyOffice para visualização (somente leitura)
    */
   @Get(":id/documentos/:docId/editor-config")
   @Roles(...VISUALIZAR_ACCESS)
@@ -378,12 +484,7 @@ export class PlanoAulaController {
     @Req() req: { user: UserContext },
     @Param("id") planoId: string,
     @Param("docId") docId: string,
-    @Query("mode") mode: string = "view",
   ) {
-    if (mode !== "edit" && mode !== "view" && mode !== "comentar") {
-      throw new BadRequestException("Mode deve ser 'edit', 'comentar' ou 'view'");
-    }
-
     const documento = await this.planoAulaService.getDocumentoById(planoId, docId);
 
     if (!documento.storageKey) {
@@ -395,14 +496,10 @@ export class PlanoAulaController {
       documento.mimeType?.includes("msword");
     if (!isWord) {
       throw new BadRequestException(
-        "Apenas documentos .doc/.docx podem ser abertos no editor",
+        "Apenas documentos .doc/.docx podem ser abertos no visualizador",
       );
     }
 
-    // URL de download direto via API (evita presigned URL que o OnlyOffice não consegue baixar).
-    // O request-filtering-agent interno do OnlyOffice modifica requisições HTTP,
-    // causando erro 400 em presigned URLs tanto no MinIO direto quanto via nginx.
-    // Solução: o OnlyOffice baixa do endpoint da API, que faz proxy do MinIO.
     const apiBaseUrl =
       this.configService.get<string>("NEXT_PUBLIC_API_URL") ||
       "https://www.portalcef.com.br/api";
@@ -412,21 +509,6 @@ export class PlanoAulaController {
       this.configService.get<string>("ONLYOFFICE_PUBLIC_URL") ||
       "https://www.portalcef.com.br/onlyoffice";
     const jwtSecret = this.configService.get<string>("ONLYOFFICE_JWT_SECRET");
-    // Permissões baseadas no modo
-    const permissions: Record<string, boolean> = {
-      edit: mode === "edit",
-      comment: mode === "comentar",
-      download: true,
-      print: true,
-    };
-
-    // OnlyOffice precisa de mode="edit" para comentários funcionarem
-    const editorMode = mode === "view" ? "view" : "edit";
-
-    // callbackUrl inclui modo para rastreamento de comentários
-    const callbackUrl = mode !== "view"
-      ? `${apiBaseUrl}/plano-aula/${planoId}/documentos/${docId}/onlyoffice-callback?mode=${mode}&userId=${req.user.userId}&userRole=${req.user.role}`
-      : undefined;
 
     const config = {
       document: {
@@ -434,16 +516,25 @@ export class PlanoAulaController {
         key: `${docId}-${documento.createdAt ? new Date(documento.createdAt).getTime() : docId}`,
         title: documento.fileName || "Documento",
         url: fileUrl,
-        permissions,
+        permissions: {
+          edit: false,
+          comment: false,
+          download: true,
+          print: true,
+        },
       },
       documentType: "word",
       editorConfig: {
-        mode: editorMode,
+        mode: "view",
         lang: "pt",
-        callbackUrl,
         customization: {
-          autosave: true,
-          forcesave: true,
+          autosave: false,
+          forcesave: false,
+          plugins: false,
+          compactToolbar: true,
+          hideRightMenu: true,
+          hideRulers: true,
+          spellcheck: false,
         },
         user: {
           id: req.user.userId,
@@ -501,138 +592,6 @@ export class PlanoAulaController {
       this.logger.error(`Erro ao baixar documento ${docId}: ${error}`);
       return reply.status(500).send({ error: "Erro ao baixar arquivo" });
     }
-  }
-
-  /**
-   * POST /plano-aula/:id/documentos/:docId/onlyoffice-callback
-   * Recebe callback do OnlyOffice após salvamento (server-to-server, sem sessão)
-   */
-  @Post(":id/documentos/:docId/onlyoffice-callback")
-  @Public() // Sem autenticação de sessão — autenticação via JWT do OnlyOffice
-  @HttpCode(200) // OnlyOffice espera 200, NestJS POST retorna 201 por padrão
-  async onlyofficeCallback(
-    @Req() req: FastifyRequest,
-    @Param("id") planoId: string,
-    @Param("docId") docId: string,
-    @Body() body: { status: number; url?: string; key?: string },
-  ) {
-    // Validar JWT do OnlyOffice no header Authorization
-    const jwtSecret = this.configService.get<string>("ONLYOFFICE_JWT_SECRET");
-    if (jwtSecret) {
-      const authHeader = req.headers.authorization;
-      if (!authHeader) {
-        this.logger.warn("OnlyOffice callback sem header Authorization");
-        return { error: 1 };
-      }
-      try {
-        const jwt = await import("jsonwebtoken");
-        const token = authHeader.replace("Bearer ", "");
-        jwt.default.verify(token, jwtSecret);
-      } catch {
-        this.logger.warn("OnlyOffice callback com JWT inválido");
-        return { error: 1 };
-      }
-    }
-
-    // Status codes do OnlyOffice:
-    // 0 - sem alteração, 1 - editando, 2 - pronto para salvar
-    // 3 - erro, 4 - fechado sem mudanças, 6 - forcesave, 7 - erro forcesave
-    if (body.status === 2 || body.status === 6) {
-      if (!body.url) {
-        this.logger.warn(`OnlyOffice callback sem URL para doc ${docId}`);
-        return { error: 0 };
-      }
-
-      try {
-        const documento = await this.planoAulaService.getDocumentoById(
-          planoId,
-          docId,
-        );
-
-        const response = await fetch(body.url);
-        if (!response.ok) {
-          throw new Error(
-            `Falha ao baixar documento do OnlyOffice: ${response.status}`,
-          );
-        }
-        const buffer = Buffer.from(await response.arrayBuffer());
-
-        await this.storageService.replaceFile(
-          documento.storageKey!,
-          buffer,
-          documento.mimeType ||
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-          documento.fileName || "documento.docx",
-        );
-
-        const precisaReconverter = (MIME_TYPES_QUE_PRECISAM_CONVERTER as readonly string[]).includes(
-          documento.mimeType || "",
-        );
-
-        await this.planoAulaService.atualizarDocumento(docId, {
-          fileSize: buffer.length,
-          updatedAt: new Date(),
-          ...(precisaReconverter && { previewStatus: "PENDENTE" }),
-        });
-
-        // Re-enfileirar conversão para PDF após edição via OnlyOffice
-        // Falha no enfileiramento não bloqueia o callback — o preview ficará PENDENTE.
-        if (precisaReconverter) {
-          try {
-            await this.documentosConversaoQueue.enfileirar({
-              documentoId: docId,
-              planoId,
-              storageKey: documento.storageKey!,
-              mimeType: documento.mimeType || "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-              fileName: documento.fileName || "documento.docx",
-            });
-          } catch (enfileirarError) {
-            this.logger.error(
-              `Falha ao reenfileirar conversão do documento ${docId}: ${enfileirarError instanceof Error ? enfileirarError.message : String(enfileirarError)}`,
-            );
-          }
-        }
-
-        this.logger.log(`Documento ${docId} atualizado via OnlyOffice`);
-
-        // Rastreamento de comentários: se callback veio do modo "comentar",
-        // marcar documento e registrar no histórico
-        const callbackMode = (req.query as Record<string, string>)?.mode;
-        const callbackUserId = (req.query as Record<string, string>)?.userId;
-
-        if (callbackMode === "comentar" && callbackUserId && body.status === 2) {
-          // Registrar apenas no fechamento do editor (status=2), não em cada forcesave (status=6),
-          // para evitar múltiplas entradas de histórico para a mesma sessão de comentários
-          await this.planoAulaService.marcarTemComentarios(docId);
-
-          const callbackUserRole = (req.query as Record<string, string>)?.userRole;
-          const userName = await this.planoAulaService.getUserNameById(callbackUserId);
-          const plano = await this.planoAulaService.getPlanoStatusById(planoId);
-          await this.historicoService.registrar({
-            planoId,
-            userId: callbackUserId,
-            userName,
-            userRole: callbackUserRole || "analista_pedagogico",
-            acao: "COMENTARIO_ADICIONADO",
-            statusAnterior: null,
-            statusNovo: plano?.status || "AGUARDANDO_ANALISTA",
-            detalhes: {
-              documentoId: docId,
-              documentoNome: documento.fileName || "Documento",
-            },
-          });
-
-          this.logger.log(`Comentário rastreado no documento ${docId}`);
-        } else if (callbackMode === "comentar") {
-          // Em forcesave (status=6), apenas marcar o documento sem registrar no histórico
-          await this.planoAulaService.marcarTemComentarios(docId);
-        }
-      } catch (error) {
-        this.logger.error(`Erro ao salvar callback OnlyOffice: ${error}`);
-      }
-    }
-
-    return { error: 0 };
   }
 
   /**

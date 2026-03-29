@@ -1549,14 +1549,16 @@ export class PlanoAulaService {
   }
 
   /**
-   * Atualiza campos de um documento (usado pelo callback do OnlyOffice)
+   * Atualiza campos de um documento
    */
   async atualizarDocumento(
     documentoId: string,
     dados: {
       fileSize?: number;
       updatedAt?: Date;
-      previewStatus?: "PENDENTE" | "PRONTO" | "ERRO" | null;
+      sharepointItemId?: string | null;
+      sharepointEditUrl?: string | null;
+      editandoDesde?: Date | null;
     },
   ) {
     const db = getDb();
@@ -1564,5 +1566,20 @@ export class PlanoAulaService {
       .update(planoDocumento)
       .set(dados)
       .where(eq(planoDocumento.id, documentoId));
+  }
+
+  /**
+   * Busca documento por ID sem necessidade do planoId
+   * Usado pelo webhook do SharePoint
+   */
+  async getDocumentoByIdDireto(documentoId: string) {
+    const db = getDb();
+    const documento = await db.query.planoDocumento.findFirst({
+      where: eq(planoDocumento.id, documentoId),
+    });
+    if (!documento) {
+      throw new NotFoundException("Documento não encontrado");
+    }
+    return documento;
   }
 }
