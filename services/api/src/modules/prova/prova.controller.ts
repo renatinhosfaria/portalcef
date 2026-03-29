@@ -5,7 +5,6 @@ import {
   Controller,
   Delete,
   Get,
-  HttpCode,
   InternalServerErrorException,
   Logger,
   Param,
@@ -22,7 +21,7 @@ import { Public } from "../../common/decorators/public.decorator";
 import { Roles } from "../../common/decorators/roles.decorator";
 import { AuthGuard } from "../../common/guards/auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
-import { DocumentosConversaoQueueService } from "../../common/queues/documentos-conversao.queue";
+import { SharePointService } from "../../common/sharepoint/sharepoint.service";
 import { StorageService } from "../../common/storage/storage.service";
 import {
   type CreateProvaDto,
@@ -95,7 +94,7 @@ export class ProvaController {
     private readonly storageService: StorageService,
     private readonly historicoService: ProvaHistoricoService,
     private readonly configService: ConfigService,
-    private readonly conversaoQueue: DocumentosConversaoQueueService,
+    private readonly sharePointService: SharePointService,
   ) {}
 
   // ============================================
@@ -336,13 +335,6 @@ export class ProvaController {
       // Upload para MinIO
       const uploadResult = await this.storageService.uploadFile(data);
 
-      // Verificar se o documento precisa de conversão para PDF (DOC/DOCX)
-      const isWord =
-        data.mimetype?.includes("word") ||
-        data.mimetype?.includes("msword") ||
-        data.filename?.match(/\.docx?$/i);
-      const previewStatus = isWord ? "PENDENTE" : undefined;
-
       // Salvar documento no banco via service
       const documento = await this.provaService.adicionarDocumentoUpload(
         provaId,
@@ -353,24 +345,8 @@ export class ProvaController {
           fileUrl: uploadResult.url,
           fileSize: buffer.length,
           mimeType: data.mimetype,
-          previewStatus: previewStatus as "PENDENTE" | undefined,
         },
       );
-
-      // Enfileirar conversão DOC/DOCX → PDF para o worker
-      if (isWord && documento.id) {
-        await this.conversaoQueue.enfileirar({
-          documentoId: documento.id,
-          planoId: provaId,
-          storageKey: uploadResult.key,
-          mimeType: data.mimetype,
-          fileName: uploadResult.name,
-          tabela: "prova_documento",
-        });
-        this.logger.log(
-          `Documento ${documento.id} enfileirado para conversão (prova_documento)`,
-        );
-      }
 
       return {
         success: true,
@@ -388,8 +364,147 @@ export class ProvaController {
   }
 
   /**
+   * GET /prova/:id/documentos/:docId/editar-word
+   * Gera URL para edição via Word desktop (SharePoint)
+   */
+  @Get(":id/documentos/:docId/editar-word")
+  @Roles(...PROFESSORA_ACCESS, ...ANALISTA_ACCESS)
+  async editarWord(
+    @Param("id") provaId: string,
+    @Param("docId") docId: string,
+  ) {
+    if (!this.sharePointService.isConfigurado()) {
+      throw new BadRequestException({
+        code: "SHAREPOINT_NOT_CONFIGURED",
+        message: "Edição via Word não está disponível. SharePoint não configurado.",
+      });
+    }
+
+    const documento = await this.provaService.getDocumentoById(provaId, docId);
+
+    if (!documento.storageKey) {
+      throw new BadRequestException("Documento sem arquivo associado");
+    }
+
+    const isWord =
+      documento.mimeType?.includes("word") ||
+      documento.mimeType?.includes("msword") ||
+      documento.fileName?.match(/\.docx?$/i);
+    if (!isWord) {
+      throw new BadRequestException(
+        "Apenas documentos .doc/.docx podem ser editados no Word",
+      );
+    }
+
+    // Upload para SharePoint e criar link de compartilhamento
+    const itemId = await this.sharePointService.uploadParaSharePoint(
+      documento.storageKey,
+      documento.fileName || "documento.docx",
+      docId,
+    );
+
+    const { url } = await this.sharePointService.criarLinkCompartilhamento(itemId);
+
+    // Atualizar documento com dados do SharePoint
+    await this.provaService.atualizarDocumento(docId, {
+      sharepointItemId: itemId,
+      sharepointEditUrl: url,
+      editandoDesde: new Date(),
+    });
+
+    // Gerar URL ms-word: para abrir diretamente no Word desktop
+    const msWordUrl = this.sharePointService.construirMsWordUrl(url);
+
+    return {
+      success: true,
+      data: { url: msWordUrl },
+    };
+  }
+
+  /**
+   * POST /prova/:id/documentos/:docId/atualizar
+   * Re-upload manual de documento (fallback quando ms-word: não funciona)
+   */
+  @Post(":id/documentos/:docId/atualizar")
+  @Roles(...PROFESSORA_ACCESS, ...ANALISTA_ACCESS)
+  async atualizarDocumento(
+    @Param("id") provaId: string,
+    @Param("docId") docId: string,
+    @Req() req: FastifyMultipartRequest,
+  ) {
+    if (!req.isMultipart()) {
+      throw new BadRequestException({
+        code: "INVALID_REQUEST",
+        message: "Request deve ser multipart/form-data",
+      });
+    }
+
+    const documento = await this.provaService.getDocumentoById(provaId, docId);
+
+    if (!documento.storageKey) {
+      throw new BadRequestException("Documento sem arquivo associado");
+    }
+
+    const data = await req.file();
+    if (!data) {
+      throw new BadRequestException({
+        code: "NO_FILE",
+        message: "Nenhum arquivo enviado",
+      });
+    }
+
+    // Validar tipo de arquivo (apenas Word)
+    const wordMimeTypes = [
+      "application/msword",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ];
+    if (!wordMimeTypes.includes(data.mimetype)) {
+      throw new BadRequestException({
+        code: "INVALID_FILE_TYPE",
+        message: "Apenas arquivos .doc/.docx são permitidos para atualização",
+      });
+    }
+
+    const buffer = await data.toBuffer();
+    const MAX_SIZE = 100 * 1024 * 1024;
+    if (buffer.length > MAX_SIZE) {
+      throw new BadRequestException({
+        code: "FILE_TOO_LARGE",
+        message: "Arquivo muito grande. Tamanho máximo: 100MB",
+      });
+    }
+
+    try {
+      await this.storageService.replaceFile(
+        documento.storageKey,
+        buffer,
+        data.mimetype,
+        data.filename || documento.fileName || "documento.docx",
+      );
+
+      await this.provaService.atualizarDocumento(docId, {
+        fileSize: buffer.length,
+        updatedAt: new Date(),
+      });
+
+      return {
+        success: true,
+        message: "Documento atualizado com sucesso",
+      };
+    } catch (error) {
+      this.logger.error(
+        `Erro ao atualizar documento ${docId}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      throw new InternalServerErrorException({
+        code: "UPDATE_FAILED",
+        message: "Erro ao atualizar o arquivo",
+      });
+    }
+  }
+
+  /**
    * GET /prova/:id/documentos/:docId/editor-config
-   * Retorna configuração do OnlyOffice para abrir o editor
+   * Retorna configuração do OnlyOffice para visualização (somente leitura)
    */
   @Get(":id/documentos/:docId/editor-config")
   @Roles(...VISUALIZAR_ACCESS)
@@ -397,14 +512,7 @@ export class ProvaController {
     @Req() req: { user: UserContext },
     @Param("id") provaId: string,
     @Param("docId") docId: string,
-    @Query("mode") mode: string = "view",
   ) {
-    if (mode !== "edit" && mode !== "view" && mode !== "comentar") {
-      throw new BadRequestException(
-        "Mode deve ser 'edit', 'comentar' ou 'view'",
-      );
-    }
-
     const documento = await this.provaService.getDocumentoById(provaId, docId);
 
     if (!documento.storageKey) {
@@ -416,7 +524,7 @@ export class ProvaController {
       documento.mimeType?.includes("msword");
     if (!isWord) {
       throw new BadRequestException(
-        "Apenas documentos .doc/.docx podem ser abertos no editor",
+        "Apenas documentos .doc/.docx podem ser abertos no visualizador",
       );
     }
 
@@ -430,39 +538,31 @@ export class ProvaController {
       "https://www.portalcef.com.br/onlyoffice";
     const jwtSecret = this.configService.get<string>("ONLYOFFICE_JWT_SECRET");
 
-    // Permissões baseadas no modo
-    const permissions: Record<string, boolean> = {
-      edit: mode === "edit",
-      comment: mode === "comentar",
-      download: true,
-      print: true,
-    };
-
-    // OnlyOffice precisa de mode="edit" para comentários funcionarem
-    const editorMode = mode === "view" ? "view" : "edit";
-
-    // callbackUrl inclui modo para rastreamento de comentários
-    const callbackUrl =
-      mode !== "view"
-        ? `${apiBaseUrl}/prova/${provaId}/documentos/${docId}/onlyoffice-callback?mode=${mode}&userId=${req.user.userId}&userRole=${req.user.role}`
-        : undefined;
-
     const config = {
       document: {
         fileType: documento.fileName?.endsWith(".doc") ? "doc" : "docx",
         key: `${docId}-${documento.createdAt ? new Date(documento.createdAt).getTime() : docId}`,
         title: documento.fileName || "Documento",
         url: fileUrl,
-        permissions,
+        permissions: {
+          edit: false,
+          comment: false,
+          download: true,
+          print: true,
+        },
       },
       documentType: "word",
       editorConfig: {
-        mode: editorMode,
+        mode: "view",
         lang: "pt",
-        callbackUrl,
         customization: {
-          autosave: true,
-          forcesave: true,
+          autosave: false,
+          forcesave: false,
+          plugins: false,
+          compactToolbar: true,
+          hideRightMenu: true,
+          hideRulers: true,
+          spellcheck: false,
         },
         user: {
           id: req.user.userId,
@@ -488,7 +588,7 @@ export class ProvaController {
 
   /**
    * GET /prova/:id/documentos/:docId/download
-   * Serve o arquivo diretamente do MinIO para o OnlyOffice Document Server.
+   * Serve o arquivo diretamente do MinIO
    */
   @Get(":id/documentos/:docId/download")
   @Public()
@@ -520,115 +620,6 @@ export class ProvaController {
       this.logger.error(`Erro ao baixar documento ${docId}: ${error}`);
       return reply.status(500).send({ error: "Erro ao baixar arquivo" });
     }
-  }
-
-  /**
-   * POST /prova/:id/documentos/:docId/onlyoffice-callback
-   * Recebe callback do OnlyOffice após salvamento
-   */
-  @Post(":id/documentos/:docId/onlyoffice-callback")
-  @Public()
-  @HttpCode(200)
-  async onlyofficeCallback(
-    @Req() req: FastifyRequest,
-    @Param("id") provaId: string,
-    @Param("docId") docId: string,
-    @Body() body: { status: number; url?: string; key?: string },
-  ) {
-    // Validar JWT do OnlyOffice no header Authorization
-    const jwtSecret = this.configService.get<string>("ONLYOFFICE_JWT_SECRET");
-    if (jwtSecret) {
-      const authHeader = req.headers.authorization;
-      if (!authHeader) {
-        this.logger.warn("OnlyOffice callback sem header Authorization");
-        return { error: 1 };
-      }
-      try {
-        const jwt = await import("jsonwebtoken");
-        const token = authHeader.replace("Bearer ", "");
-        jwt.default.verify(token, jwtSecret);
-      } catch {
-        this.logger.warn("OnlyOffice callback com JWT inválido");
-        return { error: 1 };
-      }
-    }
-
-    if (body.status === 2 || body.status === 6) {
-      if (!body.url) {
-        this.logger.warn(`OnlyOffice callback sem URL para doc ${docId}`);
-        return { error: 0 };
-      }
-
-      try {
-        const documento = await this.provaService.getDocumentoById(
-          provaId,
-          docId,
-        );
-
-        const response = await fetch(body.url);
-        if (!response.ok) {
-          throw new Error(
-            `Falha ao baixar documento do OnlyOffice: ${response.status}`,
-          );
-        }
-        const buffer = Buffer.from(await response.arrayBuffer());
-
-        await this.storageService.replaceFile(
-          documento.storageKey!,
-          buffer,
-          documento.mimeType ||
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-          documento.fileName || "documento.docx",
-        );
-
-        await this.provaService.atualizarDocumento(docId, {
-          fileSize: buffer.length,
-          updatedAt: new Date(),
-        });
-
-        this.logger.log(`Documento ${docId} atualizado via OnlyOffice`);
-
-        // Rastreamento de comentários
-        const callbackMode = (req.query as Record<string, string>)?.mode;
-        const callbackUserId = (req.query as Record<string, string>)?.userId;
-
-        if (
-          callbackMode === "comentar" &&
-          callbackUserId &&
-          body.status === 2
-        ) {
-          await this.provaService.marcarTemComentarios(docId);
-
-          const callbackUserRole = (req.query as Record<string, string>)
-            ?.userRole;
-          const userName =
-            await this.provaService.getUserNameById(callbackUserId);
-          const provaStatus =
-            await this.provaService.getProvaStatusById(provaId);
-          await this.historicoService.registrar({
-            provaId,
-            userId: callbackUserId,
-            userName,
-            userRole: callbackUserRole || "analista_pedagogico",
-            acao: "COMENTARIO_ADICIONADO",
-            statusAnterior: null,
-            statusNovo: provaStatus?.status || "AGUARDANDO_ANALISTA",
-            detalhes: {
-              documentoId: docId,
-              documentoNome: documento.fileName || "Documento",
-            },
-          });
-
-          this.logger.log(`Comentário rastreado no documento ${docId}`);
-        } else if (callbackMode === "comentar") {
-          await this.provaService.marcarTemComentarios(docId);
-        }
-      } catch (error) {
-        this.logger.error(`Erro ao salvar callback OnlyOffice: ${error}`);
-      }
-    }
-
-    return { error: 0 };
   }
 
   /**

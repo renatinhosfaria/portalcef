@@ -1139,17 +1139,38 @@ export class ProvaService {
   }
 
   /**
-   * Atualiza campos de um documento (usado pelo callback do OnlyOffice)
+   * Atualiza campos de um documento
    */
   async atualizarDocumento(
     documentoId: string,
-    dados: { fileSize?: number; updatedAt?: Date },
+    dados: {
+      fileSize?: number;
+      updatedAt?: Date;
+      sharepointItemId?: string | null;
+      sharepointEditUrl?: string | null;
+      editandoDesde?: Date | null;
+    },
   ) {
     const db = getDb();
     await db
       .update(provaDocumento)
       .set(dados)
       .where(eq(provaDocumento.id, documentoId));
+  }
+
+  /**
+   * Busca documento por ID sem necessidade do provaId
+   * Usado pelo webhook do SharePoint
+   */
+  async getDocumentoByIdDireto(documentoId: string) {
+    const db = getDb();
+    const documento = await db.query.provaDocumento.findFirst({
+      where: eq(provaDocumento.id, documentoId),
+    });
+    if (!documento) {
+      throw new NotFoundException("Documento não encontrado");
+    }
+    return documento;
   }
 
   /**
