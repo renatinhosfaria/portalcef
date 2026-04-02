@@ -16,6 +16,7 @@ import {
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { FastifyReply, FastifyRequest } from "fastify";
+import * as jwt from "jsonwebtoken";
 
 import { Public } from "../../common/decorators/public.decorator";
 import { Roles } from "../../common/decorators/roles.decorator";
@@ -367,6 +368,7 @@ export class ProvaController {
    * GET /prova/:id/documentos/:docId/editar-word
    * Gera URL para edição via Word desktop (SharePoint)
    */
+  // Nota: lógica espelhada em PlanoAulaController.editarWord — manter sincronizados
   @Get(":id/documentos/:docId/editar-word")
   @Roles(...PROFESSORA_ACCESS, ...ANALISTA_ACCESS)
   async editarWord(
@@ -470,6 +472,19 @@ export class ProvaController {
       throw new BadRequestException({
         code: "INVALID_REQUEST",
         message: "Request deve ser multipart/form-data",
+      });
+    }
+
+    const user = req.user;
+    const provaResult = await this.provaService.getProvaById(user, provaId);
+    const isOwner = provaResult.user.id === user.userId;
+    const isAnalistaUser = ANALISTA_ROLES.includes(
+      user.role as (typeof ANALISTA_ROLES)[number],
+    );
+    if (!isOwner && !isAnalistaUser) {
+      throw new BadRequestException({
+        code: "NOT_AUTHORIZED",
+        message: "Você não tem permissão para atualizar documentos desta prova",
       });
     }
 
@@ -607,8 +622,7 @@ export class ProvaController {
 
     let token: string | undefined;
     if (jwtSecret) {
-      const jwt = await import("jsonwebtoken");
-      token = jwt.default.sign(config, jwtSecret);
+      token = jwt.sign(config, jwtSecret);
     }
 
     return {

@@ -263,7 +263,7 @@ Shop (CEF Shop):
 
 ### plano_documento
 
-**Documentos anexados aos planos de aula (sistema atual). Suporta arquivos e links do YouTube, com conversao automatica para PDF preview.**
+**Documentos anexados aos planos de aula (sistema atual). Suporta arquivos e links do YouTube, com edicao via Word desktop (SharePoint).**
 
 | Coluna | Tipo | Descricao |
 | ------ | ---- | --------- |
@@ -275,11 +275,9 @@ Shop (CEF Shop):
 | `file_name` | varchar(255) | Nome original do arquivo |
 | `file_size` | integer | Tamanho em bytes |
 | `mime_type` | varchar(100) | Tipo MIME |
-| `preview_key` | varchar(500) | Key do PDF convertido no storage |
-| `preview_url` | varchar(1000) | URL publica do preview |
-| `preview_mime_type` | varchar(100) | Tipo MIME do preview |
-| `preview_status` | text | Enum: PENDENTE, PRONTO, ERRO |
-| `preview_error` | text | Mensagem de erro |
+| `sharepoint_item_id` | varchar(500) | ID do item no SharePoint (temporario, durante edicao) |
+| `sharepoint_edit_url` | varchar(1000) | URL de edicao no SharePoint (temporario) |
+| `editando_desde` | timestamptz | Inicio da sessao de edicao (temporario) |
 | `approved_by` | uuid | FK -> users.id (analista que aprovou) |
 | `approved_at` | timestamptz | Data da aprovacao |
 | `printed_by` | uuid | FK -> users.id (quem imprimiu) |
@@ -475,7 +473,6 @@ stateDiagram-v2
 ### planejamento enums (novos)
 
 - `documentoTipoEnum`: `ARQUIVO`, `LINK_YOUTUBE`
-- `documentoPreviewStatusEnum`: `PENDENTE`, `PRONTO`, `ERRO`
 - `planoAulaHistoricoAcaoEnum`: `CRIADO`, `SUBMETIDO`, `APROVADO_ANALISTA`, `DEVOLVIDO_ANALISTA`, `APROVADO_COORDENADORA`, `DEVOLVIDO_COORDENADORA`, `DOCUMENTO_IMPRESSO`
 
 ### tarefas enums

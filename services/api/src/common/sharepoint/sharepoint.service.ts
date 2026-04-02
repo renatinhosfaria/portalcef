@@ -201,7 +201,7 @@ export class SharePointService {
     const response = await client.api("/subscriptions").post({
       changeType: "updated",
       notificationUrl: callbackUrl,
-      resource: `/sites/${this.siteId}/drives/${this.driveId}/root/children`,
+      resource: `/sites/${this.siteId}/drives/${this.driveId}/root:/edicao-temporaria:/children`,
       expirationDateTime: expiracao.toISOString(),
       clientState: "essencia-portal-webhook",
     });

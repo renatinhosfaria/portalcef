@@ -6,7 +6,7 @@
 # Uso:
 #   docker buildx bake                    # Build todas as imagens
 #   docker buildx bake apps               # Build apenas apps Next.js
-#   docker buildx bake api worker         # Build específicos
+#   docker buildx bake api                # Build específicos
 #   docker buildx bake --push             # Build e push para registry
 #
 # Com cache remoto:

@@ -11,6 +11,7 @@ import { FastifyReply } from "fastify";
 import {
   getDb,
   eq,
+  and,
   planoDocumento,
   provaDocumento,
 } from "@essencia/db";
@@ -182,6 +183,7 @@ export class SharePointWebhookController {
       );
 
       // Atualizar registro e limpar campos do SharePoint
+      // Usa WHERE com sharepointItemId para evitar race condition com o cron de limpeza
       const dadosAtualizacao = {
         fileSize: buffer.length,
         updatedAt: new Date(),
@@ -194,12 +196,22 @@ export class SharePointWebhookController {
         await db
           .update(planoDocumento)
           .set(dadosAtualizacao)
-          .where(eq(planoDocumento.id, documentoId));
+          .where(
+            and(
+              eq(planoDocumento.id, documentoId),
+              eq(planoDocumento.sharepointItemId, documento.sharepointItemId),
+            ),
+          );
       } else {
         await db
           .update(provaDocumento)
           .set(dadosAtualizacao)
-          .where(eq(provaDocumento.id, documentoId));
+          .where(
+            and(
+              eq(provaDocumento.id, documentoId),
+              eq(provaDocumento.sharepointItemId, documento.sharepointItemId),
+            ),
+          );
       }
 
       // Remover arquivo temporário do SharePoint

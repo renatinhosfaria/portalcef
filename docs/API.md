@@ -467,9 +467,7 @@ Upload de arquivo para o plano (multipart/form-data).
 
 Acesso: Professora, Analista.
 
-Tipos aceitos: PDF, DOC, DOCX, PNG, JPG. Tamanho maximo: 10MB.
-
-DOC/DOCX sao enfileirados para conversao assincrona via BullMQ (previewStatus: PENDENTE → PRONTO | ERRO).
+Tipos aceitos: PDF, DOC, DOCX, PNG, JPG. Tamanho maximo: 100MB.
 
 ---
 
@@ -1225,60 +1223,44 @@ curl http://localhost:3001/api/plano-aula/uuid-plano/historico \
 
 ---
 
-## Preview de Documentos
+## Edicao de Documentos via Word Desktop (SharePoint)
 
-Sistema de conversão assíncrona de DOC/DOCX para PDF usando BullMQ.
+Sistema de edicao de documentos DOC/DOCX via Microsoft Word desktop, usando SharePoint como intermediario.
 
-### Campos de Preview em PlanoDocumento
+### Fluxo
 
-Quando um documento DOC ou DOCX é enviado via `POST /api/plano-aula/:id/documentos/upload`, o sistema:
+1. Usuario solicita edicao via `GET /plano-aula/:id/documentos/:docId/editar-word`
+2. API copia arquivo do MinIO para SharePoint (pasta `edicao-temporaria`)
+3. Cria link de compartilhamento anonimo com expiracao de 2h
+4. Retorna URL `ms-word:ofe|u|...` que abre diretamente no Word desktop
+5. Webhook do Microsoft Graph (`POST /webhooks/graph`) sincroniza alteracoes de volta ao MinIO
+6. Campos temporarios (`sharepointItemId`, `sharepointEditUrl`, `editandoDesde`) sao limpos apos sincronizacao
 
-1. Marca o documento com `previewStatus: "PENDENTE"`
-2. Enfileira job de conversão no BullMQ
-3. Worker processa conversão em background
-4. Atualiza documento com resultado
+### Endpoints de Edicao
 
-**Campos Adicionais:**
+#### GET `/plano-aula/:id/documentos/:docId/editar-word`
 
-| Campo | Tipo | Descrição |
-|-------|------|-----------|
-| `previewKey` | string | Chave do PDF convertido no storage |
-| `previewUrl` | string | URL pública do preview |
-| `previewMimeType` | string | Tipo MIME do preview (application/pdf) |
-| `previewStatus` | enum | Status da conversão: PENDENTE, PRONTO, ERRO |
-| `previewError` | string | Mensagem de erro (se houver) |
+Gera URL para edicao via Word desktop (SharePoint). Apenas DOC/DOCX.
 
-**Exemplo de Resposta com Preview:**
+Acesso: Professora (owner), Analista.
 
-```json
-{
-  "id": "uuid-doc",
-  "planoId": "uuid-plano",
-  "tipo": "ARQUIVO",
-  "fileName": "plano-aula.docx",
-  "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "url": "https://cdn/plano-aula.docx",
-  "previewStatus": "PRONTO",
-  "previewUrl": "https://cdn/preview-uuid.pdf",
-  "previewMimeType": "application/pdf",
-  "previewKey": "previews/uuid.pdf",
-  "previewError": null,
-  "createdAt": "2026-01-23T10:00:00.000Z"
-}
-```
+#### POST `/plano-aula/:id/documentos/:docId/atualizar`
 
-**Status de Conversão:**
+Re-upload manual de documento (fallback quando ms-word: nao funciona). Multipart/form-data.
 
-- **PENDENTE**: Documento na fila, aguardando conversão
-- **PRONTO**: Conversão concluída, preview disponível em `previewUrl`
-- **ERRO**: Falha na conversão, mensagem em `previewError`
+Acesso: Professora (owner), Analista.
 
-**Notas:**
+#### GET `/plano-aula/:id/documentos/:docId/editor-config`
 
-- Apenas DOC e DOCX são convertidos
-- PDF e imagens não possuem `previewStatus` (exibidos diretamente)
-- Worker processa até 2 conversões simultâneas
-- Tentativas: 3x com backoff exponencial
+Retorna configuracao do OnlyOffice para visualizacao somente leitura.
+
+Acesso: Todas as roles do workflow.
+
+#### POST `/webhooks/graph`
+
+Endpoint publico (server-to-server) para notificacoes do Microsoft Graph. Recebe alteracoes de arquivos no SharePoint e sincroniza com MinIO.
+
+**Nota:** Os mesmos endpoints existem para o modulo de provas (`/prova/:id/documentos/:docId/editar-word`, etc).
 
 ---
 
