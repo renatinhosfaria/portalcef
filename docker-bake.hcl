@@ -61,7 +61,7 @@ group "apps" {
 
 # Apenas serviços backend
 group "services" {
-  targets = ["api", "worker"]
+  targets = ["api"]
 }
 
 # Infra para desenvolvimento
@@ -249,16 +249,6 @@ target "api" {
     "${REGISTRY}/api:${TAG}",
     "${REGISTRY}/api:latest",
     "essencia-api:latest"
-  ]
-}
-
-target "worker" {
-  inherits   = ["_common"]
-  dockerfile = "docker/Dockerfile.worker"
-  tags = [
-    "${REGISTRY}/worker:${TAG}",
-    "${REGISTRY}/worker:latest",
-    "essencia-worker:latest"
   ]
 }
 
