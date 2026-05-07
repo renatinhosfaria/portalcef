@@ -52,8 +52,12 @@ Arquivo afetado: `packages/db/src/schema/plano-aula-historico.ts:18-30`.
 
 ### Migration
 
+A coluna `status` em `plano_aula` e a coluna `acao` em `plano_aula_historico` são `TEXT` no banco com **CHECK constraint** (não `pg_enum` types) — vide migrations 0011 e 0022. A constraint UNIQUE em `plano_aula` é um índice único nomeado `plano_aula_user_turma_quinzena_unique` (vide 0010_regular_chameleon.sql:58).
+
 ```sql
--- 1. Verificação prévia: abortar se já existirem duplicatas em (turmaId, quinzenaId)
+-- Migration: <NUMERO>_continuidade_plano_aula_troca_professora.sql
+
+-- 1. Verificação prévia: abortar se já existirem duplicatas em (turma_id, quinzena_id)
 DO $$
 DECLARE
   duplicate_count INT;
@@ -67,35 +71,56 @@ BEGIN
   ) AS duplicates;
 
   IF duplicate_count > 0 THEN
-    RAISE EXCEPTION 'Existem % grupos duplicados em (turmaId, quinzenaId). Resolva manualmente antes de prosseguir.', duplicate_count;
+    RAISE EXCEPTION 'Existem % grupos duplicados em (turma_id, quinzena_id). Resolva manualmente antes de prosseguir.', duplicate_count;
   END IF;
 END $$;
 
--- 2. Substituir constraint UNIQUE
-ALTER TABLE plano_aula DROP CONSTRAINT plano_aula_user_turma_quinzena_unique;
-ALTER TABLE plano_aula ADD CONSTRAINT plano_aula_turma_quinzena_unique UNIQUE (turma_id, quinzena_id);
+-- 2. Substituir índice único
+DROP INDEX "plano_aula_user_turma_quinzena_unique";
+CREATE UNIQUE INDEX "plano_aula_turma_quinzena_unique" ON "plano_aula" USING btree ("turma_id","quinzena_id");
 
--- 3. Adicionar valor ao enum
-ALTER TYPE plano_aula_historico_acao_enum ADD VALUE 'TRANSFERIDO';
+-- 3. Atualizar CHECK constraint do histórico para incluir TRANSFERIDO
+ALTER TABLE "plano_aula_historico" DROP CONSTRAINT "chk_plano_historico_acao";
+ALTER TABLE "plano_aula_historico" ADD CONSTRAINT "chk_plano_historico_acao" CHECK ("acao" IN (
+  'CRIADO',
+  'SUBMETIDO',
+  'APROVADO_ANALISTA',
+  'DEVOLVIDO_ANALISTA',
+  'APROVADO_COORDENADORA',
+  'DEVOLVIDO_COORDENADORA',
+  'DOCUMENTO_IMPRESSO',
+  'RECUPERADO',
+  'COMENTARIO_ADICIONADO',
+  'TRANSFERIDO'
+));
 ```
 
-A migration deve ser gerada via `pnpm db:generate` após editar os schemas Drizzle, e revisada antes de aplicar. O bloco `DO $$ ... $$` de verificação pode ser adicionado manualmente ao SQL gerado.
+A migration é manual (não gerada via `pnpm db:generate`) — o padrão do projeto coloca `chk_*` constraints e índices únicos manualmente, conforme migration `0022_update_historico_acao_constraint.sql`.
+
+O schema TS dos pacotes Drizzle também precisa ser atualizado para refletir o novo valor do enum (`planoAulaHistoricoAcaoEnum`) e o nome do índice único (`plano_aula_turma_quinzena_unique` ao invés de `plano_aula_user_turma_quinzena_unique`). Sem essas mudanças, drizzle-zod e queries com tipagem ficam inconsistentes.
 
 ## Fluxo da Transferência
 
-### 1. `TurmasService.update`
+### 1. `TurmasService.assignProfessora`
 
-Local: `services/api/src/modules/turmas/turmas.service.ts:159-210`.
+Local: `services/api/src/modules/turmas/turmas.service.ts:256-305`.
 
-Hoje o método compara campos antes de atualizar e roda um único `UPDATE`. A mudança:
+`TurmasService.update` (linha 159) **não modifica `professoraId`** — esse campo é gerenciado por endpoints dedicados (`assignProfessora`, `removeProfessora`). O ponto de interceptação correto é `assignProfessora`, que é chamado tanto na atribuição inicial quanto na troca de titular (sobrescreve sem checar valor anterior).
 
-1. Busca turma atual (linha 163, já existe).
-2. Se `dto.professoraId` está presente, é diferente do valor atual e o novo valor não é null:
+Mudanças no método (mantém validações atuais de unitId/stageId/role):
+
+1. Busca turma atual (linha 263, já existe).
+2. Captura `professoraAnteriorId = turma.professoraId`.
+3. Se `professoraAnteriorId !== null && professoraAnteriorId !== professoraId` (é uma troca real, não primeira atribuição):
    - Abre `db.transaction(async (tx) => { ... })`.
    - Dentro da transação:
-     - `UPDATE turmas SET professoraId = nova ...` (já é o comportamento atual, só passa a usar `tx` ao invés de `db`).
-     - Chama `planoAulaService.transferirPlanosPendentes(tx, turmaId, professoraAnteriorId, novaProfessoraId, atorSession)`.
-3. Se `professoraId` não está mudando, o caminho permanece o atual (sem transação extra). Não há regressão de performance para edições que não envolvam troca de titular.
+     - `UPDATE turmas SET professoraId = nova` (comportamento atual, só passa a usar `tx`).
+     - Chama `planoAulaService.transferirPlanosPendentes(tx, turmaId, professoraAnteriorId, professoraId, atorSession)`.
+4. Se for atribuição inicial (`professoraAnteriorId === null`) ou mesma professora, o caminho permanece o atual (sem transação extra). Atribuição inicial não precisa transferir porque não há planos prévios — `userId` é NOT NULL na tabela.
+
+`TurmasService.removeProfessora` (linha 311) **não dispara transferência** — ao remover (sem nova substituição), planos pendentes ficam com a professora anterior. Eles serão transferidos quando uma nova professora for atribuída via `assignProfessora`.
+
+Para receber o `atorSession`, a assinatura de `assignProfessora` muda para aceitar um terceiro parâmetro `ator: UserContext`. O controller (`turmas.controller.ts`) passa `req.user`. Esse refactor é necessário porque o histórico precisa registrar quem disparou a troca.
 
 ### 2. `PlanoAulaService.transferirPlanosPendentes` (novo método)
 
@@ -152,12 +177,16 @@ Pequeno ajuste recomendado, não bloqueante para a entrega:
 
 ### Unitários (vitest + mocks Drizzle, padrão do projeto)
 
-`TurmasService`:
-- Detecta mudança de `professoraId` e chama `planoAulaService.transferirPlanosPendentes` com argumentos corretos, dentro de transação.
-- NÃO chama `transferirPlanosPendentes` quando `professoraId` está ausente do DTO.
-- NÃO chama `transferirPlanosPendentes` quando `professoraId` é igual ao valor atual.
-- NÃO chama `transferirPlanosPendentes` quando `professoraId` novo é null.
-- Atomicidade da transação (UPDATE turma + transferência ou nada) é garantida pelo uso de `db.transaction` — coberta por teste de integração se houver suite, ou por inspeção de código no PR review (não viável testar via mocks unitários do padrão atual).
+`TurmasService.assignProfessora`:
+- Quando turma já tinha professora anterior diferente da nova, chama `planoAulaService.transferirPlanosPendentes` com argumentos corretos, dentro de transação.
+- NÃO chama `transferirPlanosPendentes` quando turma não tinha professora anterior (atribuição inicial).
+- NÃO chama `transferirPlanosPendentes` quando a professora atribuída é a mesma já presente.
+- Mantém validações atuais (unitId, stageId, role).
+
+`TurmasService.removeProfessora`:
+- NÃO dispara transferência (planos pendentes permanecem com a professora removida).
+
+Atomicidade da transação (UPDATE turma + transferência ou nada) é garantida pelo uso de `db.transaction` — coberta por teste de integração se houver suite, ou por inspeção de código no PR review (não viável testar via mocks unitários do padrão atual).
 
 `PlanoAulaService.transferirPlanosPendentes`:
 - Filtra apenas planos com status ≠ APROVADO.
@@ -168,7 +197,7 @@ Pequeno ajuste recomendado, não bloqueante para a entrega:
 
 ### Integração (se houver suite e2e da API)
 
-- `PUT /turmas/:id` mudando `professoraId` resulta em:
+- `PUT /turmas/:id/professora` (endpoint que aciona `assignProfessora`) com nova professora em turma que já tinha titular resulta em:
   - Planos com status ≠ APROVADO da turma têm novo `userId`.
   - Planos APROVADOS permanecem com `userId` original.
   - Existe linha `TRANSFERIDO` em `plano_aula_historico` para cada plano transferido.
@@ -187,7 +216,8 @@ Pequeno ajuste recomendado, não bloqueante para a entrega:
 - `packages/db/src/schema/plano-aula.ts` — constraint UNIQUE
 - `packages/db/src/schema/plano-aula-historico.ts` — enum
 - `packages/db/migrations/<nova>.sql` — migration manual com bloco de verificação
-- `services/api/src/modules/turmas/turmas.service.ts` — detecção de mudança e abertura de transação
+- `services/api/src/modules/turmas/turmas.service.ts` — `assignProfessora` recebe ator, detecta troca real e abre transação
+- `services/api/src/modules/turmas/turmas.controller.ts` — passa `req.user` para `assignProfessora`
 - `services/api/src/modules/plano-aula/plano-aula.service.ts` — novo método `transferirPlanosPendentes`
 - `services/api/src/modules/plano-aula/plano-aula.module.ts` — exportar service para uso pelo `TurmasModule`
 - `services/api/src/modules/turmas/turmas.module.ts` — importar `PlanoAulaModule`
