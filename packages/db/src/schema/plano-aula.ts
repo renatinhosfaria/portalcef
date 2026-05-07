@@ -89,9 +89,9 @@ export const planoAula = pgTable(
     unitIdIdx: index("plano_aula_unit_id_idx").on(table.unitId),
     userIdx: index("plano_aula_user_idx").on(table.userId),
     periodoIdx: index("plano_aula_periodo_id_idx").on(table.planoAulaPeriodoId),
-    // Constraint: um professor não pode ter 2 planos para mesma turma/quinzena
-    uniquePlanoIdx: uniqueIndex("plano_aula_user_turma_quinzena_unique").on(
-      table.userId,
+    // Constraint: uma turma tem apenas um plano por quinzena
+    // (independente de qual professora é responsável)
+    uniquePlanoIdx: uniqueIndex("plano_aula_turma_quinzena_unique").on(
       table.turmaId,
       table.quinzenaId,
     ),
@@ -129,6 +129,10 @@ export const planoDocumento = pgTable(
     sharepointItemId: text("sharepoint_item_id"), // ID do arquivo no SharePoint
     sharepointEditUrl: text("sharepoint_edit_url"), // URL de edição gerada
     editandoDesde: timestamp("editando_desde", { withTimezone: true }), // Quando a edição foi iniciada
+
+    // PDF derivado para impressão (gerado no momento da aprovação)
+    pdfStorageKey: varchar("pdf_storage_key", { length: 500 }),
+    pdfUrl: varchar("pdf_url", { length: 1000 }),
 
     // Aprovação pelo Analista Pedagógico
     approvedBy: uuid("approved_by").references(() => users.id, {
