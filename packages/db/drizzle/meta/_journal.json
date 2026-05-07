@@ -204,13 +204,6 @@
       "when": 1778414400000,
       "tag": "0028_historico_acao_transferido",
       "breakpoints": true
-    },
-    {
-      "idx": 29,
-      "version": "7",
-      "when": 1778414460000,
-      "tag": "0029_plano_aula_unique_turma_quinzena",
-      "breakpoints": true
     }
   ]
 }
