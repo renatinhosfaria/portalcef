@@ -26,10 +26,10 @@ const mockDb = {
 
 jest.mock("@essencia/db", () => ({
   getDb: jest.fn(() => mockDb),
-  and: jest.fn(),
+  and: jest.fn((...args: unknown[]) => ({ __and: args })),
   asc: jest.fn(),
-  eq: jest.fn(),
-  isNull: jest.fn(),
+  eq: jest.fn((col: unknown, val: unknown) => ({ __eq: [col, val] })),
+  isNull: jest.fn((col: unknown) => ({ __isNull: col })),
   sql: jest.fn(),
 }));
 
@@ -265,5 +265,44 @@ describe("UsersService — reativar", () => {
     await expect((service as any).reativar("prof-1", ator)).rejects.toBeInstanceOf(
       ConflictException,
     );
+  });
+});
+
+describe("UsersService — findAllByTenant filtro de inativos", () => {
+  let service: UsersService;
+  const sessionServiceMock = { deleteAllUserSessions: jest.fn() };
+
+  const atorMaster = {
+    userId: "master-1",
+    role: "master",
+    schoolId: null,
+    unitId: null,
+    stageId: null,
+  };
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        UsersService,
+        { provide: SessionService, useValue: sessionServiceMock },
+      ],
+    }).compile();
+    service = module.get<UsersService>(UsersService);
+    mockDb.query.users.findMany = jest.fn().mockResolvedValue([]);
+    jest.clearAllMocks();
+  });
+
+  it("default (incluirInativos=false) aplica where com isNull", async () => {
+    await service.findAllByTenant(atorMaster);
+
+    const call = mockDb.query.users.findMany.mock.calls[0][0];
+    expect(call.where).toBeDefined();
+  });
+
+  it("incluirInativos=true não filtra (where = undefined)", async () => {
+    await service.findAllByTenant(atorMaster, true);
+
+    const call = mockDb.query.users.findMany.mock.calls[0][0];
+    expect(call.where).toBeUndefined();
   });
 });

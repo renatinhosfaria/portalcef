@@ -39,6 +39,7 @@ export class UsersService {
    */
   async findAllByTenant(
     currentUser: CurrentUser,
+    incluirInativos: boolean = false,
   ): Promise<Omit<User, "passwordHash">[]> {
     const db = getDb();
 
@@ -50,6 +51,8 @@ export class UsersService {
       schoolId: true,
       unitId: true,
       stageId: true,
+      inativadoEm: true,
+      inativadoPor: true,
       createdAt: true,
       updatedAt: true,
     } as const;
@@ -63,24 +66,29 @@ export class UsersService {
     if (currentUser.role === "master") {
       users = await db.query.users.findMany({
         columns,
+        where: incluirInativos ? undefined : isNull(usersTable.inativadoEm),
         orderBy: [asc(usersTable.name)],
       });
     }
     // Diretora geral sees all users in their school
     else if (currentUser.role === "diretora_geral" && currentUser.schoolId) {
+      const conds = [eq(usersTable.schoolId, currentUser.schoolId!)];
+      if (!incluirInativos) conds.push(isNull(usersTable.inativadoEm));
       users = await db.query.users.findMany({
-        where: eq(usersTable.schoolId, currentUser.schoolId!),
+        where: and(...conds),
         columns,
         orderBy: [asc(usersTable.name)],
       });
     }
     // Other roles see only users in their unit
     else if (currentUser.schoolId && currentUser.unitId) {
+      const conds = [
+        eq(usersTable.schoolId, currentUser.schoolId!),
+        eq(usersTable.unitId, currentUser.unitId!),
+      ];
+      if (!incluirInativos) conds.push(isNull(usersTable.inativadoEm));
       users = await db.query.users.findMany({
-        where: and(
-          eq(usersTable.schoolId, currentUser.schoolId!),
-          eq(usersTable.unitId, currentUser.unitId!),
-        ),
+        where: and(...conds),
         columns,
         orderBy: [asc(usersTable.name)],
       });
@@ -114,6 +122,8 @@ export class UsersService {
         schoolId: true,
         unitId: true,
         stageId: true,
+        inativadoEm: true,
+        inativadoPor: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -173,6 +183,8 @@ export class UsersService {
       schoolId: usersTable.schoolId,
       unitId: usersTable.unitId,
       stageId: usersTable.stageId,
+      inativadoEm: usersTable.inativadoEm,
+      inativadoPor: usersTable.inativadoPor,
       createdAt: usersTable.createdAt,
       updatedAt: usersTable.updatedAt,
     });
@@ -240,6 +252,8 @@ export class UsersService {
         schoolId: usersTable.schoolId,
         unitId: usersTable.unitId,
         stageId: usersTable.stageId,
+        inativadoEm: usersTable.inativadoEm,
+        inativadoPor: usersTable.inativadoPor,
         createdAt: usersTable.createdAt,
         updatedAt: usersTable.updatedAt,
       });

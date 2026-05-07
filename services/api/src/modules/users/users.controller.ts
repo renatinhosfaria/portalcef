@@ -11,6 +11,7 @@ import {
   Param,
   Post,
   Put,
+  Query,
   UseGuards,
 } from "@nestjs/common";
 
@@ -57,8 +58,10 @@ export class UsersController {
       unitId: string;
       stageId: string | null;
     },
+    @Query("inativos") inativos?: string,
   ) {
-    const users = await this.usersService.findAllByTenant(currentUser);
+    const incluirInativos = inativos === "true";
+    const users = await this.usersService.findAllByTenant(currentUser, incluirInativos);
 
     // Batch fetch schools and units to resolve names
     const schoolIds = Array.from(
@@ -430,6 +433,48 @@ export class UsersController {
     return {
       success: true,
       data: null,
+    };
+  }
+
+  @Put(":id/inativar")
+  @Roles("master", "diretora_geral", "gerente_unidade", "gerente_financeiro")
+  @HttpCode(HttpStatus.OK)
+  async inativar(
+    @Param("id") id: string,
+    @CurrentUser()
+    currentUser: {
+      userId: string;
+      role: string;
+      schoolId: string;
+      unitId: string;
+      stageId: string | null;
+    },
+  ) {
+    const user = await this.usersService.inativar(id, currentUser);
+    return {
+      success: true,
+      data: user,
+    };
+  }
+
+  @Put(":id/reativar")
+  @Roles("master", "diretora_geral", "gerente_unidade", "gerente_financeiro")
+  @HttpCode(HttpStatus.OK)
+  async reativar(
+    @Param("id") id: string,
+    @CurrentUser()
+    currentUser: {
+      userId: string;
+      role: string;
+      schoolId: string;
+      unitId: string;
+      stageId: string | null;
+    },
+  ) {
+    const user = await this.usersService.reativar(id, currentUser);
+    return {
+      success: true,
+      data: user,
     };
   }
 }
