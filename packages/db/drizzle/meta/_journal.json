@@ -204,6 +204,13 @@
       "when": 1778414400000,
       "tag": "0028_historico_acao_transferido",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1778500800000,
+      "tag": "0029_users_inativacao",
+      "breakpoints": true
     }
   ]
 }
