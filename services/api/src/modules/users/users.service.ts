@@ -1,5 +1,6 @@
-import { and, asc, eq, getDb, sql } from "@essencia/db";
+import { and, asc, eq, getDb, isNull, sql } from "@essencia/db";
 import {
+  turmas as turmasTable,
   users as usersTable,
   type NewUser,
   type User,
@@ -10,10 +11,13 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  UnprocessableEntityException,
 } from "@nestjs/common";
 import * as bcrypt from "bcrypt";
 import { ROLE_HIERARCHY, canManageRole } from "@essencia/shared/roles";
 import { stageRequiredRoles } from "@essencia/shared/types";
+
+import { SessionService } from "../auth/session.service";
 
 interface CurrentUser {
   userId: string;
@@ -25,6 +29,8 @@ interface CurrentUser {
 
 @Injectable()
 export class UsersService {
+  constructor(private readonly sessionService: SessionService) {}
+
   /**
    * Find all users within tenant scope
    * Master: sees all users (global access)
@@ -258,5 +264,96 @@ export class UsersService {
     }
 
     await db.delete(usersTable).where(sql`${usersTable.id} = ${id}`);
+  }
+
+  /**
+   * Inativa um usuário (soft-delete temporal).
+   *
+   * Validações na ordem:
+   * 1. Não pode inativar a si mesmo
+   * 2. Hierarquia (canManageRole)
+   * 3. Não pode inativar quem já está inativo
+   * 4. Se professora: não pode inativar enquanto for titular de alguma turma
+   *
+   * Após inativar, revoga todas as sessões ativas do usuário no Redis.
+   *
+   * @returns Usuário atualizado (sem passwordHash)
+   */
+  async inativar(
+    targetId: string,
+    currentUser: CurrentUser,
+  ): Promise<Omit<User, "passwordHash">> {
+    const db = getDb();
+
+    if (targetId === currentUser.userId) {
+      throw new ForbiddenException({
+        code: "AUTO_INATIVACAO",
+        message: "Você não pode inativar a si mesmo",
+      });
+    }
+
+    const target = await db.query.users.findFirst({
+      where: eq(usersTable.id, targetId),
+    });
+
+    if (!target) {
+      throw new NotFoundException("Usuario nao encontrado");
+    }
+
+    if (!canManageRole(currentUser.role, target.role)) {
+      throw new ForbiddenException({
+        code: "ROLE_HIERARCHY_VIOLATION",
+        message: `Você não pode inativar usuário com role ${target.role}`,
+      });
+    }
+
+    if (target.inativadoEm !== null) {
+      throw new ConflictException({
+        code: "JA_INATIVO",
+        message: `Usuário já está inativo desde ${target.inativadoEm.toISOString()}`,
+      });
+    }
+
+    if (target.role === "professora") {
+      const turmasVinculadas = await db.query.turmas.findMany({
+        where: eq(turmasTable.professoraId, targetId),
+        columns: { id: true, name: true, code: true },
+      });
+
+      if (turmasVinculadas.length > 0) {
+        throw new UnprocessableEntityException({
+          code: "USUARIO_TEM_VINCULOS_ATIVOS",
+          message:
+            "Não é possível inativar: a professora é titular das turmas listadas. Atribua outra professora ou remova a titularidade antes.",
+          turmas: turmasVinculadas,
+        });
+      }
+    }
+
+    const [updated] = await db
+      .update(usersTable)
+      .set({
+        inativadoEm: new Date(),
+        inativadoPor: currentUser.userId,
+        updatedAt: new Date(),
+      })
+      .where(eq(usersTable.id, targetId))
+      .returning({
+        id: usersTable.id,
+        email: usersTable.email,
+        name: usersTable.name,
+        role: usersTable.role,
+        schoolId: usersTable.schoolId,
+        unitId: usersTable.unitId,
+        stageId: usersTable.stageId,
+        inativadoEm: usersTable.inativadoEm,
+        inativadoPor: usersTable.inativadoPor,
+        createdAt: usersTable.createdAt,
+        updatedAt: usersTable.updatedAt,
+      });
+
+    await this.sessionService.deleteAllUserSessions(targetId);
+
+    return updated;
   }
 }
