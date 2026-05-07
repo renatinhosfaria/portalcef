@@ -195,3 +195,75 @@ describe("UsersService — inativar", () => {
     expect(mockDb.update).toHaveBeenCalled();
   });
 });
+
+describe("UsersService — reativar", () => {
+  let service: UsersService;
+  const sessionServiceMock = {
+    deleteAllUserSessions: jest.fn(),
+  };
+
+  const alvoInativo = {
+    id: "prof-1",
+    email: "prof@example.com",
+    name: "Maria",
+    role: "professora",
+    schoolId: "s-1",
+    unitId: "u-1",
+    stageId: "st-1",
+    inativadoEm: new Date("2026-04-15T10:00:00Z"),
+    inativadoPor: "outra-coord",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        UsersService,
+        { provide: SessionService, useValue: sessionServiceMock },
+      ],
+    }).compile();
+
+    service = module.get<UsersService>(UsersService);
+    jest.clearAllMocks();
+  });
+
+  it("reativa usuário inativo — limpa timestamp e ator, não toca sessões", async () => {
+    mockDb.query.users.findFirst.mockResolvedValue(alvoInativo);
+    mockDb.returning.mockResolvedValue([
+      { ...alvoInativo, inativadoEm: null, inativadoPor: null },
+    ]);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = await (service as any).reativar("prof-1", ator);
+
+    expect(mockDb.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        inativadoEm: null,
+        inativadoPor: null,
+      }),
+    );
+    expect(result.inativadoEm).toBeNull();
+    expect(sessionServiceMock.deleteAllUserSessions).not.toHaveBeenCalled();
+  });
+
+  it("rejeita auto-reativação", async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await expect((service as any).reativar(ator.userId, ator)).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+  });
+
+  it("rejeita reativação de usuário já ativo", async () => {
+    mockDb.query.users.findFirst.mockResolvedValue({
+      ...alvoInativo,
+      inativadoEm: null,
+      inativadoPor: null,
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await expect((service as any).reativar("prof-1", ator)).rejects.toBeInstanceOf(
+      ConflictException,
+    );
+  });
+});

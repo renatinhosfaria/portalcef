@@ -356,4 +356,71 @@ export class UsersService {
 
     return updated;
   }
+
+  /**
+   * Reativa um usuário previamente inativado.
+   * Limpa inativadoEm e inativadoPor.
+   * NÃO restaura sessões antigas — usuária precisa fazer login novo.
+   *
+   * Validações: não-auto, hierarquia, idempotência (não pode reativar quem já está ativo).
+   */
+  async reativar(
+    targetId: string,
+    currentUser: CurrentUser,
+  ): Promise<Omit<User, "passwordHash">> {
+    const db = getDb();
+
+    if (targetId === currentUser.userId) {
+      throw new ForbiddenException({
+        code: "AUTO_REATIVACAO",
+        message: "Você não pode reativar a si mesmo",
+      });
+    }
+
+    const target = await db.query.users.findFirst({
+      where: eq(usersTable.id, targetId),
+    });
+
+    if (!target) {
+      throw new NotFoundException("Usuario nao encontrado");
+    }
+
+    if (!canManageRole(currentUser.role, target.role)) {
+      throw new ForbiddenException({
+        code: "ROLE_HIERARCHY_VIOLATION",
+        message: `Você não pode reativar usuário com role ${target.role}`,
+      });
+    }
+
+    if (target.inativadoEm === null) {
+      throw new ConflictException({
+        code: "JA_ATIVO",
+        message: "Usuário já está ativo",
+      });
+    }
+
+    const [updated] = await db
+      .update(usersTable)
+      .set({
+        inativadoEm: null,
+        inativadoPor: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(usersTable.id, targetId))
+      .returning({
+        id: usersTable.id,
+        email: usersTable.email,
+        name: usersTable.name,
+        role: usersTable.role,
+        schoolId: usersTable.schoolId,
+        unitId: usersTable.unitId,
+        stageId: usersTable.stageId,
+        inativadoEm: usersTable.inativadoEm,
+        inativadoPor: usersTable.inativadoPor,
+        createdAt: usersTable.createdAt,
+        updatedAt: usersTable.updatedAt,
+      });
+
+    return updated;
+  }
 }
