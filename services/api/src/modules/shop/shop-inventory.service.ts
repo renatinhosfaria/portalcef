@@ -2,18 +2,36 @@ import {
   Injectable,
   ConflictException,
   BadRequestException,
+  NotFoundException,
   OnModuleDestroy,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import Redis from "ioredis";
+import { randomUUID } from "node:crypto";
 import {
   getDb,
   shopInventory,
   shopInventoryLedger,
+  shopProductVariants,
+  units,
   eq,
   and,
   desc,
 } from "@essencia/db";
+import {
+  assertShopTenantScope,
+  isMasterShopScope,
+  type ShopTenantScope,
+} from "./shop-tenant-scope";
+
+type Db = ReturnType<typeof getDb>;
+type DbTransaction = Parameters<Db["transaction"]>[0] extends (
+  tx: infer T,
+) => Promise<unknown>
+  ? T
+  : never;
+type DbExecutor = Db | DbTransaction;
+type InventoryLockTarget = { variantId: string; unitId: string };
 
 /**
  * ShopInventoryService
@@ -40,35 +58,122 @@ export class ShopInventoryService implements OnModuleDestroy {
    * Adquire lock Redis para operação atômica de estoque
    * Usa SETNX com TTL para evitar deadlocks
    */
-  private async acquireLock(
-    variantId: string,
-    unitId: string,
-  ): Promise<boolean> {
-    const lockKey = `shop:inventory:lock:${variantId}:${unitId}`;
+  private inventoryLockKey(variantId: string, unitId: string): string {
+    return `shop:inventory:lock:${variantId}:${unitId}`;
+  }
+
+  private async acquireNamedLock(lockKey: string): Promise<string | null> {
+    const token = randomUUID();
     const result = await this.redis.set(
       lockKey,
-      "1",
+      token,
       "EX",
       this.LOCK_TTL,
       "NX",
     );
-    return result === "OK";
+    return result === "OK" ? token : null;
+  }
+
+  private async releaseNamedLock(
+    lockKey: string,
+    token: string,
+  ): Promise<void> {
+    await this.redis.eval(
+      'if redis.call("get", KEYS[1]) == ARGV[1] then return redis.call("del", KEYS[1]) else return 0 end',
+      1,
+      lockKey,
+      token,
+    );
+  }
+
+  private async acquireLock(
+    variantId: string,
+    unitId: string,
+  ): Promise<string | null> {
+    return this.acquireNamedLock(this.inventoryLockKey(variantId, unitId));
   }
 
   /**
    * Libera lock Redis
    */
-  private async releaseLock(variantId: string, unitId: string): Promise<void> {
-    const lockKey = `shop:inventory:lock:${variantId}:${unitId}`;
-    await this.redis.del(lockKey);
+  private async releaseLock(
+    variantId: string,
+    unitId: string,
+    token: string,
+  ): Promise<void> {
+    await this.releaseNamedLock(this.inventoryLockKey(variantId, unitId), token);
+  }
+
+  async withInventoryLocks<T>(
+    targets: InventoryLockTarget[],
+    callback: () => Promise<T>,
+  ): Promise<T> {
+    const lockKeys = Array.from(
+      new Set(
+        targets.map((target) =>
+          this.inventoryLockKey(target.variantId, target.unitId),
+        ),
+      ),
+    ).sort();
+    const acquired: Array<{ lockKey: string; token: string }> = [];
+
+    try {
+      for (const lockKey of lockKeys) {
+        let token: string | null = null;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          token = await this.acquireNamedLock(lockKey);
+          if (token) break;
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+
+        if (!token) {
+          throw new ConflictException({
+            code: "CONFLICT",
+            message:
+              "Estoque sendo atualizado por outra operação. Tente novamente.",
+          });
+        }
+
+        acquired.push({ lockKey, token });
+      }
+
+      return await callback();
+    } finally {
+      for (const { lockKey, token } of acquired.reverse()) {
+        await this.releaseNamedLock(lockKey, token);
+      }
+    }
+  }
+
+  async withOrderLock<T>(
+    orderId: string,
+    callback: () => Promise<T>,
+  ): Promise<T> {
+    const lockKey = `shop:orders:lock:${orderId}`;
+    const token = await this.acquireNamedLock(lockKey);
+
+    if (!token) {
+      throw new ConflictException({
+        code: "CONFLICT",
+        message: "Pedido sendo atualizado. Tente novamente.",
+      });
+    }
+
+    try {
+      return await callback();
+    } finally {
+      await this.releaseNamedLock(lockKey, token);
+    }
   }
 
   /**
    * Busca ou cria entrada de inventário
    */
-  private async getOrCreateInventory(variantId: string, unitId: string) {
-    const db = getDb();
-
+  private async getOrCreateInventory(
+    variantId: string,
+    unitId: string,
+    db: DbExecutor = getDb(),
+  ) {
     let inventory = await db.query.shopInventory.findFirst({
       where: and(
         eq(shopInventory.variantId, variantId),
@@ -94,12 +199,86 @@ export class ShopInventoryService implements OnModuleDestroy {
     return inventory;
   }
 
+  private async getExistingInventory(
+    variantId: string,
+    unitId: string,
+    db: DbExecutor = getDb(),
+  ) {
+    const inventory = await db.query.shopInventory.findFirst({
+      where: and(
+        eq(shopInventory.variantId, variantId),
+        eq(shopInventory.unitId, unitId),
+      ),
+    });
+
+    if (!inventory) {
+      throw new BadRequestException({
+        code: "INSUFFICIENT_STOCK",
+        message: "Estoque indisponível para esta unidade",
+      });
+    }
+
+    return inventory;
+  }
+
+  private async assertInventoryScope(
+    variantId: string,
+    unitId: string,
+    scope?: ShopTenantScope,
+  ) {
+    if (isMasterShopScope(scope)) {
+      return;
+    }
+
+    assertShopTenantScope(scope);
+    const scopedTenant = scope!;
+
+    if (scopedTenant.unitId && scopedTenant.unitId !== unitId) {
+      throw new NotFoundException({
+        code: "RESOURCE_NOT_FOUND",
+        message: "Estoque não encontrado",
+      });
+    }
+
+    const db = getDb();
+    const [variant, unit] = await Promise.all([
+      db.query.shopProductVariants.findFirst({
+        where: eq(shopProductVariants.id, variantId),
+        with: {
+          product: true,
+        },
+      }),
+      db.query.units.findFirst({
+        where: and(
+          eq(units.id, unitId),
+          eq(units.schoolId, scopedTenant.schoolId!),
+        ),
+      }),
+    ]);
+
+    if (
+      !variant?.product ||
+      variant.product.schoolId !== scopedTenant.schoolId ||
+      !unit
+    ) {
+      throw new NotFoundException({
+        code: "RESOURCE_NOT_FOUND",
+        message: "Estoque não encontrado",
+      });
+    }
+  }
+
   /**
    * GET /shop/admin/inventory/:variantId/:unitId
    *
    * Retorna status atual do estoque
    */
-  async getInventory(variantId: string, unitId: string) {
+  async getInventory(
+    variantId: string,
+    unitId: string,
+    scope?: ShopTenantScope,
+  ) {
+    await this.assertInventoryScope(variantId, unitId, scope);
     const inventory = await this.getOrCreateInventory(variantId, unitId);
 
     return {
@@ -123,17 +302,15 @@ export class ShopInventoryService implements OnModuleDestroy {
     quantity: number,
     orderId: string,
   ) {
-    const db = getDb();
-
     // Tentar adquirir lock (retry até 3x com delay de 100ms)
-    let lockAcquired = false;
+    let lockToken: string | null = null;
     for (let i = 0; i < 3; i++) {
-      lockAcquired = await this.acquireLock(variantId, unitId);
-      if (lockAcquired) break;
+      lockToken = await this.acquireLock(variantId, unitId);
+      if (lockToken) break;
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
 
-    if (!lockAcquired) {
+    if (!lockToken) {
       throw new ConflictException({
         code: "CONFLICT",
         message:
@@ -142,39 +319,53 @@ export class ShopInventoryService implements OnModuleDestroy {
     }
 
     try {
-      const inventory = await this.getOrCreateInventory(variantId, unitId);
-      const available = inventory.quantity - inventory.reservedQuantity;
-
-      if (available < quantity) {
-        throw new BadRequestException({
-          code: "INSUFFICIENT_STOCK",
-          message: `Estoque insuficiente. Disponível: ${available}, solicitado: ${quantity}`,
-        });
-      }
-
-      // Incrementa reservedQuantity
-      await db
-        .update(shopInventory)
-        .set({
-          reservedQuantity: inventory.reservedQuantity + quantity,
-          updatedAt: new Date(),
-        })
-        .where(eq(shopInventory.id, inventory.id));
-
-      // Cria ledger entry
-      await db.insert(shopInventoryLedger).values({
-        inventoryId: inventory.id,
-        movementType: "RESERVA",
-        quantityChange: -quantity, // Negativo pois reduziu disponível
-        referenceId: orderId,
-        notes: `Reserva para pedido ${orderId}`,
-        createdBy: null,
-      });
-
-      return { success: true, reserved: quantity };
+      return await this.reserveStockInTransaction(
+        variantId,
+        unitId,
+        quantity,
+        orderId,
+        getDb(),
+      );
     } finally {
-      await this.releaseLock(variantId, unitId);
+      await this.releaseLock(variantId, unitId, lockToken);
     }
+  }
+
+  async reserveStockInTransaction(
+    variantId: string,
+    unitId: string,
+    quantity: number,
+    orderId: string,
+    db: DbExecutor,
+  ) {
+    const inventory = await this.getExistingInventory(variantId, unitId, db);
+    const available = inventory.quantity - inventory.reservedQuantity;
+
+    if (available < quantity) {
+      throw new BadRequestException({
+        code: "INSUFFICIENT_STOCK",
+        message: `Estoque insuficiente. Disponível: ${available}, solicitado: ${quantity}`,
+      });
+    }
+
+    await db
+      .update(shopInventory)
+      .set({
+        reservedQuantity: inventory.reservedQuantity + quantity,
+        updatedAt: new Date(),
+      })
+      .where(eq(shopInventory.id, inventory.id));
+
+    await db.insert(shopInventoryLedger).values({
+      inventoryId: inventory.id,
+      movementType: "RESERVA",
+      quantityChange: -quantity,
+      referenceId: orderId,
+      notes: `Reserva para pedido ${orderId}`,
+      createdBy: null,
+    });
+
+    return { success: true, reserved: quantity };
   }
 
   /**
@@ -187,10 +378,9 @@ export class ShopInventoryService implements OnModuleDestroy {
     quantity: number,
     orderId: string,
   ) {
-    const db = getDb();
-    const lockAcquired = await this.acquireLock(variantId, unitId);
+    const lockToken = await this.acquireLock(variantId, unitId);
 
-    if (!lockAcquired) {
+    if (!lockToken) {
       throw new ConflictException({
         code: "CONFLICT",
         message: "Estoque sendo atualizado. Tente novamente.",
@@ -198,32 +388,53 @@ export class ShopInventoryService implements OnModuleDestroy {
     }
 
     try {
-      const inventory = await this.getOrCreateInventory(variantId, unitId);
-
-      // Decrementa quantity real e reservedQuantity
-      await db
-        .update(shopInventory)
-        .set({
-          quantity: inventory.quantity - quantity,
-          reservedQuantity: inventory.reservedQuantity - quantity,
-          updatedAt: new Date(),
-        })
-        .where(eq(shopInventory.id, inventory.id));
-
-      // Cria ledger entry
-      await db.insert(shopInventoryLedger).values({
-        inventoryId: inventory.id,
-        movementType: "VENDA_ONLINE",
-        quantityChange: -quantity,
-        referenceId: orderId,
-        notes: `Venda online confirmada - pedido ${orderId}`,
-        createdBy: null,
-      });
-
-      return { success: true, confirmed: quantity };
+      return await this.confirmSaleInTransaction(
+        variantId,
+        unitId,
+        quantity,
+        orderId,
+        getDb(),
+      );
     } finally {
-      await this.releaseLock(variantId, unitId);
+      await this.releaseLock(variantId, unitId, lockToken);
     }
+  }
+
+  async confirmSaleInTransaction(
+    variantId: string,
+    unitId: string,
+    quantity: number,
+    orderId: string,
+    db: DbExecutor,
+  ) {
+    const inventory = await this.getExistingInventory(variantId, unitId, db);
+
+    if (inventory.reservedQuantity < quantity || inventory.quantity < quantity) {
+      throw new BadRequestException({
+        code: "INSUFFICIENT_STOCK",
+        message: "Reserva insuficiente para confirmar a venda",
+      });
+    }
+
+    await db
+      .update(shopInventory)
+      .set({
+        quantity: inventory.quantity - quantity,
+        reservedQuantity: inventory.reservedQuantity - quantity,
+        updatedAt: new Date(),
+      })
+      .where(eq(shopInventory.id, inventory.id));
+
+    await db.insert(shopInventoryLedger).values({
+      inventoryId: inventory.id,
+      movementType: "VENDA_ONLINE",
+      quantityChange: -quantity,
+      referenceId: orderId,
+      notes: `Venda online confirmada - pedido ${orderId}`,
+      createdBy: null,
+    });
+
+    return { success: true, confirmed: quantity };
   }
 
   /**
@@ -238,10 +449,9 @@ export class ShopInventoryService implements OnModuleDestroy {
     orderNumber: string,
     userId: string,
   ) {
-    const db = getDb();
-    const lockAcquired = await this.acquireLock(variantId, unitId);
+    const lockToken = await this.acquireLock(variantId, unitId);
 
-    if (!lockAcquired) {
+    if (!lockToken) {
       throw new ConflictException({
         code: "CONFLICT",
         message: "Estoque sendo atualizado. Tente novamente.",
@@ -249,39 +459,55 @@ export class ShopInventoryService implements OnModuleDestroy {
     }
 
     try {
-      const inventory = await this.getOrCreateInventory(variantId, unitId);
-      const available = inventory.quantity - inventory.reservedQuantity;
-
-      if (available < quantity) {
-        throw new BadRequestException({
-          code: "INSUFFICIENT_STOCK",
-          message: `Estoque insuficiente. Disponível: ${available}, solicitado: ${quantity}`,
-        });
-      }
-
-      // Decrementa APENAS quantity (venda presencial não tem reserva)
-      await db
-        .update(shopInventory)
-        .set({
-          quantity: inventory.quantity - quantity,
-          updatedAt: new Date(),
-        })
-        .where(eq(shopInventory.id, inventory.id));
-
-      // Cria ledger entry como VENDA_PRESENCIAL
-      await db.insert(shopInventoryLedger).values({
-        inventoryId: inventory.id,
-        movementType: "VENDA_PRESENCIAL",
-        quantityChange: -quantity,
-        referenceId: orderNumber,
-        notes: `Venda presencial - pedido ${orderNumber}`,
-        createdBy: userId,
-      });
-
-      return { success: true, confirmed: quantity };
+      return await this.confirmPresentialSaleInTransaction(
+        variantId,
+        unitId,
+        quantity,
+        orderNumber,
+        userId,
+        getDb(),
+      );
     } finally {
-      await this.releaseLock(variantId, unitId);
+      await this.releaseLock(variantId, unitId, lockToken);
     }
+  }
+
+  async confirmPresentialSaleInTransaction(
+    variantId: string,
+    unitId: string,
+    quantity: number,
+    orderNumber: string,
+    userId: string,
+    db: DbExecutor,
+  ) {
+    const inventory = await this.getExistingInventory(variantId, unitId, db);
+    const available = inventory.quantity - inventory.reservedQuantity;
+
+    if (available < quantity) {
+      throw new BadRequestException({
+        code: "INSUFFICIENT_STOCK",
+        message: `Estoque insuficiente. Disponível: ${available}, solicitado: ${quantity}`,
+      });
+    }
+
+    await db
+      .update(shopInventory)
+      .set({
+        quantity: inventory.quantity - quantity,
+        updatedAt: new Date(),
+      })
+      .where(eq(shopInventory.id, inventory.id));
+
+    await db.insert(shopInventoryLedger).values({
+      inventoryId: inventory.id,
+      movementType: "VENDA_PRESENCIAL",
+      quantityChange: -quantity,
+      referenceId: orderNumber,
+      notes: `Venda presencial - pedido ${orderNumber}`,
+      createdBy: userId,
+    });
+
+    return { success: true, confirmed: quantity };
   }
 
   /**
@@ -294,9 +520,9 @@ export class ShopInventoryService implements OnModuleDestroy {
     orderId: string,
   ) {
     const db = getDb();
-    const lockAcquired = await this.acquireLock(variantId, unitId);
+    const lockToken = await this.acquireLock(variantId, unitId);
 
-    if (!lockAcquired) {
+    if (!lockToken) {
       throw new ConflictException({
         code: "CONFLICT",
         message: "Estoque sendo atualizado. Tente novamente.",
@@ -304,31 +530,54 @@ export class ShopInventoryService implements OnModuleDestroy {
     }
 
     try {
-      const inventory = await this.getOrCreateInventory(variantId, unitId);
-
-      // Decrementa reservedQuantity (libera para novos pedidos)
-      await db
-        .update(shopInventory)
-        .set({
-          reservedQuantity: Math.max(0, inventory.reservedQuantity - quantity),
-          updatedAt: new Date(),
-        })
-        .where(eq(shopInventory.id, inventory.id));
-
-      // Cria ledger entry
-      await db.insert(shopInventoryLedger).values({
-        inventoryId: inventory.id,
-        movementType: "LIBERACAO",
-        quantityChange: quantity, // Positivo pois voltou a ficar disponível
-        referenceId: orderId,
-        notes: `Reserva liberada - pedido ${orderId}`,
-        createdBy: null,
-      });
-
-      return { success: true, released: quantity };
+      return await db.transaction(async (tx: DbTransaction) =>
+        this.releaseReservationInTransaction(
+          variantId,
+          unitId,
+          quantity,
+          orderId,
+          tx,
+        ),
+      );
     } finally {
-      await this.releaseLock(variantId, unitId);
+      await this.releaseLock(variantId, unitId, lockToken);
     }
+  }
+
+  async releaseReservationInTransaction(
+    variantId: string,
+    unitId: string,
+    quantity: number,
+    orderId: string,
+    db: DbExecutor,
+  ) {
+    const inventory = await this.getExistingInventory(variantId, unitId, db);
+
+    if (inventory.reservedQuantity < quantity) {
+      throw new BadRequestException({
+        code: "INSUFFICIENT_RESERVATION",
+        message: "Reserva insuficiente para liberação",
+      });
+    }
+
+    await db
+      .update(shopInventory)
+      .set({
+        reservedQuantity: inventory.reservedQuantity - quantity,
+        updatedAt: new Date(),
+      })
+      .where(eq(shopInventory.id, inventory.id));
+
+    await db.insert(shopInventoryLedger).values({
+      inventoryId: inventory.id,
+      movementType: "LIBERACAO",
+      quantityChange: quantity,
+      referenceId: orderId,
+      notes: `Reserva liberada - pedido ${orderId}`,
+      createdBy: null,
+    });
+
+    return { success: true, released: quantity };
   }
 
   /**
@@ -342,11 +591,13 @@ export class ShopInventoryService implements OnModuleDestroy {
     quantity: number,
     notes: string,
     userId: string,
+    scope?: ShopTenantScope,
   ) {
     const db = getDb();
-    const lockAcquired = await this.acquireLock(variantId, unitId);
+    await this.assertInventoryScope(variantId, unitId, scope);
+    const lockToken = await this.acquireLock(variantId, unitId);
 
-    if (!lockAcquired) {
+    if (!lockToken) {
       throw new ConflictException({
         code: "CONFLICT",
         message: "Estoque sendo atualizado. Tente novamente.",
@@ -354,35 +605,58 @@ export class ShopInventoryService implements OnModuleDestroy {
     }
 
     try {
-      const inventory = await this.getOrCreateInventory(variantId, unitId);
-
-      // Incrementa quantity
-      await db
-        .update(shopInventory)
-        .set({
-          quantity: inventory.quantity + quantity,
-          updatedAt: new Date(),
-        })
-        .where(eq(shopInventory.id, inventory.id));
-
-      // Cria ledger entry
-      await db.insert(shopInventoryLedger).values({
-        inventoryId: inventory.id,
-        movementType: "ENTRADA",
-        quantityChange: quantity,
-        referenceId: null,
-        notes: notes || "Entrada de estoque",
-        createdBy: userId,
-      });
-
-      return {
-        success: true,
-        newQuantity: inventory.quantity + quantity,
-        added: quantity,
-      };
+      return await db.transaction((tx: DbTransaction) =>
+        this.addStockInTransaction(
+          variantId,
+          unitId,
+          quantity,
+          notes,
+          userId,
+          tx,
+        ),
+      );
     } finally {
-      await this.releaseLock(variantId, unitId);
+      await this.releaseLock(variantId, unitId, lockToken);
     }
+  }
+
+  async addStockInTransaction(
+    variantId: string,
+    unitId: string,
+    quantity: number,
+    notes: string,
+    userId: string,
+    db: DbExecutor,
+    scope?: ShopTenantScope,
+  ) {
+    if (scope) {
+      await this.assertInventoryScope(variantId, unitId, scope);
+    }
+
+    const inventory = await this.getOrCreateInventory(variantId, unitId, db);
+
+    await db
+      .update(shopInventory)
+      .set({
+        quantity: inventory.quantity + quantity,
+        updatedAt: new Date(),
+      })
+      .where(eq(shopInventory.id, inventory.id));
+
+    await db.insert(shopInventoryLedger).values({
+      inventoryId: inventory.id,
+      movementType: "ENTRADA",
+      quantityChange: quantity,
+      referenceId: null,
+      notes: notes || "Entrada de estoque",
+      createdBy: userId,
+    });
+
+    return {
+      success: true,
+      newQuantity: inventory.quantity + quantity,
+      added: quantity,
+    };
   }
 
   /**
@@ -396,11 +670,13 @@ export class ShopInventoryService implements OnModuleDestroy {
     quantityChange: number,
     notes: string,
     userId: string,
+    scope?: ShopTenantScope,
   ) {
     const db = getDb();
-    const lockAcquired = await this.acquireLock(variantId, unitId);
+    await this.assertInventoryScope(variantId, unitId, scope);
+    const lockToken = await this.acquireLock(variantId, unitId);
 
-    if (!lockAcquired) {
+    if (!lockToken) {
       throw new ConflictException({
         code: "CONFLICT",
         message: "Estoque sendo atualizado. Tente novamente.",
@@ -408,36 +684,44 @@ export class ShopInventoryService implements OnModuleDestroy {
     }
 
     try {
-      const inventory = await this.getOrCreateInventory(variantId, unitId);
-      const newQuantity = Math.max(0, inventory.quantity + quantityChange);
+      return await db.transaction(async (tx: DbTransaction) => {
+        const inventory = await this.getOrCreateInventory(variantId, unitId, tx);
+        const newQuantity = inventory.quantity + quantityChange;
 
-      // Atualiza quantity
-      await db
-        .update(shopInventory)
-        .set({
-          quantity: newQuantity,
-          updatedAt: new Date(),
-        })
-        .where(eq(shopInventory.id, inventory.id));
+        if (newQuantity < inventory.reservedQuantity) {
+          throw new BadRequestException({
+            code: "INVALID_STOCK_ADJUSTMENT",
+            message:
+              "Ajuste inválido: o estoque total não pode ficar menor que a quantidade reservada",
+          });
+        }
 
-      // Cria ledger entry
-      await db.insert(shopInventoryLedger).values({
-        inventoryId: inventory.id,
-        movementType: "AJUSTE",
-        quantityChange,
-        referenceId: null,
-        notes: notes || "Ajuste manual de estoque",
-        createdBy: userId,
+        await tx
+          .update(shopInventory)
+          .set({
+            quantity: newQuantity,
+            updatedAt: new Date(),
+          })
+          .where(eq(shopInventory.id, inventory.id));
+
+        await tx.insert(shopInventoryLedger).values({
+          inventoryId: inventory.id,
+          movementType: "AJUSTE",
+          quantityChange,
+          referenceId: null,
+          notes: notes || "Ajuste manual de estoque",
+          createdBy: userId,
+        });
+
+        return {
+          success: true,
+          previousQuantity: inventory.quantity,
+          newQuantity,
+          change: quantityChange,
+        };
       });
-
-      return {
-        success: true,
-        previousQuantity: inventory.quantity,
-        newQuantity,
-        change: quantityChange,
-      };
     } finally {
-      await this.releaseLock(variantId, unitId);
+      await this.releaseLock(variantId, unitId, lockToken);
     }
   }
 
@@ -446,8 +730,13 @@ export class ShopInventoryService implements OnModuleDestroy {
    *
    * Retorna histórico de movimentações
    */
-  async getInventoryLedger(variantId: string, unitId: string) {
+  async getInventoryLedger(
+    variantId: string,
+    unitId: string,
+    scope?: ShopTenantScope,
+  ) {
     const db = getDb();
+    await this.assertInventoryScope(variantId, unitId, scope);
 
     const inventory = await this.getOrCreateInventory(variantId, unitId);
 
@@ -480,11 +769,13 @@ export class ShopInventoryService implements OnModuleDestroy {
     notes: string,
     reason: "VENDA_BALCAO" | "DANO" | "PERDA" | "AMOSTRA" | "OUTROS",
     userId: string,
+    scope?: ShopTenantScope,
   ) {
     const db = getDb();
-    const lockAcquired = await this.acquireLock(variantId, unitId);
+    await this.assertInventoryScope(variantId, unitId, scope);
+    const lockToken = await this.acquireLock(variantId, unitId);
 
-    if (!lockAcquired) {
+    if (!lockToken) {
       throw new ConflictException({
         code: "CONFLICT",
         message: "Estoque sendo atualizado. Tente novamente.",
@@ -492,44 +783,44 @@ export class ShopInventoryService implements OnModuleDestroy {
     }
 
     try {
-      const inventory = await this.getOrCreateInventory(variantId, unitId);
-      const available = inventory.quantity - inventory.reservedQuantity;
+      return await db.transaction(async (tx: DbTransaction) => {
+        const inventory = await this.getOrCreateInventory(variantId, unitId, tx);
+        const available = inventory.quantity - inventory.reservedQuantity;
 
-      if (available < quantity) {
-        throw new BadRequestException({
-          code: "INSUFFICIENT_STOCK",
-          message: `Estoque disponível insuficiente. Disponível: ${available}, solicitado: ${quantity}`,
+        if (available < quantity) {
+          throw new BadRequestException({
+            code: "INSUFFICIENT_STOCK",
+            message: `Estoque disponível insuficiente. Disponível: ${available}, solicitado: ${quantity}`,
+          });
+        }
+
+        const newQuantity = inventory.quantity - quantity;
+        await tx
+          .update(shopInventory)
+          .set({
+            quantity: newQuantity,
+            updatedAt: new Date(),
+          })
+          .where(eq(shopInventory.id, inventory.id));
+
+        await tx.insert(shopInventoryLedger).values({
+          inventoryId: inventory.id,
+          movementType: "AJUSTE",
+          quantityChange: -quantity,
+          referenceId: null,
+          notes: `${notes || "Saída manual"} - Motivo: ${reason}`,
+          createdBy: userId,
         });
-      }
 
-      // Decrementa quantity
-      const newQuantity = inventory.quantity - quantity;
-      await db
-        .update(shopInventory)
-        .set({
-          quantity: newQuantity,
-          updatedAt: new Date(),
-        })
-        .where(eq(shopInventory.id, inventory.id));
-
-      // Cria ledger entry
-      await db.insert(shopInventoryLedger).values({
-        inventoryId: inventory.id,
-        movementType: `SAIDA_${reason}`,
-        quantityChange: -quantity,
-        referenceId: null,
-        notes: notes || `Saída manual - ${reason}`,
-        createdBy: userId,
+        return {
+          success: true,
+          previousQuantity: inventory.quantity,
+          newQuantity,
+          removed: quantity,
+        };
       });
-
-      return {
-        success: true,
-        previousQuantity: inventory.quantity,
-        newQuantity,
-        removed: quantity,
-      };
     } finally {
-      await this.releaseLock(variantId, unitId);
+      await this.releaseLock(variantId, unitId, lockToken);
     }
   }
 }

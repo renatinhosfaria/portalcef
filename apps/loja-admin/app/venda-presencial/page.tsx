@@ -4,19 +4,12 @@ import { Plus, Trash2, ShoppingCart, CheckCircle, AlertCircle } from 'lucide-rea
 import { useState, useEffect } from 'react';
 
 import { apiFetch } from '../../lib/api';
-
-interface Variant {
-    id: string;
-    size: string;
-    price: number;
-}
-
-interface Product {
-    id: string;
-    name: string;
-    basePrice: number;
-    variants: Variant[];
-}
+import {
+    getSelectableVariants,
+    getVariantAvailableStock,
+    getVariantEffectivePrice,
+    type VendaPresencialProduct as Product,
+} from '../../lib/venda-presencial';
 
 interface CartItem {
     variantId: string;
@@ -67,6 +60,7 @@ export default function VendaPresencialPage() {
     }, []);
 
     const activeProduct = products.find(p => p.id === selectedProduct);
+    const selectableVariants = activeProduct ? getSelectableVariants(activeProduct) : [];
     const totalAmount = items.reduce((sum, item) => sum + (item.unitPrice * item.quantity), 0);
     const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
     const remainingAmount = Math.max(0, totalAmount - totalPaid);
@@ -90,8 +84,14 @@ export default function VendaPresencialPage() {
         const product = products.find(p => p.id === selectedProduct);
         if (!product) return;
 
-        const variant = product.variants.find(v => v.id === selectedVariantId);
+        const variant = getSelectableVariants(product).find(v => v.id === selectedVariantId);
         if (!variant) return;
+
+        const availableStock = getVariantAvailableStock(variant);
+        if (availableStock !== null && quantity > availableStock) {
+            alert(`Estoque disponível para este tamanho: ${availableStock}`);
+            return;
+        }
 
         const newItem: CartItem = {
             variantId: variant.id,
@@ -99,7 +99,7 @@ export default function VendaPresencialPage() {
             variantSize: variant.size,
             studentName,
             quantity,
-            unitPrice: variant.price || product.basePrice,
+            unitPrice: getVariantEffectivePrice(variant, product),
         };
 
         setItems([...items, newItem]);
@@ -113,22 +113,19 @@ export default function VendaPresencialPage() {
         setItems(items.filter((_, i) => i !== index));
     };
 
-    // Auto set value to 0 if Brinde
     useEffect(() => {
-        if (currentPaymentMethod === 'BRINDE') {
-            setCurrentPaymentAmount(0);
-        } else if (currentPaymentAmount === 0 && remainingAmount > 0) {
+        if (currentPaymentAmount === 0 && remainingAmount > 0) {
             // Only auto-fill if amount is 0 (likely just switched back or new)
             setCurrentPaymentAmount(remainingAmount);
         }
-    }, [currentPaymentMethod, remainingAmount]);
+    }, [currentPaymentAmount, remainingAmount]);
 
     const addPayment = () => {
-        if (currentPaymentMethod !== 'BRINDE' && currentPaymentAmount <= 0) {
+        if (currentPaymentAmount <= 0) {
             alert('Valor do pagamento deve ser maior que zero');
             return;
         }
-        if (currentPaymentMethod !== 'BRINDE' && currentPaymentAmount > remainingAmount) {
+        if (currentPaymentAmount > remainingAmount) {
             alert(`Valor do pagamento não pode ser maior que o restante (${formatCurrency(remainingAmount)})`);
             return;
         }
@@ -152,18 +149,16 @@ export default function VendaPresencialPage() {
 
         // UX Shortcut: if no payments added, check if we can use the current inputs
         if (finalPayments.length === 0) {
-            const isImplicitBrinde = currentPaymentMethod === 'BRINDE';
-            const isImplicitFullPayment = currentPaymentAmount >= totalAmount;
+            const isImplicitFullPayment = currentPaymentAmount === totalAmount;
 
-            if (isImplicitBrinde || isImplicitFullPayment) {
+            if (isImplicitFullPayment) {
                 finalPayments = [{ method: currentPaymentMethod, amount: currentPaymentAmount }];
             }
         }
 
-        const hasBrinde = finalPayments.some(p => p.method === 'BRINDE');
         const finalTotalPaid = finalPayments.reduce((acc, p) => acc + p.amount, 0);
 
-        if (!hasBrinde && finalTotalPaid !== totalAmount) {
+        if (finalTotalPaid !== totalAmount) {
             alert(`Total pago (${formatCurrency(finalTotalPaid)}) deve ser igual ao total do pedido (${formatCurrency(totalAmount)})`);
             return;
         }
@@ -278,11 +273,16 @@ export default function VendaPresencialPage() {
                                                 className="form-select"
                                             >
                                                 <option value="">Selecione</option>
-                                                {activeProduct.variants?.map(v => (
+                                                {selectableVariants.map(v => {
+                                                    const effectivePrice = getVariantEffectivePrice(v, activeProduct);
+                                                    const availableStock = getVariantAvailableStock(v);
+                                                    return (
                                                     <option key={v.id} value={v.id}>
-                                                        {v.size} {v.price && v.price !== activeProduct.basePrice ? `(${formatCurrency(v.price)})` : ''}
+                                                        {v.size} {effectivePrice !== activeProduct.basePrice ? `(${formatCurrency(effectivePrice)})` : ''}
+                                                        {availableStock !== null ? ` - ${availableStock} disp.` : ''}
                                                     </option>
-                                                ))}
+                                                    );
+                                                })}
                                             </select>
                                         </div>
                                         <div>
@@ -290,6 +290,11 @@ export default function VendaPresencialPage() {
                                             <input
                                                 type="number"
                                                 min="1"
+                                                max={(() => {
+                                                    const variant = selectableVariants.find(v => v.id === selectedVariantId);
+                                                    const availableStock = variant ? getVariantAvailableStock(variant) : null;
+                                                    return availableStock ?? undefined;
+                                                })()}
                                                 value={quantity}
                                                 onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
                                                 className="form-input"
@@ -441,7 +446,7 @@ export default function VendaPresencialPage() {
                                                     type="button"
                                                     onClick={addPayment}
                                                     className="btn-admin btn-admin-secondary h-10 px-3 flex items-center justify-center"
-                                                    disabled={currentPaymentMethod !== 'BRINDE' && currentPaymentAmount <= 0}
+                                                    disabled={currentPaymentAmount <= 0}
                                                 >
                                                     <Plus className="w-4 h-4" />
                                                 </button>
@@ -456,13 +461,10 @@ export default function VendaPresencialPage() {
                                     </div>
 
                                     {(() => {
-                                        const hasBrinde = payments.some(p => p.method === 'BRINDE');
-
                                         // Implicit payment logic: if no payments added, but current input is valid to cover cost
-                                        const isImplicitBrinde = payments.length === 0 && currentPaymentMethod === 'BRINDE';
-                                        const isImplicitFullPayment = payments.length === 0 && currentPaymentAmount >= totalAmount;
+                                        const isImplicitFullPayment = payments.length === 0 && currentPaymentAmount === totalAmount;
 
-                                        const canSubmit = remainingAmount === 0 || hasBrinde || isImplicitBrinde || isImplicitFullPayment;
+                                        const canSubmit = remainingAmount === 0 || isImplicitFullPayment;
 
                                         return (
                                             <button

@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowLeft, FileText, Info, Loader2, Trash2 } from 'lucide-react';
+import { ArrowLeft, CreditCard, FileText, Info, Loader2, Trash2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 
@@ -11,15 +11,16 @@ import { useCart, type CartItem } from '@/lib/useCart';
 
 export default function CheckoutPage() {
   const router = useRouter();
-  const { items, getTotalAmount, clearCart, isLoaded } = useCart();
+  const { items, getTotalAmount, getCartContext, clearCart, isLoaded } = useCart();
   const { toast, showToast } = useToast();
 
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
-  const [processing, setProcessing] = useState(false);
+  const [processingAction, setProcessingAction] = useState<'online' | 'voucher' | null>(null);
   const [orderCreated, setOrderCreated] = useState(false);
 
   const totalReais = getTotalAmount();
+  const processing = processingAction !== null;
 
   useEffect(() => {
     if (isLoaded && items.length === 0 && !orderCreated && !processing) {
@@ -51,47 +52,102 @@ export default function CheckoutPage() {
     setCustomerPhone(formatted);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
+  const buildOrderPayload = () => {
     if (!customerName.trim() || !customerPhone.trim()) {
       showToast({ message: 'Preencha todos os campos obrigatórios', type: 'error' });
-      return;
+      return null;
     }
 
     const phoneDigits = customerPhone.replace(/\D/g, '');
     if (phoneDigits.length < 10 || phoneDigits.length > 13) {
       showToast({ message: 'Telefone inválido. Use formato: (11) 98765-4321', type: 'error' });
-      return;
+      return null;
     }
 
-    setProcessing(true);
+    const cartContext = getCartContext();
+    if (!cartContext) {
+      showToast({ message: 'Carrinho sem escola/unidade. Selecione os produtos novamente.', type: 'error' });
+      return null;
+    }
+
+    return {
+      cartContext,
+      phoneDigits,
+      payload: {
+        schoolId: cartContext.schoolId,
+        unitId: cartContext.unitId,
+        items: items.map(item => ({
+          variantId: item.variantId,
+          quantity: item.quantity,
+          studentName: item.studentName
+        })),
+        customerName: customerName.trim(),
+        customerPhone: phoneDigits,
+      },
+    };
+  };
+
+  const handleOnlinePayment = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    const orderPayload = buildOrderPayload();
+    if (!orderPayload) return;
+
+    setProcessingAction('online');
 
     try {
-      const storedSchoolId = localStorage.getItem('cef_shop_school_id') || 'default';
-      const storedUnitId = localStorage.getItem('cef_shop_unit_id') || 'default';
-
-      const response = await fetch(`/api/shop/orders/${storedSchoolId}`, {
+      const response = await fetch('/api/shop/checkout/init', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          schoolId: storedSchoolId,
-          unitId: storedUnitId,
-          items: items.map(item => ({
-            variantId: item.variantId,
-            quantity: item.quantity,
-            studentName: item.studentName
-          })),
-          customerName: customerName.trim(),
-          customerPhone: phoneDigits,
-        })
+        body: JSON.stringify(orderPayload.payload)
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success || !result.data) {
+        if (response.status === 429) {
+          showToast({ message: 'Muitos pedidos. Aguarde alguns minutos e tente novamente.', type: 'error' });
+          return;
+        }
+        throw new Error(result.error?.message || 'Erro ao iniciar pagamento online');
+      }
+
+      const { checkoutUrl } = result.data;
+
+      if (!checkoutUrl) {
+        throw new Error('Stripe não retornou o link de pagamento.');
+      }
+
+      setOrderCreated(true);
+      clearCart();
+      window.location.assign(checkoutUrl);
+    } catch (err: unknown) {
+      console.error('Erro no pagamento online:', err);
+      const message = err instanceof Error ? err.message : 'Erro ao iniciar pagamento online';
+      showToast({ message, type: 'error' });
+    } finally {
+      setProcessingAction(null);
+    }
+  };
+
+  const handleVoucherSubmit = async () => {
+    const orderPayload = buildOrderPayload();
+    if (!orderPayload) return;
+
+    setProcessingAction('voucher');
+
+    try {
+      const { cartContext, phoneDigits, payload } = orderPayload;
+      const response = await fetch(`/api/shop/orders/${cartContext.schoolId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
       });
 
       if (!response.ok) {
         const errorData = await response.json();
         if (response.status === 429) {
           showToast({ message: 'Muitos pedidos. Aguarde alguns minutos e tente novamente.', type: 'error' });
-          setProcessing(false);
           return;
         }
         throw new Error(errorData.error?.message || 'Erro ao criar pedido');
@@ -116,7 +172,7 @@ export default function CheckoutPage() {
       const message = err instanceof Error ? err.message : 'Erro ao gerar voucher';
       showToast({ message, type: 'error' });
     } finally {
-      setProcessing(false);
+      setProcessingAction(null);
     }
   };
 
@@ -135,14 +191,14 @@ export default function CheckoutPage() {
       </header>
 
       <main className="max-w-2xl mx-auto p-4">
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleOnlinePayment} className="space-y-4">
           {/* Info Box */}
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex gap-3">
             <Info className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" aria-hidden="true" />
             <div className="text-sm">
               <p className="font-medium text-amber-800 mb-1">Como funciona?</p>
               <p className="text-amber-700">
-                Você receberá um voucher para pagamento presencial na escola. Válido por 5 dias.
+                Pague online com cartão ou PIX. Se preferir, gere um voucher para pagamento presencial na escola. Válido por 7 dias.
               </p>
             </div>
           </div>
@@ -206,18 +262,38 @@ export default function CheckoutPage() {
                 </span>
               </div>
               <p className="text-xs text-slate-400 mt-2">
-                Pagamento realizado presencialmente na escola
+                Pagamento online confirmado automaticamente pelo Stripe.
               </p>
             </div>
           </div>
 
-          {/* Submit Button */}
+          {/* Online payment */}
           <button
             type="submit"
             disabled={processing}
             className="w-full bg-[#A3D154] text-white font-medium py-3 rounded-lg hover:bg-[#8FBD3F] transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
-            {processing ? (
+            {processingAction === 'online' ? (
+              <>
+                <Loader2 className="w-5 h-5 animate-spin" />
+                Abrindo pagamento...
+              </>
+            ) : (
+              <>
+                <CreditCard className="w-5 h-5" />
+                Pagar online
+              </>
+            )}
+          </button>
+
+          {/* Voucher fallback */}
+          <button
+            type="button"
+            onClick={handleVoucherSubmit}
+            disabled={processing}
+            className="w-full bg-white text-slate-700 border border-slate-200 font-medium py-3 rounded-lg hover:bg-slate-50 transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          >
+            {processingAction === 'voucher' ? (
               <>
                 <Loader2 className="w-5 h-5 animate-spin" />
                 Gerando voucher...
@@ -225,7 +301,7 @@ export default function CheckoutPage() {
             ) : (
               <>
                 <FileText className="w-5 h-5" />
-                Gerar Voucher
+                Gerar voucher presencial
               </>
             )}
           </button>

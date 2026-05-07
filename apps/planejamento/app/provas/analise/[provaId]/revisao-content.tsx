@@ -351,10 +351,12 @@ export function RevisaoProvaContent({ provaId }: RevisaoProvaContentProps) {
                 documentos={documentosAdaptados}
                 canDelete={false}
                 canAprovar={true}
+                canEdit={true}
                 canComentar={true}
                 onAprovar={handleAprovarDocumento}
                 onDesaprovar={handleDesaprovarDocumento}
                 onImprimir={handleImprimirDocumento}
+                modulo="prova"
               />
             </CardContent>
           </Card>

@@ -7,7 +7,10 @@ import {
 import { Reflector } from "@nestjs/core";
 
 import { IS_PUBLIC_KEY } from "../decorators/public.decorator";
-import { ROLES_KEY } from "../decorators/roles.decorator";
+import {
+  EXACT_ROLES_KEY,
+  ROLES_KEY,
+} from "../decorators/roles.decorator";
 import { AuthenticatedRequest } from "./auth.guard";
 
 import { ROLE_HIERARCHY } from "@essencia/shared/roles";
@@ -46,10 +49,23 @@ export class RolesGuard implements CanActivate {
       throw new ForbiddenException("Acesso negado");
     }
 
-    // Check if user has any of the required roles
+    const exactRoles = this.reflector.getAllAndOverride<boolean>(
+      EXACT_ROLES_KEY,
+      [context.getHandler(), context.getClass()],
+    );
+
+    // Verifica se o usuário tem uma das roles declaradas.
     const hasRole = requiredRoles.includes(user.role);
 
-    // Also check hierarchy: higher roles can access lower role endpoints
+    if (exactRoles) {
+      if (!hasRole) {
+        throw new ForbiddenException("Acesso negado - permissao insuficiente");
+      }
+
+      return true;
+    }
+
+    // Mantém a hierarquia global: roles superiores acessam endpoints inferiores.
     const userLevel = ROLE_HIERARCHY[user.role] ?? 999;
     const hasHigherRole = requiredRoles.some((role) => {
       const requiredLevel = ROLE_HIERARCHY[role] ?? 0;

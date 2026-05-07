@@ -27,6 +27,8 @@ import {
   type PlanoAulaStatus,
 } from "@essencia/db";
 
+import { PdfGeneratorService } from "../../common/sharepoint/pdf-generator.service";
+import { StorageService } from "../../common/storage/storage.service";
 import { PlanoAulaHistoricoService } from "./plano-aula-historico.service";
 
 import {
@@ -106,7 +108,11 @@ export interface QuinzenaDeadline {
  */
 @Injectable()
 export class PlanoAulaService {
-  constructor(private readonly historicoService: PlanoAulaHistoricoService) {}
+  constructor(
+    private readonly historicoService: PlanoAulaHistoricoService,
+    private readonly pdfGeneratorService: PdfGeneratorService,
+    private readonly storageService: StorageService,
+  ) {}
 
   // ============================================
   // Métodos da Professora
@@ -186,6 +192,7 @@ export class PlanoAulaService {
               },
             },
           },
+          orderBy: [desc(planoDocumento.updatedAt), desc(planoDocumento.createdAt)],
         },
       },
     });
@@ -1145,7 +1152,7 @@ export class PlanoAulaService {
   }
 
   /**
-   * Marca documento como tendo comentários (OnlyOffice)
+   * Marca documento como tendo comentários
    */
   async marcarTemComentarios(documentoId: string): Promise<void> {
     const db = getDb();
@@ -1201,12 +1208,38 @@ export class PlanoAulaService {
       );
     }
 
+    // Gerar PDF derivado para impressão (só acontece na aprovação).
+    // Falhas não bloqueiam a aprovação — impressão fica indisponível até
+    // que o analista desaprove e reaprove, ou até que o back-fill rode.
+    let pdfStorageKey: string | null = null;
+    let pdfUrl: string | null = null;
+    try {
+      const pdf = await this.pdfGeneratorService.gerarParaImpressao({
+        id: documento.id,
+        storageKey: documento.storageKey,
+        url: documento.url,
+        fileName: documento.fileName,
+        mimeType: documento.mimeType,
+      });
+      if (pdf) {
+        pdfStorageKey = pdf.pdfStorageKey;
+        pdfUrl = pdf.pdfUrl;
+      }
+    } catch (error) {
+      const mensagem = error instanceof Error ? error.message : String(error);
+      console.error(
+        `Falha ao gerar PDF de impress\u00e3o para documento ${documento.id}: ${mensagem}`,
+      );
+    }
+
     // Atualizar documento com aprovação
     const [documentoAtualizado] = await db
       .update(planoDocumento)
       .set({
         approvedBy: user.userId,
         approvedAt: new Date(),
+        pdfStorageKey,
+        pdfUrl,
         updatedAt: new Date(),
       })
       .where(eq(planoDocumento.id, documentoId))
@@ -1244,11 +1277,21 @@ export class PlanoAulaService {
       throw new BadRequestException("Este documento não está aprovado");
     }
 
+    // Remover PDF derivado do MinIO (se existir e for arquivo distinto do original).
+    if (
+      documento.pdfStorageKey &&
+      documento.pdfStorageKey !== documento.storageKey
+    ) {
+      await this.storageService.deleteFile(documento.pdfStorageKey);
+    }
+
     const [documentoAtualizado] = await db
       .update(planoDocumento)
       .set({
         approvedBy: null,
         approvedAt: null,
+        pdfStorageKey: null,
+        pdfUrl: null,
         updatedAt: new Date(),
       })
       .where(eq(planoDocumento.id, documentoId))

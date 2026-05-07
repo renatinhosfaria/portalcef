@@ -4,6 +4,8 @@ import { ImagePlus, Loader2, Trash2, X } from 'lucide-react';
 import Image from 'next/image';
 import { useCallback, useState } from 'react';
 
+import { apiFetch } from '../lib/api';
+
 interface UploadedImage {
     url: string;
     key: string;
@@ -38,7 +40,7 @@ export function ImageUploader({ value, onChange, maxFiles = 5 }: ImageUploaderPr
         formData.append('file', file);
 
         try {
-            const response = await fetch('/api/storage/upload', {
+            const response = await apiFetch('/api/storage/upload', {
                 method: 'POST',
                 body: formData,
             });

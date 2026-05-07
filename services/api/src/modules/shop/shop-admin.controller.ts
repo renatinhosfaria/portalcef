@@ -10,9 +10,10 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
+  BadRequestException,
   Req,
 } from "@nestjs/common";
-import { Roles } from "../../common/decorators/roles.decorator";
+import { ExactRoles, Roles } from "../../common/decorators/roles.decorator";
 import { AuthGuard } from "../../common/guards/auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
 import { TenantGuard } from "../../common/guards/tenant.guard";
@@ -44,11 +45,17 @@ import {
   shopInterestRequests,
   eq,
   asc,
+  desc,
   and,
+  gte,
   sql,
   isNull,
   inArray,
 } from "@essencia/db";
+import {
+  assertShopTenantScope,
+  createShopTenantScope,
+} from "./shop-tenant-scope";
 
 interface UserContext {
   userId: string;
@@ -73,6 +80,7 @@ interface UserContext {
  * - auxiliar_administrativo: leitura e operações de venda (não pode gerenciar produtos/estoque)
  */
 @Controller("shop/admin")
+@ExactRoles()
 @UseGuards(AuthGuard, RolesGuard, TenantGuard)
 export class ShopAdminController {
   constructor(
@@ -82,6 +90,10 @@ export class ShopAdminController {
     private readonly interestService: ShopInterestService,
     private readonly settingsService: ShopSettingsService,
   ) { }
+
+  private ensureTenantContext(user: UserContext) {
+    assertShopTenantScope(createShopTenantScope(user));
+  }
 
   // ==================== DASHBOARD ====================
 
@@ -100,59 +112,141 @@ export class ShopAdminController {
     "auxiliar_administrativo",
   )
   async getDashboard(@Req() req: { user: UserContext }) {
-    const db = getDb();
-    const { schoolId, unitId } = req.user;
+    const { role, schoolId, unitId } = req.user;
+    const isMaster = role === "master";
+    const scope = createShopTenantScope(req.user);
 
-    // Construir condições baseadas no tenant
-    const orderConditions = unitId
-      ? and(
-        eq(shopOrders.schoolId, schoolId),
-        eq(shopOrders.unitId, unitId),
-        eq(shopOrders.status, "CONFIRMADO"),
-      )
-      : and(
-        eq(shopOrders.schoolId, schoolId),
-        eq(shopOrders.status, "CONFIRMADO"),
-      );
+    if (!isMaster) {
+      assertShopTenantScope(scope);
+    }
+
+    const db = getDb();
+
+    type ShopCondition = ReturnType<typeof eq>;
+    const orderScopeConditions: ShopCondition[] = [];
+    if (!isMaster) {
+      orderScopeConditions.push(eq(shopOrders.schoolId, schoolId));
+      if (unitId) {
+        orderScopeConditions.push(eq(shopOrders.unitId, unitId));
+      }
+    }
+
+    const pendingPickupConditions: ShopCondition[] = [
+      ...orderScopeConditions,
+      eq(shopOrders.status, "PAGO"),
+    ];
 
     // Condição de estoque baixo usando SQL raw para evitar problemas de interpolação
     const lowStockCondition = sql`("shop_inventory"."quantity" - "shop_inventory"."reserved_quantity") <= "shop_inventory"."low_stock_threshold"`;
 
-    const inventoryConditions = unitId
-      ? and(eq(shopInventory.unitId, unitId), lowStockCondition)
-      : lowStockCondition;
+    const inventoryConditions: ShopCondition[] = [lowStockCondition];
+    if (!isMaster) {
+      if (unitId) {
+        inventoryConditions.push(eq(shopInventory.unitId, unitId));
+      } else {
+        inventoryConditions.push(
+          sql`${shopInventory.unitId} in (select id from units where school_id = ${schoolId})`,
+        );
+      }
+    }
 
-    const interestConditions = unitId
-      ? and(
-        eq(shopInterestRequests.unitId, unitId),
-        isNull(shopInterestRequests.contactedAt),
-      )
-      : isNull(shopInterestRequests.contactedAt);
+    const interestConditions: ShopCondition[] = [
+      isNull(shopInterestRequests.contactedAt),
+    ];
+    if (!isMaster) {
+      interestConditions.push(eq(shopInterestRequests.schoolId, schoolId));
+      if (unitId) {
+        interestConditions.push(eq(shopInterestRequests.unitId, unitId));
+      }
+    }
+
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+
+    const startOfWeek = new Date(startOfToday);
+    startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay());
+
+    const salesBaseConditions: ShopCondition[] = [
+      ...orderScopeConditions,
+      inArray(shopOrders.status, ["PAGO", "RETIRADO"]),
+      sql`${shopOrders.paidAt} is not null`,
+    ];
 
     // Contadores de pedidos pendentes de retirada
     const [pendingPickupResult] = await db
       .select({ count: sql<number>`cast(count(*) as integer)` })
       .from(shopOrders)
-      .where(orderConditions);
+      .where(and(...pendingPickupConditions));
 
     // Contadores de produtos com estoque baixo
     const [lowStockResult] = await db
       .select({ count: sql<number>`cast(count(*) as integer)` })
       .from(shopInventory)
-      .where(inventoryConditions);
+      .where(and(...inventoryConditions));
 
     // Contadores de interesse não contatado
     const [pendingInterestResult] = await db
       .select({ count: sql<number>`cast(count(*) as integer)` })
       .from(shopInterestRequests)
-      .where(interestConditions);
+      .where(and(...interestConditions));
+
+    const [salesTodayResult] = await db
+      .select({
+        count: sql<number>`cast(count(*) as integer)`,
+        total: sql<number>`cast(coalesce(sum(${shopOrders.totalAmount}), 0) as integer)`,
+      })
+      .from(shopOrders)
+      .where(
+        and(...salesBaseConditions, gte(shopOrders.paidAt, startOfToday)),
+      );
+
+    const [salesWeekResult] = await db
+      .select({
+        count: sql<number>`cast(count(*) as integer)`,
+        total: sql<number>`cast(coalesce(sum(${shopOrders.totalAmount}), 0) as integer)`,
+      })
+      .from(shopOrders)
+      .where(
+        and(...salesBaseConditions, gte(shopOrders.paidAt, startOfWeek)),
+      );
+
+    const recentOrders = await db.query.shopOrders.findMany({
+      where:
+        orderScopeConditions.length > 0
+          ? and(...orderScopeConditions)
+          : undefined,
+      orderBy: [desc(shopOrders.createdAt)],
+      limit: 5,
+      with: {
+        items: true,
+      },
+    });
 
     return {
       success: true,
       data: {
-        pendingPickups: pendingPickupResult?.count || 0,
-        lowStockAlerts: lowStockResult?.count || 0,
-        pendingInterest: pendingInterestResult?.count || 0,
+        stats: {
+          pendingPickups: pendingPickupResult?.count || 0,
+          lowStockAlerts: lowStockResult?.count || 0,
+          pendingInterests: pendingInterestResult?.count || 0,
+          salesToday: {
+            count: salesTodayResult?.count || 0,
+            total: salesTodayResult?.total || 0,
+          },
+          salesWeek: {
+            count: salesWeekResult?.count || 0,
+            total: salesWeekResult?.total || 0,
+          },
+        },
+        recentOrders: recentOrders.map((order: (typeof recentOrders)[number]) => ({
+          id: order.id,
+          orderNumber: order.orderNumber,
+          customerName: order.customerName,
+          studentName: order.items?.[0]?.studentName || "",
+          status: order.status,
+          totalAmount: order.totalAmount,
+          createdAt: order.createdAt,
+        })),
       },
     };
   }
@@ -175,17 +269,26 @@ export class ShopAdminController {
   )
   async getAllProducts(@Req() req: { user: UserContext }) {
     const db = getDb();
+    this.ensureTenantContext(req.user);
 
     // Master tem acesso a todos os produtos (sem filtro por schoolId)
     const whereClause =
-      req.user.role === "master" || !req.user.schoolId
+      req.user.role === "master"
         ? undefined
         : eq(shopProducts.schoolId, req.user.schoolId);
 
     const products = await db.query.shopProducts.findMany({
       where: whereClause,
       with: {
-        variants: true,
+        variants: {
+          with: {
+            inventory: req.user.unitId
+              ? {
+                  where: eq(shopInventory.unitId, req.user.unitId),
+                }
+              : true,
+          },
+        },
         images: {
           orderBy: [asc(shopProductImages.displayOrder)],
         },
@@ -197,6 +300,23 @@ export class ShopAdminController {
     const formattedProducts = products.map((p: (typeof products)[0]) => ({
       ...p,
       images: p.images.map((img: { imageUrl: string }) => img.imageUrl),
+      variants: p.variants?.map((variant: (typeof p.variants)[number]) => {
+        const availableStock =
+          variant.inventory?.reduce(
+            (
+              total: number,
+              inventory: { quantity: number; reservedQuantity: number },
+            ) =>
+              total +
+              Math.max(0, inventory.quantity - inventory.reservedQuantity),
+            0,
+          ) ?? null;
+
+        return {
+          ...variant,
+          availableStock,
+        };
+      }),
       variantsCount: p.variants?.length || 0,
     }));
 
@@ -220,8 +340,14 @@ export class ShopAdminController {
     "gerente_financeiro",
     "auxiliar_administrativo",
   )
-  async getProductById(@Param("id") id: string) {
-    const product = await this.productsService.getProductById(id);
+  async getProductById(
+    @Req() req: { user: UserContext },
+    @Param("id") id: string,
+  ) {
+    const product = await this.productsService.getProductById(
+      id,
+      createShopTenantScope(req.user),
+    );
 
     return {
       success: true,
@@ -240,7 +366,6 @@ export class ShopAdminController {
     "master",
     "diretora_geral",
     "gerente_unidade",
-    "auxiliar_administrativo",
   )
   @HttpCode(HttpStatus.CREATED)
   async createProduct(
@@ -250,6 +375,7 @@ export class ShopAdminController {
     const product = await this.productsService.createProduct(
       dto,
       req.user.userId,
+      createShopTenantScope(req.user),
     );
 
     return {
@@ -269,7 +395,6 @@ export class ShopAdminController {
     "master",
     "diretora_geral",
     "gerente_unidade",
-    "auxiliar_administrativo",
   )
   async updateProduct(
     @Req() req: { user: UserContext },
@@ -280,6 +405,7 @@ export class ShopAdminController {
       id,
       dto,
       req.user.userId,
+      createShopTenantScope(req.user),
     );
 
     return {
@@ -299,14 +425,17 @@ export class ShopAdminController {
     "master",
     "diretora_geral",
     "gerente_unidade",
-    "auxiliar_administrativo",
   )
   @HttpCode(HttpStatus.NO_CONTENT)
   async deleteProduct(
     @Req() req: { user: UserContext },
     @Param("id") id: string,
   ) {
-    await this.productsService.deleteProduct(id, req.user.userId);
+    await this.productsService.deleteProduct(
+      id,
+      req.user.userId,
+      createShopTenantScope(req.user),
+    );
   }
 
   // ==================== VARIANTES ====================
@@ -322,7 +451,6 @@ export class ShopAdminController {
     "master",
     "diretora_geral",
     "gerente_unidade",
-    "auxiliar_administrativo",
   )
   @HttpCode(HttpStatus.CREATED)
   async createVariant(
@@ -339,6 +467,7 @@ export class ShopAdminController {
       dto,
       req.user.userId,
       req.user.unitId || undefined,
+      createShopTenantScope(req.user),
     );
 
     return {
@@ -358,7 +487,6 @@ export class ShopAdminController {
     "master",
     "diretora_geral",
     "gerente_unidade",
-    "auxiliar_administrativo",
   )
   async updateVariant(
     @Req() req: { user: UserContext },
@@ -375,6 +503,7 @@ export class ShopAdminController {
       id,
       dto,
       req.user.userId,
+      createShopTenantScope(req.user),
     );
 
     return {
@@ -394,14 +523,17 @@ export class ShopAdminController {
     "master",
     "diretora_geral",
     "gerente_unidade",
-    "auxiliar_administrativo",
   )
   @HttpCode(HttpStatus.NO_CONTENT)
   async deleteVariant(
     @Req() req: { user: UserContext },
     @Param("id") id: string,
   ) {
-    await this.productsService.deleteVariant(id, req.user.userId);
+    await this.productsService.deleteVariant(
+      id,
+      req.user.userId,
+      createShopTenantScope(req.user),
+    );
   }
 
   // ==================== ESTOQUE ====================
@@ -422,13 +554,14 @@ export class ShopAdminController {
   )
   async getAllInventory(@Req() req: { user: UserContext }) {
     const db = getDb();
+    this.ensureTenantContext(req.user);
 
     // Filtrar por unidade se não for master ou diretora_geral
     const whereClause =
       req.user.role === "master"
         ? undefined
         : req.user.role === "diretora_geral"
-          ? eq(shopInventory.unitId, req.user.schoolId)
+          ? sql`${shopInventory.unitId} in (select id from units where school_id = ${req.user.schoolId})`
           : eq(shopInventory.unitId, req.user.unitId!);
 
     const inventory = await db.query.shopInventory.findMany({
@@ -517,12 +650,14 @@ export class ShopAdminController {
     "auxiliar_administrativo",
   )
   async getInventory(
+    @Req() req: { user: UserContext },
     @Param("variantId") variantId: string,
     @Param("unitId") unitId: string,
   ) {
     const inventory = await this.inventoryService.getInventory(
       variantId,
       unitId,
+      createShopTenantScope(req.user),
     );
 
     return {
@@ -542,7 +677,6 @@ export class ShopAdminController {
     "master",
     "diretora_geral",
     "gerente_unidade",
-    "auxiliar_administrativo",
   )
   @HttpCode(HttpStatus.CREATED)
   async addInventory(
@@ -555,6 +689,7 @@ export class ShopAdminController {
       dto.quantity,
       dto.notes || "Entrada de estoque",
       req.user.userId,
+      createShopTenantScope(req.user),
     );
 
     return {
@@ -574,7 +709,6 @@ export class ShopAdminController {
     "master",
     "diretora_geral",
     "gerente_unidade",
-    "auxiliar_administrativo",
   )
   @HttpCode(HttpStatus.CREATED)
   async removeInventory(
@@ -588,6 +722,7 @@ export class ShopAdminController {
       dto.notes || "Saída manual de estoque",
       dto.reason,
       req.user.userId,
+      createShopTenantScope(req.user),
     );
 
     return {
@@ -607,7 +742,6 @@ export class ShopAdminController {
     "master",
     "diretora_geral",
     "gerente_unidade",
-    "auxiliar_administrativo",
   )
   @HttpCode(HttpStatus.CREATED)
   async adjustInventory(
@@ -620,6 +754,7 @@ export class ShopAdminController {
       dto.quantityChange,
       dto.notes,
       req.user.userId,
+      createShopTenantScope(req.user),
     );
 
     return {
@@ -644,12 +779,14 @@ export class ShopAdminController {
     "auxiliar_administrativo",
   )
   async getInventoryLedger(
+    @Req() req: { user: UserContext },
     @Param("variantId") variantId: string,
     @Param("unitId") unitId: string,
   ) {
     const ledger = await this.inventoryService.getInventoryLedger(
       variantId,
       unitId,
+      createShopTenantScope(req.user),
     );
 
     return {
@@ -688,7 +825,10 @@ export class ShopAdminController {
       search: query.search,
     };
 
-    const result = await this.ordersService.listOrders(filters);
+    const result = await this.ordersService.listOrders(
+      filters,
+      createShopTenantScope(req.user),
+    );
 
     return {
       success: true,
@@ -713,8 +853,14 @@ export class ShopAdminController {
     "gerente_financeiro",
     "auxiliar_administrativo",
   )
-  async getOrderById(@Param("id") id: string) {
-    const order = await this.ordersService.getOrderById(id);
+  async getOrderById(
+    @Req() req: { user: UserContext },
+    @Param("id") id: string,
+  ) {
+    const order = await this.ordersService.getOrderById(
+      id,
+      createShopTenantScope(req.user),
+    );
 
     return {
       success: true,
@@ -743,16 +889,30 @@ export class ShopAdminController {
     @Body() dto: CreatePresentialSaleDto,
   ) {
     // Extrair tenant context da sessão (seguindo Regras Invioláveis)
-    const { schoolId, unitId, userId } = req.user;
+    const { schoolId, unitId, userId, role } = req.user;
+    const isMaster = role === "master";
+    const scope = createShopTenantScope(req.user);
 
-    if (!unitId) {
-      throw new Error("Usuário sem unidade associada");
+    if (!isMaster) {
+      assertShopTenantScope(scope);
+    }
+
+    const operationalSchoolId =
+      isMaster ? dto.schoolId : schoolId;
+    const operationalUnitId =
+      isMaster || role === "diretora_geral" ? dto.unitId || unitId : unitId;
+
+    if (!operationalSchoolId || !operationalUnitId) {
+      throw new BadRequestException({
+        code: "OPERATIONAL_UNIT_REQUIRED",
+        message: "Informe uma unidade operacional para registrar a venda",
+      });
     }
 
     const order = await this.ordersService.createPresentialSale(
       dto,
-      schoolId,
-      unitId,
+      operationalSchoolId,
+      operationalUnitId,
       userId,
     );
 
@@ -773,14 +933,18 @@ export class ShopAdminController {
     "master",
     "diretora_geral",
     "gerente_unidade",
-    "auxiliar_administrativo",
   )
   async cancelOrder(
     @Req() req: { user: UserContext },
     @Param("id") id: string,
     @Body() dto: CancelOrderDto,
   ) {
-    await this.ordersService.cancelOrder(id, req.user.userId, dto.reason);
+    await this.ordersService.cancelOrder(
+      id,
+      req.user.userId,
+      dto.reason,
+      createShopTenantScope(req.user),
+    );
 
     return {
       success: true,
@@ -813,6 +977,7 @@ export class ShopAdminController {
       id,
       dto,
       req.user.userId,
+      createShopTenantScope(req.user),
     );
 
     return {
@@ -839,7 +1004,11 @@ export class ShopAdminController {
     @Req() req: { user: UserContext },
     @Param("id") id: string,
   ) {
-    const order = await this.ordersService.markAsPickedUp(id, req.user.userId);
+    const order = await this.ordersService.markAsPickedUp(
+      id,
+      req.user.userId,
+      createShopTenantScope(req.user),
+    );
 
     return {
       success: true,
@@ -860,14 +1029,17 @@ export class ShopAdminController {
     "master",
     "diretora_geral",
     "gerente_unidade",
-    "auxiliar_administrativo",
   )
   @HttpCode(HttpStatus.NO_CONTENT)
   async deleteOrder(
     @Req() req: { user: UserContext },
     @Param("id") id: string,
   ) {
-    await this.ordersService.deleteOrder(id, req.user.userId);
+    await this.ordersService.deleteOrder(
+      id,
+      req.user.userId,
+      createShopTenantScope(req.user),
+    );
   }
 
   // ==================== LISTA DE INTERESSE ====================
@@ -896,6 +1068,7 @@ export class ShopAdminController {
     const result = await this.interestService.getInterestRequests(
       unitId,
       filters,
+      createShopTenantScope(req.user),
     );
 
     return {
@@ -924,7 +1097,10 @@ export class ShopAdminController {
   )
   async getInterestSummary(@Req() req: { user: UserContext }) {
     const unitId = req.user.unitId;
-    const result = await this.interestService.getInterestSummary(unitId);
+    const result = await this.interestService.getInterestSummary(
+      unitId,
+      createShopTenantScope(req.user),
+    );
 
     return {
       success: true,
@@ -955,6 +1131,7 @@ export class ShopAdminController {
     const result = await this.interestService.markAsContacted(
       id,
       req.user.userId,
+      createShopTenantScope(req.user),
     );
 
     return {
@@ -979,8 +1156,14 @@ export class ShopAdminController {
     "gerente_financeiro",
     "auxiliar_administrativo",
   )
-  async getSettings(@Param("unitId") unitId: string) {
-    const settings = await this.settingsService.getSettings(unitId);
+  async getSettings(
+    @Req() req: { user: UserContext },
+    @Param("unitId") unitId: string,
+  ) {
+    const settings = await this.settingsService.getSettings(
+      unitId,
+      createShopTenantScope(req.user),
+    );
 
     return {
       success: true,
@@ -999,7 +1182,6 @@ export class ShopAdminController {
     "master",
     "diretora_geral",
     "gerente_unidade",
-    "auxiliar_administrativo",
   )
   async updateSettings(
     @Req() req: { user: UserContext },
@@ -1010,6 +1192,7 @@ export class ShopAdminController {
       unitId,
       dto,
       req.user.userId,
+      createShopTenantScope(req.user),
     );
 
     return {

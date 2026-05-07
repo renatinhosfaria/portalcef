@@ -14,11 +14,8 @@ import {
   Res,
   UseGuards,
 } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
 import { FastifyReply, FastifyRequest } from "fastify";
-import * as jwt from "jsonwebtoken";
 
-import { Public } from "../../common/decorators/public.decorator";
 import { Roles } from "../../common/decorators/roles.decorator";
 import { AuthGuard } from "../../common/guards/auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
@@ -102,7 +99,6 @@ export class PlanoAulaController {
     private readonly planoAulaService: PlanoAulaService,
     private readonly storageService: StorageService,
     private readonly historicoService: PlanoAulaHistoricoService,
-    private readonly configService: ConfigService,
     private readonly sharePointService: SharePointService,
   ) {}
 
@@ -342,7 +338,7 @@ export class PlanoAulaController {
    */
   // Nota: lógica espelhada em ProvaController.editarWord — manter sincronizados
   @Get(":id/documentos/:docId/editar-word")
-  @Roles(...PROFESSORA_ACCESS, ...ANALISTA_ACCESS)
+  @Roles(...ANALISTA_ACCESS)
   async editarWord(
     @Req() req: { user: UserContext },
     @Param("id") planoId: string,
@@ -356,15 +352,7 @@ export class PlanoAulaController {
     }
 
     const user = req.user;
-    const plano = await this.planoAulaService.getPlanoById(user, planoId);
-    const isOwner = plano.user.id === user.userId;
-    const isAnalistaUser = ANALISTA_ROLES.includes(user.role as typeof ANALISTA_ROLES[number]);
-    if (!isOwner && !isAnalistaUser) {
-      throw new BadRequestException({
-        code: "NOT_AUTHORIZED",
-        message: "Você não tem permissão para editar documentos deste plano",
-      });
-    }
+    await this.planoAulaService.getPlanoById(user, planoId);
 
     const documento = await this.planoAulaService.getDocumentoById(planoId, docId);
 
@@ -383,47 +371,199 @@ export class PlanoAulaController {
     }
 
     // Verificar se já existe uma edição ativa
+    let itemId: string | null = null;
     if (documento.sharepointItemId && documento.editandoDesde) {
-      const expirado = new Date();
-      expirado.setHours(expirado.getHours() - 2);
+      const expirado = this.sharePointService.calcularLimiteEdicao();
 
       if (documento.editandoDesde > expirado) {
-        // Edição ainda ativa — retornar URL existente
-        const msWordUrl = this.sharePointService.construirMsWordUrl(
-          documento.sharepointEditUrl!,
-        );
-        return {
-          success: true,
-          data: { url: msWordUrl },
-        };
+        if (documento.sharepointEditUrl) {
+          // Edição ainda ativa — retornar URL existente
+          const msWordUrl = this.sharePointService.construirMsWordUrl(
+            documento.sharepointEditUrl,
+          );
+          return {
+            success: true,
+            data: { url: msWordUrl },
+          };
+        }
+        // Item existe (subido pela visualização) mas sem link edit — reusar item
+        itemId = documento.sharepointItemId;
+      } else {
+        // Edição expirada — limpar antes de criar nova (best-effort, 1 tentativa)
+        await this.sharePointService.removerArquivo(documento.sharepointItemId, 1);
       }
-
-      // Edição expirada — limpar antes de criar nova
-      await this.sharePointService.removerArquivo(documento.sharepointItemId);
     }
 
-    // Upload para SharePoint e criar link de compartilhamento
-    const itemId = await this.sharePointService.uploadParaSharePoint(
-      documento.storageKey,
-      documento.fileName || "documento.docx",
+    if (!itemId) {
+      // Upload para SharePoint
+      this.logger.log(
+        `[editarWord] Iniciando upload: storageKey=${documento.storageKey}, fileName=${documento.fileName}`,
+      );
+
+      itemId = await this.sharePointService.uploadParaSharePoint(
+        documento.storageKey,
+        documento.fileName || "documento.docx",
+        docId,
+      );
+
+      this.logger.log(`[editarWord] Upload concluído: itemId=${itemId}`);
+    }
+
+    const { url, directUrl } = await this.sharePointService.criarLinkCompartilhamento(
+      itemId,
       docId,
+      documento.fileName || "documento.docx",
     );
 
-    const { url } = await this.sharePointService.criarLinkCompartilhamento(itemId);
+    this.logger.log(`[editarWord] Link compartilhamento: ${url}`);
+    this.logger.log(`[editarWord] URL direta: ${directUrl}`);
 
     // Atualizar documento com dados do SharePoint
     await this.planoAulaService.atualizarDocumento(docId, {
       sharepointItemId: itemId,
-      sharepointEditUrl: url,
+      sharepointEditUrl: directUrl,
       editandoDesde: new Date(),
     });
 
-    // Gerar URL ms-word: para abrir diretamente no Word desktop
-    const msWordUrl = this.sharePointService.construirMsWordUrl(url);
+    // Gerar URL ms-word: usando URL direta do arquivo no SharePoint
+    const msWordUrl = this.sharePointService.construirMsWordUrl(directUrl);
 
     return {
       success: true,
       data: { url: msWordUrl },
+    };
+  }
+
+  /**
+   * GET /plano-aula/:id/documentos/:docId/visualizar-sharepoint
+   * Retorna URL embeddable do Office para Web para visualização fiel de .docx
+   */
+  // Nota: lógica espelhada em ProvaController.visualizarSharePoint — manter sincronizados
+  @Get(":id/documentos/:docId/visualizar-sharepoint")
+  @Roles(...VISUALIZAR_ACCESS)
+  async visualizarSharePoint(
+    @Req() req: { user: UserContext },
+    @Param("id") planoId: string,
+    @Param("docId") docId: string,
+  ) {
+    if (!this.sharePointService.isConfigurado()) {
+      return { success: true, data: { disponivel: false } };
+    }
+
+    const user = req.user;
+    await this.planoAulaService.getPlanoById(user, planoId);
+
+    const documento = await this.planoAulaService.getDocumentoById(planoId, docId);
+
+    const isWord =
+      documento.mimeType?.includes("word") ||
+      documento.mimeType?.includes("msword") ||
+      documento.fileName?.match(/\.docx?$/i);
+
+    if (!isWord || !documento.storageKey) {
+      return { success: true, data: { disponivel: false } };
+    }
+
+    // Reusar item existente se não expirou
+    let itemId: string | null = null;
+    if (documento.sharepointItemId && documento.editandoDesde) {
+      const expirado = this.sharePointService.calcularLimiteEdicao();
+      if (documento.editandoDesde > expirado) {
+        itemId = documento.sharepointItemId;
+      }
+    }
+
+    if (!itemId) {
+      itemId = await this.sharePointService.uploadParaSharePoint(
+        documento.storageKey,
+        documento.fileName || "documento.docx",
+        docId,
+      );
+
+      // Persistir itemId para permitir reuso e garantir cleanup
+      await this.planoAulaService.atualizarDocumento(docId, {
+        sharepointItemId: itemId,
+        editandoDesde: new Date(),
+      });
+    }
+
+    const { embedUrl } = await this.sharePointService.criarLinkVisualizacao(itemId);
+
+    return {
+      success: true,
+      data: { disponivel: true, embedUrl },
+    };
+  }
+
+  /**
+   * POST /plano-aula/:id/documentos/:docId/sincronizar-word
+   * Sincroniza alterações do SharePoint de volta ao MinIO
+   */
+  @Post(":id/documentos/:docId/sincronizar-word")
+  @Roles(...ANALISTA_ACCESS)
+  async sincronizarWord(
+    @Req() req: { user: UserContext },
+    @Param("id") planoId: string,
+    @Param("docId") docId: string,
+  ) {
+    const user = req.user;
+    await this.planoAulaService.getPlanoById(user, planoId);
+
+    const documento = await this.planoAulaService.getDocumentoById(planoId, docId);
+
+    if (!documento.sharepointItemId) {
+      throw new BadRequestException({
+        code: "NO_SHAREPOINT_SESSION",
+        message: "Nenhuma edição ativa no SharePoint para este documento",
+      });
+    }
+
+    if (!documento.storageKey) {
+      throw new BadRequestException("Documento sem arquivo associado");
+    }
+
+    if (!documento.editandoDesde) {
+      throw new BadRequestException("Estado inconsistente: edição sem data de início");
+    }
+
+    // Verificar se houve modificação no SharePoint
+    const foiModificado = await this.sharePointService.foiModificadoApos(
+      documento.sharepointItemId,
+      documento.editandoDesde,
+    );
+
+    if (foiModificado) {
+      // Baixar do SharePoint e atualizar no MinIO
+      const buffer = await this.sharePointService.baixarArquivo(
+        documento.sharepointItemId,
+      );
+
+      await this.storageService.replaceFile(
+        documento.storageKey,
+        buffer,
+        documento.mimeType ||
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        documento.fileName || "documento.docx",
+      );
+
+      this.logger.log(
+        `[sincronizarWord] Documento ${docId} sincronizado do SharePoint (${buffer.length} bytes)`,
+      );
+    }
+
+    // Limpar arquivo do SharePoint e dados temporários
+    await this.sharePointService.removerArquivo(documento.sharepointItemId);
+
+    await this.planoAulaService.atualizarDocumento(docId, {
+      sharepointItemId: null,
+      sharepointEditUrl: null,
+      editandoDesde: null,
+      updatedAt: new Date(),
+    });
+
+    return {
+      success: true,
+      data: { sincronizado: foiModificado },
     };
   }
 
@@ -520,96 +660,11 @@ export class PlanoAulaController {
   }
 
   /**
-   * GET /plano-aula/:id/documentos/:docId/editor-config
-   * Retorna configuração do OnlyOffice para visualização (somente leitura)
-   */
-  @Get(":id/documentos/:docId/editor-config")
-  @Roles(...VISUALIZAR_ACCESS)
-  async getEditorConfig(
-    @Req() req: { user: UserContext },
-    @Param("id") planoId: string,
-    @Param("docId") docId: string,
-  ) {
-    const documento = await this.planoAulaService.getDocumentoById(planoId, docId);
-
-    if (!documento.storageKey) {
-      throw new BadRequestException("Documento sem arquivo associado");
-    }
-
-    const isWord =
-      documento.mimeType?.includes("word") ||
-      documento.mimeType?.includes("msword");
-    if (!isWord) {
-      throw new BadRequestException(
-        "Apenas documentos .doc/.docx podem ser abertos no visualizador",
-      );
-    }
-
-    const apiBaseUrl =
-      this.configService.get<string>("NEXT_PUBLIC_API_URL") ||
-      "https://www.portalcef.com.br/api";
-    const fileUrl = `${apiBaseUrl}/plano-aula/${planoId}/documentos/${docId}/download`;
-
-    const onlyofficeUrl =
-      this.configService.get<string>("ONLYOFFICE_PUBLIC_URL") ||
-      "https://www.portalcef.com.br/onlyoffice";
-    const jwtSecret = this.configService.get<string>("ONLYOFFICE_JWT_SECRET");
-
-    const config = {
-      document: {
-        fileType: documento.fileName?.endsWith(".doc") ? "doc" : "docx",
-        key: `${docId}-${documento.updatedAt ? new Date(documento.updatedAt).getTime() : docId}`,
-        title: documento.fileName || "Documento",
-        url: fileUrl,
-        permissions: {
-          edit: false,
-          comment: false,
-          download: true,
-          print: true,
-        },
-      },
-      documentType: "word",
-      editorConfig: {
-        mode: "view",
-        lang: "pt",
-        customization: {
-          autosave: false,
-          forcesave: false,
-          plugins: false,
-          compactToolbar: true,
-          hideRightMenu: true,
-          hideRulers: true,
-          spellcheck: false,
-        },
-        user: {
-          id: req.user.userId,
-          name: "Usuário",
-        },
-      },
-    };
-
-    let token: string | undefined;
-    if (jwtSecret) {
-      token = jwt.sign(config, jwtSecret);
-    }
-
-    return {
-      success: true,
-      data: {
-        documentServerUrl: onlyofficeUrl,
-        config: { ...config, token },
-      },
-    };
-  }
-
-  /**
    * GET /plano-aula/:id/documentos/:docId/download
-   * Serve o arquivo diretamente do MinIO para o OnlyOffice Document Server.
-   * Sem autenticação de sessão — o OnlyOffice não envia JWT ao baixar document.url.
-   * Segurança: a URL é gerada server-side e requer UUIDs exatos (planoId + docId).
+   * Serve o arquivo diretamente do MinIO para visualização no browser (docx-preview).
    */
   @Get(":id/documentos/:docId/download")
-  @Public() // Sem autenticação — endpoint server-to-server para o OnlyOffice
+  @Roles(...VISUALIZAR_ACCESS)
   async downloadDocumento(
     @Res() reply: FastifyReply,
     @Param("id") planoId: string,

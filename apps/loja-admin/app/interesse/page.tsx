@@ -5,22 +5,36 @@ import { Phone, Mail, Check, Sparkles, Users, Clock } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
 import { apiFetch } from '../../lib/api';
+import { formatInterestItems, type InterestItem } from '../../lib/interesse';
 
 interface InterestRequest {
     id: string;
     customerName: string;
     customerPhone: string;
-    customerEmail: string;
+    customerEmail: string | null;
     studentName: string;
     studentClass: string;
     notes: string;
+    items?: InterestItem[];
     itemsCount: number;
+    itemsDescription: string[];
     contactedAt: string | null;
     createdAt: string;
 }
 
+interface InterestSummary {
+    total: number;
+    pending: number;
+    contacted: number;
+}
+
 export default function InteressePage() {
     const [requests, setRequests] = useState<InterestRequest[]>([]);
+    const [summary, setSummary] = useState<InterestSummary>({
+        total: 0,
+        pending: 0,
+        contacted: 0,
+    });
     const [loading, setLoading] = useState(true);
     const [statusFilter, setStatusFilter] = useState<'PENDENTE' | 'CONTATADO' | 'TODOS'>('PENDENTE');
 
@@ -33,7 +47,6 @@ export default function InteressePage() {
                 params.set('status', statusFilter);
             }
 
-            // TODO: Implementar API /api/shop/admin/interest no backend
             const response = await apiFetch(`/api/shop/admin/interest?${params.toString()}`);
 
             if (!response.ok) {
@@ -43,7 +56,15 @@ export default function InteressePage() {
             }
 
             const result = await response.json();
-            setRequests(result.data || []);
+            setRequests((result.data || []).map((request: InterestRequest) => {
+                const items = request.items || [];
+
+                return {
+                    ...request,
+                    itemsCount: request.itemsCount ?? items.length,
+                    itemsDescription: formatInterestItems(items),
+                };
+            }));
         } catch (err) {
             console.warn('Não foi possível carregar lista de interesse. API ainda não implementada?', err);
             setRequests([]);
@@ -52,9 +73,35 @@ export default function InteressePage() {
         }
     }, [statusFilter]);
 
+    const loadSummary = useCallback(async () => {
+        try {
+            const response = await apiFetch('/api/shop/admin/interest/summary');
+
+            if (!response.ok) {
+                setSummary({ total: 0, pending: 0, contacted: 0 });
+                return;
+            }
+
+            const result = await response.json();
+            const statusCounts = result.data?.statusCounts || {};
+            const pending = statusCounts.PENDENTE || 0;
+            const contacted = statusCounts.CONTATADO || 0;
+
+            setSummary({
+                total: pending + contacted,
+                pending,
+                contacted,
+            });
+        } catch (err) {
+            console.warn('Não foi possível carregar resumo de interesse.', err);
+            setSummary({ total: 0, pending: 0, contacted: 0 });
+        }
+    }, []);
+
     useEffect(() => {
         loadRequests();
-    }, [loadRequests]);
+        loadSummary();
+    }, [loadRequests, loadSummary]);
 
     const formatDate = (dateStr: string) => {
         return formatarDataHora(dateStr);
@@ -68,9 +115,17 @@ export default function InteressePage() {
     };
 
     const handleMarkContacted = async (id: string) => {
-        setRequests(requests.map(r =>
-            r.id === id ? { ...r, contactedAt: new Date().toISOString() } : r
-        ));
+        const response = await apiFetch(`/api/shop/admin/interest/${id}/contacted`, {
+            method: 'PATCH',
+        });
+
+        if (!response.ok) {
+            console.warn('Não foi possível marcar interesse como contatado:', response.status);
+            return;
+        }
+
+        await loadRequests();
+        await loadSummary();
     };
 
     return (
@@ -90,7 +145,7 @@ export default function InteressePage() {
                     <div className="flex items-start justify-between">
                         <div>
                             <p className="stat-card-label">Total</p>
-                            <p className="stat-card-value">15</p>
+                            <p className="stat-card-value">{summary.total}</p>
                         </div>
                         <div className="stat-card-icon bg-blue-100 text-blue-600">
                             <Users className="w-6 h-6" />
@@ -104,7 +159,7 @@ export default function InteressePage() {
                     <div className="flex items-start justify-between">
                         <div>
                             <p className="stat-card-label">Pendentes</p>
-                            <p className="stat-card-value text-amber-600">12</p>
+                            <p className="stat-card-value text-amber-600">{summary.pending}</p>
                         </div>
                         <div className="stat-card-icon bg-amber-100 text-amber-600">
                             <Clock className="w-6 h-6" />
@@ -118,7 +173,7 @@ export default function InteressePage() {
                     <div className="flex items-start justify-between">
                         <div>
                             <p className="stat-card-label">Contatados</p>
-                            <p className="stat-card-value text-[#5a7a1f]">3</p>
+                            <p className="stat-card-value text-[#5a7a1f]">{summary.contacted}</p>
                         </div>
                         <div className="stat-card-icon bg-[#A3D154]/20 text-[#5a7a1f]">
                             <Check className="w-6 h-6" />
@@ -174,17 +229,28 @@ export default function InteressePage() {
                                                     <Phone className="w-3 h-3" />
                                                     {formatPhone(req.customerPhone)}
                                                 </a>
-                                                <a href={`mailto:${req.customerEmail}`} className="flex items-center gap-2 text-sm text-slate-500 hover:text-[#A3D154]">
-                                                    <Mail className="w-3 h-3" />
-                                                    {req.customerEmail}
-                                                </a>
+                                                {req.customerEmail && (
+                                                    <a href={`mailto:${req.customerEmail}`} className="flex items-center gap-2 text-sm text-slate-500 hover:text-[#A3D154]">
+                                                        <Mail className="w-3 h-3" />
+                                                        {req.customerEmail}
+                                                    </a>
+                                                )}
                                             </div>
                                         </td>
                                         <td>
-                                            <span className="badge badge-info flex items-center gap-1">
-                                                <Sparkles className="w-3 h-3" />
-                                                {req.itemsCount}
-                                            </span>
+                                            <div className="space-y-2">
+                                                <span className="badge badge-info inline-flex items-center gap-1">
+                                                    <Sparkles className="w-3 h-3" />
+                                                    {req.itemsCount}
+                                                </span>
+                                                {req.itemsDescription.length > 0 && (
+                                                    <ul className="space-y-1 text-xs text-slate-600">
+                                                        {req.itemsDescription.map((item) => (
+                                                            <li key={item}>{item}</li>
+                                                        ))}
+                                                    </ul>
+                                                )}
+                                            </div>
                                         </td>
                                         <td className="text-sm text-slate-500">{formatDate(req.createdAt)}</td>
                                         <td>

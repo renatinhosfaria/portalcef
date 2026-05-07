@@ -10,9 +10,12 @@ import {
   shopInterestItems,
   shopProducts,
   shopProductVariants,
+  users,
+  units,
   eq,
   and,
   desc,
+  gte,
   ilike,
   or,
   sql,
@@ -20,6 +23,18 @@ import {
 } from "@essencia/db";
 import type { CreateInterestRequestDto } from "./dto/create-interest-request.dto";
 import type { InterestFiltersDto } from "./dto/interest-filters.dto";
+import {
+  assertShopTenantScope,
+  isMasterShopScope,
+  type ShopTenantScope,
+} from "./shop-tenant-scope";
+
+type Db = ReturnType<typeof getDb>;
+type DbTransaction = Parameters<Db["transaction"]>[0] extends (
+  tx: infer T,
+) => Promise<unknown>
+  ? T
+  : never;
 
 @Injectable()
 export class ShopInterestService {
@@ -34,7 +49,25 @@ export class ShopInterestService {
       `Creating interest request for customer: ${dto.customerName}`,
     );
 
-    // Validar que todos os variants existem e pertencem à unidade
+    if (!dto.items?.length) {
+      throw new BadRequestException({
+        code: "VALIDATION_ERROR",
+        message: "Informe ao menos um item de interesse",
+      });
+    }
+
+    const unit = await db.query.units.findFirst({
+      where: and(eq(units.id, dto.unitId), eq(units.schoolId, dto.schoolId)),
+    });
+
+    if (!unit) {
+      throw new BadRequestException({
+        code: "VALIDATION_ERROR",
+        message: "Unidade não encontrada para a escola informada",
+      });
+    }
+
+    // Validar que todos os variants existem e pertencem à escola
     const variantIds = dto.items.map((i) => i.variantId);
     const variants = await db.query.shopProductVariants.findMany({
       where: inArray(shopProductVariants.id, variantIds),
@@ -50,51 +83,55 @@ export class ShopInterestService {
       });
     }
 
-    // Verificar se todos pertencem à mesma unidade
+    // Verificar se todos pertencem à mesma escola e continuam ativos
     type VariantWithProduct = (typeof variants)[number];
     const invalidVariants = variants.filter(
-      (v: VariantWithProduct) => v.product?.unitId !== dto.unitId,
+      (v: VariantWithProduct) =>
+        !v.isActive ||
+        !v.product?.isActive ||
+        v.product.schoolId !== dto.schoolId,
     );
     if (invalidVariants.length > 0) {
       throw new BadRequestException({
         code: "VALIDATION_ERROR",
-        message: "Produtos pertencem a unidades diferentes",
+        message: "Produtos inválidos para a escola informada",
       });
     }
 
-    // Criar requisição
-    const [request] = await db
-      .insert(shopInterestRequests)
-      .values({
-        unitId: dto.unitId,
-        customerName: dto.customerName,
-        customerPhone: dto.customerPhone,
-        customerEmail: dto.customerEmail || null,
-        studentName: dto.studentName,
-        studentClass: dto.studentClass || null,
-        notes: dto.notes || null,
-        status: "PENDENTE",
-      })
-      .returning();
+    return db.transaction(async (tx: DbTransaction) => {
+      const [request] = await tx
+        .insert(shopInterestRequests)
+        .values({
+          schoolId: dto.schoolId,
+          unitId: dto.unitId,
+          customerName: dto.customerName,
+          customerPhone: dto.customerPhone,
+          customerEmail: dto.customerEmail || null,
+          studentName: dto.studentName,
+          studentClass: dto.studentClass || null,
+          notes: dto.notes || null,
+          status: "PENDENTE",
+        })
+        .returning();
 
-    this.logger.log(`Interest request created: ${request.id}`);
+      this.logger.log(`Interest request created: ${request.id}`);
 
-    // Criar itens
-    const itemsToInsert = dto.items.map((item) => ({
-      interestRequestId: request.id,
-      variantId: item.variantId,
-      quantity: item.quantity,
-    }));
+      const itemsToInsert = dto.items.map((item) => ({
+        interestRequestId: request.id,
+        variantId: item.variantId,
+        quantity: item.quantity,
+      }));
 
-    await db.insert(shopInterestItems).values(itemsToInsert);
+      await tx.insert(shopInterestItems).values(itemsToInsert);
 
-    this.logger.log(`Created ${itemsToInsert.length} interest items`);
+      this.logger.log(`Created ${itemsToInsert.length} interest items`);
 
-    return {
-      requestId: request.id,
-      message:
-        "Obrigado! Entraremos em contato assim que os produtos estiverem disponíveis.",
-    };
+      return {
+        requestId: request.id,
+        message:
+          "Obrigado! Entraremos em contato assim que os produtos estiverem disponíveis.",
+      };
+    });
   }
 
   /**
@@ -103,65 +140,209 @@ export class ShopInterestService {
   async getInterestRequests(
     unitId: string | null,
     filters: InterestFiltersDto = {} as InterestFiltersDto,
+    scope?: ShopTenantScope,
   ) {
     const db = getDb();
     const { status = "TODOS", search = "", page = 1, limit = 20 } = filters;
 
     const offset = (page - 1) * limit;
 
+    const buildConditions = (interestRequests: typeof shopInterestRequests) => {
+      const currentConditions: ReturnType<typeof eq>[] = [];
+
+      if (!isMasterShopScope(scope)) {
+        assertShopTenantScope(scope);
+        const scopedTenant = scope!;
+        currentConditions.push(
+          eq(interestRequests.schoolId, scopedTenant.schoolId!),
+        );
+        if (scopedTenant.unitId) {
+          currentConditions.push(
+            eq(interestRequests.unitId, scopedTenant.unitId),
+          );
+        }
+      } else if (unitId) {
+        currentConditions.push(eq(interestRequests.unitId, unitId));
+      }
+
+      if (status !== "TODOS") {
+        currentConditions.push(eq(interestRequests.status, status));
+      }
+
+      if (search.trim()) {
+        currentConditions.push(
+          or(
+            ilike(interestRequests.customerName, `%${search}%`),
+            ilike(interestRequests.customerPhone, `%${search}%`),
+            ilike(interestRequests.studentName, `%${search}%`),
+          )!,
+        );
+      }
+
+      return currentConditions;
+    };
+
     // Build where conditions
-    const conditions: ReturnType<typeof eq>[] = [];
+    const conditions = buildConditions(shopInterestRequests);
 
-    if (unitId) {
-      conditions.push(eq(shopInterestRequests.unitId, unitId));
-    }
+    type InterestRequestListRow = {
+      id: string;
+      schoolId: string;
+      unitId: string;
+      customerName: string;
+      customerPhone: string;
+      customerEmail: string | null;
+      studentName: string;
+      studentClass: string | null;
+      notes: string | null;
+      status: string;
+      contactedAt: Date | null;
+      contactedBy: string | null;
+      createdAt: Date;
+      contactedByUserId: string | null;
+      contactedByUserName: string | null;
+    };
 
-    if (status !== "TODOS") {
-      conditions.push(eq(shopInterestRequests.status, status));
-    }
+    type InterestItemListRow = {
+      id: string;
+      interestRequestId: string;
+      variantId: string;
+      quantity: number;
+      createdAt: Date;
+      variantSize: string;
+      variantSku: string | null;
+      variantPriceOverride: number | null;
+      variantIsActive: boolean;
+      productId: string;
+      productName: string;
+      productDescription: string | null;
+      productCategory: string;
+      productBasePrice: number;
+      productImageUrl: string | null;
+      productIsActive: boolean;
+    };
 
-    if (search.trim()) {
-      conditions.push(
-        or(
-          ilike(shopInterestRequests.customerName, `%${search}%`),
-          ilike(shopInterestRequests.customerPhone, `%${search}%`),
-          ilike(shopInterestRequests.studentName, `%${search}%`),
-        )!,
-      );
-    }
+    const requestRows = (await db
+      .select({
+        id: shopInterestRequests.id,
+        schoolId: shopInterestRequests.schoolId,
+        unitId: shopInterestRequests.unitId,
+        customerName: shopInterestRequests.customerName,
+        customerPhone: shopInterestRequests.customerPhone,
+        customerEmail: shopInterestRequests.customerEmail,
+        studentName: shopInterestRequests.studentName,
+        studentClass: shopInterestRequests.studentClass,
+        notes: shopInterestRequests.notes,
+        status: shopInterestRequests.status,
+        contactedAt: shopInterestRequests.contactedAt,
+        contactedBy: shopInterestRequests.contactedBy,
+        createdAt: shopInterestRequests.createdAt,
+        contactedByUserId: users.id,
+        contactedByUserName: users.name,
+      })
+      .from(shopInterestRequests)
+      .leftJoin(users, eq(shopInterestRequests.contactedBy, users.id))
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(desc(shopInterestRequests.createdAt))
+      .limit(limit)
+      .offset(offset)) as InterestRequestListRow[];
 
-    // Fetch requests with items
-    const requests = await db.query.shopInterestRequests.findMany({
-      where: conditions.length > 0 ? and(...conditions) : undefined,
-      with: {
-        items: {
-          with: {
-            variant: {
-              with: {
-                product: true,
-              },
-            },
+    const requestIds = requestRows.map((request) => request.id);
+    const itemRows =
+      requestIds.length > 0
+        ? ((await db
+            .select({
+              id: shopInterestItems.id,
+              interestRequestId: shopInterestItems.interestRequestId,
+              variantId: shopInterestItems.variantId,
+              quantity: shopInterestItems.quantity,
+              createdAt: shopInterestItems.createdAt,
+              variantSize: shopProductVariants.size,
+              variantSku: shopProductVariants.sku,
+              variantPriceOverride: shopProductVariants.priceOverride,
+              variantIsActive: shopProductVariants.isActive,
+              productId: shopProducts.id,
+              productName: shopProducts.name,
+              productDescription: shopProducts.description,
+              productCategory: shopProducts.category,
+              productBasePrice: shopProducts.basePrice,
+              productImageUrl: shopProducts.imageUrl,
+              productIsActive: shopProducts.isActive,
+            })
+            .from(shopInterestItems)
+            .innerJoin(
+              shopProductVariants,
+              eq(shopInterestItems.variantId, shopProductVariants.id),
+            )
+            .innerJoin(
+              shopProducts,
+              eq(shopProductVariants.productId, shopProducts.id),
+            )
+            .where(
+              inArray(shopInterestItems.interestRequestId, requestIds),
+            )) as InterestItemListRow[])
+        : [];
+
+    const itemsByRequestId = new Map<string, unknown[]>();
+    for (const item of itemRows) {
+      const items = itemsByRequestId.get(item.interestRequestId) ?? [];
+      items.push({
+        id: item.id,
+        interestRequestId: item.interestRequestId,
+        variantId: item.variantId,
+        quantity: item.quantity,
+        createdAt: item.createdAt,
+        variant: {
+          id: item.variantId,
+          size: item.variantSize,
+          sku: item.variantSku,
+          priceOverride: item.variantPriceOverride,
+          isActive: item.variantIsActive,
+          product: {
+            id: item.productId,
+            name: item.productName,
+            description: item.productDescription,
+            category: item.productCategory,
+            basePrice: item.productBasePrice,
+            imageUrl: item.productImageUrl,
+            isActive: item.productIsActive,
           },
         },
-        contactedBy: {
-          columns: {
-            id: true,
-            name: true,
-          },
-        },
-      },
-      orderBy: desc(shopInterestRequests.createdAt),
-      limit,
-      offset,
-    });
+      });
+      itemsByRequestId.set(item.interestRequestId, items);
+    }
+
+    const requests = requestRows.map((request) => ({
+      id: request.id,
+      schoolId: request.schoolId,
+      unitId: request.unitId,
+      customerName: request.customerName,
+      customerPhone: request.customerPhone,
+      customerEmail: request.customerEmail,
+      studentName: request.studentName,
+      studentClass: request.studentClass,
+      notes: request.notes,
+      status: request.status,
+      contactedAt: request.contactedAt,
+      contactedBy: request.contactedBy,
+      createdAt: request.createdAt,
+      contactedByUser: request.contactedByUserId
+        ? {
+            id: request.contactedByUserId,
+            name: request.contactedByUserName,
+          }
+        : null,
+      items: itemsByRequestId.get(request.id) ?? [],
+    }));
 
     // Count total
     const [{ count }] = await db
-      .select({ count: sql<number>`count(*)` })
+      .select({ count: sql<number>`cast(count(*) as integer)` })
       .from(shopInterestRequests)
       .where(conditions.length > 0 ? and(...conditions) : undefined);
 
-    const totalPages = Math.ceil(count / limit);
+    const total = Number(count);
+    const totalPages = Math.ceil(total / limit);
 
     return {
       data: requests,
@@ -169,7 +350,7 @@ export class ShopInterestService {
         pagination: {
           page,
           limit,
-          total: count,
+          total,
           totalPages,
           hasNext: page < totalPages,
           hasPrev: page > 1,
@@ -181,10 +362,28 @@ export class ShopInterestService {
   /**
    * Marca requisição como contatada (admin)
    */
-  async markAsContacted(requestId: string, userId: string) {
+  async markAsContacted(
+    requestId: string,
+    userId: string,
+    scope?: ShopTenantScope,
+  ) {
     const db = getDb();
+    const requestConditions = [eq(shopInterestRequests.id, requestId)];
+    if (!isMasterShopScope(scope)) {
+      assertShopTenantScope(scope);
+      const scopedTenant = scope!;
+      requestConditions.push(
+        eq(shopInterestRequests.schoolId, scopedTenant.schoolId!),
+      );
+      if (scopedTenant.unitId) {
+        requestConditions.push(
+          eq(shopInterestRequests.unitId, scopedTenant.unitId),
+        );
+      }
+    }
+
     const request = await db.query.shopInterestRequests.findFirst({
-      where: eq(shopInterestRequests.id, requestId),
+      where: and(...requestConditions),
     });
 
     if (!request) {
@@ -201,7 +400,7 @@ export class ShopInterestService {
         contactedAt: new Date(),
         contactedBy: userId,
       })
-      .where(eq(shopInterestRequests.id, requestId))
+      .where(and(...requestConditions))
       .returning();
 
     this.logger.log(
@@ -214,16 +413,27 @@ export class ShopInterestService {
   /**
    * Retorna resumo de interesse para a unidade (admin)
    */
-  async getInterestSummary(unitId: string | null) {
+  async getInterestSummary(unitId: string | null, scope?: ShopTenantScope) {
     const db = getDb();
     // Buscar variantes mais procuradas (últimos 30 dias)
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-    const topVariantsConditions: ReturnType<typeof sql>[] = [
-      sql`${shopInterestRequests.createdAt} >= ${thirtyDaysAgo}`,
+    const topVariantsConditions: ReturnType<typeof gte>[] = [
+      gte(shopInterestRequests.createdAt, thirtyDaysAgo),
     ];
-    if (unitId) {
+    if (!isMasterShopScope(scope)) {
+      assertShopTenantScope(scope);
+      const scopedTenant = scope!;
+      topVariantsConditions.push(
+        eq(shopInterestRequests.schoolId, scopedTenant.schoolId!),
+      );
+      if (scopedTenant.unitId) {
+        topVariantsConditions.push(
+          eq(shopInterestRequests.unitId, scopedTenant.unitId),
+        );
+      }
+    } else if (unitId) {
       topVariantsConditions.push(eq(shopInterestRequests.unitId, unitId));
     }
 
@@ -259,7 +469,18 @@ export class ShopInterestService {
 
     // Contar requisições por status
     const statusConditions: ReturnType<typeof eq>[] = [];
-    if (unitId) {
+    if (!isMasterShopScope(scope)) {
+      assertShopTenantScope(scope);
+      const scopedTenant = scope!;
+      statusConditions.push(
+        eq(shopInterestRequests.schoolId, scopedTenant.schoolId!),
+      );
+      if (scopedTenant.unitId) {
+        statusConditions.push(
+          eq(shopInterestRequests.unitId, scopedTenant.unitId),
+        );
+      }
+    } else if (unitId) {
       statusConditions.push(eq(shopInterestRequests.unitId, unitId));
     }
 

@@ -1,0 +1,25 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Colégio Essência Feliz//Mãe por Inteiro//PT
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+BEGIN:VEVENT
+DTSTART:20260516T123000Z
+DTEND:20260516T153000Z
+SUMMARY:🌷 Mãe por Inteiro - Colégio Essência Feliz
+DESCRIPTION:Encontro especial para mães do Colégio Essência Feliz.\n\nUm momento de conexão\, troca e leveza.\n\nImportante: não haverá estrutura para crianças no local.
+LOCATION:Auditório do Parque Una - R. Nininha Rocha\, 125 - Gávea\, Uberlândia - MG\, 38411-852
+STATUS:CONFIRMED
+ORGANIZER;CN=Colégio Essência Feliz:mailto:contato@portalcef.com.br
+BEGIN:VALARM
+TRIGGER:-P1D
+ACTION:DISPLAY
+DESCRIPTION:Amanhã é o Mãe por Inteiro! 🌷
+END:VALARM
+BEGIN:VALARM
+TRIGGER:-PT2H
+ACTION:DISPLAY
+DESCRIPTION:O Mãe por Inteiro começa em 2 horas! ✨
+END:VALARM
+END:VEVENT
+END:VCALENDAR

@@ -36,6 +36,7 @@ Internet
    ├──→ /turmas/*       →  essencia-turmas:3006    (Next.js)
    ├──→ /planejamento/* →  essencia-planejamento:3007 (Next.js)
    ├──→ /calendario/*   →  essencia-calendario:3008 (Next.js)
+   ├──→ /eventos/*      →  essencia-eventos:3014    (Next.js)
    ├──→ /loja/*         →  essencia-loja:3010      (Next.js)
    ├──→ /loja-admin/*   →  essencia-loja-admin:3011 (Next.js)
    ├──→ /tarefas/*      →  essencia-tarefas:3012   (Next.js)
@@ -70,6 +71,7 @@ Internet
 | **Turmas**       | essencia-turmas          | 3006          | —             | —            |
 | **Planejamento** | essencia-planejamento    | 3007          | —             | —            |
 | **Calendario**   | essencia-calendario      | 3008          | —             | —            |
+| **Eventos**      | essencia-eventos         | 3014          | —             | —            |
 | **Loja**         | essencia-loja            | 3010          | —             | —            |
 | **Loja Admin**   | essencia-loja-admin      | 3011          | —             | —            |
 | **Tarefas**      | essencia-tarefas         | 3012          | —             | —            |
@@ -214,6 +216,7 @@ POSTGRES_DB=essencia_db
 STRIPE_SECRET_KEY=sk_live_...
 STRIPE_PUBLISHABLE_KEY=pk_live_...
 STRIPE_WEBHOOK_SECRET=whsec_...
+LOJA_PUBLIC_URL=https://loja.portalcef.com.br
 NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_live_...
 
 # Node

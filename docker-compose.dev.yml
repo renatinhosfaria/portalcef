@@ -145,6 +145,7 @@ services:
       - "3010:3010"   # loja
       - "3011:3011"   # loja-admin
       - "3012:3012"   # tarefas
+      - "3014:3014"   # eventos
     depends_on:
       postgres:
         condition: service_healthy

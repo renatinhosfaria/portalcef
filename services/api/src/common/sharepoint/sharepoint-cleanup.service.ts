@@ -1,5 +1,4 @@
-import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
+import { Injectable, Logger } from "@nestjs/common";
 import { Cron, CronExpression } from "@nestjs/schedule";
 import {
   getDb,
@@ -21,67 +20,18 @@ import { SharePointService } from "./sharepoint.service";
  * abandonadas no SharePoint.
  *
  * Cenário: usuária abre documento para edição no Word desktop,
- * mas nunca salva/fecha. Após 2 horas, o sistema sincroniza
+ * mas nunca salva/fecha. Após a janela configurada de edição, o sistema sincroniza
  * eventuais alterações de volta ao MinIO e limpa os campos
  * temporários do SharePoint.
  */
 @Injectable()
-export class SharePointCleanupService implements OnModuleInit {
+export class SharePointCleanupService {
   private readonly logger = new Logger(SharePointCleanupService.name);
-  private subscriptionId: string | null = null;
 
   constructor(
     private readonly sharePointService: SharePointService,
     private readonly storageService: StorageService,
-    private readonly configService: ConfigService,
   ) {}
-
-  async onModuleInit(): Promise<void> {
-    if (!this.sharePointService.isConfigurado()) return;
-
-    try {
-      const apiBaseUrl =
-        this.configService.get<string>("API_BASE_URL") ||
-        "https://www.portalcef.com.br/api";
-      const callbackUrl = `${apiBaseUrl}/webhooks/graph`;
-
-      this.subscriptionId = await this.sharePointService.criarSubscription(callbackUrl);
-      this.logger.log(`Webhook subscription criada: ${this.subscriptionId}`);
-    } catch (error) {
-      this.logger.warn(
-        `Falha ao criar subscription do Graph (webhook indisponível — sincronização via cron): ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-  }
-
-  @Cron(CronExpression.EVERY_DAY_AT_3AM)
-  async renovarSubscription(): Promise<void> {
-    if (!this.subscriptionId || !this.sharePointService.isConfigurado()) return;
-
-    try {
-      await this.sharePointService.renovarSubscription(this.subscriptionId);
-      this.logger.log(`Subscription ${this.subscriptionId} renovada`);
-    } catch (error) {
-      this.logger.warn(
-        `Falha ao renovar subscription: ${error instanceof Error ? error.message : String(error)}`,
-      );
-      // Tentar recriar
-      try {
-        const apiBaseUrl =
-          this.configService.get<string>("API_BASE_URL") ||
-          "https://www.portalcef.com.br/api";
-        this.subscriptionId = await this.sharePointService.criarSubscription(
-          `${apiBaseUrl}/webhooks/graph`,
-        );
-        this.logger.log(`Subscription recriada: ${this.subscriptionId}`);
-      } catch (recriarError) {
-        this.logger.error(
-          `Falha ao recriar subscription: ${recriarError instanceof Error ? recriarError.message : String(recriarError)}`,
-        );
-        this.subscriptionId = null;
-      }
-    }
-  }
 
   @Cron(CronExpression.EVERY_30_MINUTES)
   async limparEdicoesExpiradas(): Promise<void> {
@@ -89,11 +39,10 @@ export class SharePointCleanupService implements OnModuleInit {
       return;
     }
 
-    const duasHorasAtras = new Date();
-    duasHorasAtras.setHours(duasHorasAtras.getHours() - 2);
+    const limiteExpiracao = this.sharePointService.calcularLimiteEdicao();
 
-    await this.limparPlanoDocumentos(duasHorasAtras);
-    await this.limparProvaDocumentos(duasHorasAtras);
+    await this.limparPlanoDocumentos(limiteExpiracao);
+    await this.limparProvaDocumentos(limiteExpiracao);
   }
 
   private async limparPlanoDocumentos(limite: Date): Promise<void> {
@@ -198,14 +147,23 @@ export class SharePointCleanupService implements OnModuleInit {
       }
 
       // Remover do SharePoint (link de compartilhamento é invalidado ao remover o arquivo)
-      await this.sharePointService.removerArquivo(documento.sharepointItemId);
+      const removido = await this.sharePointService.removerArquivo(documento.sharepointItemId);
+
+      if (!removido) {
+        // Arquivo ainda bloqueado — manter campos para tentar novamente no próximo ciclo
+        this.logger.warn(
+          `Documento ${documento.id} não removido do SharePoint (arquivo bloqueado). Será tentado novamente no próximo ciclo.`,
+        );
+        return;
+      }
     } catch (error) {
       this.logger.error(
         `Erro ao limpar documento ${documento.id} do SharePoint: ${error instanceof Error ? error.message : String(error)}`,
       );
+      return;
     }
 
-    // Limpar campos do banco independente de sucesso do SharePoint
+    // Limpar campos do banco somente se a remoção do SharePoint foi bem-sucedida
     await db
       .update(tabelaRef)
       .set({

@@ -17,6 +17,7 @@ Frontend (Next.js 15 - 10 apps)
   - turmas :3006
   - planejamento :3007
   - calendario :3008
+  - eventos :3014
   - loja :3010
   - loja-admin :3011
   - tarefas :3012
@@ -133,6 +134,9 @@ apps/
 +-- loja-admin/         # Admin da loja (:3011)
 |   +-- app/
 |   +-- components/
+|   +-- package.json
++-- eventos/            # Gestao de inscricoes de eventos (:3014)
+|   +-- app/
 |   +-- package.json
 +-- tarefas/            # Sistema de gerenciamento de tarefas (:3012)
     +-- app/

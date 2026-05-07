@@ -95,7 +95,7 @@ services:
       - essencia-postgres-data:/var/lib/postgresql/data
     healthcheck:
       <<: *healthcheck
-      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER}" ]
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}" ]
 
   redis:
     image: redis:7-alpine
@@ -224,6 +224,20 @@ services:
       api:
         condition: service_healthy
 
+  eventos:
+    image: essencia-eventos:latest
+    container_name: essencia-eventos
+    <<: *common
+    environment:
+      <<: *nextjs-env
+      PORT: 3014
+    healthcheck:
+      <<: *healthcheck
+      test: [ "CMD", "curl", "-f", "http://localhost:3014/eventos" ]
+    depends_on:
+      api:
+        condition: service_healthy
+
   loja:
     image: essencia-loja:latest
     container_name: essencia-loja
@@ -282,6 +296,21 @@ services:
         condition: service_healthy
 
   # ===========================================================================
+  # LANDING PAGES (ESTÁTICAS)
+  # ===========================================================================
+
+  landing-mae:
+    build:
+      context: ./landing-mae-por-inteiro
+      dockerfile: Dockerfile
+    image: essencia-landing-mae:latest
+    container_name: essencia-landing-mae
+    <<: *common
+    healthcheck:
+      <<: *healthcheck
+      test: [ "CMD", "curl", "-f", "http://localhost:8080/evento-mae-por-inteiro/" ]
+
+  # ===========================================================================
   # API NESTJS
   # ===========================================================================
 
@@ -306,14 +335,13 @@ services:
       COOKIE_SECURE: "true"
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET}
-      ONLYOFFICE_JWT_SECRET: ${ONLYOFFICE_JWT_SECRET}
-      ONLYOFFICE_URL: http://essencia-onlyoffice
-      ONLYOFFICE_PUBLIC_URL: https://www.portalcef.com.br/onlyoffice
+      LOJA_PUBLIC_URL: ${LOJA_PUBLIC_URL:-https://loja.portalcef.com.br}
       AZURE_TENANT_ID: ${AZURE_TENANT_ID}
       AZURE_CLIENT_ID: ${AZURE_CLIENT_ID}
       AZURE_CLIENT_SECRET: ${AZURE_CLIENT_SECRET}
       SHAREPOINT_SITE_ID: ${SHAREPOINT_SITE_ID}
       SHAREPOINT_DRIVE_ID: ${SHAREPOINT_DRIVE_ID}
+      SHAREPOINT_EDIT_TTL_HOURS: ${SHAREPOINT_EDIT_TTL_HOURS:-8}
       API_BASE_URL: https://www.portalcef.com.br/api
     depends_on:
       postgres:
@@ -333,34 +361,6 @@ services:
         reservations:
           memory: 512M
 
-  # ===========================================================================
-  # ONLYOFFICE - Document Editor
-  # ===========================================================================
-
-  onlyoffice:
-    image: onlyoffice/documentserver:9.2.1
-    container_name: essencia-onlyoffice
-    <<: *common
-    environment:
-      JWT_ENABLED: "true"
-      JWT_SECRET: ${ONLYOFFICE_JWT_SECRET}
-      ALLOW_PRIVATE_IP_ADDRESS: "true"
-      ALLOW_META_IP_ADDRESS: "true"
-    volumes:
-      - essencia-onlyoffice-data:/var/www/onlyoffice/Data
-      - essencia-onlyoffice-log:/var/log/onlyoffice
-      - essencia-onlyoffice-lib:/var/lib/onlyoffice
-      - essencia-onlyoffice-conf:/etc/onlyoffice
-    deploy:
-      resources:
-        limits:
-          memory: 4G
-        reservations:
-          memory: 2G
-    healthcheck:
-      <<: *healthcheck
-      test: ["CMD", "curl", "-f", "http://localhost/healthcheck"]
-      start_period: 60s
 
 # =============================================================================
 # NETWORKS
@@ -391,13 +391,3 @@ volumes:
     external: true
   essencia-nginx-cache:
     name: essencia-nginx-cache
-
-  # OnlyOffice (persistência de estado entre restarts)
-  essencia-onlyoffice-data:
-    name: essencia-onlyoffice-data
-  essencia-onlyoffice-log:
-    name: essencia-onlyoffice-log
-  essencia-onlyoffice-lib:
-    name: essencia-onlyoffice-lib
-  essencia-onlyoffice-conf:
-    name: essencia-onlyoffice-conf

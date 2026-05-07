@@ -21,6 +21,7 @@ async function bootstrap() {
       logger: true,
       bodyLimit: 50 * 1024 * 1024, // 50MB body limit for file uploads
     }),
+    { rawBody: true },
   );
 
   app.useGlobalFilters(new ApiExceptionFilter());

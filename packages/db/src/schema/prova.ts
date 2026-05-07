@@ -119,6 +119,10 @@ export const provaDocumento = pgTable(
     sharepointEditUrl: text("sharepoint_edit_url"), // URL de edição gerada
     editandoDesde: timestamp("editando_desde", { withTimezone: true }), // Quando a edição foi iniciada
 
+    // PDF derivado para impressão (gerado no momento da aprovação)
+    pdfStorageKey: varchar("pdf_storage_key", { length: 500 }),
+    pdfUrl: varchar("pdf_url", { length: 1000 }),
+
     // Aprovação pelo Analista Pedagógico
     approvedBy: uuid("approved_by").references(() => users.id, {
       onDelete: "set null",

@@ -1,7 +1,5 @@
 import { NextResponse } from "next/server";
 
-import { sanitizarClienteParaLog } from "../../../../../lib/log-seguro";
-
 const API_URL = process.env.API_INTERNAL_URL || "http://localhost:3001";
 
 export async function GET(request: Request) {
@@ -19,14 +17,6 @@ export async function GET(request: Request) {
     });
 
     const data = await res.json();
-
-    console.log('[Orders Route] Backend response status:', res.status);
-    console.log('[Orders Route] Backend data keys:', Object.keys(data || {}));
-    console.log('[Orders Route] data.data length:', data?.data?.length);
-    if (data?.data?.[0]) {
-      console.log('[Orders Route] First order keys:', Object.keys(data.data[0]));
-      console.log('[Orders Route] First order customer:', sanitizarClienteParaLog(data.data[0].customer));
-    }
 
     // Mapear dados do customer para os campos planos que o frontend espera
     let orders = data?.data || [];

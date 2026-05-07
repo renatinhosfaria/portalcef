@@ -1,10 +1,12 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DocumentoList } from "./documento-list";
 
 describe("DocumentoList", () => {
+  const fetchMock = vi.fn();
+
   const mockDocumentoWord = {
     id: "doc-1",
     planoId: "plano-1",
@@ -37,6 +39,15 @@ describe("DocumentoList", () => {
     approvedBy: "analista-1",
     approvedAt: "2026-02-06T15:30:00.000Z",
   };
+
+  beforeEach(() => {
+    vi.stubGlobal("fetch", fetchMock);
+    fetchMock.mockReset();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
 
   it("abre modal ao clicar em Visualizar para documento Word", async () => {
     const user = userEvent.setup();
@@ -77,22 +88,43 @@ describe("DocumentoList", () => {
     expect(botao).not.toBeDisabled();
   });
 
-  it("exibe botão Imprimir apenas para documento PDF aprovado", () => {
+  it("exibe botão Imprimir para documentos aprovados com URL imprimível (PDF nativo ou DOCX com pdfUrl), mas não para Word sem PDF derivado, não aprovado, ou YouTube", () => {
     const onImprimir = vi.fn().mockResolvedValue(undefined);
+
+    const mockDocumentoWordAprovadoComPdf = {
+      ...mockDocumentoAprovado,
+      id: "doc-word-com-pdf",
+      pdfUrl: "https://cdn/pdf/abc.pdf",
+      pdfStorageKey: "pdf/abc.pdf",
+    };
+
+    const mockYoutubeAprovado = {
+      id: "doc-youtube",
+      planoId: "plano-1",
+      tipo: "LINK_YOUTUBE" as const,
+      fileName: null,
+      mimeType: null,
+      url: "https://youtu.be/abc123",
+      createdAt: "2026-01-23T10:00:00.000Z",
+      approvedBy: "analista-1",
+      approvedAt: "2026-02-06T15:30:00.000Z",
+    };
 
     render(
       <DocumentoList
         documentos={[
-          mockDocumentoPdfAprovado,
-          { ...mockDocumentoPdf, id: "doc-nao-aprovado" },
-          mockDocumentoAprovado, // Word aprovado - não deve ter imprimir
+          mockDocumentoPdfAprovado, // PDF aprovado → imprime
+          { ...mockDocumentoPdf, id: "doc-nao-aprovado" }, // não aprovado → não imprime
+          mockDocumentoAprovado, // Word aprovado SEM pdfUrl → não imprime (fallback seguro)
+          mockDocumentoWordAprovadoComPdf, // Word aprovado COM pdfUrl → imprime via PDF derivado
+          mockYoutubeAprovado, // YouTube → não imprime
         ]}
         onImprimir={onImprimir}
       />,
     );
 
     const botoesImprimir = screen.getAllByRole("button", { name: /imprimir/i });
-    expect(botoesImprimir).toHaveLength(1);
+    expect(botoesImprimir).toHaveLength(2);
   });
 
   it("chama callback onImprimir ao clicar no botão Imprimir e confirmar", async () => {
@@ -144,6 +176,7 @@ describe("DocumentoList", () => {
       <DocumentoList
         documentos={[mockDocumentoWord]}
         canAprovar={true}
+        canEdit={true}
         onAprovar={onAprovar}
       />,
     );
@@ -152,12 +185,43 @@ describe("DocumentoList", () => {
       screen.getByRole("button", { name: /visualizar documento/i }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /editar no word/i }),
+      screen.getByRole("button", { name: /^editar no word$/i }),
     ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /editar no word online \(teste\)/i }),
+    ).not.toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /aprovar documento/i }),
     ).toBeInTheDocument();
     expect(document.querySelector('[aria-haspopup="menu"]')).toBeNull();
+  });
+
+  it("usa a rota de prova no visualizador quando renderizado no módulo de prova", async () => {
+    const user = userEvent.setup();
+    fetchMock.mockResolvedValue({
+      ok: true,
+      arrayBuffer: async () => new ArrayBuffer(0),
+    });
+
+    render(
+      <DocumentoList
+        documentos={[
+          { ...mockDocumentoWord, id: "doc-prova", planoId: "prova-1" },
+        ]}
+        modulo="prova"
+      />,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: /visualizar documento/i }),
+    );
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/prova/prova-1/documentos/doc-prova/download",
+        { credentials: "include" },
+      );
+    });
   });
 
   it("mostra data e horário quando documento já foi impresso", () => {

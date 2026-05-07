@@ -6,12 +6,11 @@
  * Task 3.2: Criar componentes de upload e lista de documentos
  */
 
-import { useState } from "react";
 
-import { formatarDataHora, formatarDataHoraCurta } from "@essencia/shared/formatar-data";
-import { toast } from "@essencia/ui/toaster";
-import { Badge } from "@essencia/ui/components/badge";
-import { Button } from "@essencia/ui/components/button";
+import {
+  formatarDataHora,
+  formatarDataHoraCurta,
+} from "@essencia/shared/formatar-data";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,7 +21,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@essencia/ui/components/alert-dialog";
+import { Badge } from "@essencia/ui/components/badge";
+import { Button } from "@essencia/ui/components/button";
 import { cn } from "@essencia/ui/lib/utils";
+import { toast } from "@essencia/ui/toaster";
 import {
   CheckCircle,
   Eye,
@@ -33,12 +35,15 @@ import {
   MessageSquare,
   Pencil,
   Printer,
+  RefreshCw,
   Trash2,
   Undo2,
   Youtube,
 } from "lucide-react";
+import { useState } from "react";
 
 import type { PlanoDocumento } from "../types";
+
 import { DocumentoEditorModal } from "./documento-editor";
 
 interface DocumentoListProps {
@@ -49,7 +54,9 @@ interface DocumentoListProps {
   onImprimir?: (docId: string) => Promise<void>;
   canDelete?: boolean;
   canAprovar?: boolean;
+  canEdit?: boolean;
   canComentar?: boolean;
+  modulo?: "plano-aula" | "prova";
 }
 
 function formatFileSize(bytes: number | null | undefined): string {
@@ -122,7 +129,24 @@ function getDocumentUrl(documento: PlanoDocumento): string | undefined {
   return documento.url;
 }
 
-function imprimirPdf(url: string): void {
+function getUrlParaImpressao(documento: PlanoDocumento): string | null {
+  // pdfUrl é o PDF derivado gerado na aprovação (para DOCX) ou espelho
+  // do próprio url quando o documento já é PDF.
+  if (documento.pdfUrl) return documento.pdfUrl;
+  if (!documento.url) return null;
+  if (
+    documento.mimeType === "application/pdf" ||
+    documento.mimeType?.startsWith("image/")
+  ) {
+    return documento.url;
+  }
+  return null;
+}
+
+function imprimirDocumento(documento: PlanoDocumento): boolean {
+  const url = getUrlParaImpressao(documento);
+  if (!url) return false;
+
   const iframe = document.createElement("iframe");
   iframe.style.position = "fixed";
   iframe.style.right = "0";
@@ -147,6 +171,8 @@ function imprimirPdf(url: string): void {
       document.body.removeChild(iframe);
     }
   }, 60_000);
+
+  return true;
 }
 
 function isWordDocument(documento: PlanoDocumento): boolean {
@@ -175,14 +201,32 @@ export function DocumentoList({
   onImprimir,
   canDelete = false,
   canAprovar = false,
-  canComentar = false,
+  canEdit = false,
+  canComentar: _canComentar = false,
+  modulo = "plano-aula",
 }: DocumentoListProps) {
   const [editorDocId, setEditorDocId] = useState<string | null>(null);
   const [aprovandoId, setAprovandoId] = useState<string | null>(null);
   const [imprimindoId, setImprimindoId] = useState<string | null>(null);
   const [desaprovandoId, setDesaprovandoId] = useState<string | null>(null);
+  const [sincronizandoId, setSincronizandoId] = useState<string | null>(null);
   const [showConfirmarImpressao, setShowConfirmarImpressao] = useState(false);
   const [documentoParaImprimir, setDocumentoParaImprimir] = useState<string | null>(null);
+
+  const prepararEdicaoWord = async (documento: PlanoDocumento) => {
+    const res = await fetch(
+      `/api/${modulo}/${documento.planoId}/documentos/${documento.id}/editar-word`,
+      { credentials: "include" },
+    );
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.message || "Erro ao preparar edição no Word");
+    }
+
+    const json = await res.json();
+    return json.data as { url: string };
+  };
 
   const handleAprovar = async (docId: string) => {
     if (!onAprovar) return;
@@ -209,9 +253,15 @@ export function DocumentoList({
   };
 
   const handleImprimir = (documento: PlanoDocumento) => {
-    if (!onImprimir || !documento.url) return;
+    if (!onImprimir) return;
 
-    imprimirPdf(documento.url);
+    const abriu = imprimirDocumento(documento);
+    if (!abriu) {
+      toast.error(
+        "PDF de impressão ainda não disponível. Desaprove e aprove novamente para gerar.",
+      );
+      return;
+    }
     setDocumentoParaImprimir(documento.id);
     setShowConfirmarImpressao(true);
   };
@@ -257,12 +307,13 @@ export function DocumentoList({
         const url = getDocumentUrl(documento);
         const name = getDocumentName(documento);
         const podeVisualizar = isWordDocument(documento) || !!url;
-        const podeEditar = isWordDocument(documento);
+        const podeEditar = canEdit && isWordDocument(documento);
         const podeAprovar = canAprovar && !!onAprovar && !documento.approvedBy;
         const podeDesaprovar =
           canAprovar && !!onDesaprovar && !!documento.approvedBy;
         const podeImprimir =
-          documento.mimeType === "application/pdf" &&
+          documento.tipo !== "LINK_YOUTUBE" &&
+          !!getUrlParaImpressao(documento) &&
           !!documento.approvedAt &&
           !!documento.approvedBy &&
           !!onImprimir;
@@ -331,11 +382,13 @@ export function DocumentoList({
                         <span>{formatFileSize(documento.fileSize)}</span>
                       </>
                     )}
-                    {documento.createdAt && (
+                    {(documento.updatedAt || documento.createdAt) && (
                       <>
                         <span className="text-muted-foreground/40">&middot;</span>
-                        <span title="Data de envio">
-                          {formatarDataHora(documento.createdAt)}
+                        <span title="Última atualização">
+                          {formatarDataHora(
+                            documento.updatedAt || documento.createdAt,
+                          )}
                         </span>
                       </>
                     )}
@@ -413,28 +466,65 @@ export function DocumentoList({
                       className="h-8 w-8 text-blue-600 hover:bg-blue-50 hover:text-blue-700"
                       onClick={async () => {
                         try {
-                          const res = await fetch(
-                            `/api/plano-aula/${documento.planoId}/documentos/${documento.id}/editar-word`,
-                            { credentials: "include" },
-                          );
-                          if (!res.ok) {
-                            const err = await res.json();
-                            toast.error(err.message || "Erro ao abrir no Word");
-                            return;
-                          }
-                          const json = await res.json();
-                          window.location.href = json.data.url;
+                          const data = await prepararEdicaoWord(documento);
+                          window.location.href = data.url;
+                          // Recarregar após breve delay para exibir o botão Sincronizar
+                          // (o protocolo ms-word:// abre o Word sem navegar o browser)
+                          setTimeout(() => window.location.reload(), 1500);
                           toast.info(
-                            "O documento foi aberto no Word. Edite e salve normalmente (Ctrl+S). As alterações serão sincronizadas automaticamente.",
+                            "O documento foi aberto no Word. Após editar e salvar, volte ao portal e clique em Sincronizar.",
                           );
-                        } catch {
-                          toast.error("Erro ao preparar edição no Word");
+                        } catch (error) {
+                          toast.error(
+                            error instanceof Error
+                              ? error.message
+                              : "Erro ao preparar edição no Word",
+                          );
                         }
                       }}
                       title="Editar no Word"
                       aria-label="Editar no Word"
                     >
                       <Pencil className="h-4 w-4" />
+                    </Button>
+                  )}
+
+                  {podeEditar && documento.sharepointItemId && documento.sharepointEditUrl && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-purple-600 hover:bg-purple-50 hover:text-purple-700"
+                      onClick={async () => {
+                        try {
+                          setSincronizandoId(documento.id);
+                          const res = await fetch(
+                            `/api/${modulo}/${documento.planoId}/documentos/${documento.id}/sincronizar-word`,
+                            { method: "POST", credentials: "include" },
+                          );
+                          if (!res.ok) {
+                            const err = await res.json();
+                            throw new Error(err.message || "Erro ao sincronizar");
+                          }
+                          toast.success("Documento sincronizado com sucesso!");
+                          window.location.reload();
+                        } catch (error) {
+                          toast.error(
+                            error instanceof Error
+                              ? error.message
+                              : "Erro ao sincronizar documento",
+                          );
+                        } finally {
+                          setSincronizandoId(null);
+                        }
+                      }}
+                      disabled={sincronizandoId === documento.id}
+                      title="Sincronizar alterações do Word"
+                      aria-label="Sincronizar alterações do Word"
+                    >
+                      <RefreshCw className={cn(
+                        "h-4 w-4",
+                        sincronizandoId === documento.id && "animate-spin",
+                      )} />
                     </Button>
                   )}
 
@@ -545,6 +635,7 @@ export function DocumentoList({
               <DocumentoEditorModal
                 planoId={documento.planoId}
                 documentoId={documento.id}
+                modulo={modulo}
                 open={editorDocId === documento.id}
                 onOpenChange={(open) =>
                   setEditorDocId(open ? documento.id : null)

@@ -193,7 +193,7 @@ interface OrderItem {
 
 interface Order {
     orderNumber: string;
-    status: 'AGUARDANDO_PAGAMENTO' | 'PAGO' | 'RETIRADO' | 'EXPIRADO';
+    status: 'AGUARDANDO_PAGAMENTO' | 'PAGO' | 'RETIRADO' | 'EXPIRADO' | 'CANCELADO';
     totalAmount: number;
     createdAt: string;
     expiresAt: string;
@@ -311,10 +311,7 @@ export const VoucherPDF = ({ order }: VoucherPDFProps) => {
                     {/* Instructions */}
                     <View style={styles.instructionBox}>
                         <Text style={styles.instructionTitle}>Instruções de Retirada</Text>
-                        <Text style={styles.instructionText}>
-                            Retire seu pedido na secretaria da unidade, de segunda a sexta, das 7h às 18h.
-                            Apresente o código de 6 dígitos acima.
-                        </Text>
+                        <Text style={styles.instructionText}>{order.pickupInstructions}</Text>
                     </View>
 
                     {/* Items List */}

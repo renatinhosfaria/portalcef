@@ -7,50 +7,9 @@ import { use, useEffect, useState } from 'react';
 
 import { LoadingSpinner } from '@/components/Loading';
 import { OrderItemCard } from '@/components/OrderItemCard';
+import { transformOrderResponse, type Order } from '@/lib/order';
 
 import { VoucherPDF } from './VoucherPDF';
-
-interface OrderItem {
-  id: string;
-  productName: string;
-  variantSize: string;
-  quantity: number;
-  unitPrice: number;
-  subtotal: number;
-  studentName: string;
-  imageUrl: string;
-}
-
-// API response types
-interface ApiOrderItem {
-  id: string;
-  quantity: number;
-  unitPrice: number;
-  studentName: string;
-  product?: {
-    name?: string;
-    imageUrl?: string;
-  };
-  variant?: {
-    size?: string;
-    product?: {
-      name?: string;
-      imageUrl?: string;
-    };
-  };
-}
-
-interface Order {
-  orderNumber: string;
-  status: 'AGUARDANDO_PAGAMENTO' | 'PAGO' | 'RETIRADO' | 'EXPIRADO';
-  totalAmount: number;
-  createdAt: string;
-  expiresAt: string;
-  items: OrderItem[];
-  pickupInstructions: string;
-  customerName: string;
-  customerPhone: string;
-}
 
 export default function VoucherPage({
   params,
@@ -100,29 +59,7 @@ export default function VoucherPage({
         if (result.success && result.data) {
           const orderData = result.data;
 
-          // Transform API response to local Order format
-          const transformedOrder: Order = {
-            orderNumber: orderData.orderNumber,
-            status: orderData.status,
-            totalAmount: orderData.totalAmount,
-            createdAt: orderData.createdAt,
-            expiresAt: orderData.expiresAt || new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString(),
-            customerName: orderData.customerName,
-            customerPhone: orderData.customerPhone,
-            pickupInstructions: 'Retire seu pedido na secretaria da unidade, de segunda a sexta, das 7h às 18h. Apresente o código de 6 dígitos acima.',
-            items: orderData.items?.map((item: ApiOrderItem) => ({
-              id: item.id,
-              productName: item.product?.name || item.variant?.product?.name || 'Produto',
-              variantSize: item.variant?.size || 'Único',
-              quantity: item.quantity,
-              unitPrice: item.unitPrice / 100, // Converter de centavos para reais
-              subtotal: (item.unitPrice * item.quantity) / 100, // Converter de centavos para reais
-              studentName: item.studentName,
-              imageUrl: item.product?.imageUrl || item.variant?.product?.imageUrl || '/placeholder-product.jpg',
-            })) || [],
-          };
-
-          setOrder(transformedOrder);
+          setOrder(transformOrderResponse(orderData));
         } else {
           setError('Erro ao carregar dados do pedido.');
         }
@@ -203,7 +140,7 @@ ${itemsList}
 
 💰 *Total:* ${totalFormatted}
 
-📍 *Retirada:* Apresente o código *${order.orderNumber}* na secretaria da unidade.
+📍 *Retirada:* ${order.pickupInstructions}
 
 📥 *PDF baixado!* Anexe o arquivo "voucher-${order.orderNumber}.pdf" nesta conversa.
 
@@ -387,7 +324,7 @@ _Válido até ${formatarData(order.expiresAt)}_`;
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 text-sm text-slate-600 no-print">
           <p className="font-semibold text-slate-800 mb-2">Importante:</p>
           <ul className="list-disc list-inside space-y-1">
-            <li>Este voucher é válido por 5 dias a partir da data do pedido</li>
+            <li>Este voucher é válido por 7 dias a partir da data do pedido</li>
             <li>Traga um documento de identificação com foto</li>
             <li>A retirada pode ser feita por qualquer responsável cadastrado</li>
             <li>Em caso de dúvidas, entre em contato com a secretaria da unidade</li>

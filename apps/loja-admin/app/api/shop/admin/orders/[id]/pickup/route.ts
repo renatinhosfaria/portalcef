@@ -10,8 +10,6 @@ export async function PATCH(
         const { id } = await params;
         const targetUrl = `${API_URL}/api/shop/admin/orders/${id}/pickup`;
 
-        console.log(`[Pickup Route] Proxying PATCH to: ${targetUrl}`);
-
         const res = await fetch(targetUrl, {
             method: "PATCH",
             headers: {
@@ -20,11 +18,8 @@ export async function PATCH(
             credentials: "include",
         });
 
-        console.log(`[Pickup Route] Backend response status: ${res.status}`);
-
         // Tentar obter a resposta como texto primeiro
         const responseText = await res.text();
-        console.log(`[Pickup Route] Backend response length: ${responseText.length}`);
 
         // Tentar fazer parse como JSON
         let data;

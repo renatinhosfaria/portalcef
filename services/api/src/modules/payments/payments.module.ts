@@ -8,9 +8,9 @@ import { ShopModule } from "../shop/shop.module";
  * PaymentsModule
  *
  * Gerencia integração com Stripe:
- * - PaymentIntent creation
+ * - Checkout hospedado para pagamentos online
  * - Webhooks para confirmação
- * - Refunds
+ * - Estornos
  */
 @Module({
   imports: [

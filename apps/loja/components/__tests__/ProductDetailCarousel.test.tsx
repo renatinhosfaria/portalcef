@@ -56,13 +56,13 @@ describe('ProductDetailCarousel', () => {
     );
 
     const firstThumb = screen.getByLabelText('Ver imagem 1');
-    expect(firstThumb).toHaveClass('border-brand-600');
+    expect(firstThumb).toHaveClass('border-[#A3D154]');
 
     const secondThumb = screen.getByLabelText('Ver imagem 2');
     fireEvent.click(secondThumb);
 
-    expect(secondThumb).toHaveClass('border-brand-600');
-    expect(firstThumb).not.toHaveClass('border-brand-600');
+    expect(secondThumb).toHaveClass('border-[#A3D154]');
+    expect(firstThumb).not.toHaveClass('border-[#A3D154]');
   });
 
   it('should show image counter', () => {
@@ -123,8 +123,6 @@ describe('ProductDetailCarousel', () => {
     expect(screen.getByText('3 / 3')).toBeInTheDocument();
 
     const nextBtn = screen.getByLabelText('Próxima imagem');
-    fireEvent.click(nextBtn);
-    fireEvent.click(nextBtn);
     fireEvent.click(nextBtn);
 
     // Should wrap back to first

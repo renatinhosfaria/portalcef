@@ -88,6 +88,7 @@ check_internal "Escolas" "essencia-escolas" "3005" "/escolas"
 check_internal "Turmas" "essencia-turmas" "3006" "/turmas"
 check_internal "Planejamento" "essencia-planejamento" "3007" "/planejamento"
 check_internal "Calendário" "essencia-calendario" "3008" "/calendario"
+check_internal "Eventos" "essencia-eventos" "3014" "/eventos"
 check_internal "Loja" "essencia-loja" "3010" "/"
 check_internal "Loja Admin" "essencia-loja-admin" "3011" "/loja-admin"
 check_internal "Tarefas" "essencia-tarefas" "3012" "/tarefas"
@@ -159,8 +160,8 @@ echo ""
 
 # PostgreSQL
 echo -n "  PostgreSQL: "
-if docker exec essencia-postgres pg_isready -U essencia > /dev/null 2>&1; then
-    CONN=$(docker exec essencia-postgres psql -U essencia -d essencia_db -t -c "SELECT count(*) FROM pg_stat_activity;" 2>/dev/null | xargs)
+if docker exec essencia-postgres pg_isready -U essencia_prod -d essencia_db > /dev/null 2>&1; then
+    CONN=$(docker exec essencia-postgres psql -U essencia_prod -d essencia_db -t -c "SELECT count(*) FROM pg_stat_activity;" 2>/dev/null | xargs)
     echo -e "${GREEN}OK${NC} ($CONN conexões ativas)"
 else
     echo -e "${RED}Erro${NC}"
@@ -180,15 +181,6 @@ fi
 # MinIO
 echo -n "  MinIO: "
 if docker exec essencia-minio curl -sf http://localhost:9000/minio/health/live > /dev/null 2>&1; then
-    echo -e "${GREEN}OK${NC}"
-else
-    echo -e "${RED}Erro${NC}"
-    FAILED=1
-fi
-
-# OnlyOffice
-echo -n "  OnlyOffice: "
-if docker exec essencia-onlyoffice curl -sf --max-time 10 http://localhost/healthcheck > /dev/null 2>&1; then
     echo -e "${GREEN}OK${NC}"
 else
     echo -e "${RED}Erro${NC}"

@@ -29,6 +29,7 @@ import { SuporteModule } from "./modules/suporte/suporte.module";
 import { ProvaCicloModule } from "./modules/prova-ciclo/prova-ciclo.module";
 import { ProvaModule } from "./modules/prova/prova.module";
 import { SecurityModule } from "./modules/security/security.module";
+import { EventoInscricoesModule } from "./modules/evento-inscricoes/evento-inscricoes.module";
 
 @Module({
   imports: [
@@ -94,6 +95,8 @@ import { SecurityModule } from "./modules/security/security.module";
     ProvaCicloModule,
     // Provas (workflow de aprovação)
     ProvaModule,
+    // Inscrições de eventos (landing pública + admin restrito)
+    EventoInscricoesModule,
   ],
   providers: [
     {

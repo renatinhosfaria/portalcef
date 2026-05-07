@@ -6,17 +6,19 @@ import { StorageService } from "../storage/storage.service";
 describe("SharePointService", () => {
   let service: SharePointService;
 
+  const obterConfigPadrao = (key: string) => {
+    const config: Record<string, string> = {
+      AZURE_TENANT_ID: "test-tenant-id",
+      AZURE_CLIENT_ID: "test-client-id",
+      AZURE_CLIENT_SECRET: "test-client-secret",
+      SHAREPOINT_SITE_ID: "test-site-id",
+      SHAREPOINT_DRIVE_ID: "test-drive-id",
+    };
+    return config[key];
+  };
+
   const mockConfigService = {
-    get: jest.fn((key: string) => {
-      const config: Record<string, string> = {
-        AZURE_TENANT_ID: "test-tenant-id",
-        AZURE_CLIENT_ID: "test-client-id",
-        AZURE_CLIENT_SECRET: "test-client-secret",
-        SHAREPOINT_SITE_ID: "test-site-id",
-        SHAREPOINT_DRIVE_ID: "test-drive-id",
-      };
-      return config[key];
-    }),
+    get: jest.fn(obterConfigPadrao),
   };
 
   const mockStorageService = {
@@ -25,6 +27,9 @@ describe("SharePointService", () => {
   };
 
   beforeEach(async () => {
+    jest.clearAllMocks();
+    mockConfigService.get.mockImplementation(obterConfigPadrao);
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         SharePointService,
@@ -34,6 +39,10 @@ describe("SharePointService", () => {
     }).compile();
 
     service = module.get<SharePointService>(SharePointService);
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
   });
 
   it("deve ser definido", () => {
@@ -57,5 +66,68 @@ describe("SharePointService", () => {
     const shareUrl = "https://escola.sharepoint.com/:w:/s/site/EaBcDeFg?e=xYz";
     const result = service.construirMsWordUrl(shareUrl);
     expect(result).toBe(`ms-word:ofe|u|${shareUrl}`);
+  });
+
+  it("deve criar link de edição com expiração padrão de 8 horas", async () => {
+    jest.useFakeTimers().setSystemTime(new Date("2026-05-04T12:00:00.000Z"));
+
+    const post = jest.fn().mockResolvedValue({
+      id: "permissao-123",
+      link: { webUrl: "https://sharepoint.test/link-edicao" },
+    });
+
+    (service as any).client = {
+      api: jest.fn().mockReturnValue({ post }),
+    };
+    (service as any).driveWebUrl =
+      "https://colegio.sharepoint.com/sites/Colegio/Documentos%20Compartilhados";
+
+    await service.criarLinkCompartilhamento(
+      "item-123",
+      "documento-123",
+      "arquivo.docx",
+    );
+
+    expect(post).toHaveBeenCalledWith({
+      type: "edit",
+      scope: "anonymous",
+      expirationDateTime: "2026-05-04T20:00:00.000Z",
+    });
+  });
+
+  it("deve respeitar SHAREPOINT_EDIT_TTL_HOURS ao criar link de edição", async () => {
+    mockConfigService.get.mockImplementation((key: string) => {
+      if (key === "SHAREPOINT_EDIT_TTL_HOURS") return "12";
+      return obterConfigPadrao(key);
+    });
+    const serviceComConfig = new SharePointService(
+      mockConfigService as unknown as ConfigService,
+      mockStorageService as unknown as StorageService,
+    );
+
+    jest.useFakeTimers().setSystemTime(new Date("2026-05-04T12:00:00.000Z"));
+
+    const post = jest.fn().mockResolvedValue({
+      id: "permissao-123",
+      link: { webUrl: "https://sharepoint.test/link-edicao" },
+    });
+
+    (serviceComConfig as any).client = {
+      api: jest.fn().mockReturnValue({ post }),
+    };
+    (serviceComConfig as any).driveWebUrl =
+      "https://colegio.sharepoint.com/sites/Colegio/Documentos%20Compartilhados";
+
+    await serviceComConfig.criarLinkCompartilhamento(
+      "item-123",
+      "documento-123",
+      "arquivo.docx",
+    );
+
+    expect(post).toHaveBeenCalledWith({
+      type: "edit",
+      scope: "anonymous",
+      expirationDateTime: "2026-05-05T00:00:00.000Z",
+    });
   });
 });

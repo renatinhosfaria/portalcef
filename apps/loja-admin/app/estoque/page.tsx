@@ -1,9 +1,12 @@
 'use client';
 
+import { useTenant } from '@essencia/shared/providers/tenant';
 import { Search, Plus, Minus, Settings, History, Package, AlertTriangle, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { apiFetch } from '../../lib/api';
+import { getInventoryRowKey, getInventoryUnitLabel } from '../../lib/inventory';
+import { canManageInventory } from '../../lib/permissions';
 
 interface InventoryItem {
     variantId: string;
@@ -14,10 +17,12 @@ interface InventoryItem {
     totalSold: number;
     lowStockThreshold: number;
     unitId: string;
+    unitName?: string | null;
     needsRestock: boolean;
 }
 
 export default function EstoquePage() {
+    const { role } = useTenant();
     const [inventory, setInventory] = useState<InventoryItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
@@ -65,6 +70,7 @@ export default function EstoquePage() {
     const totalReserved = inventory.reduce((sum, i) => sum + i.reservedQuantity, 0);
     const totalSold = inventory.reduce((sum, i) => sum + i.totalSold, 0);
     const lowStockCount = inventory.filter(i => i.needsRestock).length;
+    const canManageStock = canManageInventory(role);
 
     return (
         <div className="space-y-8">
@@ -144,6 +150,7 @@ export default function EstoquePage() {
                             <tr>
                                 <th>Produto</th>
                                 <th>Tamanho</th>
+                                <th>Unidade</th>
                                 <th>Reservado</th>
                                 <th>Disponível</th>
                                 <th>Vendido</th>
@@ -154,13 +161,13 @@ export default function EstoquePage() {
                         <tbody>
                             {loading ? (
                                 <tr>
-                                    <td colSpan={7} className="text-center py-12">
+                                    <td colSpan={8} className="text-center py-12">
                                         <div className="loading-spinner-admin mx-auto"></div>
                                     </td>
                                 </tr>
                             ) : filteredInventory.length === 0 ? (
                                 <tr>
-                                    <td colSpan={7}>
+                                    <td colSpan={8}>
                                         <div className="empty-state">
                                             <div className="empty-state-icon">📦</div>
                                             <div className="empty-state-title">Nenhum item encontrado</div>
@@ -175,11 +182,12 @@ export default function EstoquePage() {
                                     const status = getStockStatus(item);
 
                                     return (
-                                        <tr key={item.variantId} className={item.needsRestock ? 'bg-red-50/50' : ''}>
+                                        <tr key={getInventoryRowKey(item)} className={item.needsRestock ? 'bg-red-50/50' : ''}>
                                             <td className="font-semibold text-slate-800">{item.productName}</td>
                                             <td>
                                                 <span className="badge badge-neutral">{item.variantSize}</span>
                                             </td>
+                                            <td className="text-sm text-slate-600">{getInventoryUnitLabel(item)}</td>
                                             <td className="font-mono text-amber-600">{item.reservedQuantity}</td>
                                             <td className="font-mono font-bold text-slate-800">{item.available}</td>
                                             <td className="font-mono text-emerald-600">{item.totalSold}</td>
@@ -188,26 +196,30 @@ export default function EstoquePage() {
                                             </td>
                                             <td>
                                                 <div className="flex gap-2">
-                                                    <button
-                                                        onClick={() => {
-                                                            setSelectedVariant(item);
-                                                            setShowEntryModal(true);
-                                                        }}
-                                                        className="btn-admin btn-admin-primary btn-admin-sm"
-                                                    >
-                                                        <Plus className="w-4 h-4" />
-                                                        Entrada
-                                                    </button>
-                                                    <button
-                                                        onClick={() => {
-                                                            setSelectedVariant(item);
-                                                            setShowExitModal(true);
-                                                        }}
-                                                        className="btn-admin btn-admin-danger btn-admin-sm"
-                                                    >
-                                                        <Minus className="w-4 h-4" />
-                                                        Saída
-                                                    </button>
+                                                    {canManageStock && (
+                                                        <>
+                                                            <button
+                                                                onClick={() => {
+                                                                    setSelectedVariant(item);
+                                                                    setShowEntryModal(true);
+                                                                }}
+                                                                className="btn-admin btn-admin-primary btn-admin-sm"
+                                                            >
+                                                                <Plus className="w-4 h-4" />
+                                                                Entrada
+                                                            </button>
+                                                            <button
+                                                                onClick={() => {
+                                                                    setSelectedVariant(item);
+                                                                    setShowExitModal(true);
+                                                                }}
+                                                                className="btn-admin btn-admin-danger btn-admin-sm"
+                                                            >
+                                                                <Minus className="w-4 h-4" />
+                                                                Saída
+                                                            </button>
+                                                        </>
+                                                    )}
                                                     <button className="btn-admin btn-admin-ghost btn-admin-sm">
                                                         <Settings className="w-4 h-4" />
                                                     </button>
@@ -422,4 +434,3 @@ export default function EstoquePage() {
         </div>
     );
 }
-

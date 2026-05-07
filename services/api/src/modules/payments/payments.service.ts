@@ -7,12 +7,29 @@ import {
 import { ConfigService } from "@nestjs/config";
 import Stripe from "stripe";
 
+type CheckoutSessionItem = {
+  name: string;
+  unitAmount: number;
+  quantity: number;
+};
+
+type CreateCheckoutSessionInput = {
+  orderId: string;
+  orderNumber: string;
+  totalAmount: number;
+  customerName: string;
+  customerPhone: string;
+  customerEmail?: string;
+  expiresAt: Date;
+  items: CheckoutSessionItem[];
+};
+
 /**
  * PaymentsService
  *
- * Integração com Stripe para processamento de pagamentos
- * - Criação de PaymentIntent (PIX + Cartão)
- * - Parcelamento (até max configurado por unidade)
+ * Integração com Stripe para processamento de pagamentos.
+ * - Checkout Session hospedada para pagamentos online da loja
+ * - PaymentIntent legado para fluxos internos que ainda dependem dele
  * - Refund completo ou parcial
  */
 @Injectable()
@@ -79,7 +96,7 @@ export class PaymentsService {
       const paymentIntentParams: Stripe.PaymentIntentCreateParams = {
         amount,
         currency: "brl",
-        payment_method_types: ["card"], // PIX será adicionado em FASE 4 (requer configuração extra)
+        payment_method_types: ["card"],
         metadata: metadata as Stripe.MetadataParam,
         description: metadata.orderNumber
           ? `Pedido ${metadata.orderNumber} - CEF Shop`
@@ -136,6 +153,128 @@ export class PaymentsService {
       throw new InternalServerErrorException({
         code: "STRIPE_ERROR",
         message: "Erro ao processar pagamento. Tente novamente.",
+        details:
+          process.env.NODE_ENV === "development" ? errorMessage : undefined,
+      });
+    }
+  }
+
+  /**
+   * Cria Checkout Session hospedada para pagamento online da loja.
+   */
+  async createCheckoutSession(
+    input: CreateCheckoutSessionInput,
+  ): Promise<{
+    checkoutSessionId: string;
+    checkoutUrl: string;
+    paymentIntentId?: string;
+  }> {
+    try {
+      if (input.totalAmount < 100) {
+        throw new BadRequestException({
+          code: "INVALID_AMOUNT",
+          message: "Valor mínimo para pagamento: R$ 1,00",
+        });
+      }
+
+      if (input.items.length === 0) {
+        throw new BadRequestException({
+          code: "EMPTY_CHECKOUT",
+          message: "Checkout sem itens",
+        });
+      }
+
+      const lojaPublicUrl =
+        this.configService.get<string>("LOJA_PUBLIC_URL") ||
+        "https://loja.portalcef.com.br";
+      const orderUrl = `${lojaPublicUrl}/pedido/${input.orderNumber}?phone=${input.customerPhone}`;
+      const minimumExpiresAtSeconds = Math.floor(Date.now() / 1000) + 30 * 60;
+      const requestedExpiresAtSeconds = Math.ceil(
+        input.expiresAt.getTime() / 1000,
+      );
+      const expiresAtSeconds = Math.max(
+        requestedExpiresAtSeconds,
+        minimumExpiresAtSeconds,
+      );
+      const metadata = {
+        orderId: input.orderId,
+        orderNumber: input.orderNumber,
+        customerName: input.customerName,
+        customerPhone: input.customerPhone,
+      };
+
+      const session = await this.stripe.checkout.sessions.create({
+        mode: "payment",
+        payment_method_types: ["card", "pix"],
+        client_reference_id: input.orderNumber,
+        customer_email: input.customerEmail,
+        line_items: input.items.map((item) => ({
+          quantity: item.quantity,
+          price_data: {
+            currency: "brl",
+            unit_amount: item.unitAmount,
+            product_data: {
+              name: item.name,
+            },
+          },
+        })),
+        metadata,
+        payment_intent_data: {
+          metadata,
+        },
+        payment_method_options: {
+          pix: {
+            expires_after_seconds: 30 * 60,
+          },
+        },
+        success_url: `${orderUrl}&pagamento=sucesso`,
+        cancel_url: `${orderUrl}&pagamento=cancelado`,
+        expires_at: expiresAtSeconds,
+      });
+
+      if (!session.url) {
+        throw new InternalServerErrorException({
+          code: "CHECKOUT_URL_MISSING",
+          message: "Stripe não retornou URL de checkout",
+        });
+      }
+
+      const paymentIntentId =
+        typeof session.payment_intent === "string"
+          ? session.payment_intent
+          : session.payment_intent?.id;
+
+      return {
+        checkoutSessionId: session.id,
+        checkoutUrl: session.url,
+        paymentIntentId,
+      };
+    } catch (error: unknown) {
+      const stripeError =
+        error instanceof Stripe.errors.StripeError ? error : null;
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
+      const errorStack = error instanceof Error ? error.stack : undefined;
+
+      this.logger.error(
+        `Erro ao criar Checkout Session: ${errorMessage}`,
+        errorStack,
+      );
+
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+
+      if (stripeError?.type === "StripeInvalidRequestError") {
+        throw new BadRequestException({
+          code: "CHECKOUT_ERROR",
+          message: errorMessage,
+        });
+      }
+
+      throw new InternalServerErrorException({
+        code: "STRIPE_ERROR",
+        message: "Erro ao iniciar pagamento online. Tente novamente.",
         details:
           process.env.NODE_ENV === "development" ? errorMessage : undefined,
       });
@@ -252,7 +391,37 @@ export class PaymentsService {
         `Erro ao cancelar PaymentIntent: ${errorMessage}`,
         errorStack,
       );
-      // Nǜo lan��ar exce��ǜo aqui - cancelamento Ǹ best-effort
+      // Nao lancar excecao aqui - cancelamento e best-effort.
+    }
+  }
+
+  /**
+   * Expira Checkout Session aberta.
+   */
+  async expireCheckoutSession(checkoutSessionId: string): Promise<void> {
+    try {
+      this.logger.log(`Expirando Checkout Session: ${checkoutSessionId}`);
+
+      const session =
+        await this.stripe.checkout.sessions.retrieve(checkoutSessionId);
+
+      if (session.status === "open") {
+        await this.stripe.checkout.sessions.expire(checkoutSessionId);
+        this.logger.log(`Checkout Session expirada: ${checkoutSessionId}`);
+      } else {
+        this.logger.warn(
+          `Checkout Session ${checkoutSessionId} não pode ser expirada. Status: ${session.status}`,
+        );
+      }
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
+      const errorStack = error instanceof Error ? error.stack : undefined;
+
+      this.logger.error(
+        `Erro ao expirar Checkout Session: ${errorMessage}`,
+        errorStack,
+      );
     }
   }
 

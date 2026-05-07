@@ -91,7 +91,7 @@ export default function CarrinhoPage() {
           <div className="flex items-center justify-between mb-4">
             <span className="text-xl font-semibold">Total</span>
             <span className="text-3xl font-bold text-primary">
-              R$ {(getTotalAmount() / 100).toFixed(2)}
+              R$ {getTotalAmount().toFixed(2)}
             </span>
           </div>
           

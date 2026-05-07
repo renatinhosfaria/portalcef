@@ -5,13 +5,18 @@
 
 # Dependencies (installed in container)
 node_modules
+**/node_modules
 .pnpm-store
 
 # Build outputs
 dist
+**/dist
 .next
+**/.next
 .turbo
+**/.turbo
 *.tsbuildinfo
+**/*.tsbuildinfo
 
 # Environment files
 .env
@@ -123,7 +128,9 @@ dump.rdb
 
 # Turbo remote cache (arquivos locais)
 .turbo/
+**/.turbo/
 node_modules/.cache/
+**/node_modules/.cache/
 
 # Docker Bake (arquivo de configuração, não conteúdo)
 docker-bake.hcl

@@ -18,7 +18,9 @@ export type PaymentMethod =
   | "PIX"
   | "CARTAO_CREDITO"
   | "CARTAO_DEBITO"
-  | "DINHEIRO";
+  | "DINHEIRO"
+  | "BRINDE"
+  | "MULTIPLO";
 export type MovementType =
   | "ENTRADA"
   | "VENDA_ONLINE"
@@ -111,6 +113,7 @@ export interface ShopOrder {
   installments: number;
   paymentMethod?: PaymentMethod | null;
   stripePaymentIntentId?: string | null;
+  stripeCheckoutSessionId?: string | null;
   expiresAt?: Date | null;
   paidAt?: Date | null;
   pickedUpAt?: Date | null;
@@ -130,8 +133,18 @@ export interface ShopOrderItem {
   unitPrice: number;
 }
 
+export interface ShopOrderPayment {
+  id: string;
+  orderId?: string;
+  paymentMethod: PaymentMethod;
+  amount: number;
+  createdAt: Date;
+}
+
 export interface ShopOrderWithItems extends ShopOrder {
   items: ShopOrderItem[];
+  payments?: ShopOrderPayment[];
+  pickupInstructions?: string | null;
 }
 
 // ============================================
@@ -241,8 +254,9 @@ export interface CreateOrderResponse {
     orderNumber: string;
     totalAmount: number;
     expiresAt: string;
-    stripeClientSecret: string;
-    stripePublishableKey: string;
+    checkoutUrl?: string;
+    stripeClientSecret?: string;
+    stripePublishableKey?: string;
   };
 }
 

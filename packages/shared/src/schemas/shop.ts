@@ -4,8 +4,9 @@ import { z } from "zod";
 // Enums
 // ============================================
 export const productCategorySchema = z.enum([
-  "UNIFORME_DIARIO",
-  "UNIFORME_EDUCACAO_FISICA",
+  "UNIFORME_FEMININO",
+  "UNIFORME_MASCULINO",
+  "UNIFORME_UNISSEX",
   "ACESSORIO",
 ]);
 
@@ -24,6 +25,8 @@ export const paymentMethodSchema = z.enum([
   "CARTAO_CREDITO",
   "CARTAO_DEBITO",
   "DINHEIRO",
+  "BRINDE",
+  "MULTIPLO",
 ]);
 
 export const movementTypeSchema = z.enum([

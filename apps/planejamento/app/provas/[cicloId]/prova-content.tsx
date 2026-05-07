@@ -472,6 +472,7 @@ export function ProvaDetailContent({
                 documentos={documentosAdaptados}
                 onImprimir={handleImprimirDocumento}
                 canDelete={false}
+                modulo="prova"
               />
             </TabsContent>
 

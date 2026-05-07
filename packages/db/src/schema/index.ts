@@ -20,3 +20,4 @@ export * from "./suporte.js";
 export * from "./prova-ciclo.js";
 export * from "./prova.js";
 export * from "./prova-historico.js";
+export * from "./evento-inscricoes.js";

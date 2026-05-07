@@ -105,6 +105,23 @@ export default function DashboardPage() {
     return <span className={`badge ${config.class}`}>{config.label}</span>;
   };
 
+  const handleMarkPickedUp = async (orderId: string) => {
+    try {
+      const response = await apiFetch(`/api/shop/admin/orders/${orderId}/pickup`, {
+        method: 'PATCH',
+      });
+
+      if (!response.ok) {
+        console.warn('Não foi possível marcar pedido como retirado:', response.status);
+        return;
+      }
+
+      await loadDashboard();
+    } catch (error) {
+      console.warn('Erro ao marcar pedido como retirado:', error);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -244,7 +261,10 @@ export default function DashboardPage() {
                           <span className="hidden sm:inline">Ver</span>
                         </Link>
                         {order.status === 'PAGO' && (
-                          <button className="btn-admin btn-admin-primary btn-admin-sm">
+                          <button
+                            onClick={() => handleMarkPickedUp(order.id)}
+                            className="btn-admin btn-admin-primary btn-admin-sm"
+                          >
                             <Check className="w-4 h-4" />
                             <span className="hidden sm:inline">Retirar</span>
                           </button>

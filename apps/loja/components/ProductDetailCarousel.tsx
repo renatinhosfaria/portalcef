@@ -77,7 +77,8 @@ export function ProductDetailCarousel({
                 priority={selectedIndex === 0}
                 sizes="(max-width: 768px) 100vw, 50vw"
                 unoptimized
-                onLoadingComplete={(img) => {
+                onLoad={(event) => {
+                  const img = event.currentTarget;
                   const { naturalWidth, naturalHeight } = img;
                   if (!naturalWidth || !naturalHeight) return;
                   setImageRatios((prev) => {

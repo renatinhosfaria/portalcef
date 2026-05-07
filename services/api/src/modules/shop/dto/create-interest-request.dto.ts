@@ -3,15 +3,17 @@ import {
   IsEmail,
   IsOptional,
   IsArray,
+  ArrayMinSize,
   ValidateNested,
   IsInt,
+  IsUUID,
   Min,
   MinLength,
 } from "class-validator";
 import { Type } from "class-transformer";
 
 class InterestItemDto {
-  @IsString()
+  @IsUUID()
   variantId!: string;
 
   @IsInt()
@@ -20,10 +22,10 @@ class InterestItemDto {
 }
 
 export class CreateInterestRequestDto {
-  @IsString()
+  @IsUUID()
   schoolId!: string;
 
-  @IsString()
+  @IsUUID()
   unitId!: string;
 
   @IsString()
@@ -51,6 +53,7 @@ export class CreateInterestRequestDto {
   notes?: string;
 
   @IsArray()
+  @ArrayMinSize(1)
   @ValidateNested({ each: true })
   @Type(() => InterestItemDto)
   items!: InterestItemDto[];

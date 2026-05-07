@@ -1,5 +1,6 @@
 'use client';
 
+import { useTenant } from '@essencia/shared/providers/tenant';
 import { Button } from '@essencia/ui/components/button';
 import { Input } from '@essencia/ui/components/input';
 import { Label } from '@essencia/ui/components/label';
@@ -10,6 +11,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 
 import { apiFetch } from '../../../../lib/api';
+import { canManageCatalog } from '../../../../lib/permissions';
 
 interface Variant {
     id: string;
@@ -30,7 +32,9 @@ interface Product {
 export default function VariantesPage() {
     const params = useParams();
     const router = useRouter();
+    const { role } = useTenant();
     const productId = params.id as string;
+    const canManageVariants = canManageCatalog(role);
 
     const [product, setProduct] = useState<Product | null>(null);
     const [loading, setLoading] = useState(true);
@@ -131,7 +135,7 @@ export default function VariantesPage() {
                 size: formData.size.trim().toUpperCase(),
                 sku: formData.sku.trim() || null,
                 priceOverride: priceValue ? Math.round(priceValue * 100) : null,
-                isActive: true,
+                isActive: variantToEdit?.isActive ?? true,
             };
 
             const isEditing = !!variantToEdit;
@@ -223,13 +227,15 @@ export default function VariantesPage() {
                         Preço base: {formatCurrency(product.basePrice)} • Gerenciar tamanhos/variantes
                     </p>
                 </div>
-                <Button
-                    onClick={handleCreateClick}
-                    className="bg-[#A3D154] hover:bg-[#8ec33e] text-slate-900 font-bold"
-                >
-                    <Plus className="w-4 h-4 mr-2" />
-                    Nova Variante
-                </Button>
+                {canManageVariants && (
+                    <Button
+                        onClick={handleCreateClick}
+                        className="bg-[#A3D154] hover:bg-[#8ec33e] text-slate-900 font-bold"
+                    >
+                        <Plus className="w-4 h-4 mr-2" />
+                        Nova Variante
+                    </Button>
+                )}
             </div>
 
             {/* Variants Table */}
@@ -278,19 +284,25 @@ export default function VariantesPage() {
                                         </td>
                                         <td>
                                             <div className="flex gap-2">
-                                                <button
-                                                    onClick={() => handleEditClick(variant)}
-                                                    className="btn-admin btn-admin-secondary btn-admin-sm"
-                                                >
-                                                    Editar
-                                                </button>
-                                                <button
-                                                    onClick={() => deleteVariant(variant.id, variant.size)}
-                                                    className="btn-admin btn-admin-ghost btn-admin-sm text-red-500 hover:text-red-700 hover:bg-red-50"
-                                                    title="Excluir variante"
-                                                >
-                                                    <Trash2 className="w-4 h-4" />
-                                                </button>
+                                                {canManageVariants ? (
+                                                    <>
+                                                        <button
+                                                            onClick={() => handleEditClick(variant)}
+                                                            className="btn-admin btn-admin-secondary btn-admin-sm"
+                                                        >
+                                                            Editar
+                                                        </button>
+                                                        <button
+                                                            onClick={() => deleteVariant(variant.id, variant.size)}
+                                                            className="btn-admin btn-admin-ghost btn-admin-sm text-red-500 hover:text-red-700 hover:bg-red-50"
+                                                            title="Excluir variante"
+                                                        >
+                                                            <Trash2 className="w-4 h-4" />
+                                                        </button>
+                                                    </>
+                                                ) : (
+                                                    <span className="text-xs text-slate-500">Somente leitura</span>
+                                                )}
                                             </div>
                                         </td>
                                     </tr>

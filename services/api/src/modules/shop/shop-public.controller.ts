@@ -7,7 +7,7 @@ import {
   Query,
   HttpCode,
   HttpStatus,
-  BadRequestException,
+  ParseUUIDPipe,
 } from "@nestjs/common";
 import { Throttle } from "@nestjs/throttler";
 import {
@@ -20,7 +20,6 @@ import { ShopProductsService } from "./shop-products.service";
 import { ShopOrdersService } from "./shop-orders.service";
 import { ShopInterestService } from "./shop-interest.service";
 import { ShopLocationsService } from "./shop-locations.service";
-import { PaymentsService } from "../payments/payments.service";
 
 /**
  * ShopPublicController
@@ -40,7 +39,6 @@ export class ShopPublicController {
     private readonly ordersService: ShopOrdersService,
     private readonly interestService: ShopInterestService,
     private readonly locationsService: ShopLocationsService,
-    private readonly paymentsService: PaymentsService,
   ) {}
 
   /**
@@ -56,8 +54,8 @@ export class ShopPublicController {
    */
   @Get("catalog/:schoolId/:unitId")
   async getCatalog(
-    @Param("schoolId") schoolId: string,
-    @Param("unitId") unitId: string,
+    @Param("schoolId", new ParseUUIDPipe({ version: "4" })) schoolId: string,
+    @Param("unitId", new ParseUUIDPipe({ version: "4" })) unitId: string,
     @Query() filters: CatalogFiltersDto,
   ) {
     const products = await this.productsService.getProducts(
@@ -100,8 +98,16 @@ export class ShopPublicController {
    * Público - sem autenticação
    */
   @Get("products/:id")
-  async getProductById(@Param("id") id: string) {
-    const product = await this.productsService.getProductById(id);
+  async getProductById(
+    @Param("id", new ParseUUIDPipe({ version: "4" })) id: string,
+    @Query("schoolId", new ParseUUIDPipe({ version: "4" })) schoolId: string,
+    @Query("unitId", new ParseUUIDPipe({ version: "4" })) unitId: string,
+  ) {
+    const product = await this.productsService.getPublicProductById(
+      id,
+      schoolId,
+      unitId,
+    );
 
     return {
       success: true,
@@ -112,7 +118,7 @@ export class ShopPublicController {
   /**
    * POST /shop/orders
    *
-   * Cria um novo pedido (reserva estoque + cria PaymentIntent Stripe)
+   * Cria um novo pedido para voucher presencial.
    * Público - sem autenticação
    *
    * Rate limit: 50 pedidos por hora por IP (@nestjs/throttler)
@@ -121,9 +127,8 @@ export class ShopPublicController {
    * 1. Valida estoque disponível para todos os itens
    * 2. Reserva estoque (Redis lock atômico)
    * 3. Cria pedido com status AGUARDANDO_PAGAMENTO
-   * 4. Cria PaymentIntent no Stripe
-   * 5. Define expiração (now + 15 min)
-   * 6. Retorna { orderId, orderNumber, clientSecret }
+   * 4. Define expiração em 7 dias
+   * 5. Retorna dados do pedido para acompanhamento e voucher
    */
   @Post("orders")
   @Throttle({ strict: { limit: 50, ttl: 3600000 } }) // 50 pedidos por hora
@@ -147,6 +152,7 @@ export class ShopPublicController {
    * Valida que orderNumber pertence ao telefone informado
    */
   @Get("orders/:orderNumber")
+  @Throttle({ strict: { limit: 60, ttl: 3600000 } }) // 60 consultas por hora
   async getOrderByNumber(
     @Param("orderNumber") orderNumber: string,
     @Query() query: GetOrderDto,
@@ -171,6 +177,7 @@ export class ShopPublicController {
    * Body: customer, student, items[]
    */
   @Post("interest")
+  @Throttle({ strict: { limit: 20, ttl: 3600000 } }) // 20 interesses por hora
   @HttpCode(HttpStatus.CREATED)
   async createInterestRequest(@Body() dto: CreateInterestRequestDto) {
     const result = await this.interestService.createInterestRequest(dto);
@@ -184,22 +191,18 @@ export class ShopPublicController {
   /**
    * POST /shop/checkout/init
    *
-   * Inicializa PaymentIntent para Stripe Elements
-   * Permite renderizar o formulário de pagamento antes de criar o pedido
+   * Cria pedido online e inicializa Checkout hospedado do Stripe.
+   * A confirmação de pagamento acontece somente pelo webhook Stripe.
    */
   @Post("checkout/init")
+  @Throttle({ strict: { limit: 50, ttl: 3600000 } }) // 50 checkouts por hora
   @HttpCode(HttpStatus.CREATED)
-  async initCheckout(@Body() body: { amount: number }) {
-    if (!body.amount || body.amount < 100) {
-      throw new BadRequestException("Valor inválido (mínimo 100 centavos)");
-    }
-
-    const { clientSecret, paymentIntentId } =
-      await this.paymentsService.createPaymentIntent(body.amount, {});
+  async initCheckout(@Body() dto: CreateOrderDto) {
+    const result = await this.ordersService.createCheckout(dto);
 
     return {
       success: true,
-      data: { clientSecret, paymentIntentId },
+      data: result,
     };
   }
 }

@@ -13,8 +13,7 @@ interface ProductVariant {
   id: string;
   size: string;
   priceOverride: number | null; // Price in cents
-  // inventory is returned by backend, we calculate available_stock from it
-  inventory?: { quantity: number; reservedQuantity: number }[];
+  availableStock?: number;
   available_stock?: number; // Calculated on frontend
 }
 
@@ -55,7 +54,8 @@ export default function ProductDetailPage({
         setLoading(true);
         setError(null);
 
-        const response = await fetch(`/api/shop/products/${id}`);
+        const params = new URLSearchParams({ schoolId, unitId });
+        const response = await fetch(`/api/shop/products/${id}?${params.toString()}`);
 
         if (!response.ok) {
           if (response.status === 404) {
@@ -71,39 +71,24 @@ export default function ProductDetailPage({
         // Map backend response to match Component expectations
         const rawProduct = result.data;
 
-        interface RawInventory {
-          unitId: string;
-          available: number;
-          total: number;
-          reserved: number;
-        }
-
         interface RawVariant {
           id: string;
           size: string;
           sku: string;
           priceOverride: number | null;
-          inventory: RawInventory[];
+          isActive?: boolean;
+          availableStock?: number;
         }
 
         const mappedProduct: Product = {
           ...rawProduct,
-          variants: (rawProduct.variants as RawVariant[]).map((v) => {
-            // Calculate stock from inventory for current unit
-            const inventoryStock = v.inventory?.reduce((sum: number, inv: RawInventory) => {
-              // Only count stock for the current unit
-              if (inv.unitId === unitId) {
-                return sum + inv.available;
-              }
-              return sum;
-            }, 0) || 0;
-
-            return {
+          variants: (rawProduct.variants as RawVariant[])
+            .filter((v) => v.isActive !== false)
+            .map((v) => ({
               ...v,
               priceOverride: v.priceOverride,
-              available_stock: inventoryStock
-            };
-          })
+              available_stock: v.availableStock || 0,
+            })),
         };
 
         setProduct(mappedProduct);
@@ -116,7 +101,7 @@ export default function ProductDetailPage({
     }
 
     loadProduct();
-  }, [id, unitId]);
+  }, [id, schoolId, unitId]);
 
   const handleAddToCart = async () => {
     if (!selectedVariant || !studentName.trim()) {
@@ -137,6 +122,8 @@ export default function ProductDetailPage({
       await new Promise((resolve) => setTimeout(resolve, 300));
 
       const result = addItem({
+        schoolId,
+        unitId,
         variantId: variant.id,
         productId: product!.id,
         productName: product!.name,

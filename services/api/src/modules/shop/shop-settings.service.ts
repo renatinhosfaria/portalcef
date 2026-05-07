@@ -1,5 +1,10 @@
-import { Injectable, Logger } from "@nestjs/common";
-import { getDb, shopSettings, eq } from "@essencia/db";
+import { Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { getDb, shopSettings, units, eq, and } from "@essencia/db";
+import {
+  assertShopTenantScope,
+  isMasterShopScope,
+  type ShopTenantScope,
+} from "./shop-tenant-scope";
 
 export interface UpdateSettingsDto {
   maxInstallments?: number;
@@ -11,25 +16,53 @@ export interface UpdateSettingsDto {
 export class ShopSettingsService {
   private readonly logger = new Logger(ShopSettingsService.name);
 
+  private async assertSettingsScope(unitId: string, scope?: ShopTenantScope) {
+    if (isMasterShopScope(scope)) {
+      return;
+    }
+
+    assertShopTenantScope(scope);
+    const scopedTenant = scope!;
+
+    if (scopedTenant.unitId && scopedTenant.unitId !== unitId) {
+      throw new NotFoundException({
+        code: "RESOURCE_NOT_FOUND",
+        message: "Configurações não encontradas",
+      });
+    }
+
+    const db = getDb();
+    const unit = await db.query.units.findFirst({
+      where: and(
+        eq(units.id, unitId),
+        eq(units.schoolId, scopedTenant.schoolId!),
+      ),
+    });
+
+    if (!unit) {
+      throw new NotFoundException({
+        code: "RESOURCE_NOT_FOUND",
+        message: "Configurações não encontradas",
+      });
+    }
+  }
+
   /**
    * Busca configurações de uma unidade
    * Se não existir, cria com valores padrão
    */
-  async getSettings(unitId: string) {
+  async getSettings(unitId: string, scope?: ShopTenantScope) {
     try {
-      this.logger.log(`[DEBUG] getSettings called for unitId: ${unitId}`);
       const db = getDb();
+      await this.assertSettingsScope(unitId, scope);
 
       let settings = await db.query.shopSettings.findFirst({
         where: eq(shopSettings.unitId, unitId),
       });
 
-      this.logger.log(`[DEBUG] Existing settings found? ${!!settings}`);
-
       // Se não existe, criar com defaults
       if (!settings) {
         try {
-          this.logger.log(`[DEBUG] Attempting to insert default settings...`);
           const [newSettings] = await db
             .insert(shopSettings)
             .values({
@@ -41,25 +74,23 @@ export class ShopSettingsService {
             })
             .returning();
 
-          this.logger.log(`[DEBUG] Insert successful`);
           settings = newSettings;
         } catch (error) {
           this.logger.error(
-            `[DEBUG] Insert failed: ${error}`,
+            `Falha ao criar configurações padrão da loja: ${error}`,
             (error as Error).stack,
           );
           // Tentar buscar novamente em caso de race condition
           settings = await db.query.shopSettings.findFirst({
             where: eq(shopSettings.unitId, unitId),
           });
-          this.logger.log(`[DEBUG] Fallback fetch result: ${!!settings}`);
         }
       }
 
       return settings;
     } catch (e) {
       this.logger.error(
-        `[CRITICAL] Error in getSettings: ${e}`,
+        `Erro ao buscar configurações da loja: ${e}`,
         (e as Error).stack,
       );
       throw e;
@@ -69,9 +100,15 @@ export class ShopSettingsService {
   /**
    * Atualiza configurações de uma unidade
    */
-  async updateSettings(unitId: string, dto: UpdateSettingsDto, userId: string) {
+  async updateSettings(
+    unitId: string,
+    dto: UpdateSettingsDto,
+    userId: string,
+    scope?: ShopTenantScope,
+  ) {
     const db = getDb();
     this.logger.log(`Updating settings for unit: ${unitId} by user: ${userId}`);
+    await this.assertSettingsScope(unitId, scope);
 
     // Garantir que existe
     const existing = await db.query.shopSettings.findFirst({

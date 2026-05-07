@@ -6,6 +6,7 @@ import {
   shopInventoryLedger,
   shopOrders,
   shopOrderItems,
+  shopOrderPayments,
   shopInterestRequests,
   shopInterestItems,
   shopSettings,
@@ -117,6 +118,7 @@ export const shopOrdersRelations = relations(shopOrders, ({ one, many }) => ({
     relationName: "cancelledBy",
   }),
   items: many(shopOrderItems),
+  payments: many(shopOrderPayments),
 }));
 
 // ============================================
@@ -132,6 +134,19 @@ export const shopOrderItemsRelations = relations(shopOrderItems, ({ one }) => ({
     references: [shopProductVariants.id],
   }),
 }));
+
+// ============================================
+// Shop Order Payments Relations
+// ============================================
+export const shopOrderPaymentsRelations = relations(
+  shopOrderPayments,
+  ({ one }) => ({
+    order: one(shopOrders, {
+      fields: [shopOrderPayments.orderId],
+      references: [shopOrders.id],
+    }),
+  }),
+);
 
 // ============================================
 // Shop Interest Requests Relations

@@ -8,6 +8,7 @@ import { LoadingSkeleton } from '@/components/Loading';
 import { ProductCard } from '@/components/ProductCard';
 import { ShopHeader } from '@/components/ShopHeader';
 import { ShopHero } from '@/components/ShopHero';
+import { getCatalogCardPrice } from '@/lib/catalog';
 
 interface Product {
   id: string;
@@ -27,6 +28,8 @@ interface ApiInventory {
 interface ApiVariant {
   inventory?: ApiInventory[];
   availableStock?: number;
+  price?: number;
+  priceOverride?: number | null;
 }
 
 interface ApiProduct {
@@ -99,7 +102,7 @@ export default function CatalogPage({
           return {
             id: product.id,
             name: product.name,
-            price: product.basePrice / 100, // Convert cents to float
+            price: getCatalogCardPrice(product),
             imageUrl: product.imageUrl || undefined,
             category: product.category,
             availableStock: totalStock,

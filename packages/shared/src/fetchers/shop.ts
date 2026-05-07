@@ -16,6 +16,7 @@ import type {
   CancelOrderRequest,
   ProductCategory,
   OrderStatus,
+  PaymentMethod,
 } from "../types/shop.js";
 
 // ============================================
@@ -211,9 +212,10 @@ export const shopApi = {
      */
     getInventoryLedger: async (
       variantId: string,
+      unitId: string,
     ): Promise<ShopInventoryLedger[]> => {
       return api.get<ShopInventoryLedger[]>(
-        `/shop/admin/inventory/ledger/${variantId}`,
+        `/shop/admin/inventory/ledger/${variantId}/${unitId}`,
       );
     },
 
@@ -272,10 +274,14 @@ export const shopApi = {
      * Create presential sale (directly RETIRADO)
      */
     createPresentialSale: async (data: {
-      unitId: string;
+      unitId?: string;
       customerName: string;
       customerPhone: string;
-      paymentMethod: "DINHEIRO" | "CARTAO_CREDITO" | "CARTAO_DEBITO" | "PIX";
+      customerEmail?: string;
+      payments: Array<{
+        method: Exclude<PaymentMethod, "MULTIPLO">;
+        amount: number;
+      }>;
       items: Array<{
         variantId: string;
         studentName: string;
@@ -283,7 +289,7 @@ export const shopApi = {
       }>;
     }): Promise<ShopOrderWithItems> => {
       return api.post<ShopOrderWithItems>(
-        "/shop/admin/orders/presential",
+        "/shop/admin/orders/presencial",
         data,
       );
     },

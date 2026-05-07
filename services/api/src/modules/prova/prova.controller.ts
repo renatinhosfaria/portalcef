@@ -14,11 +14,8 @@ import {
   Res,
   UseGuards,
 } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
 import { FastifyReply, FastifyRequest } from "fastify";
-import * as jwt from "jsonwebtoken";
 
-import { Public } from "../../common/decorators/public.decorator";
 import { Roles } from "../../common/decorators/roles.decorator";
 import { AuthGuard } from "../../common/guards/auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
@@ -94,7 +91,6 @@ export class ProvaController {
     private readonly provaService: ProvaService,
     private readonly storageService: StorageService,
     private readonly historicoService: ProvaHistoricoService,
-    private readonly configService: ConfigService,
     private readonly sharePointService: SharePointService,
   ) {}
 
@@ -370,7 +366,7 @@ export class ProvaController {
    */
   // Nota: lógica espelhada em PlanoAulaController.editarWord — manter sincronizados
   @Get(":id/documentos/:docId/editar-word")
-  @Roles(...PROFESSORA_ACCESS, ...ANALISTA_ACCESS)
+  @Roles(...ANALISTA_ACCESS)
   async editarWord(
     @Req() req: { user: UserContext },
     @Param("id") provaId: string,
@@ -384,17 +380,7 @@ export class ProvaController {
     }
 
     const user = req.user;
-    const provaResult = await this.provaService.getProvaById(user, provaId);
-    const isOwner = provaResult.user.id === user.userId;
-    const isAnalistaUser = ANALISTA_ROLES.includes(
-      user.role as (typeof ANALISTA_ROLES)[number],
-    );
-    if (!isOwner && !isAnalistaUser) {
-      throw new BadRequestException({
-        code: "NOT_AUTHORIZED",
-        message: "Você não tem permissão para editar documentos desta prova",
-      });
-    }
+    await this.provaService.getProvaById(user, provaId);
 
     const documento = await this.provaService.getDocumentoById(provaId, docId);
 
@@ -413,47 +399,187 @@ export class ProvaController {
     }
 
     // Verificar se já existe uma edição ativa
+    let itemId: string | null = null;
     if (documento.sharepointItemId && documento.editandoDesde) {
-      const expirado = new Date();
-      expirado.setHours(expirado.getHours() - 2);
+      const expirado = this.sharePointService.calcularLimiteEdicao();
 
       if (documento.editandoDesde > expirado) {
-        // Edição ainda ativa — retornar URL existente
-        const msWordUrl = this.sharePointService.construirMsWordUrl(
-          documento.sharepointEditUrl!,
-        );
-        return {
-          success: true,
-          data: { url: msWordUrl },
-        };
+        if (documento.sharepointEditUrl) {
+          // Edição ainda ativa — retornar URL existente
+          const msWordUrl = this.sharePointService.construirMsWordUrl(
+            documento.sharepointEditUrl,
+          );
+          return {
+            success: true,
+            data: { url: msWordUrl },
+          };
+        }
+        // Item existe (subido pela visualização) mas sem link edit — reusar item
+        itemId = documento.sharepointItemId;
+      } else {
+        // Edição expirada — limpar antes de criar nova (best-effort, 1 tentativa)
+        await this.sharePointService.removerArquivo(documento.sharepointItemId, 1);
       }
-
-      // Edição expirada — limpar antes de criar nova
-      await this.sharePointService.removerArquivo(documento.sharepointItemId);
     }
 
-    // Upload para SharePoint e criar link de compartilhamento
-    const itemId = await this.sharePointService.uploadParaSharePoint(
-      documento.storageKey,
-      documento.fileName || "documento.docx",
-      docId,
-    );
+    if (!itemId) {
+      // Upload para SharePoint
+      itemId = await this.sharePointService.uploadParaSharePoint(
+        documento.storageKey,
+        documento.fileName || "documento.docx",
+        docId,
+      );
+    }
 
-    const { url } = await this.sharePointService.criarLinkCompartilhamento(itemId);
+    const { directUrl } = await this.sharePointService.criarLinkCompartilhamento(
+      itemId,
+      docId,
+      documento.fileName || "documento.docx",
+    );
 
     // Atualizar documento com dados do SharePoint
     await this.provaService.atualizarDocumento(docId, {
       sharepointItemId: itemId,
-      sharepointEditUrl: url,
+      sharepointEditUrl: directUrl,
       editandoDesde: new Date(),
     });
 
-    // Gerar URL ms-word: para abrir diretamente no Word desktop
-    const msWordUrl = this.sharePointService.construirMsWordUrl(url);
+    // Gerar URL ms-word: usando URL direta do arquivo no SharePoint
+    const msWordUrl = this.sharePointService.construirMsWordUrl(directUrl);
 
     return {
       success: true,
       data: { url: msWordUrl },
+    };
+  }
+
+  /**
+   * GET /prova/:id/documentos/:docId/visualizar-sharepoint
+   * Retorna URL embeddable do Office para Web para visualização fiel de .docx
+   */
+  // Nota: lógica espelhada em PlanoAulaController.visualizarSharePoint — manter sincronizados
+  @Get(":id/documentos/:docId/visualizar-sharepoint")
+  @Roles(...VISUALIZAR_ACCESS)
+  async visualizarSharePoint(
+    @Req() req: { user: UserContext },
+    @Param("id") provaId: string,
+    @Param("docId") docId: string,
+  ) {
+    if (!this.sharePointService.isConfigurado()) {
+      return { success: true, data: { disponivel: false } };
+    }
+
+    const user = req.user;
+    await this.provaService.getProvaById(user, provaId);
+
+    const documento = await this.provaService.getDocumentoById(provaId, docId);
+
+    const isWord =
+      documento.mimeType?.includes("word") ||
+      documento.mimeType?.includes("msword") ||
+      documento.fileName?.match(/\.docx?$/i);
+
+    if (!isWord || !documento.storageKey) {
+      return { success: true, data: { disponivel: false } };
+    }
+
+    // Reusar item existente se não expirou
+    let itemId: string | null = null;
+    if (documento.sharepointItemId && documento.editandoDesde) {
+      const expirado = this.sharePointService.calcularLimiteEdicao();
+      if (documento.editandoDesde > expirado) {
+        itemId = documento.sharepointItemId;
+      }
+    }
+
+    if (!itemId) {
+      itemId = await this.sharePointService.uploadParaSharePoint(
+        documento.storageKey,
+        documento.fileName || "documento.docx",
+        docId,
+      );
+
+      // Persistir itemId para permitir reuso e garantir cleanup
+      await this.provaService.atualizarDocumento(docId, {
+        sharepointItemId: itemId,
+        editandoDesde: new Date(),
+      });
+    }
+
+    const { embedUrl } = await this.sharePointService.criarLinkVisualizacao(itemId);
+
+    return {
+      success: true,
+      data: { disponivel: true, embedUrl },
+    };
+  }
+
+  /**
+   * POST /prova/:id/documentos/:docId/sincronizar-word
+   * Sincroniza alterações do SharePoint de volta ao MinIO
+   */
+  @Post(":id/documentos/:docId/sincronizar-word")
+  @Roles(...ANALISTA_ACCESS)
+  async sincronizarWord(
+    @Req() req: { user: UserContext },
+    @Param("id") provaId: string,
+    @Param("docId") docId: string,
+  ) {
+    const user = req.user;
+    await this.provaService.getProvaById(user, provaId);
+
+    const documento = await this.provaService.getDocumentoById(provaId, docId);
+
+    if (!documento.sharepointItemId) {
+      throw new BadRequestException({
+        code: "NO_SHAREPOINT_SESSION",
+        message: "Nenhuma edição ativa no SharePoint para este documento",
+      });
+    }
+
+    if (!documento.storageKey) {
+      throw new BadRequestException("Documento sem arquivo associado");
+    }
+
+    if (!documento.editandoDesde) {
+      throw new BadRequestException("Estado inconsistente: edição sem data de início");
+    }
+
+    const foiModificado = await this.sharePointService.foiModificadoApos(
+      documento.sharepointItemId,
+      documento.editandoDesde,
+    );
+
+    if (foiModificado) {
+      const buffer = await this.sharePointService.baixarArquivo(
+        documento.sharepointItemId,
+      );
+
+      await this.storageService.replaceFile(
+        documento.storageKey,
+        buffer,
+        documento.mimeType ||
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        documento.fileName || "documento.docx",
+      );
+
+      this.logger.log(
+        `[sincronizarWord] Documento ${docId} sincronizado do SharePoint (${buffer.length} bytes)`,
+      );
+    }
+
+    await this.sharePointService.removerArquivo(documento.sharepointItemId);
+
+    await this.provaService.atualizarDocumento(docId, {
+      sharepointItemId: null,
+      sharepointEditUrl: null,
+      editandoDesde: null,
+      updatedAt: new Date(),
+    });
+
+    return {
+      success: true,
+      data: { sincronizado: foiModificado },
     };
   }
 
@@ -552,94 +678,11 @@ export class ProvaController {
   }
 
   /**
-   * GET /prova/:id/documentos/:docId/editor-config
-   * Retorna configuração do OnlyOffice para visualização (somente leitura)
-   */
-  @Get(":id/documentos/:docId/editor-config")
-  @Roles(...VISUALIZAR_ACCESS)
-  async getEditorConfig(
-    @Req() req: { user: UserContext },
-    @Param("id") provaId: string,
-    @Param("docId") docId: string,
-  ) {
-    const documento = await this.provaService.getDocumentoById(provaId, docId);
-
-    if (!documento.storageKey) {
-      throw new BadRequestException("Documento sem arquivo associado");
-    }
-
-    const isWord =
-      documento.mimeType?.includes("word") ||
-      documento.mimeType?.includes("msword");
-    if (!isWord) {
-      throw new BadRequestException(
-        "Apenas documentos .doc/.docx podem ser abertos no visualizador",
-      );
-    }
-
-    const apiBaseUrl =
-      this.configService.get<string>("NEXT_PUBLIC_API_URL") ||
-      "https://www.portalcef.com.br/api";
-    const fileUrl = `${apiBaseUrl}/prova/${provaId}/documentos/${docId}/download`;
-
-    const onlyofficeUrl =
-      this.configService.get<string>("ONLYOFFICE_PUBLIC_URL") ||
-      "https://www.portalcef.com.br/onlyoffice";
-    const jwtSecret = this.configService.get<string>("ONLYOFFICE_JWT_SECRET");
-
-    const config = {
-      document: {
-        fileType: documento.fileName?.endsWith(".doc") ? "doc" : "docx",
-        key: `${docId}-${documento.updatedAt ? new Date(documento.updatedAt).getTime() : docId}`,
-        title: documento.fileName || "Documento",
-        url: fileUrl,
-        permissions: {
-          edit: false,
-          comment: false,
-          download: true,
-          print: true,
-        },
-      },
-      documentType: "word",
-      editorConfig: {
-        mode: "view",
-        lang: "pt",
-        customization: {
-          autosave: false,
-          forcesave: false,
-          plugins: false,
-          compactToolbar: true,
-          hideRightMenu: true,
-          hideRulers: true,
-          spellcheck: false,
-        },
-        user: {
-          id: req.user.userId,
-          name: "Usuário",
-        },
-      },
-    };
-
-    let token: string | undefined;
-    if (jwtSecret) {
-      token = jwt.sign(config, jwtSecret);
-    }
-
-    return {
-      success: true,
-      data: {
-        documentServerUrl: onlyofficeUrl,
-        config: { ...config, token },
-      },
-    };
-  }
-
-  /**
    * GET /prova/:id/documentos/:docId/download
-   * Serve o arquivo diretamente do MinIO
+   * Serve o arquivo diretamente do MinIO para visualização no browser (docx-preview).
    */
   @Get(":id/documentos/:docId/download")
-  @Public()
+  @Roles(...VISUALIZAR_ACCESS)
   async downloadDocumento(
     @Res() reply: FastifyReply,
     @Param("id") provaId: string,

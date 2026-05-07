@@ -3,11 +3,34 @@
     "allow": [
       "Read(//root/.claude/plugins/cache/superpowers-marketplace/superpowers/5.0.6/skills/subagent-driven-development/**)",
       "Bash(npx jest:*)",
-      "Bash(npx next:*)"
+      "Bash(npx next:*)",
+      "Bash(docker restart:*)",
+      "Bash(docker image:*)",
+      "Bash(/tmp/check-minio.sh:*)",
+      "Bash(__NEW_LINE_a6da60de365156fe__ chmod:*)",
+      "Bash(/tmp/check-minio.sh)",
+      "Bash(/tmp/check-file.sh:*)",
+      "Bash(__NEW_LINE_95b3164b84f6cfc2__ chmod:*)",
+      "Bash(/tmp/check-file.sh)",
+      "Bash(docker rm:*)",
+      "Bash(kill %1)",
+      "Bash(dpkg -l)",
+      "Read(//etc/**)",
+      "Bash(apt list:*)",
+      "Bash(awk '{print $NF}')",
+      "Bash(sysctl vm.overcommit_memory)",
+      "Bash(awk -F'[][]' '{print $2}')",
+      "Bash(netstat -tlnp)",
+      "Bash(crontab -l)",
+      "Bash(systemctl list-timers:*)",
+      "Bash(awk '{print $4}')",
+      "Bash(sudo sysctl:*)",
+      "Bash(sudo tee:*)"
     ],
     "additionalDirectories": [
       "/var/www/essencia/docs/superpowers",
-      "/var/www/essencia/apps/planejamento/app/plano-aula/[quinzenaId]"
+      "/var/www/essencia/apps/planejamento/app/plano-aula/[quinzenaId]",
+      "/var/www/essencia"
     ]
   }
 }

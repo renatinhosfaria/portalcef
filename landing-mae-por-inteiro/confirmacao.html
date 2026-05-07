@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>Inscrição Confirmada | Mãe por Inteiro</title>
+  <meta name="description" content="Sua inscrição para o evento Mãe por Inteiro foi confirmada com sucesso.">
+  
+  <!-- Estilos e Fontes -->
+  <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400;1,600&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    .conf-text { color: var(--text-light); font-size: 1.1rem; line-height: 1.7; margin-bottom: 20px; }
+    .conf-box { background: rgba(255,249,243,0.8); border-radius: 16px; padding: 24px; margin: 30px 0; border: 1px solid rgba(212,165,116,0.2); }
+    .conf-strong { color: var(--text); font-weight: 600; }
+  </style>
+</head>
+<body style="background: var(--cream); min-height: 100vh; display: flex; flex-direction: column;">
+
+  <!-- NAVBAR SIMPLIFICADA -->
+  <nav class="navbar" id="navbar" style="background: rgba(255, 249, 243, 0.9);">
+    <div class="container nav-container">
+      <a href="index.html" class="nav-brand">
+        Colégio Essência Feliz
+      </a>
+      <a href="index.html" class="btn btn-outline nav-cta" style="font-size: 0.9rem; padding: 10px 20px;">
+        Voltar ao início
+      </a>
+    </div>
+  </nav>
+
+  <!-- CONTEÚDO PRINCIPAL -->
+  <main style="flex: 1; display: flex; align-items: center; padding: 120px 20px 60px;">
+    <div class="container" style="width: 100%;">
+      <div class="confirmation-card" data-animate="fade-up">
+        
+        <div class="confirmation-icon">
+          <i data-lucide="check-circle-2"></i>
+        </div>
+
+        <h1 class="title-script" style="font-size: clamp(2rem, 6vw, 3rem); margin-bottom: 20px; color: var(--primary);">💛 Inscrição confirmada com sucesso!</h1>
+        
+        <p class="conf-text">
+          Estamos muito felizes em ter você conosco no <span class="conf-strong">Mãe por Inteiro ✨</span><br>
+          Será um momento especial, pensado com muito carinho para você.
+        </p>
+
+        <div class="conf-box" style="text-align: left;">
+          <p class="conf-text" style="margin-bottom: 10px;"><strong style="color:var(--rose);">📅 Reserve essa data e esse momento para você:</strong></p>
+          <p class="conf-text" style="margin-bottom: 10px;">
+            <i data-lucide="calendar" style="width:16px; height:16px; display:inline-block; vertical-align:middle; margin-right:5px; color:var(--gold);"></i>
+            <span class="conf-strong">16 de maio (sábado), às 9h30</span>
+          </p>
+          <p class="conf-text" style="margin-bottom: 20px;">
+            <i data-lucide="map-pin" style="width:16px; height:16px; display:inline-block; vertical-align:middle; margin-right:5px; color:var(--gold);"></i>
+            <span class="conf-strong">Auditório do Parque Una</span><br>
+            <span style="font-size:0.9rem; margin-left:25px;">R. Nininha Rocha, 125 — Gávea, Uberlândia – MG, 38411-852</span>
+          </p>
+
+          <!-- Botão Adicionar ao Calendário -->
+          <a href="mae-por-inteiro.ics" download="mae-por-inteiro.ics" class="btn btn-primary btn-glow" style="display:inline-flex; align-items:center; gap:8px; width:100%; justify-content:center; text-decoration:none; font-size:1rem; padding:14px 24px;">
+            <i data-lucide="calendar-plus" style="width:20px; height:20px;"></i>
+            <span>Adicionar ao meu Calendário</span>
+          </a>
+        </div>
+
+        <div style="border-top: 1px solid rgba(212,165,116,0.2); padding-top: 30px; margin-top: 30px;">
+          <p class="conf-text" style="font-style: italic;">
+            <strong style="color: var(--rose);">Gostaríamos de reforçar um ponto importante:</strong><br>
+            Este encontro foi preparado para ser um tempo exclusivo da mãe com ela mesma, de conexão, troca e leveza.
+          </p>
+          <p class="conf-text" style="font-style: italic;">
+            Por isso, <span class="conf-strong">não teremos estrutura para receber crianças no local.</span><br>
+            Se possível, organize-se para deixar seu filho com o papai, com a vovó ou alguém de confiança, para que você possa viver essa experiência por completo 💛
+          </p>
+        </div>
+
+        <p class="conf-text" style="margin-top: 30px; margin-bottom: 0;">
+          <span class="conf-strong">Nos vemos em breve! Vai ser lindo ter você com a gente 🌷</span>
+        </p>
+
+      </div>
+    </div>
+  </main>
+
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="script.js"></script>
+</body>
+</html>

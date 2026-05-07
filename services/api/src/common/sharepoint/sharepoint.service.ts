@@ -4,19 +4,25 @@ import { Client } from "@microsoft/microsoft-graph-client";
 import { ClientSecretCredential } from "@azure/identity";
 import { TokenCredentialAuthenticationProvider } from "@microsoft/microsoft-graph-client/authProviders/azureTokenCredentials";
 import "isomorphic-fetch";
+import axios from "axios";
 
 import { StorageService } from "../storage/storage.service";
 
 @Injectable()
 export class SharePointService {
+  private static readonly HORAS_EDICAO_PADRAO = 8;
+
   private readonly logger = new Logger(SharePointService.name);
   private client: Client | null = null;
+  private credential: ClientSecretCredential | null = null;
 
   private readonly tenantId: string | undefined;
   private readonly clientId: string | undefined;
   private readonly clientSecret: string | undefined;
   private readonly siteId: string | undefined;
   private readonly driveId: string | undefined;
+  private readonly horasEdicao: number;
+  private driveWebUrl: string | null = null;
 
   constructor(
     private readonly configService: ConfigService,
@@ -27,6 +33,7 @@ export class SharePointService {
     this.clientSecret = this.configService.get<string>("AZURE_CLIENT_SECRET");
     this.siteId = this.configService.get<string>("SHAREPOINT_SITE_ID");
     this.driveId = this.configService.get<string>("SHAREPOINT_DRIVE_ID");
+    this.horasEdicao = this.carregarHorasEdicao();
 
     if (this.isConfigurado()) {
       this.inicializarClient();
@@ -35,6 +42,21 @@ export class SharePointService {
         "SharePoint não configurado — variáveis AZURE_* ou SHAREPOINT_* ausentes",
       );
     }
+  }
+
+  private carregarHorasEdicao(): number {
+    const valor = this.configService.get<string>("SHAREPOINT_EDIT_TTL_HOURS");
+    if (!valor) return SharePointService.HORAS_EDICAO_PADRAO;
+
+    const horas = Number(valor);
+    if (!Number.isFinite(horas) || horas <= 0) {
+      this.logger.warn(
+        `SHAREPOINT_EDIT_TTL_HOURS inválido (${valor}); usando ${SharePointService.HORAS_EDICAO_PADRAO}h`,
+      );
+      return SharePointService.HORAS_EDICAO_PADRAO;
+    }
+
+    return horas;
   }
 
   isConfigurado(): boolean {
@@ -48,13 +70,13 @@ export class SharePointService {
   }
 
   private inicializarClient(): void {
-    const credential = new ClientSecretCredential(
+    this.credential = new ClientSecretCredential(
       this.tenantId!,
       this.clientId!,
       this.clientSecret!,
     );
 
-    const authProvider = new TokenCredentialAuthenticationProvider(credential, {
+    const authProvider = new TokenCredentialAuthenticationProvider(this.credential, {
       scopes: ["https://graph.microsoft.com/.default"],
     });
 
@@ -68,42 +90,103 @@ export class SharePointService {
     return this.client;
   }
 
+  obterHorasEdicao(): number {
+    return this.horasEdicao;
+  }
+
+  calcularLimiteEdicao(agora = new Date()): Date {
+    return new Date(agora.getTime() - this.horasEdicao * 60 * 60 * 1000);
+  }
+
   async uploadParaSharePoint(
     storageKey: string,
     fileName: string,
     documentoId: string,
   ): Promise<string> {
-    const client = this.getClient();
-
     const s3Response = await this.storageService.getObject(storageKey);
     const chunks: Buffer[] = [];
-    const stream = s3Response.Body as NodeJS.ReadableStream;
-    for await (const chunk of stream) {
-      chunks.push(Buffer.from(chunk as Buffer));
+    const s3Stream = s3Response.Body as NodeJS.ReadableStream;
+
+    for await (const chunk of s3Stream) {
+      chunks.push(chunk instanceof Buffer ? chunk : Buffer.from(chunk as any));
     }
     const buffer = Buffer.concat(chunks);
 
-    const uploadPath = `/drives/${this.driveId}/root:/edicao-temporaria/${documentoId}/${fileName}:/content`;
-
-    const response = await client
-      .api(`/sites/${this.siteId}${uploadPath}`)
-      .putStream(buffer);
-
     this.logger.log(
-      `Arquivo ${fileName} copiado para SharePoint (documentoId: ${documentoId})`,
+      `Buffer preparado: ${buffer.length} bytes (storageKey: ${storageKey})`,
     );
 
-    return response.id;
+    if (buffer.length === 0) {
+      throw new Error(`Arquivo ${storageKey} vazio ao ler do storage`);
+    }
+
+    const uploadPath = `/sites/${this.siteId}/drives/${this.driveId}/root:/edicao-temporaria/${documentoId}/${fileName}:/content`;
+
+    this.logger.log(
+      `Iniciando upload para SharePoint via REST: ${uploadPath}`,
+    );
+
+    try {
+      // Usar axios para upload direto via REST API
+      const response = await axios.put(
+        `https://graph.microsoft.com/v1.0${uploadPath}`,
+        buffer,
+        {
+          headers: {
+            "Authorization": await this.getAuthorizationHeader(),
+            "Content-Type": "application/octet-stream",
+          },
+        },
+      );
+
+      this.logger.log(
+        `Arquivo ${fileName} copiado para SharePoint (${buffer.length} bytes → itemId: ${response.data.id})`,
+      );
+
+      return response.data.id;
+    } catch (error) {
+      this.logger.error(
+        `Erro ao fazer upload para SharePoint: ${error instanceof Error ? error.message : error}`,
+      );
+      throw error;
+    }
+  }
+
+  private async getAuthorizationHeader(): Promise<string> {
+    if (!this.credential) {
+      throw new Error("SharePoint não configurado");
+    }
+
+    const token = await this.credential.getToken("https://graph.microsoft.com/.default");
+    return `Bearer ${token.token}`;
+  }
+
+  private async getDriveWebUrl(): Promise<string> {
+    if (this.driveWebUrl) return this.driveWebUrl;
+
+    const client = this.getClient();
+    const drive = await client
+      .api(`/sites/${this.siteId}/drives/${this.driveId}`)
+      .select("webUrl")
+      .get();
+
+    this.driveWebUrl = drive.webUrl;
+    this.logger.log(`Drive webUrl obtido: ${drive.webUrl}`);
+    return drive.webUrl;
   }
 
   async criarLinkCompartilhamento(
     itemId: string,
-    expiracaoHoras: number = 2,
-  ): Promise<{ url: string; shareId: string }> {
+    documentoId: string,
+    fileName: string,
+    expiracaoHoras = this.horasEdicao,
+  ): Promise<{ url: string; shareId: string; directUrl: string }> {
     const client = this.getClient();
 
     const expiracao = new Date();
     expiracao.setHours(expiracao.getHours() + expiracaoHoras);
+
+    const expiracaoIso = expiracao.toISOString();
 
     const response = await client
       .api(
@@ -112,12 +195,42 @@ export class SharePointService {
       .post({
         type: "edit",
         scope: "anonymous",
-        expirationDateTime: expiracao.toISOString(),
+        expirationDateTime: expiracaoIso,
       });
+
+    // Construir URL direta do arquivo no SharePoint (para ms-word protocol)
+    const driveUrl = await this.getDriveWebUrl();
+    const encodedFileName = encodeURIComponent(fileName).replace(/%20/g, " ");
+    const directUrl = `${driveUrl}/edicao-temporaria/${documentoId}/${encodedFileName}`;
+
+    this.logger.log(`Link compartilhamento: ${response.link.webUrl}`);
+    this.logger.log(`URL direta do arquivo: ${directUrl}`);
 
     return {
       url: response.link.webUrl,
       shareId: response.id,
+      directUrl,
+    };
+  }
+
+  async criarLinkVisualizacao(
+    itemId: string,
+  ): Promise<{ embedUrl: string }> {
+    const client = this.getClient();
+
+    // Endpoint preview retorna URL hospedada em *.officeapps.live.com,
+    // embeddable em qualquer domínio (diferente do webUrl do SharePoint,
+    // cujo frame-ancestors restringe a domínios Microsoft).
+    const response = await client
+      .api(
+        `/sites/${this.siteId}/drives/${this.driveId}/items/${itemId}/preview`,
+      )
+      .post({});
+
+    this.logger.log(`Preview URL: ${response.getUrl}`);
+
+    return {
+      embedUrl: response.getUrl,
     };
   }
 
@@ -132,9 +245,43 @@ export class SharePointService {
 
     const chunks: Buffer[] = [];
     for await (const chunk of stream) {
-      chunks.push(Buffer.from(chunk as Buffer));
+      chunks.push(chunk instanceof Buffer ? chunk : Buffer.from(chunk as any));
     }
-    return Buffer.concat(chunks);
+    const buffer = Buffer.concat(chunks);
+
+    if (buffer.length === 0) {
+      throw new Error(`Arquivo ${itemId} vazio ao baixar do SharePoint`);
+    }
+
+    return buffer;
+  }
+
+  async converterParaPdf(itemId: string): Promise<Buffer> {
+    // Graph responde com 302 para uma URL temporária (~1h) do PDF gerado.
+    // O SDK segue redirects transparentemente via getStream().
+    const url = `https://graph.microsoft.com/v1.0/sites/${this.siteId}/drives/${this.driveId}/items/${itemId}/content?format=pdf`;
+
+    const response = await axios.get<ArrayBuffer>(url, {
+      responseType: "arraybuffer",
+      headers: {
+        Authorization: await this.getAuthorizationHeader(),
+      },
+      maxRedirects: 5,
+    });
+
+    const buffer = Buffer.from(response.data);
+
+    if (buffer.length === 0) {
+      throw new Error(
+        `Convers\u00e3o DOCX\u2192PDF retornou buffer vazio para item ${itemId}`,
+      );
+    }
+
+    this.logger.log(
+      `PDF gerado via Graph para item ${itemId}: ${buffer.length} bytes`,
+    );
+
+    return buffer;
   }
 
   async foiModificadoApos(
@@ -158,22 +305,40 @@ export class SharePointService {
     }
   }
 
-  async removerArquivo(itemId: string): Promise<void> {
+  async removerArquivo(itemId: string, tentativas = 3): Promise<boolean> {
     const client = this.getClient();
 
-    try {
-      await client
-        .api(
-          `/sites/${this.siteId}/drives/${this.driveId}/items/${itemId}`,
-        )
-        .delete();
+    for (let i = 0; i < tentativas; i++) {
+      try {
+        await client
+          .api(
+            `/sites/${this.siteId}/drives/${this.driveId}/items/${itemId}`,
+          )
+          .delete();
 
-      this.logger.log(`Arquivo ${itemId} removido do SharePoint`);
-    } catch (error) {
-      this.logger.warn(
-        `Falha ao remover arquivo ${itemId} do SharePoint: ${error}`,
-      );
+        this.logger.log(`Arquivo ${itemId} removido do SharePoint`);
+        return true;
+      } catch (error) {
+        const mensagem = error instanceof Error ? error.message : String(error);
+        const isLocked = mensagem.includes("locked");
+
+        if (isLocked && i < tentativas - 1) {
+          const delay = Math.pow(2, i) * 5000; // 5s, 10s, 20s
+          this.logger.warn(
+            `Arquivo ${itemId} está bloqueado no SharePoint, tentativa ${i + 1}/${tentativas}. Aguardando ${delay / 1000}s...`,
+          );
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          continue;
+        }
+
+        this.logger.warn(
+          `Falha ao remover arquivo ${itemId} do SharePoint (tentativa ${i + 1}/${tentativas}): ${mensagem}`,
+        );
+        return false;
+      }
     }
+
+    return false;
   }
 
   async revogarLink(itemId: string, shareId: string): Promise<void> {
@@ -190,42 +355,6 @@ export class SharePointService {
         `Falha ao revogar link ${shareId}: ${error}`,
       );
     }
-  }
-
-  async criarSubscription(callbackUrl: string): Promise<string> {
-    const client = this.getClient();
-
-    const expiracao = new Date();
-    expiracao.setDate(expiracao.getDate() + 29);
-
-    const response = await client.api("/subscriptions").post({
-      changeType: "updated",
-      notificationUrl: callbackUrl,
-      resource: `/sites/${this.siteId}/drives/${this.driveId}/root:/edicao-temporaria:/children`,
-      expirationDateTime: expiracao.toISOString(),
-      clientState: "essencia-portal-webhook",
-    });
-
-    this.logger.log(
-      `Subscription criada: ${response.id} (expira em ${expiracao.toISOString()})`,
-    );
-
-    return response.id;
-  }
-
-  async renovarSubscription(subscriptionId: string): Promise<void> {
-    const client = this.getClient();
-
-    const expiracao = new Date();
-    expiracao.setDate(expiracao.getDate() + 29);
-
-    await client.api(`/subscriptions/${subscriptionId}`).patch({
-      expirationDateTime: expiracao.toISOString(),
-    });
-
-    this.logger.log(
-      `Subscription ${subscriptionId} renovada até ${expiracao.toISOString()}`,
-    );
   }
 
   construirMsWordUrl(sharePointUrl: string): string {

@@ -266,6 +266,9 @@ export const shopOrders = pgTable(
     installments: integer("installments").default(1),
     paymentMethod: text("payment_method", { enum: paymentMethodEnum }),
     stripePaymentIntentId: varchar("stripe_payment_intent_id", { length: 255 }),
+    stripeCheckoutSessionId: varchar("stripe_checkout_session_id", {
+      length: 255,
+    }),
     expiresAt: timestamp("expires_at", { withTimezone: true }),
     paidAt: timestamp("paid_at", { withTimezone: true }),
     pickedUpAt: timestamp("picked_up_at", { withTimezone: true }),
@@ -361,6 +364,7 @@ export const shopInterestRequests = pgTable(
     customerPhoneIdx: index("shop_interest_requests_customer_phone_idx").on(
       table.customerPhone,
     ),
+    statusIdx: index("shop_interest_requests_status_idx").on(table.status),
     contactedAtIdx: index("shop_interest_requests_contacted_at_idx").on(
       table.contactedAt,
     ),
@@ -459,6 +463,20 @@ export type ShopOrderPayment = typeof shopOrderPayments.$inferSelect;
 export type NewShopOrderPayment = typeof shopOrderPayments.$inferInsert;
 
 // ============================================
+// Table: stripe_webhook_events
+// ============================================
+export const stripeWebhookEvents = pgTable("stripe_webhook_events", {
+  id: varchar("id", { length: 255 }).primaryKey(),
+  type: varchar("type", { length: 120 }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export type StripeWebhookEvent = typeof stripeWebhookEvents.$inferSelect;
+export type NewStripeWebhookEvent = typeof stripeWebhookEvents.$inferInsert;
+
+// ============================================
 // Zod Schemas
 // ============================================
 export const insertShopProductSchema = createInsertSchema(shopProducts);
@@ -482,5 +500,10 @@ export const selectShopSettingsSchema = createSelectSchema(shopSettings);
 
 export const insertShopOrderPaymentSchema = createInsertSchema(shopOrderPayments);
 export const selectShopOrderPaymentSchema = createSelectSchema(shopOrderPayments);
+
+export const insertStripeWebhookEventSchema =
+  createInsertSchema(stripeWebhookEvents);
+export const selectStripeWebhookEventSchema =
+  createSelectSchema(stripeWebhookEvents);
 
 // End of file

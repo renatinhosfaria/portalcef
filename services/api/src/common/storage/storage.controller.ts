@@ -9,9 +9,10 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { FastifyRequest } from "fastify";
+import { Roles } from "../../common/decorators/roles.decorator";
 import { AuthGuard } from "../../common/guards/auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
-import { StorageService } from "./storage.service";
+import { RASTER_IMAGE_MIME_TYPES, StorageService } from "./storage.service";
 
 interface FastifyMultipartRequest extends FastifyRequest {
   isMultipart: () => boolean;
@@ -26,6 +27,7 @@ export class StorageController {
   constructor(private readonly storageService: StorageService) {}
 
   @Post("upload")
+  @Roles("master", "diretora_geral", "gerente_unidade")
   async upload(@Req() req: FastifyMultipartRequest) {
     if (!req.isMultipart()) {
       throw new BadRequestException({
@@ -44,9 +46,15 @@ export class StorageController {
     }
 
     try {
-      const result = await this.storageService.uploadFile(file);
+      const result = await this.storageService.uploadFile(file, {
+        allowedMimeTypes: RASTER_IMAGE_MIME_TYPES,
+      });
       return { success: true, data: result };
     } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+
       this.logger.error(
         `Erro ao fazer upload: ${error instanceof Error ? error.message : String(error)}`,
       );

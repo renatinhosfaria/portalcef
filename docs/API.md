@@ -746,7 +746,20 @@ Registra interesse em produtos sem estoque.
 
 #### POST `/shop/checkout/init`
 
-Cria PaymentIntent (uso futuro). Frontend atual retorna 503 no proxy.
+Inicializa pagamento online no Stripe Checkout. Recebe o mesmo contrato de criação de pedido público, reserva o estoque por 30 minutos e retorna a URL hospedada do Stripe.
+
+```json
+{
+  "success": true,
+  "data": {
+    "orderId": "uuid",
+    "orderNumber": "123456",
+    "totalAmount": 17000,
+    "expiresAt": "2026-04-28T12:30:00.000Z",
+    "checkoutUrl": "https://checkout.stripe.com/c/pay/..."
+  }
+}
+```
 
 ---
 
@@ -835,7 +848,7 @@ Body:
 
 #### POST `/payments/webhook`
 
-Webhook Stripe. Retorna `{ received: true, eventId }` mesmo em erros internos para evitar retry infinito.
+Webhook Stripe exposto em produção como `https://www.portalcef.com.br/api/payments/webhook`. Valida `stripe-signature`, registra eventos processados para idempotência e confirma/libera reservas via serviço de pedidos. Retorna `{ received: true, eventId }` mesmo em erros internos para evitar retry infinito.
 
 ---
 
@@ -1231,7 +1244,7 @@ Sistema de edicao de documentos DOC/DOCX via Microsoft Word desktop, usando Shar
 
 1. Usuario solicita edicao via `GET /plano-aula/:id/documentos/:docId/editar-word`
 2. API copia arquivo do MinIO para SharePoint (pasta `edicao-temporaria`)
-3. Cria link de compartilhamento anonimo com expiracao de 2h
+3. Cria link de compartilhamento anonimo com expiracao de 8h por padrao (`SHAREPOINT_EDIT_TTL_HOURS`)
 4. Retorna URL `ms-word:ofe|u|...` que abre diretamente no Word desktop
 5. Webhook do Microsoft Graph (`POST /webhooks/graph`) sincroniza alteracoes de volta ao MinIO
 6. Campos temporarios (`sharepointItemId`, `sharepointEditUrl`, `editandoDesde`) sao limpos apos sincronizacao

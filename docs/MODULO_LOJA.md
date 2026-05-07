@@ -8,6 +8,8 @@ Documentação completa do módulo de e-commerce do Portal Essência Feliz.
 
 O **CEF Shop** é um sistema de loja online para venda de uniformes escolares e acessórios. O módulo permite que pais/responsáveis façam pedidos online e paguem presencialmente na escola, gerando um **voucher** para retirada.
 
+> Matriz obrigatória de qualidade: toda alteração neste módulo deve seguir [LOJA_INVARIANTES_TESTES.md](./LOJA_INVARIANTES_TESTES.md).
+
 ### Características Principais
 
 - **Catálogo Público**: Produtos organizados por categoria, tamanho e disponibilidade
@@ -516,34 +518,31 @@ if (order.unitId !== session.unitId && session.role !== 'diretora_geral') {
 
 ---
 
-## Integração Stripe (Futuro)
+## Integração Stripe
 
-### Preparação no Código
+### Fluxo Online
 
-O sistema já possui:
-
-- Campo `stripe_payment_intent_id` em `shop_orders`
-- Endpoint `/shop/checkout/init` (retorna 503 no frontend atual)
-- Webhook `/payments/webhook` para eventos Stripe
-
-### Fluxo Proposto
+O checkout online usa Stripe Checkout hospedado para pagamentos únicos com cartão e PIX. O retorno do navegador não confirma pagamento; a confirmação válida vem apenas do webhook Stripe.
 
 ```
 1. Cliente preenche carrinho
    ↓
 2. POST /shop/checkout/init
-   → Cria PaymentIntent no Stripe
-   → Retorna clientSecret
+   → Cria pedido AGUARDANDO_PAGAMENTO
+   → Reserva estoque por 30 minutos
+   → Cria Checkout Session no Stripe
+   → Retorna checkoutUrl
    ↓
-3. Frontend renderiza Stripe Elements
-   → Cliente paga com cartão
+3. Frontend redireciona para Stripe Checkout
    ↓
-4. Webhook Stripe: payment_intent.succeeded
-   → PATCH /shop/admin/orders/:id/confirm-payment
+4. Webhook Stripe confirma pagamento
+   → Baixa reserva em transação
    → Status: PAGO
    ↓
 5. Cliente retira na escola
 ```
+
+O voucher presencial continua disponível como fallback público e mantém validade de 7 dias.
 
 ### Variáveis de Ambiente
 
@@ -551,6 +550,7 @@ O sistema já possui:
 STRIPE_SECRET_KEY=sk_live_...
 STRIPE_PUBLISHABLE_KEY=pk_live_...
 STRIPE_WEBHOOK_SECRET=whsec_...
+LOJA_PUBLIC_URL=https://loja.portalcef.com.br
 NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_live_...
 ```
 

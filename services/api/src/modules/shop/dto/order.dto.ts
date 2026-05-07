@@ -134,6 +134,14 @@ export class PaymentItemDto {
  * seguindo o padrão de Tenant Context
  */
 export class CreatePresentialSaleDto {
+  @IsOptional()
+  @IsUUID()
+  schoolId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  unitId?: string;
+
   @IsString()
   customerName!: string;
 

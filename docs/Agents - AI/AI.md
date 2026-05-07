@@ -147,6 +147,13 @@ docker compose -f docker-compose.prod.yml up -d
 ```bash
 pnpm turbo lint && pnpm turbo typecheck
 ```
+
+### Matriz Obrigatória da Loja
+
+Alterações em `services/api/src/modules/shop`, `apps/loja` ou `apps/loja-admin` devem seguir a matriz de invariantes e testes em [docs/LOJA_INVARIANTES_TESTES.md](docs/LOJA_INVARIANTES_TESTES.md).
+
+Correções de bugs da loja não podem ser tratadas como casos isolados: classifique o achado em `LOJA-01` a `LOJA-10`, escreva primeiro o teste da classe impactada, confirme a falha, implemente a correção e execute o comando mínimo da classe antes do pipeline global.
+
 ---
 
 # 1. Rebuild e restart
@@ -505,4 +512,3 @@ docker system prune -a --volumes -f
 ## AI Context References
 - Documentation index: `.context/docs/README.md`
 - Agent playbooks: `.context/agents/README.md`
-

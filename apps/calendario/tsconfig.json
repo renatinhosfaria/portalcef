@@ -1,7 +1,6 @@
 {
   "extends": "@essencia/config/typescript/next",
   "compilerOptions": {
-    "baseUrl": ".",
     "paths": {
       "@/*": ["./*"]
     },

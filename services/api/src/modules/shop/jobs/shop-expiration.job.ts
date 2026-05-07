@@ -7,6 +7,12 @@ import { PaymentsService } from "../../payments/payments.service";
 type ExpiredOrder = typeof shopOrders.$inferSelect & {
   items: Array<typeof shopOrderItems.$inferSelect>;
 };
+type Db = ReturnType<typeof getDb>;
+type DbTransaction = Parameters<Db["transaction"]>[0] extends (
+  tx: infer T,
+) => Promise<unknown>
+  ? T
+  : never;
 
 /**
  * ShopExpirationJob
@@ -97,33 +103,65 @@ export class ShopExpirationJob {
       `Expirando pedido: ${order.orderNumber} (${order.items.length} itens)`,
     );
 
-    // 1. Liberar reservas de estoque
-    for (const item of order.items) {
-      await this.inventoryService.releaseReservation(
-        item.variantId,
-        order.unitId,
-        item.quantity,
-        order.id,
-      );
-    }
+    await this.inventoryService.withOrderLock(order.id, async () => {
+      const currentOrder = await db.query.shopOrders.findFirst({
+        where: and(
+          eq(shopOrders.id, order.id),
+          eq(shopOrders.status, "AGUARDANDO_PAGAMENTO"),
+        ),
+        with: { items: true },
+      });
 
-    // 2. Cancelar PaymentIntent no Stripe (se existir)
+      if (!currentOrder) {
+        this.logger.warn(
+          `Pedido ${order.orderNumber} não está mais aguardando pagamento`,
+        );
+        return;
+      }
+
+      const lockTargets = currentOrder.items.map(
+        (item: ExpiredOrder["items"][number]) => ({
+          variantId: item.variantId,
+          unitId: currentOrder.unitId,
+        }),
+      );
+      const cancellationReason = currentOrder.stripeCheckoutSessionId
+        ? "Checkout Stripe expirado - pagamento online nao finalizado dentro do prazo de 30 minutos"
+        : "Voucher expirado - pagamento nao realizado dentro do prazo de 7 dias";
+
+      await this.inventoryService.withInventoryLocks(lockTargets, async () =>
+        db.transaction(async (tx: DbTransaction) => {
+          for (const item of currentOrder.items) {
+            await this.inventoryService.releaseReservationInTransaction(
+              item.variantId,
+              currentOrder.unitId,
+              item.quantity,
+              currentOrder.id,
+              tx,
+            );
+          }
+
+          await tx
+            .update(shopOrders)
+            .set({
+              status: "EXPIRADO",
+              cancelledAt: new Date(),
+              cancellationReason,
+            })
+            .where(eq(shopOrders.id, currentOrder.id));
+        }),
+      );
+    });
+
     if (order.stripePaymentIntentId) {
-      await this.paymentsService.cancelPaymentIntent(
-        order.stripePaymentIntentId,
-      );
+      await this.paymentsService.cancelPaymentIntent(order.stripePaymentIntentId);
     }
 
-    // 3. Atualizar status do pedido
-    await db
-      .update(shopOrders)
-      .set({
-        status: "EXPIRADO",
-        cancelledAt: new Date(),
-        cancellationReason:
-          "Voucher expirado - pagamento nao realizado dentro do prazo de 7 dias",
-      })
-      .where(eq(shopOrders.id, order.id));
+    if (order.stripeCheckoutSessionId) {
+      await this.paymentsService.expireCheckoutSession(
+        order.stripeCheckoutSessionId,
+      );
+    }
 
     this.logger.log(`Pedido ${order.orderNumber} expirado com sucesso`);
   }

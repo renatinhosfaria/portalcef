@@ -2,18 +2,22 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
-  ForbiddenException,
   Inject,
   forwardRef,
 } from "@nestjs/common";
 import {
   getDb,
   shopOrders,
+  shopSettings,
   type ShopOrder,
   shopOrderItems,
+  shopOrderPayments,
+  type PaymentMethod,
+  type ShopOrderPayment,
   type ShopOrderItem,
   shopProductVariants,
   type ShopProductVariant,
+  units,
   eq,
   and,
   or,
@@ -28,6 +32,11 @@ import {
   CreatePresentialSaleDto,
   ListOrdersDto,
 } from "./dto/order.dto";
+import {
+  assertShopTenantScope,
+  isMasterShopScope,
+  type ShopTenantScope,
+} from "./shop-tenant-scope";
 
 type OrderItemWithPrice = {
   variantId: string;
@@ -35,7 +44,21 @@ type OrderItemWithPrice = {
   quantity: number;
   unitPrice: number;
   subtotal: number;
+  productName: string;
+  variantSize: string;
 };
+
+type PendingOrderResult = {
+  order: ShopOrder;
+  itemsWithPrice: OrderItemWithPrice[];
+};
+
+type Db = ReturnType<typeof getDb>;
+type DbTransaction = Parameters<Db["transaction"]>[0] extends (
+  tx: infer T,
+) => Promise<unknown>
+  ? T
+  : never;
 
 type OrderItemVariant = ShopProductVariant & {
   product: ShopProduct;
@@ -48,6 +71,7 @@ type OrderItemWithVariant = ShopOrderItem & {
 
 type OrderWithItems = ShopOrder & {
   items: OrderItemWithVariant[];
+  payments?: ShopOrderPayment[];
   updatedAt?: Date | null;
 };
 
@@ -93,43 +117,111 @@ export class ShopOrdersService {
     throw new Error("Failed to generate unique order number");
   }
 
-  /**
-   * POST /shop/orders
-   *
-   * Cria pedido online com reserva de estoque
-   */
-  async createOrder(dto: CreateOrderDto) {
-    const db = getDb();
-
-    // 1. Validar itens existem
-    for (const item of dto.items) {
-      const variant = await db.query.shopProductVariants.findFirst({
-        where: eq(shopProductVariants.id, item.variantId),
-        with: { product: true },
-      });
-
-      if (!variant || !variant.product.isActive) {
-        throw new NotFoundException({
-          code: "RESOURCE_NOT_FOUND",
-          message: `Produto ou variante não encontrado: ${item.variantId}`,
-        });
-      }
+  private orderWhere(orderId: string, scope?: ShopTenantScope) {
+    if (isMasterShopScope(scope)) {
+      return eq(shopOrders.id, orderId);
     }
 
-    // 2. Gerar orderNumber
+    assertShopTenantScope(scope);
+    const scopedTenant = scope!;
+    const conditions = [
+      eq(shopOrders.id, orderId),
+      eq(shopOrders.schoolId, scopedTenant.schoolId!),
+    ];
+
+    if (scopedTenant.unitId) {
+      conditions.push(eq(shopOrders.unitId, scopedTenant.unitId));
+    }
+
+    return and(...conditions);
+  }
+
+  private async assertUnitBelongsToSchool(schoolId: string, unitId: string) {
+    const db = getDb();
+    const unit = await db.query.units.findFirst({
+      where: and(eq(units.id, unitId), eq(units.schoolId, schoolId)),
+    });
+
+    if (!unit) {
+      throw new NotFoundException({
+        code: "RESOURCE_NOT_FOUND",
+        message: "Unidade não encontrada",
+      });
+    }
+  }
+
+  private async getPickupInstructions(unitId: string): Promise<string | null> {
+    const db = getDb();
+    const settings = await db.query.shopSettings.findFirst({
+      where: eq(shopSettings.unitId, unitId),
+    });
+
+    return settings?.pickupInstructions ?? null;
+  }
+
+  private async assertShopEnabled(unitId: string) {
+    const db = getDb();
+    const settings = await db.query.shopSettings.findFirst({
+      where: eq(shopSettings.unitId, unitId),
+    });
+
+    if (settings?.isShopEnabled === false) {
+      throw new BadRequestException({
+        code: "SHOP_DISABLED",
+        message: "A loja desta unidade está temporariamente fechada",
+      });
+    }
+  }
+
+  private async getActiveVariantForOrder(variantId: string, schoolId: string) {
+    const db = getDb();
+    const variant = await db.query.shopProductVariants.findFirst({
+      where: eq(shopProductVariants.id, variantId),
+      with: { product: true },
+    });
+
+    if (
+      !variant ||
+      !variant.isActive ||
+      !variant.product?.isActive ||
+      variant.product.schoolId !== schoolId
+    ) {
+      throw new NotFoundException({
+        code: "RESOURCE_NOT_FOUND",
+        message: `Produto ou variante não encontrado: ${variantId}`,
+      });
+    }
+
+    return variant;
+  }
+
+  private async createPendingOnlineOrder(
+    dto: CreateOrderDto,
+    expiresAt: Date,
+  ): Promise<PendingOrderResult> {
+    const db = getDb();
+    await this.assertUnitBelongsToSchool(dto.schoolId, dto.unitId);
+    await this.assertShopEnabled(dto.unitId);
+
+    const variantsById = new Map<
+      string,
+      Awaited<ReturnType<typeof this.getActiveVariantForOrder>>
+    >();
+    for (const item of dto.items) {
+      variantsById.set(
+        item.variantId,
+        await this.getActiveVariantForOrder(item.variantId, dto.schoolId),
+      );
+    }
+
     const orderNumber = await this.generateOrderNumber();
 
-    // 3. Calcular total
     let totalAmount = 0;
     const itemsWithPrice: OrderItemWithPrice[] = [];
 
     for (const item of dto.items) {
-      const variant = await db.query.shopProductVariants.findFirst({
-        where: eq(shopProductVariants.id, item.variantId),
-        with: { product: true },
-      });
-
-      const itemPrice = variant!.priceOverride ?? variant!.product.basePrice;
+      const variant = variantsById.get(item.variantId)!;
+      const itemPrice = variant.priceOverride ?? variant.product.basePrice;
       const itemTotal = itemPrice * item.quantity;
       totalAmount += itemTotal;
 
@@ -139,162 +231,157 @@ export class ShopOrdersService {
         quantity: item.quantity,
         unitPrice: itemPrice,
         subtotal: itemTotal,
+        productName: variant.product.name,
+        variantSize: variant.size,
       });
     }
 
-    // 4. Reservar estoque para cada item (atômico com Redis locks)
-    const reservations: Array<{
-      variantId: string;
-      unitId: string;
-      quantity: number;
-    }> = [];
-    try {
-      for (const item of dto.items) {
-        await this.inventoryService.reserveStock(
-          item.variantId,
-          dto.unitId,
-          item.quantity,
-          orderNumber, // Usa orderNumber como referência temporária
-        );
-        reservations.push({
-          variantId: item.variantId,
-          unitId: dto.unitId,
-          quantity: item.quantity,
-        });
-      }
-    } catch (error) {
-      // Rollback: liberar reservas já feitas
-      for (const reservation of reservations) {
-        await this.inventoryService.releaseReservation(
-          reservation.variantId,
-          reservation.unitId,
-          reservation.quantity,
-          orderNumber,
-        );
-      }
-      throw error;
-    }
-
-    // 5. Criar pedido
-    // Voucher válido por 7 dias (cliente paga presencialmente na escola)
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 dias
-
-    const [order] = await db
-      .insert(shopOrders)
-      .values({
-        orderNumber,
-        schoolId: dto.schoolId,
-        unitId: dto.unitId,
-        orderSource: "ONLINE",
-        status: "AGUARDANDO_PAGAMENTO",
-        totalAmount,
-        customerName: dto.customerName,
-        customerPhone: dto.customerPhone,
-        customerEmail: dto.customerEmail || null,
-        expiresAt,
-      })
-      .returning();
-
-    // 6. Criar itens do pedido
-    const orderItemsValues = itemsWithPrice.map((item) => ({
-      orderId: order.id,
+    const lockTargets = dto.items.map((item) => ({
       variantId: item.variantId,
-      studentName: item.studentName,
-      quantity: item.quantity,
-      unitPrice: item.unitPrice,
-      subtotal: item.subtotal,
+      unitId: dto.unitId,
     }));
 
-    await db.insert(shopOrderItems).values(orderItemsValues);
+    const order = await this.inventoryService.withInventoryLocks(
+      lockTargets,
+      async () =>
+        db.transaction(async (tx: DbTransaction) => {
+          const [createdOrder] = await tx
+            .insert(shopOrders)
+            .values({
+              orderNumber,
+              schoolId: dto.schoolId,
+              unitId: dto.unitId,
+              orderSource: "ONLINE",
+              status: "AGUARDANDO_PAGAMENTO",
+              totalAmount,
+              customerName: dto.customerName,
+              customerPhone: dto.customerPhone,
+              customerEmail: dto.customerEmail || null,
+              expiresAt,
+            })
+            .returning();
 
-    // ============================================================
-    // STRIPE DESABILITADO - Sistema de Voucher Ativo
-    // Cliente recebe voucher e paga presencialmente na escola
-    // Código mantido para futura reintegração com Stripe
-    // ============================================================
-    /*
-    // 7. Processar PaymentIntent (Criar novo ou Atualizar existente)
-    let clientSecret: string | undefined;
-    let paymentIntentId: string | undefined;
+          for (const item of dto.items) {
+            await this.inventoryService.reserveStockInTransaction(
+              item.variantId,
+              dto.unitId,
+              item.quantity,
+              createdOrder.id,
+              tx,
+            );
+          }
 
-    try {
-      if (dto.paymentIntentId) {
-        // Cenário A: Intent já existe (Checkout Elements Flow)
-        paymentIntentId = dto.paymentIntentId;
+          const orderItemsValues = itemsWithPrice.map((item) => ({
+            orderId: createdOrder.id,
+            variantId: item.variantId,
+            studentName: item.studentName,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+          }));
 
-        // Atualizar metadata do Intent com dados do pedido real
-        await this.paymentsService.updatePaymentIntent(paymentIntentId, {
-          orderId: order.id,
-          orderNumber: order.orderNumber,
-          schoolId: dto.schoolId,
-          unitId: dto.unitId,
-          customerName: dto.customerName,
-          customerPhone: dto.customerPhone,
-        });
+          await tx.insert(shopOrderItems).values(orderItemsValues);
 
-        // Recuperar clientSecret (opcional, mas bom retornar)
-        const intent = await this.paymentsService
-          .getStripeClient()
-          .paymentIntents.retrieve(paymentIntentId);
-        clientSecret = intent.client_secret || undefined;
+          return createdOrder;
+        }),
+    );
 
-        // TODO: Validar se amount do intent bate com totalAmount?
-        // Se houver divergência (ex: preço mudou durante checkout), devíamos cancelar/erro.
-        if (intent.amount !== totalAmount) {
-          throw new BadRequestException(
-            "Valor do pagamento diverge do total do pedido",
-          );
-        }
-      } else {
-        // Cenário B: Criar novo Intent (Flow antigo / Backend-only)
-        const paymentIntent = await this.paymentsService.createPaymentIntent(
-          totalAmount,
-          {
-            orderId: order.id,
-            orderNumber: order.orderNumber,
-            schoolId: dto.schoolId,
-            unitId: dto.unitId,
-            customerName: dto.customerName,
-            customerPhone: dto.customerPhone,
-          },
-          dto.installments || 1,
-        );
+    return { order, itemsWithPrice };
+  }
 
-        clientSecret = paymentIntent.clientSecret;
-        paymentIntentId = paymentIntent.paymentIntentId;
-      }
-
-      // Atualizar pedido com stripePaymentIntentId
-      await db
-        .update(shopOrders)
-        .set({ stripePaymentIntentId: paymentIntentId })
-        .where(eq(shopOrders.id, order.id));
-    } catch (error) {
-      // Se falhar criar PaymentIntent, liberar reservas e deletar pedido
-      for (const reservation of reservations) {
-        await this.inventoryService.releaseReservation(
-          reservation.variantId,
-          reservation.unitId,
-          reservation.quantity,
-          orderNumber,
-        );
-      }
-
-      // Deletar pedido e itens (cascade)
-      await db.delete(shopOrders).where(eq(shopOrders.id, order.id));
-
-      throw error;
-    }
-    */
-    // ============================================================
+  /**
+   * POST /shop/orders
+   *
+   * Cria pedido de voucher presencial com reserva de estoque.
+   */
+  async createOrder(dto: CreateOrderDto) {
+    // Voucher válido por 7 dias (cliente paga presencialmente na escola)
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 dias
+    const { order } = await this.createPendingOnlineOrder(dto, expiresAt);
 
     return {
       orderId: order.id,
       orderNumber: order.orderNumber,
       totalAmount: order.totalAmount,
       expiresAt: order.expiresAt,
-      // clientSecret não retornado - sistema de voucher ativo
     };
+  }
+
+  /**
+   * POST /shop/checkout/init
+   *
+   * Cria pedido online, reserva estoque por 30 minutos e gera Checkout Session.
+   */
+  async createCheckout(dto: CreateOrderDto) {
+    const db = getDb();
+    const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
+    const { order, itemsWithPrice } = await this.createPendingOnlineOrder(
+      dto,
+      expiresAt,
+    );
+    let checkoutSession:
+      | Awaited<ReturnType<PaymentsService["createCheckoutSession"]>>
+      | undefined;
+
+    try {
+      checkoutSession = await this.paymentsService.createCheckoutSession({
+        orderId: order.id,
+        orderNumber: order.orderNumber,
+        totalAmount: order.totalAmount,
+        customerName: dto.customerName,
+        customerPhone: dto.customerPhone,
+        customerEmail: dto.customerEmail,
+        expiresAt,
+        items: itemsWithPrice.map((item) => ({
+          name: `${item.productName} - Tam. ${item.variantSize}`,
+          unitAmount: item.unitPrice,
+          quantity: item.quantity,
+        })),
+      });
+
+      await db
+        .update(shopOrders)
+        .set({
+          stripeCheckoutSessionId: checkoutSession.checkoutSessionId,
+          stripePaymentIntentId: checkoutSession.paymentIntentId ?? null,
+        })
+        .where(eq(shopOrders.id, order.id));
+
+      return {
+        orderId: order.id,
+        orderNumber: order.orderNumber,
+        totalAmount: order.totalAmount,
+        expiresAt,
+        checkoutUrl: checkoutSession.checkoutUrl,
+      };
+    } catch (error) {
+      if (checkoutSession?.checkoutSessionId) {
+        try {
+          await this.paymentsService.expireCheckoutSession(
+            checkoutSession.checkoutSessionId,
+          );
+        } catch (stripeCleanupError) {
+          console.error(
+            `Erro ao expirar Checkout Session órfã ${checkoutSession.checkoutSessionId}:`,
+            stripeCleanupError,
+          );
+        }
+      }
+
+      try {
+        await this.failStripePayment({
+          orderId: order.id,
+          status: "CANCELADO",
+          reason: "Falha ao iniciar checkout Stripe",
+        });
+      } catch (cleanupError) {
+        console.error(
+          `Erro ao liberar reserva do checkout ${order.orderNumber}:`,
+          cleanupError,
+        );
+      }
+
+      throw error;
+    }
   }
 
   /**
@@ -317,6 +404,7 @@ export class ShopOrdersService {
             },
           },
         },
+        payments: true,
       },
     });
 
@@ -329,13 +417,15 @@ export class ShopOrdersService {
 
     // Validar telefone
     if (order.customerPhone !== phone) {
-      throw new ForbiddenException({
-        code: "FORBIDDEN",
-        message: "Telefone não corresponde ao pedido",
+      throw new NotFoundException({
+        code: "RESOURCE_NOT_FOUND",
+        message: `Pedido ${orderNumber} não encontrado`,
       });
     }
 
-    return this.formatOrderResponse(order);
+    const pickupInstructions = await this.getPickupInstructions(order.unitId);
+
+    return this.formatOrderResponse(order, { pickupInstructions });
   }
 
   /**
@@ -343,11 +433,11 @@ export class ShopOrdersService {
    *
    * Consulta admin (sem validação de telefone)
    */
-  async getOrderById(id: string) {
+  async getOrderById(id: string, scope?: ShopTenantScope) {
     const db = getDb();
 
     const order = await db.query.shopOrders.findFirst({
-      where: eq(shopOrders.id, id),
+      where: this.orderWhere(id, scope),
       with: {
         items: {
           with: {
@@ -358,6 +448,7 @@ export class ShopOrdersService {
             },
           },
         },
+        payments: true,
       },
     });
 
@@ -368,7 +459,9 @@ export class ShopOrdersService {
       });
     }
 
-    return this.formatOrderResponse(order);
+    const pickupInstructions = await this.getPickupInstructions(order.unitId);
+
+    return this.formatOrderResponse(order, { pickupInstructions });
   }
 
   /**
@@ -376,7 +469,7 @@ export class ShopOrdersService {
    *
    * Lista pedidos com filtros e paginação
    */
-  async listOrders(filters: ListOrdersDto) {
+  async listOrders(filters: ListOrdersDto, scope?: ShopTenantScope) {
     const db = getDb();
     const page = filters.page || 1;
     const limit = filters.limit || 20;
@@ -385,11 +478,18 @@ export class ShopOrdersService {
     // Construir condições
     const conditions: Array<ReturnType<typeof eq>> = [];
 
-    if (filters.schoolId) {
+    if (!isMasterShopScope(scope)) {
+      assertShopTenantScope(scope);
+      const scopedTenant = scope!;
+      conditions.push(eq(shopOrders.schoolId, scopedTenant.schoolId!));
+      if (scopedTenant.unitId) {
+        conditions.push(eq(shopOrders.unitId, scopedTenant.unitId));
+      }
+    } else if (filters.schoolId) {
       conditions.push(eq(shopOrders.schoolId, filters.schoolId));
     }
 
-    if (filters.unitId) {
+    if (isMasterShopScope(scope) && filters.unitId) {
       conditions.push(eq(shopOrders.unitId, filters.unitId));
     }
 
@@ -430,6 +530,7 @@ export class ShopOrdersService {
             },
           },
         },
+        payments: true,
       },
     })) as OrderWithItems[];
 
@@ -470,20 +571,15 @@ export class ShopOrdersService {
     userId: string,
   ) {
     const db = getDb();
+    await this.assertUnitBelongsToSchool(schoolId, unitId);
 
     // 1. Validar itens
+    const variantsById = new Map<string, Awaited<ReturnType<typeof this.getActiveVariantForOrder>>>();
     for (const item of dto.items) {
-      const variant = await db.query.shopProductVariants.findFirst({
-        where: eq(shopProductVariants.id, item.variantId),
-        with: { product: true },
-      });
-
-      if (!variant || !variant.product.isActive) {
-        throw new NotFoundException({
-          code: "RESOURCE_NOT_FOUND",
-          message: `Produto ou variante não encontrado: ${item.variantId}`,
-        });
-      }
+      variantsById.set(
+        item.variantId,
+        await this.getActiveVariantForOrder(item.variantId, schoolId),
+      );
     }
 
     // 2. Gerar orderNumber
@@ -494,13 +590,10 @@ export class ShopOrdersService {
     const itemsWithPrice: OrderItemWithPrice[] = [];
 
     for (const item of dto.items) {
-      const variant = await db.query.shopProductVariants.findFirst({
-        where: eq(shopProductVariants.id, item.variantId),
-        with: { product: true },
-      });
+      const variant = variantsById.get(item.variantId)!;
 
       // Preço: usa priceOverride da variante ou basePrice do produto
-      const itemPrice = variant!.priceOverride || variant!.product.basePrice;
+      const itemPrice = variant.priceOverride ?? variant.product.basePrice;
       const itemTotal = itemPrice * item.quantity;
       totalAmount += itemTotal;
 
@@ -510,6 +603,8 @@ export class ShopOrdersService {
         quantity: item.quantity,
         unitPrice: itemPrice,
         subtotal: itemTotal,
+        productName: variant.product.name,
+        variantSize: variant.size,
       });
     }
 
@@ -522,88 +617,74 @@ export class ShopOrdersService {
 
     const totalPaid = payments.reduce((acc, p) => acc + p.amount, 0);
 
-    // Se houver pagamento como BRINDE, aceitamos qualquer valor (geralmente 0 ou parcial)
-    // Caso contrário, o valor pago deve bater com o total
-    const hasBrinde = payments.some(p => p.method === "BRINDE");
-
-    if (!hasBrinde && totalPaid !== totalAmount) {
+    if (totalPaid !== totalAmount) {
       throw new BadRequestException(`Valor pago (${totalPaid}) diverge do total do pedido (${totalAmount})`);
     }
 
-    // 5. Decrementar estoque DIRETAMENTE (sem reserva)
-    const salesConfirmed: Array<{
-      variantId: string;
-      unitId: string;
-      quantity: number;
-    }> = [];
-
-    // Decrementa estoque usando função dedicada para venda presencial
-    for (const item of dto.items) {
-      await this.inventoryService.confirmPresentialSale(
-        item.variantId,
-        unitId,
-        item.quantity,
-        orderNumber,
-        userId,
-      );
-      salesConfirmed.push({
-        variantId: item.variantId,
-        unitId: unitId,
-        quantity: item.quantity,
-      });
-    }
-
-    // 6. Criar pedido com status RETIRADO e pagamentos
     const now = new Date();
-
-    // Determina método de pagamento principal para campo legado/resumo
     const primaryPaymentMethod = payments.length === 1 ? payments[0].method : "MULTIPLO";
-
-    const [order] = await db
-      .insert(shopOrders)
-      .values({
-        orderNumber,
-        schoolId,
-        unitId,
-        orderSource: "PRESENCIAL",
-        status: "RETIRADO",
-        totalAmount,
-        customerName: dto.customerName,
-        customerPhone: dto.customerPhone,
-        customerEmail: dto.customerEmail || null,
-        paymentMethod: primaryPaymentMethod,
-        paidAt: now,
-        pickedUpAt: now,
-        pickedUpBy: userId,
-      })
-      .returning();
-
-    // 7. Criar itens
-    const orderItemsValues = itemsWithPrice.map((item) => ({
-      orderId: order.id,
+    const lockTargets = dto.items.map((item) => ({
       variantId: item.variantId,
-      studentName: item.studentName,
-      quantity: item.quantity,
-      unitPrice: item.unitPrice,
-      subtotal: item.subtotal,
+      unitId,
     }));
 
-    await db.insert(shopOrderItems).values(orderItemsValues);
+    const order = await this.inventoryService.withInventoryLocks(
+      lockTargets,
+      async () =>
+        db.transaction(async (tx: DbTransaction) => {
+          for (const item of dto.items) {
+            await this.inventoryService.confirmPresentialSaleInTransaction(
+              item.variantId,
+              unitId,
+              item.quantity,
+              orderNumber,
+              userId,
+              tx,
+            );
+          }
 
-    // 8. Criar registros de pagamento
-    if (payments.length > 0) {
-      // Importar tabela se necessário, ou usar string literal se import circular for problema
-      // Assumindo shopOrderPayments importado do @essencia/db (precisa adicionar no topo se não tiver)
-      const { shopOrderPayments } = await import("@essencia/db");
+          const [createdOrder] = await tx
+            .insert(shopOrders)
+            .values({
+              orderNumber,
+              schoolId,
+              unitId,
+              orderSource: "PRESENCIAL",
+              status: "RETIRADO",
+              totalAmount,
+              customerName: dto.customerName,
+              customerPhone: dto.customerPhone,
+              customerEmail: dto.customerEmail || null,
+              paymentMethod: primaryPaymentMethod,
+              paidAt: now,
+              pickedUpAt: now,
+              pickedUpBy: userId,
+            })
+            .returning();
 
-      const paymentValues = payments.map(p => ({
-        orderId: order.id,
-        paymentMethod: p.method,
-        amount: p.amount,
-      }));
+          const orderItemsValues = itemsWithPrice.map((item) => ({
+            orderId: createdOrder.id,
+            variantId: item.variantId,
+            studentName: item.studentName,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+          }));
 
-      await db.insert(shopOrderPayments).values(paymentValues);
-    }
+          await tx.insert(shopOrderItems).values(orderItemsValues);
+
+          if (payments.length > 0) {
+            const paymentValues = payments.map(p => ({
+              orderId: createdOrder.id,
+              paymentMethod: p.method,
+              amount: p.amount,
+            }));
+
+            await tx.insert(shopOrderPayments).values(paymentValues);
+          }
+
+          return createdOrder;
+        }),
+    );
 
     return {
       orderId: order.id,
@@ -618,72 +699,92 @@ export class ShopOrdersService {
    *
    * Cancela pedido e libera estoque
    */
-  async cancelOrder(orderId: string, userId: string, reason: string) {
+  async cancelOrder(
+    orderId: string,
+    userId: string,
+    reason: string,
+    scope?: ShopTenantScope,
+  ) {
     const db = getDb();
 
-    const order = await db.query.shopOrders.findFirst({
-      where: eq(shopOrders.id, orderId),
-      with: { items: true },
-    });
+    const cancelledOrder = await this.inventoryService.withOrderLock(
+      orderId,
+      async () => {
+        const order = await db.query.shopOrders.findFirst({
+          where: this.orderWhere(orderId, scope),
+          with: { items: true },
+        });
 
-    if (!order) {
-      throw new NotFoundException({
-        code: "RESOURCE_NOT_FOUND",
-        message: `Pedido ${orderId} não encontrado`,
-      });
-    }
+        if (!order) {
+          throw new NotFoundException({
+            code: "RESOURCE_NOT_FOUND",
+            message: `Pedido ${orderId} não encontrado`,
+          });
+        }
 
-    // Validar status permite cancelamento
-    if (["CANCELADO", "EXPIRADO", "RETIRADO"].includes(order.status)) {
-      throw new BadRequestException({
-        code: "INVALID_STATUS",
-        message: `Não é possível cancelar pedido com status ${order.status}`,
-      });
-    }
+        if (["CANCELADO", "EXPIRADO", "RETIRADO"].includes(order.status)) {
+          throw new BadRequestException({
+            code: "INVALID_STATUS",
+            message: `Não é possível cancelar pedido com status ${order.status}`,
+          });
+        }
 
-    // Liberar estoque
-    for (const item of order.items) {
-      if (order.status === "AGUARDANDO_PAGAMENTO") {
-        // Libera reserva
-        await this.inventoryService.releaseReservation(
-          item.variantId,
-          order.unitId,
-          item.quantity,
-          order.id,
+        const lockTargets = order.items.map((item: ShopOrderItem) => ({
+          variantId: item.variantId,
+          unitId: order.unitId,
+        }));
+
+        await this.inventoryService.withInventoryLocks(lockTargets, async () =>
+          db.transaction(async (tx: DbTransaction) => {
+            for (const item of order.items) {
+              if (order.status === "AGUARDANDO_PAGAMENTO") {
+                await this.inventoryService.releaseReservationInTransaction(
+                  item.variantId,
+                  order.unitId,
+                  item.quantity,
+                  order.id,
+                  tx,
+                );
+              } else if (order.status === "PAGO") {
+                await this.inventoryService.addStockInTransaction(
+                  item.variantId,
+                  order.unitId,
+                  item.quantity,
+                  `Estorno do pedido ${order.orderNumber}`,
+                  userId,
+                  tx,
+                  scope,
+                );
+              }
+            }
+
+            await tx
+              .update(shopOrders)
+              .set({
+                status: "CANCELADO",
+                cancelledAt: new Date(),
+                cancelledBy: userId,
+                cancellationReason: reason,
+              })
+              .where(this.orderWhere(orderId, scope));
+          }),
         );
-      } else if (order.status === "PAGO") {
-        // Estorna estoque (incrementa quantity de volta)
-        await this.inventoryService.addStock(
-          item.variantId,
-          order.unitId,
-          item.quantity,
-          `Estorno do pedido ${order.orderNumber}`,
-          userId,
-        );
-      }
-    }
 
-    // Atualizar pedido
-    await db
-      .update(shopOrders)
-      .set({
-        status: "CANCELADO",
-        cancelledAt: new Date(),
-        cancelledBy: userId,
-        cancellationReason: reason,
-      })
-      .where(eq(shopOrders.id, orderId));
+        return order;
+      },
+    );
 
-    // Se pago, criar refund no Stripe
-    if (order.status === "PAGO" && order.stripePaymentIntentId) {
+    if (cancelledOrder.status === "PAGO" && cancelledOrder.stripePaymentIntentId) {
       try {
-        await this.paymentsService.refundPayment(order.stripePaymentIntentId);
+        await this.paymentsService.refundPayment(
+          cancelledOrder.stripePaymentIntentId,
+        );
       } catch (error: unknown) {
         const errorMessage =
           error instanceof Error ? error.message : "Unknown error";
         // Log erro mas nǜo falhar o cancelamento (estoque jǭ foi liberado)
         console.error(
-          `Erro ao criar refund no Stripe para pedido ${order.orderNumber}:`,
+          `Erro ao criar refund no Stripe para pedido ${cancelledOrder.orderNumber}:`,
           errorMessage,
         );
       }
@@ -697,11 +798,15 @@ export class ShopOrdersService {
    *
    * Marca pedido como retirado
    */
-  async markAsPickedUp(orderId: string, userId: string) {
+  async markAsPickedUp(
+    orderId: string,
+    userId: string,
+    scope?: ShopTenantScope,
+  ) {
     const db = getDb();
 
     const order = await db.query.shopOrders.findFirst({
-      where: eq(shopOrders.id, orderId),
+      where: this.orderWhere(orderId, scope),
     });
 
     if (!order) {
@@ -725,9 +830,244 @@ export class ShopOrdersService {
         pickedUpAt: new Date(),
         pickedUpBy: userId,
       })
-      .where(eq(shopOrders.id, orderId));
+      .where(this.orderWhere(orderId, scope));
 
     return { success: true, message: "Pedido marcado como retirado" };
+  }
+
+  /**
+   * Confirma pagamento online recebido via webhook Stripe.
+   *
+   * Nao usa escopo de sessao porque o webhook e autenticado por assinatura Stripe.
+   */
+  async confirmStripePayment(dto: {
+    orderId: string;
+    paymentIntentId: string;
+    paymentMethod: Extract<PaymentMethod, "PIX" | "CARTAO_CREDITO">;
+    amount: number;
+  }) {
+    const db = getDb();
+
+    return this.inventoryService.withOrderLock(dto.orderId, async () => {
+      const order = await db.query.shopOrders.findFirst({
+        where: eq(shopOrders.id, dto.orderId),
+        with: { items: true },
+      });
+
+      if (!order) {
+        throw new NotFoundException({
+          code: "RESOURCE_NOT_FOUND",
+          message: `Pedido ${dto.orderId} não encontrado`,
+        });
+      }
+
+      if (["PAGO", "RETIRADO"].includes(order.status)) {
+        return {
+          success: true,
+          message: "Pagamento Stripe já processado",
+          orderNumber: order.orderNumber,
+          paymentMethod: order.paymentMethod,
+        };
+      }
+
+      if (order.status !== "AGUARDANDO_PAGAMENTO") {
+        throw new BadRequestException({
+          code: "INVALID_STATUS",
+          message: `Pedido não pode receber pagamento Stripe no status ${order.status}`,
+        });
+      }
+
+      if (dto.amount !== order.totalAmount) {
+        throw new BadRequestException(
+          `Valor pago (${dto.amount}) diverge do total do pedido (${order.totalAmount})`,
+        );
+      }
+
+      const lockTargets = order.items.map((item: ShopOrderItem) => ({
+        variantId: item.variantId,
+        unitId: order.unitId,
+      }));
+
+      return this.inventoryService.withInventoryLocks(lockTargets, async () =>
+        db.transaction(async (tx: DbTransaction) => {
+          const currentOrder = await tx.query.shopOrders.findFirst({
+            where: eq(shopOrders.id, dto.orderId),
+            with: { items: true },
+          });
+
+          if (!currentOrder) {
+            throw new NotFoundException({
+              code: "RESOURCE_NOT_FOUND",
+              message: `Pedido ${dto.orderId} não encontrado`,
+            });
+          }
+
+          if (["PAGO", "RETIRADO"].includes(currentOrder.status)) {
+            return {
+              success: true,
+              message: "Pagamento Stripe já processado",
+              orderNumber: currentOrder.orderNumber,
+              paymentMethod: currentOrder.paymentMethod,
+            };
+          }
+
+          if (currentOrder.status !== "AGUARDANDO_PAGAMENTO") {
+            throw new BadRequestException({
+              code: "INVALID_STATUS",
+              message: `Pedido não pode receber pagamento Stripe no status ${currentOrder.status}`,
+            });
+          }
+
+          if (dto.amount !== currentOrder.totalAmount) {
+            throw new BadRequestException(
+              `Valor pago (${dto.amount}) diverge do total do pedido (${currentOrder.totalAmount})`,
+            );
+          }
+
+          for (const item of currentOrder.items) {
+            await this.inventoryService.confirmSaleInTransaction(
+              item.variantId,
+              currentOrder.unitId,
+              item.quantity,
+              currentOrder.id,
+              tx,
+            );
+          }
+
+          await tx
+            .update(shopOrders)
+            .set({
+              status: "PAGO",
+              paymentMethod: dto.paymentMethod,
+              paidAt: new Date(),
+              stripePaymentIntentId: dto.paymentIntentId,
+            })
+            .where(eq(shopOrders.id, dto.orderId));
+
+          await tx.insert(shopOrderPayments).values([
+            {
+              orderId: currentOrder.id,
+              paymentMethod: dto.paymentMethod,
+              amount: dto.amount,
+            },
+          ]);
+
+          return {
+            success: true,
+            message: "Pagamento Stripe confirmado com sucesso",
+            orderNumber: currentOrder.orderNumber,
+            paymentMethod: dto.paymentMethod,
+          };
+        }),
+      );
+    });
+  }
+
+  /**
+   * Libera reserva de pedido online quando o Stripe informa falha ou expiracao.
+   */
+  async failStripePayment(dto: {
+    orderId: string;
+    status: Extract<OrderWithItems["status"], "CANCELADO" | "EXPIRADO">;
+    reason: string;
+    paymentIntentId?: string;
+  }) {
+    const db = getDb();
+
+    return this.inventoryService.withOrderLock(dto.orderId, async () => {
+      const order = await db.query.shopOrders.findFirst({
+        where: eq(shopOrders.id, dto.orderId),
+        with: { items: true },
+      });
+
+      if (!order) {
+        throw new NotFoundException({
+          code: "RESOURCE_NOT_FOUND",
+          message: `Pedido ${dto.orderId} não encontrado`,
+        });
+      }
+
+      if (["CANCELADO", "EXPIRADO", "PAGO", "RETIRADO"].includes(order.status)) {
+        return {
+          success: true,
+          message: "Falha Stripe já processada ou pedido finalizado",
+          orderNumber: order.orderNumber,
+        };
+      }
+
+      if (order.status !== "AGUARDANDO_PAGAMENTO") {
+        throw new BadRequestException({
+          code: "INVALID_STATUS",
+          message: `Pedido não pode ser cancelado pelo Stripe no status ${order.status}`,
+        });
+      }
+
+      const lockTargets = order.items.map((item: ShopOrderItem) => ({
+        variantId: item.variantId,
+        unitId: order.unitId,
+      }));
+
+      return this.inventoryService.withInventoryLocks(lockTargets, async () =>
+        db.transaction(async (tx: DbTransaction) => {
+          const currentOrder = await tx.query.shopOrders.findFirst({
+            where: eq(shopOrders.id, dto.orderId),
+            with: { items: true },
+          });
+
+          if (!currentOrder) {
+            throw new NotFoundException({
+              code: "RESOURCE_NOT_FOUND",
+              message: `Pedido ${dto.orderId} não encontrado`,
+            });
+          }
+
+          if (
+            ["CANCELADO", "EXPIRADO", "PAGO", "RETIRADO"].includes(
+              currentOrder.status,
+            )
+          ) {
+            return {
+              success: true,
+              message: "Falha Stripe já processada ou pedido finalizado",
+              orderNumber: currentOrder.orderNumber,
+            };
+          }
+
+          if (currentOrder.status !== "AGUARDANDO_PAGAMENTO") {
+            throw new BadRequestException({
+              code: "INVALID_STATUS",
+              message: `Pedido não pode ser cancelado pelo Stripe no status ${currentOrder.status}`,
+            });
+          }
+
+          for (const item of currentOrder.items) {
+            await this.inventoryService.releaseReservationInTransaction(
+              item.variantId,
+              currentOrder.unitId,
+              item.quantity,
+              currentOrder.id,
+              tx,
+            );
+          }
+
+          await tx
+            .update(shopOrders)
+            .set({
+              status: dto.status,
+              cancelledAt: new Date(),
+              cancellationReason: dto.reason,
+              stripePaymentIntentId: dto.paymentIntentId,
+            })
+            .where(eq(shopOrders.id, dto.orderId));
+
+          return {
+            success: true,
+            message: "Reserva Stripe liberada com sucesso",
+            orderNumber: currentOrder.orderNumber,
+          };
+        }),
+      );
+    });
   }
 
   /**
@@ -744,93 +1084,127 @@ export class ShopOrdersService {
       payments?: Array<{ method: "DINHEIRO" | "PIX" | "CARTAO_CREDITO" | "CARTAO_DEBITO" | "BRINDE"; amount: number }>
     },
     _adminUserId: string,
+    scope?: ShopTenantScope,
   ) {
     const db = getDb();
 
-    const order = await db.query.shopOrders.findFirst({
-      where: eq(shopOrders.id, orderId),
-      with: { items: true },
-    });
-
-    if (!order) {
-      throw new NotFoundException({
-        code: "RESOURCE_NOT_FOUND",
-        message: `Pedido ${orderId} não encontrado`,
+    return this.inventoryService.withOrderLock(orderId, async () => {
+      const order = await db.query.shopOrders.findFirst({
+        where: this.orderWhere(orderId, scope),
+        with: { items: true },
       });
-    }
 
-    // Validar status permite confirmação de pagamento
-    if (order.status !== "AGUARDANDO_PAGAMENTO") {
-      throw new BadRequestException({
-        code: "INVALID_STATUS",
-        message: `Apenas pedidos aguardando pagamento podem ter pagamento confirmado. Status atual: ${order.status}`,
-      });
-    }
+      if (!order) {
+        throw new NotFoundException({
+          code: "RESOURCE_NOT_FOUND",
+          message: `Pedido ${orderId} não encontrado`,
+        });
+      }
 
-    // Verificar se pedido não expirou
-    if (order.expiresAt && new Date() > order.expiresAt) {
-      throw new BadRequestException({
-        code: "ORDER_EXPIRED",
-        message: `Pedido expirado em ${order.expiresAt.toLocaleString("pt-BR")}. Por favor, crie um novo pedido.`,
-      });
-    }
+      if (order.status !== "AGUARDANDO_PAGAMENTO") {
+        throw new BadRequestException({
+          code: "INVALID_STATUS",
+          message: `Apenas pedidos aguardando pagamento podem ter pagamento confirmado. Status atual: ${order.status}`,
+        });
+      }
 
-    // Validar Pagamentos
-    const payments = dto.payments || (dto.paymentMethod ? [{ method: dto.paymentMethod, amount: order.totalAmount }] : []);
+      if (order.expiresAt && new Date() > order.expiresAt) {
+        throw new BadRequestException({
+          code: "ORDER_EXPIRED",
+          message: `Pedido expirado em ${order.expiresAt.toLocaleString("pt-BR")}. Por favor, crie um novo pedido.`,
+        });
+      }
 
-    if (payments.length === 0) {
-      throw new BadRequestException("Pelo menos um método de pagamento deve ser informado.");
-    }
+      const payments = dto.payments || (dto.paymentMethod ? [{ method: dto.paymentMethod, amount: order.totalAmount }] : []);
 
-    const totalPaid = payments.reduce((acc, p) => acc + p.amount, 0);
+      if (payments.length === 0) {
+        throw new BadRequestException("Pelo menos um método de pagamento deve ser informado.");
+      }
 
-    const hasBrinde = payments.some(p => p.method === "BRINDE");
+      const totalPaid = payments.reduce((acc, p) => acc + p.amount, 0);
 
-    if (!hasBrinde && totalPaid !== order.totalAmount) {
-      throw new BadRequestException(`Valor pago (${totalPaid}) diverge do total do pedido (${order.totalAmount})`);
-    }
+      if (totalPaid !== order.totalAmount) {
+        throw new BadRequestException(`Valor pago (${totalPaid}) diverge do total do pedido (${order.totalAmount})`);
+      }
 
-    // Converter reservas em vendas confirmadas
-    for (const item of order.items) {
-      await this.inventoryService.confirmSale(
-        item.variantId,
-        order.unitId,
-        item.quantity,
-        order.id,
-      );
-    }
-
-    const primaryPaymentMethod = payments.length === 1 ? payments[0].method : "MULTIPLO";
-
-    // Atualizar pedido para PAGO
-    await db
-      .update(shopOrders)
-      .set({
-        status: "PAGO",
-        paymentMethod: primaryPaymentMethod,
-        paidAt: new Date(),
-      })
-      .where(eq(shopOrders.id, orderId));
-
-    // Criar registros de pagamento
-    if (payments.length > 0) {
-      const { shopOrderPayments } = await import("@essencia/db");
-
-      const paymentValues = payments.map(p => ({
-        orderId: order.id,
-        paymentMethod: p.method,
-        amount: p.amount,
+      const lockTargets = order.items.map((item: ShopOrderItem) => ({
+        variantId: item.variantId,
+        unitId: order.unitId,
       }));
 
-      await db.insert(shopOrderPayments).values(paymentValues);
-    }
+      return this.inventoryService.withInventoryLocks(lockTargets, async () =>
+        db.transaction(async (tx: DbTransaction) => {
+          const currentOrder = await tx.query.shopOrders.findFirst({
+            where: this.orderWhere(orderId, scope),
+            with: { items: true },
+          });
 
-    return {
-      success: true,
-      message: "Pagamento confirmado com sucesso",
-      orderNumber: order.orderNumber,
-      paymentMethod: primaryPaymentMethod,
-    };
+          if (!currentOrder) {
+            throw new NotFoundException({
+              code: "RESOURCE_NOT_FOUND",
+              message: `Pedido ${orderId} não encontrado`,
+            });
+          }
+
+          if (currentOrder.status !== "AGUARDANDO_PAGAMENTO") {
+            throw new BadRequestException({
+              code: "INVALID_STATUS",
+              message: `Apenas pedidos aguardando pagamento podem ter pagamento confirmado. Status atual: ${currentOrder.status}`,
+            });
+          }
+
+          if (currentOrder.expiresAt && new Date() > currentOrder.expiresAt) {
+            throw new BadRequestException({
+              code: "ORDER_EXPIRED",
+              message: `Pedido expirado em ${currentOrder.expiresAt.toLocaleString("pt-BR")}. Por favor, crie um novo pedido.`,
+            });
+          }
+
+          const currentTotalPaid = payments.reduce((acc, p) => acc + p.amount, 0);
+          if (currentTotalPaid !== currentOrder.totalAmount) {
+            throw new BadRequestException(`Valor pago (${currentTotalPaid}) diverge do total do pedido (${currentOrder.totalAmount})`);
+          }
+
+          for (const item of currentOrder.items) {
+            await this.inventoryService.confirmSaleInTransaction(
+              item.variantId,
+              currentOrder.unitId,
+              item.quantity,
+              currentOrder.id,
+              tx,
+            );
+          }
+
+          const primaryPaymentMethod = payments.length === 1 ? payments[0].method : "MULTIPLO";
+
+          await tx
+            .update(shopOrders)
+            .set({
+              status: "PAGO",
+              paymentMethod: primaryPaymentMethod,
+              paidAt: new Date(),
+            })
+            .where(this.orderWhere(orderId, scope));
+
+          if (payments.length > 0) {
+            const paymentValues = payments.map(p => ({
+              orderId: currentOrder.id,
+              paymentMethod: p.method,
+              amount: p.amount,
+            }));
+
+            await tx.insert(shopOrderPayments).values(paymentValues);
+          }
+
+          return {
+            success: true,
+            message: "Pagamento confirmado com sucesso",
+            orderNumber: currentOrder.orderNumber,
+            paymentMethod: primaryPaymentMethod,
+          };
+        }),
+      );
+    });
   }
 
   /**
@@ -839,62 +1213,53 @@ export class ShopOrdersService {
    * Exclui permanentemente um pedido (hard delete)
    * Pedidos RETIRADO e PAGO devolvem produtos ao estoque
    */
-  async deleteOrder(orderId: string, userId: string) {
+  async deleteOrder(orderId: string, _userId: string, scope?: ShopTenantScope) {
     const db = getDb();
 
-    const order = await db.query.shopOrders.findFirst({
-      where: eq(shopOrders.id, orderId),
-      with: { items: true },
-    });
-
-    if (!order) {
-      throw new NotFoundException({
-        code: "RESOURCE_NOT_FOUND",
-        message: `Pedido ${orderId} não encontrado`,
+    await this.inventoryService.withOrderLock(orderId, async () => {
+      const order = await db.query.shopOrders.findFirst({
+        where: this.orderWhere(orderId, scope),
+        with: { items: true },
       });
-    }
 
-    // Se AGUARDANDO_PAGAMENTO, liberar reservas antes de excluir
-    if (order.status === "AGUARDANDO_PAGAMENTO") {
-      for (const item of order.items) {
-        try {
-          await this.inventoryService.releaseReservation(
-            item.variantId,
-            order.unitId,
-            item.quantity,
-            order.id,
-          );
-        } catch (error) {
-          console.warn(
-            `Erro ao liberar reserva do item ${item.id} do pedido ${order.orderNumber}:`,
-            error,
-          );
-        }
+      if (!order) {
+        throw new NotFoundException({
+          code: "RESOURCE_NOT_FOUND",
+          message: `Pedido ${orderId} não encontrado`,
+        });
       }
-    }
 
-    // Se PAGO ou RETIRADO, devolver produtos ao estoque
-    if (order.status === "PAGO" || order.status === "RETIRADO") {
-      for (const item of order.items) {
-        try {
-          await this.inventoryService.addStock(
-            item.variantId,
-            order.unitId,
-            item.quantity,
-            `Estorno por exclusão do pedido ${order.orderNumber}`,
-            userId,
-          );
-        } catch (error) {
-          console.warn(
-            `Erro ao devolver estoque do item ${item.id} do pedido ${order.orderNumber}:`,
-            error,
-          );
-        }
+      if (["PAGO", "RETIRADO"].includes(order.status)) {
+        throw new BadRequestException({
+          code: "INVALID_STATUS",
+          message:
+            "Pedidos pagos ou retirados não podem ser excluídos definitivamente",
+        });
       }
-    }
 
-    // Deletar pedido (itens são removidos automaticamente via CASCADE)
-    await db.delete(shopOrders).where(eq(shopOrders.id, orderId));
+      const lockTargets = order.items.map((item: ShopOrderItem) => ({
+        variantId: item.variantId,
+        unitId: order.unitId,
+      }));
+
+      await this.inventoryService.withInventoryLocks(lockTargets, async () =>
+        db.transaction(async (tx: DbTransaction) => {
+          if (order.status === "AGUARDANDO_PAGAMENTO") {
+            for (const item of order.items) {
+              await this.inventoryService.releaseReservationInTransaction(
+                item.variantId,
+                order.unitId,
+                item.quantity,
+                order.id,
+                tx,
+              );
+            }
+          }
+
+          await tx.delete(shopOrders).where(this.orderWhere(orderId, scope));
+        }),
+      );
+    });
 
     return { success: true, message: "Pedido excluído com sucesso" };
   }
@@ -902,7 +1267,10 @@ export class ShopOrdersService {
   /**
    * Formata resposta de pedido
    */
-  private formatOrderResponse(order: OrderWithItems) {
+  private formatOrderResponse(
+    order: OrderWithItems,
+    options: { pickupInstructions?: string | null } = {},
+  ) {
     return {
       id: order.id,
       orderNumber: order.orderNumber,
@@ -935,6 +1303,14 @@ export class ShopOrdersService {
         },
       })),
       paymentMethod: order.paymentMethod,
+      payments:
+        order.payments?.map((payment: ShopOrderPayment) => ({
+          id: payment.id,
+          paymentMethod: payment.paymentMethod,
+          amount: payment.amount,
+          createdAt: payment.createdAt,
+        })) ?? [],
+      pickupInstructions: options.pickupInstructions ?? null,
       paidAt: order.paidAt,
       expiresAt: order.expiresAt,
       pickedUpAt: order.pickedUpAt,

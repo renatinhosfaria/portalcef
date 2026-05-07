@@ -2,7 +2,7 @@ import { cookies } from 'next/headers';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
-const API_URL = process.env.INTERNAL_API_URL || 'http://localhost:3001';
+const API_URL = process.env.API_INTERNAL_URL || 'http://localhost:3001';
 
 export async function POST(request: NextRequest) {
     try {
@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
         const formData = await request.formData();
 
         // Forward the request to the backend
-        const response = await fetch(`${API_URL}/storage/upload`, {
+        const response = await fetch(`${API_URL}/api/storage/upload`, {
             method: 'POST',
             headers: {
                 'Cookie': cookieHeader,

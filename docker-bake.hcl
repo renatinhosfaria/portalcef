@@ -52,6 +52,7 @@ group "apps" {
     "turmas",
     "planejamento",
     "calendario",
+    "eventos",
     "loja",
     "loja-admin",
     "tarefas",
@@ -181,6 +182,20 @@ target "calendario" {
     "${REGISTRY}/calendario:${TAG}",
     "${REGISTRY}/calendario:latest",
     "essencia-calendario:latest"
+  ]
+}
+
+target "eventos" {
+  inherits = ["_nextjs"]
+  args = {
+    APP_NAME     = "eventos"
+    PACKAGE_NAME = "eventos"
+    APP_PORT     = "3014"
+  }
+  tags = [
+    "${REGISTRY}/eventos:${TAG}",
+    "${REGISTRY}/eventos:latest",
+    "essencia-eventos:latest"
   ]
 }
 

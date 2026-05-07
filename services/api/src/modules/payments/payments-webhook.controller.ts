@@ -3,8 +3,10 @@ import {
   Post,
   Req,
   Headers,
+  RawBody,
   Logger,
   BadRequestException,
+  InternalServerErrorException,
   RawBodyRequest,
 } from "@nestjs/common";
 import { Request } from "express";
@@ -12,8 +14,7 @@ import { ConfigService } from "@nestjs/config";
 import Stripe from "stripe";
 import { PaymentsService } from "./payments.service";
 import { ShopOrdersService } from "../shop/shop-orders.service";
-import { ShopInventoryService } from "../shop/shop-inventory.service";
-import { getDb, shopOrders, eq } from "@essencia/db";
+import { getDb, stripeWebhookEvents, eq } from "@essencia/db";
 
 /**
  * PaymentsWebhookController
@@ -34,7 +35,6 @@ export class PaymentsWebhookController {
     private configService: ConfigService,
     private paymentsService: PaymentsService,
     private ordersService: ShopOrdersService,
-    private inventoryService: ShopInventoryService,
   ) {
     this.webhookSecret =
       this.configService.get<string>("STRIPE_WEBHOOK_SECRET") || "";
@@ -52,16 +52,26 @@ export class PaymentsWebhookController {
    * Recebe eventos do Stripe (payment_intent.*, charge.refunded, etc.)
    *
    * Configuracao necessaria no Stripe Dashboard:
-   * - URL: https://api.essencia.edu.br/payments/webhook
-   * - Eventos: payment_intent.succeeded, payment_intent.payment_failed, payment_intent.canceled, charge.refunded
+   * - URL: https://www.portalcef.com.br/api/payments/webhook
+   * - Eventos: checkout.session.completed, checkout.session.async_payment_succeeded,
+   *   checkout.session.async_payment_failed, checkout.session.expired,
+   *   payment_intent.succeeded, payment_intent.payment_failed,
+   *   payment_intent.canceled, charge.refunded
    */
   @Post("webhook")
   async handleWebhook(
     @Req() req: RawBodyRequest<Request>,
+    @RawBody() rawBody: Buffer | undefined,
     @Headers("stripe-signature") signature: string,
   ) {
     if (!signature) {
       throw new BadRequestException("Missing Stripe signature");
+    }
+
+    const payload = rawBody ?? req.rawBody;
+
+    if (!payload) {
+      throw new BadRequestException("Missing raw body");
     }
 
     let event: Stripe.Event;
@@ -70,7 +80,7 @@ export class PaymentsWebhookController {
       // Validar signature do Stripe
       const stripe = this.paymentsService.getStripeClient();
       event = stripe.webhooks.constructEvent(
-        req.rawBody!,
+        payload,
         signature,
         this.webhookSecret,
       );
@@ -95,9 +105,10 @@ export class PaymentsWebhookController {
         `Erro ao processar webhook ${event.type}: ${errorMessage}`,
         errorStack,
       );
-      // Retornar 200 mesmo com erro interno para evitar retry infinito do Stripe
-      // Erro sera logado para investigacao manual
-      return { received: true, eventId: event.id, error: errorMessage };
+      throw new InternalServerErrorException({
+        code: "STRIPE_WEBHOOK_PROCESSING_ERROR",
+        message: "Erro ao processar webhook Stripe",
+      });
     }
   }
 
@@ -105,7 +116,41 @@ export class PaymentsWebhookController {
    * Processa eventos do Stripe
    */
   private async processWebhookEvent(event: Stripe.Event): Promise<void> {
+    const db = getDb();
+    const existingEvent = await db.query.stripeWebhookEvents.findFirst({
+      where: eq(stripeWebhookEvents.id, event.id),
+    });
+
+    if (existingEvent) {
+      this.logger.log(`Webhook duplicado ignorado: ${event.id}`);
+      return;
+    }
+
     switch (event.type) {
+      case "checkout.session.completed":
+        await this.handleCheckoutSessionCompleted(
+          event.data.object as Stripe.Checkout.Session,
+        );
+        break;
+
+      case "checkout.session.async_payment_succeeded":
+        await this.handleCheckoutSessionAsyncPaymentSucceeded(
+          event.data.object as Stripe.Checkout.Session,
+        );
+        break;
+
+      case "checkout.session.async_payment_failed":
+        await this.handleCheckoutSessionAsyncPaymentFailed(
+          event.data.object as Stripe.Checkout.Session,
+        );
+        break;
+
+      case "checkout.session.expired":
+        await this.handleCheckoutSessionExpired(
+          event.data.object as Stripe.Checkout.Session,
+        );
+        break;
+
       case "payment_intent.succeeded":
         await this.handlePaymentSucceeded(
           event.data.object as Stripe.PaymentIntent,
@@ -131,6 +176,115 @@ export class PaymentsWebhookController {
       default:
         this.logger.log(`Evento nao tratado: ${event.type}`);
     }
+
+    await db.insert(stripeWebhookEvents).values({
+      id: event.id,
+      type: event.type,
+    });
+  }
+
+  private getMetadataOrderId(
+    metadata?: Stripe.Metadata | null,
+  ): string | undefined {
+    return metadata?.orderId || undefined;
+  }
+
+  private getPaymentIntentId(
+    paymentIntent: string | Stripe.PaymentIntent | null,
+  ): string | undefined {
+    if (!paymentIntent) return undefined;
+    return typeof paymentIntent === "string" ? paymentIntent : paymentIntent.id;
+  }
+
+  private async handleCheckoutSessionCompleted(
+    session: Stripe.Checkout.Session,
+  ): Promise<void> {
+    const orderId = this.getMetadataOrderId(session.metadata);
+
+    if (!orderId) {
+      this.logger.error(`Checkout Session ${session.id} sem orderId`);
+      return;
+    }
+
+    if (session.payment_status !== "paid") {
+      this.logger.log(
+        `Checkout Session ${session.id} concluida sem pagamento final: ${session.payment_status}`,
+      );
+      return;
+    }
+
+    const paymentIntentId = this.getPaymentIntentId(session.payment_intent);
+
+    if (!paymentIntentId) {
+      throw new BadRequestException("Checkout pago sem PaymentIntent");
+    }
+
+    await this.ordersService.confirmStripePayment({
+      orderId,
+      paymentIntentId,
+      paymentMethod: "CARTAO_CREDITO",
+      amount: session.amount_total ?? 0,
+    });
+  }
+
+  private async handleCheckoutSessionAsyncPaymentSucceeded(
+    session: Stripe.Checkout.Session,
+  ): Promise<void> {
+    const orderId = this.getMetadataOrderId(session.metadata);
+
+    if (!orderId) {
+      this.logger.error(`Checkout Session ${session.id} sem orderId`);
+      return;
+    }
+
+    const paymentIntentId = this.getPaymentIntentId(session.payment_intent);
+
+    if (!paymentIntentId) {
+      throw new BadRequestException("Checkout Pix pago sem PaymentIntent");
+    }
+
+    await this.ordersService.confirmStripePayment({
+      orderId,
+      paymentIntentId,
+      paymentMethod: "PIX",
+      amount: session.amount_total ?? 0,
+    });
+  }
+
+  private async handleCheckoutSessionAsyncPaymentFailed(
+    session: Stripe.Checkout.Session,
+  ): Promise<void> {
+    const orderId = this.getMetadataOrderId(session.metadata);
+
+    if (!orderId) {
+      this.logger.error(`Checkout Session ${session.id} sem orderId`);
+      return;
+    }
+
+    await this.ordersService.failStripePayment({
+      orderId,
+      status: "CANCELADO",
+      reason: "Pagamento Stripe falhou",
+      paymentIntentId: this.getPaymentIntentId(session.payment_intent),
+    });
+  }
+
+  private async handleCheckoutSessionExpired(
+    session: Stripe.Checkout.Session,
+  ): Promise<void> {
+    const orderId = this.getMetadataOrderId(session.metadata);
+
+    if (!orderId) {
+      this.logger.error(`Checkout Session ${session.id} sem orderId`);
+      return;
+    }
+
+    await this.ordersService.failStripePayment({
+      orderId,
+      status: "EXPIRADO",
+      reason: "Checkout Stripe expirado",
+      paymentIntentId: this.getPaymentIntentId(session.payment_intent),
+    });
   }
 
   /**
@@ -148,49 +302,28 @@ export class PaymentsWebhookController {
       `Pagamento confirmado: ${paymentIntent.id} | Pedido: ${orderNumber}`,
     );
 
-    const db = getDb();
-
-    // Buscar pedido
-    const order = await db.query.shopOrders.findFirst({
-      where: eq(shopOrders.id, orderId),
-      with: { items: true },
-    });
-
-    if (!order) {
+    if (!orderId) {
       this.logger.error(
-        `Pedido ${orderId} nao encontrado para PaymentIntent ${paymentIntent.id}`,
+        `PaymentIntent ${paymentIntent.id} sem orderId no metadata`,
       );
       return;
     }
 
-    // Validar idempotencia: se ja esta PAGO, nao processar novamente
-    if (order.status === "PAGO" || order.status === "RETIRADO") {
+    const paymentMethod = this.extractPaymentMethod(paymentIntent);
+
+    if (!paymentMethod) {
       this.logger.log(
-        `Pedido ${orderNumber} ja esta no status ${order.status} - ignorando webhook duplicado`,
+        `PaymentIntent ${paymentIntent.id} com método ambíguo; aguardando evento de Checkout Session`,
       );
       return;
     }
 
-    // Converter reservas em vendas (decrementa quantity real)
-    for (const item of order.items) {
-      await this.inventoryService.confirmSale(
-        item.variantId,
-        order.unitId,
-        item.quantity,
-        order.id,
-      );
-    }
-
-    // Atualizar pedido
-    await db
-      .update(shopOrders)
-      .set({
-        status: "PAGO",
-        paidAt: new Date(),
-        stripePaymentIntentId: paymentIntent.id,
-        paymentMethod: this.extractPaymentMethod(paymentIntent),
-      })
-      .where(eq(shopOrders.id, orderId));
+    await this.ordersService.confirmStripePayment({
+      orderId,
+      paymentIntentId: paymentIntent.id,
+      paymentMethod,
+      amount: paymentIntent.amount,
+    });
 
     this.logger.log(`Pedido ${orderNumber} confirmado como PAGO`);
   }
@@ -210,45 +343,17 @@ export class PaymentsWebhookController {
       `Pagamento falhou: ${paymentIntent.id} | Pedido: ${orderNumber}`,
     );
 
-    const db = getDb();
+    if (!orderId) {
+      this.logger.error(`PaymentIntent ${paymentIntent.id} sem orderId`);
+      return;
+    }
 
-    const order = await db.query.shopOrders.findFirst({
-      where: eq(shopOrders.id, orderId),
-      with: { items: true },
+    await this.ordersService.failStripePayment({
+      orderId,
+      status: "CANCELADO",
+      reason: `Pagamento falhou: ${paymentIntent.last_payment_error?.message || "Erro desconhecido"}`,
+      paymentIntentId: paymentIntent.id,
     });
-
-    if (!order) {
-      this.logger.error(`Pedido ${orderId} nao encontrado`);
-      return;
-    }
-
-    // Validar idempotencia
-    if (order.status === "CANCELADO" || order.status === "EXPIRADO") {
-      this.logger.log(
-        `Pedido ${orderNumber} ja esta ${order.status} - ignorando webhook`,
-      );
-      return;
-    }
-
-    // Liberar reservas
-    for (const item of order.items) {
-      await this.inventoryService.releaseReservation(
-        item.variantId,
-        order.unitId,
-        item.quantity,
-        order.id,
-      );
-    }
-
-    // Atualizar pedido
-    await db
-      .update(shopOrders)
-      .set({
-        status: "CANCELADO",
-        cancelledAt: new Date(),
-        cancellationReason: `Pagamento falhou: ${paymentIntent.last_payment_error?.message || "Erro desconhecido"}`,
-      })
-      .where(eq(shopOrders.id, orderId));
 
     this.logger.log(`Pedido ${orderNumber} cancelado (pagamento falhou)`);
   }
@@ -268,43 +373,17 @@ export class PaymentsWebhookController {
       `PaymentIntent cancelado: ${paymentIntent.id} | Pedido: ${orderNumber}`,
     );
 
-    const db = getDb();
+    if (!orderId) {
+      this.logger.error(`PaymentIntent ${paymentIntent.id} sem orderId`);
+      return;
+    }
 
-    const order = await db.query.shopOrders.findFirst({
-      where: eq(shopOrders.id, orderId),
-      with: { items: true },
+    await this.ordersService.failStripePayment({
+      orderId,
+      status: "EXPIRADO",
+      reason: "PaymentIntent cancelado no Stripe",
+      paymentIntentId: paymentIntent.id,
     });
-
-    if (!order) {
-      this.logger.error(`Pedido ${orderId} nao encontrado`);
-      return;
-    }
-
-    // Validar idempotencia
-    if (order.status === "CANCELADO" || order.status === "EXPIRADO") {
-      this.logger.log(`Pedido ${orderNumber} ja esta ${order.status}`);
-      return;
-    }
-
-    // Liberar reservas
-    for (const item of order.items) {
-      await this.inventoryService.releaseReservation(
-        item.variantId,
-        order.unitId,
-        item.quantity,
-        order.id,
-      );
-    }
-
-    // Atualizar pedido
-    await db
-      .update(shopOrders)
-      .set({
-        status: "EXPIRADO",
-        cancelledAt: new Date(),
-        cancellationReason: "PaymentIntent cancelado no Stripe",
-      })
-      .where(eq(shopOrders.id, orderId));
 
     this.logger.log(`Pedido ${orderNumber} expirado (PaymentIntent cancelado)`);
   }
@@ -328,19 +407,27 @@ export class PaymentsWebhookController {
    */
   private extractPaymentMethod(
     paymentIntent: Stripe.PaymentIntent,
-  ): string | null {
+  ): "PIX" | "CARTAO_CREDITO" | undefined {
     // PaymentIntent pode vir expandido ou nao do webhook
     // Quando vem expandido, charges e um objeto, senao e um ID string
     const paymentIntentWithCharges = paymentIntent as Stripe.PaymentIntent & {
       charges?: { data?: Stripe.Charge[] };
     };
     const charges = paymentIntentWithCharges.charges;
-    if (!charges?.data?.length) return null;
+    if (!charges?.data?.length) {
+      if (paymentIntent.payment_method_types?.length === 1) {
+        return paymentIntent.payment_method_types[0] === "pix"
+          ? "PIX"
+          : "CARTAO_CREDITO";
+      }
+
+      return undefined;
+    }
 
     const charge = charges.data[0];
     const paymentMethod = charge.payment_method_details;
 
-    if (!paymentMethod) return null;
+    if (!paymentMethod) return "CARTAO_CREDITO";
 
     switch (paymentMethod.type) {
       case "card":
@@ -348,7 +435,7 @@ export class PaymentsWebhookController {
       case "pix":
         return "PIX";
       default:
-        return paymentMethod.type.toUpperCase();
+        return "CARTAO_CREDITO";
     }
   }
 }

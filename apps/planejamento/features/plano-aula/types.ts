@@ -39,6 +39,9 @@ export interface PlanoDocumento {
   sharepointItemId?: string;
   sharepointEditUrl?: string;
   editandoDesde?: string;
+  // PDF derivado para impressão (gerado na aprovação)
+  pdfStorageKey?: string | null;
+  pdfUrl?: string | null;
   // Campos de aprovação individual (analista_pedagogico)
   approvedBy?: string;
   approvedAt?: string;

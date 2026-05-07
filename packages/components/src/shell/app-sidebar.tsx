@@ -7,6 +7,7 @@ import {
   Calendar,
   CheckSquare,
   GraduationCap,
+  HeartHandshake,
   Headset,
   LayoutDashboard,
   LogOut,
@@ -30,6 +31,7 @@ type ActivePage =
   | "turmas"
   | "planejamento"
   | "calendario"
+  | "eventos"
   | "tarefas"
   | "suporte"
   | "loja-admin";
@@ -42,6 +44,7 @@ const MODULE_ACCESS_RULES = {
   turmas: ["master", "diretora_geral", "gerente_unidade", "gerente_financeiro"],
   planejamento: "ALL", // Todos os perfis pedagógicos
   calendario: "ALL", // Todos os usuários
+  eventos: ["master", "diretora_geral", "gerente_unidade"],
   tarefas: [
     "master",
     "diretora_geral",
@@ -87,6 +90,7 @@ function getActivePageFromPath(pathname: string): ActivePage | null {
   if (normalizedPath.startsWith("/turmas")) return "turmas";
   if (normalizedPath.startsWith("/planejamento")) return "planejamento";
   if (normalizedPath.startsWith("/calendario")) return "calendario";
+  if (normalizedPath.startsWith("/eventos")) return "eventos";
   if (normalizedPath.startsWith("/tarefas")) return "tarefas";
   if (normalizedPath.startsWith("/suporte")) return "suporte";
   if (normalizedPath.startsWith("/loja-admin")) return "loja-admin";
@@ -197,6 +201,13 @@ export function AppSidebar({ tarefasBadge, suporteBadge, collapsed = false, onTo
       activePage: "calendario" as ActivePage,
     },
     {
+      key: "eventos" as ModuleKey,
+      icon: HeartHandshake,
+      label: "Eventos",
+      href: `https://www.portalcef.com.br/eventos/inscricoes-evento?data=${tenantPayload}`,
+      activePage: "eventos" as ActivePage,
+    },
+    {
       key: "tarefas" as ModuleKey,
       icon: CheckSquare,
       label: "Tarefas",
@@ -243,6 +254,7 @@ export function AppSidebar({ tarefasBadge, suporteBadge, collapsed = false, onTo
     if (port === "3006") return setActivePage("turmas");
     if (port === "3007") return setActivePage("planejamento");
     if (port === "3008") return setActivePage("calendario");
+    if (port === "3014") return setActivePage("eventos");
     if (port === "3012") return setActivePage("tarefas");
     if (port === "3013") return setActivePage("suporte");
     if (port === "3011") return setActivePage("loja-admin");

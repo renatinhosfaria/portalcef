@@ -1,4 +1,7 @@
 import { Test, TestingModule } from "@nestjs/testing";
+import { plainToInstance } from "class-transformer";
+import { validate } from "class-validator";
+import { CreateInterestRequestDto } from "./dto/create-interest-request.dto";
 import { ShopInterestService } from "./shop-interest.service";
 
 // Mock the db module
@@ -176,6 +179,28 @@ describe("ShopInterestService", () => {
 });
 
 describe("Interest Request Validation", () => {
+  it("should reject invalid UUID fields before service execution", async () => {
+    const dto = plainToInstance(CreateInterestRequestDto, {
+      schoolId: "school-invalid",
+      unitId: "unit-invalid",
+      customerName: "Maria Silva",
+      customerPhone: "11987654321",
+      studentName: "João Silva",
+      items: [{ variantId: "variant-invalid", quantity: 1 }],
+    });
+
+    const errors = await validate(dto);
+    const topLevelProperties = errors.map((error) => error.property);
+    const itemProperties =
+      errors
+        .find((error) => error.property === "items")
+        ?.children?.[0]?.children?.map((error) => error.property) ?? [];
+
+    expect(topLevelProperties).toContain("schoolId");
+    expect(topLevelProperties).toContain("unitId");
+    expect(itemProperties).toContain("variantId");
+  });
+
   it("should require student name", () => {
     const studentName = "João Silva";
     expect(studentName.length).toBeGreaterThan(0);

@@ -2,6 +2,8 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 interface CartItem {
     variantId: string;
@@ -273,6 +275,25 @@ describe('Checkout Page', () => {
             const value = total / installments;
             expect(Math.round(value)).toBe(4167);
         });
+    });
+});
+
+describe('Voucher público', () => {
+    it('exibe validade de 7 dias de forma consistente com o backend', () => {
+        const checkoutSource = readFileSync(join(process.cwd(), 'app/checkout/page.tsx'), 'utf8');
+        const orderSource = readFileSync(join(process.cwd(), 'app/pedido/[orderNumber]/page.tsx'), 'utf8');
+
+        expect(checkoutSource).toContain('Válido por 7 dias');
+        expect(orderSource).toContain('válido por 7 dias');
+        expect(checkoutSource).not.toContain('Válido por 5 dias');
+        expect(orderSource).not.toContain('válido por 5 dias');
+    });
+
+    it('lê responsável e telefone do contrato atual da API', () => {
+        const orderSource = readFileSync(join(process.cwd(), 'lib/order.ts'), 'utf8');
+
+        expect(orderSource).toContain('orderData.customer?.name ?? orderData.customerName');
+        expect(orderSource).toContain('orderData.customer?.phone ?? orderData.customerPhone');
     });
 });
 

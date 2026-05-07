@@ -198,9 +198,10 @@ if (available < quantity) throw new BadRequestException('Estoque insuficiente');
 
 ## Stripe Webhooks
 
-- Endpoint: `POST /payments/webhook`.
+- Endpoint: `POST /api/payments/webhook` em produção (`https://www.portalcef.com.br/api/payments/webhook`).
 - Validacao obrigatoria da assinatura (`stripe-signature`).
 - Usa `STRIPE_WEBHOOK_SECRET`.
+- Eventos são registrados por `eventId` para idempotência antes de aceitar reenvios do Stripe sem duplicar baixa de estoque.
 
 ---
 

@@ -189,22 +189,17 @@ export default function PedidosPage() {
         setCurrentModalPaymentAmount(0);
     };
 
-    // Auto set value to 0 if Brinde in Modal
     useEffect(() => {
         if (!confirmPaymentModal) return;
 
-        if (currentModalPaymentMethod === 'BRINDE') {
-            setCurrentModalPaymentAmount(0);
-        } else {
-            // Calculate remaining
-            const currentPaid = modalPayments.reduce((acc, p) => acc + p.amount, 0);
-            const remaining = confirmPaymentModal.totalAmount - currentPaid;
+        // Calculate remaining
+        const currentPaid = modalPayments.reduce((acc, p) => acc + p.amount, 0);
+        const remaining = confirmPaymentModal.totalAmount - currentPaid;
 
-            if (currentModalPaymentAmount === 0 && remaining > 0) {
-                setCurrentModalPaymentAmount(remaining);
-            }
+        if (currentModalPaymentAmount === 0 && remaining > 0) {
+            setCurrentModalPaymentAmount(remaining);
         }
-    }, [currentModalPaymentMethod, confirmPaymentModal, modalPayments]);
+    }, [currentModalPaymentAmount, currentModalPaymentMethod, confirmPaymentModal, modalPayments]);
 
     const addModalPayment = () => {
         if (!confirmPaymentModal) return;
@@ -212,12 +207,12 @@ export default function PedidosPage() {
         const currentPaid = modalPayments.reduce((acc, p) => acc + p.amount, 0);
         const remaining = confirmPaymentModal.totalAmount - currentPaid;
 
-        if (currentModalPaymentMethod !== 'BRINDE' && currentModalPaymentAmount <= 0) {
+        if (currentModalPaymentAmount <= 0) {
             alert('Valor deve ser maior que zero');
             return;
         }
 
-        if (currentModalPaymentMethod !== 'BRINDE' && currentModalPaymentAmount > remaining) {
+        if (currentModalPaymentAmount > remaining) {
             alert(`Valor excede o restante (${formatCurrency(remaining)})`);
             return;
         }
@@ -234,20 +229,17 @@ export default function PedidosPage() {
     const handleConfirmPayment = async () => {
         if (!confirmPaymentModal) return;
 
-        const totalPaid = modalPayments.reduce((acc, p) => acc + p.amount, 0);
-
         // Se não adicionou nem um pagamento na lista, tenta adicionar o atual se cobrir tudo (atalho UX)
         let finalPayments = [...modalPayments];
         if (finalPayments.length === 0) {
-            if (currentModalPaymentMethod === 'BRINDE' || currentModalPaymentAmount === confirmPaymentModal.totalAmount) {
+            if (currentModalPaymentAmount === confirmPaymentModal.totalAmount) {
                 finalPayments = [{ method: currentModalPaymentMethod, amount: currentModalPaymentAmount }];
             }
         }
 
         const finalTotalPaid = finalPayments.reduce((acc, p) => acc + p.amount, 0);
-        const hasBrinde = finalPayments.some(p => p.method === 'BRINDE');
 
-        if (!hasBrinde && finalTotalPaid !== confirmPaymentModal.totalAmount) {
+        if (finalTotalPaid !== confirmPaymentModal.totalAmount) {
             alert(`Total pago (${formatCurrency(finalTotalPaid)}) deve ser igual ao total do pedido (${formatCurrency(confirmPaymentModal.totalAmount)})`);
             return;
         }
@@ -456,7 +448,7 @@ export default function PedidosPage() {
                                                             Retirar
                                                         </button>
                                                     )}
-                                                    {['AGUARDANDO_PAGAMENTO', 'CANCELADO', 'EXPIRADO', 'RETIRADO', 'PAGO'].includes(order.status) && (
+                                                    {['AGUARDANDO_PAGAMENTO', 'CANCELADO', 'EXPIRADO'].includes(order.status) && (
                                                         <button
                                                             onClick={() => openDeleteOrderModal(order)}
                                                             className="btn-admin btn-admin-ghost btn-admin-sm text-red-500 hover:text-red-700 hover:bg-red-50"

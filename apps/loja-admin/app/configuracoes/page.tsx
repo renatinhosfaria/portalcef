@@ -5,6 +5,7 @@ import { Save, Store, CreditCard, Settings2, Shield, Power } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react';
 
 import { apiFetch } from '../../lib/api';
+import { canManageShopSettings } from '../../lib/permissions';
 
 interface ShopSettings {
     id: string;
@@ -19,7 +20,8 @@ interface ShopSettings {
 
 
 export default function ConfiguracoesPage() {
-    const { unitId } = useTenant();
+    const { unitId, role } = useTenant();
+    const canEditSettings = canManageShopSettings(role);
     const [_settings, setSettings] = useState<ShopSettings | null>(null);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -68,6 +70,9 @@ export default function ConfiguracoesPage() {
     useEffect(() => {
         if (unitId) {
             loadSettings();
+        } else {
+            setLoading(false);
+            setError('Selecione uma unidade para gerenciar as configurações da loja.');
         }
     }, [unitId, loadSettings]);
 
@@ -118,6 +123,24 @@ export default function ConfiguracoesPage() {
         );
     }
 
+    if (!unitId) {
+        return (
+            <div className="admin-card">
+                <div className="admin-card-body">
+                    <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-200 rounded-xl">
+                        <Shield className="w-5 h-5 text-amber-600 mt-0.5" />
+                        <div>
+                            <h1 className="font-semibold text-amber-900">Unidade operacional necessária</h1>
+                            <p className="text-sm text-amber-700 mt-1">
+                                Selecione uma unidade para gerenciar as configurações da loja.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="space-y-8">
             {/* Header */}
@@ -126,28 +149,30 @@ export default function ConfiguracoesPage() {
                     <h1 className="text-3xl font-bold text-slate-800 tracking-tight">Configurações</h1>
                     <p className="text-slate-500 mt-1">Gerencie as configurações da loja</p>
                 </div>
-                <button
-                    onClick={handleSave}
-                    disabled={saving}
-                    className="btn-admin btn-admin-primary"
-                >
-                    {saving ? (
-                        <>
-                            <div className="loading-spinner-admin w-4 h-4 border-2"></div>
-                            Salvando...
-                        </>
-                    ) : saved ? (
-                        <>
-                            <Settings2 className="w-5 h-5" />
-                            Salvo!
-                        </>
-                    ) : (
-                        <>
-                            <Save className="w-5 h-5" />
-                            Salvar Alterações
-                        </>
-                    )}
-                </button>
+                {canEditSettings && (
+                    <button
+                        onClick={handleSave}
+                        disabled={saving}
+                        className="btn-admin btn-admin-primary"
+                    >
+                        {saving ? (
+                            <>
+                                <div className="loading-spinner-admin w-4 h-4 border-2"></div>
+                                Salvando...
+                            </>
+                        ) : saved ? (
+                            <>
+                                <Settings2 className="w-5 h-5" />
+                                Salvo!
+                            </>
+                        ) : (
+                            <>
+                                <Save className="w-5 h-5" />
+                                Salvar Alterações
+                            </>
+                        )}
+                    </button>
+                )}
             </div>
 
             {/* Error Alert */}
@@ -181,6 +206,7 @@ export default function ConfiguracoesPage() {
                             <button
                                 type="button"
                                 onClick={() => setIsShopEnabled(!isShopEnabled)}
+                                disabled={!canEditSettings}
                                 className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[#A3D154] focus:ring-offset-2 ${isShopEnabled ? 'bg-[#A3D154]' : 'bg-slate-200'
                                     }`}
                             >
@@ -216,6 +242,7 @@ export default function ConfiguracoesPage() {
                             <select
                                 value={maxInstallments}
                                 onChange={(e) => setMaxInstallments(parseInt(e.target.value))}
+                                disabled={!canEditSettings}
                                 className="form-input"
                             >
                                 {installmentOptions.map((n) => (
@@ -247,6 +274,7 @@ export default function ConfiguracoesPage() {
                             <textarea
                                 value={pickupInstructions}
                                 onChange={(e) => setPickupInstructions(e.target.value)}
+                                disabled={!canEditSettings}
                                 className="form-input min-h-[120px] resize-none"
                                 placeholder="Ex: Retirada na secretaria, de segunda a sexta, das 8h às 17h."
                             />

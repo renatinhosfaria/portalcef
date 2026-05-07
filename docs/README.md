@@ -33,6 +33,7 @@ O **Portal Digital Colegio Essencia Feliz** e uma plataforma web moderna para ge
 | **Escolas**       | 3005  | Administracao de escolas e unidades         |
 | **Turmas**        | 3006  | Gestao de turmas                            |
 | **Planejamento**  | 3007  | Planejamento pedagogico quinzenal           |
+| **Eventos**       | 3014  | Gestao de inscricoes de eventos             |
 | **Loja**          | 3010  | Loja publica (uniformes)                    |
 | **Loja Admin**    | 3011  | Administracao de produtos, estoque, pedidos |
 | **Tarefas**       | 3012  | Gerenciamento de tarefas                    |
@@ -131,6 +132,7 @@ pnpm dev
 |   +-- escolas/          :3005     # Gestao de escolas
 |   +-- turmas/           :3006     # Gestao de turmas
 |   +-- planejamento/     :3007     # Planejamento pedagogico
+|   +-- eventos/          :3014     # Gestao de inscricoes de eventos
 |   +-- loja/             :3010     # Loja publica
 |   +-- loja-admin/       :3011     # Admin da loja
 |
@@ -173,6 +175,7 @@ pnpm dev
 | [DATABASE.md](./DATABASE.md)         | Schema, migracoes, relacionamentos     |
 | [DEPLOYMENT.md](./DEPLOYMENT.md)     | Deploy, Docker, producao               |
 | [MODULO_LOJA.md](./MODULO_LOJA.md)   | Documentacao do modulo de loja         |
+| [LOJA_INVARIANTES_TESTES.md](./LOJA_INVARIANTES_TESTES.md) | Matriz obrigatoria de invariantes e testes da loja |
 | [SECURITY.md](./SECURITY.md)         | Autenticacao, RBAC, seguranca          |
 
 ---

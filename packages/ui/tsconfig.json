@@ -2,7 +2,6 @@
   "extends": "./node_modules/@essencia/config/typescript/next.json",
   "compilerOptions": {
     "rootDir": "./src",
-    "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"]
     },

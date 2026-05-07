@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 
 export interface CartItem {
+  schoolId: string;
+  unitId: string;
   variantId: string;
   productId: string;
   productName: string;
@@ -55,13 +57,40 @@ export function useCart() {
   };
 
   const addItem = (item: CartItem): { success: boolean; message?: string } => {
+    const currentContext = getCartContext();
+    if (
+      currentContext &&
+      (currentContext.schoolId !== item.schoolId ||
+        currentContext.unitId !== item.unitId)
+    ) {
+      return {
+        success: false,
+        message:
+          'Finalize ou limpe o carrinho atual antes de comprar em outra unidade',
+      };
+    }
+
     const currentQty = getQuantityForProductStudent(item.productId, item.studentName);
     const newTotal = currentQty + item.quantity;
+    const existingVariantQty = items
+      .filter(
+        (cartItem) =>
+          cartItem.variantId === item.variantId &&
+          cartItem.studentName.toLowerCase() === item.studentName.toLowerCase(),
+      )
+      .reduce((sum, cartItem) => sum + cartItem.quantity, 0);
 
     if (newTotal > MAX_QUANTITY_PER_STUDENT) {
       return {
         success: false,
         message: `Limite de ${MAX_QUANTITY_PER_STUDENT} unidades por produto por aluno atingido`,
+      };
+    }
+
+    if (existingVariantQty + item.quantity > item.availableStock) {
+      return {
+        success: false,
+        message: `Estoque disponível insuficiente para ${item.productName}`,
       };
     }
 
@@ -100,11 +129,33 @@ export function useCart() {
     }
 
     setItems((current) =>
-      current.map((item) =>
-        item.variantId === variantId && item.studentName === studentName
-          ? { ...item, quantity }
-          : item
-      )
+      current.map((item) => {
+        if (
+          item.variantId !== variantId ||
+          item.studentName.toLowerCase() !== studentName.toLowerCase()
+        ) {
+          return item;
+        }
+
+        const quantityFromOtherVariants = current
+          .filter(
+            (cartItem) =>
+              cartItem.productId === item.productId &&
+              cartItem.variantId !== variantId &&
+              cartItem.studentName.toLowerCase() === studentName.toLowerCase(),
+          )
+          .reduce((sum, cartItem) => sum + cartItem.quantity, 0);
+        const maxByStudent = Math.max(
+          1,
+          MAX_QUANTITY_PER_STUDENT - quantityFromOtherVariants,
+        );
+        const maxAllowed = Math.min(item.availableStock, maxByStudent);
+
+        return {
+          ...item,
+          quantity: Math.max(1, Math.min(quantity, maxAllowed)),
+        };
+      })
     );
   };
 
@@ -121,6 +172,18 @@ export function useCart() {
     return items.reduce((sum, item) => sum + item.quantity, 0);
   };
 
+  const getCartContext = () => {
+    const firstItem = items[0];
+    if (!firstItem?.schoolId || !firstItem?.unitId) {
+      return null;
+    }
+
+    return {
+      schoolId: firstItem.schoolId,
+      unitId: firstItem.unitId,
+    };
+  };
+
   return {
     items,
     addItem,
@@ -129,6 +192,7 @@ export function useCart() {
     clearCart,
     getTotalAmount,
     getTotalItems,
+    getCartContext,
     getQuantityForProductStudent,
     isLoaded,
   };

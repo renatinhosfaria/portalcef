@@ -37,7 +37,7 @@ export class CreateProductDto {
     | "ACESSORIO";
 
   @IsInt()
-  @Min(0)
+  @Min(1)
   basePrice!: number; // Em centavos
 
   @IsOptional()
@@ -82,7 +82,7 @@ export class UpdateProductDto {
 
   @IsOptional()
   @IsInt()
-  @Min(0)
+  @Min(1)
   basePrice?: number;
 
   @IsOptional()

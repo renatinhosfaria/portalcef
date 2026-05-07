@@ -12,6 +12,7 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { ImageUploader } from '../../components/ImageUploader';
 import { apiFetch } from '../../lib/api';
+import { canManageCatalog } from '../../lib/permissions';
 
 interface Product {
     id: string;
@@ -41,7 +42,7 @@ export default function ProdutosPage() {
     const [productToEdit, setProductToEdit] = useState<Product | null>(null);
 
     // Permission check
-    const canManageProducts = ['master', 'diretora_geral', 'gerente_unidade', 'auxiliar_administrativo'].includes(role);
+    const canManageProducts = canManageCatalog(role);
 
     // Form state
     const [formData, setFormData] = useState({

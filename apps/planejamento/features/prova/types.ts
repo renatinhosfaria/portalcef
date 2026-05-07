@@ -58,6 +58,9 @@ export interface ProvaDocumento {
   sharepointItemId?: string;
   sharepointEditUrl?: string;
   editandoDesde?: string;
+  // PDF derivado para impressão (gerado na aprovação)
+  pdfStorageKey?: string | null;
+  pdfUrl?: string | null;
   // Campos de aprovacao individual (analista_pedagogico)
   approvedBy?: string;
   approvedAt?: string;

@@ -354,6 +354,7 @@ export function RevisaoContent({ planoId }: RevisaoContentProps) {
                 documentos={plano.documentos}
                 canDelete={false}
                 canAprovar={true}
+                canEdit={true}
                 canComentar={true}
                 onAprovar={handleAprovarDocumento}
                 onDesaprovar={handleDesaprovarDocumento}
