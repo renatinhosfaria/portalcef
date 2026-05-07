@@ -28,8 +28,6 @@ BEGIN
   IF duplicate_count > 0 THEN
     RAISE EXCEPTION 'Existem % grupos duplicados em (turma_id, quinzena_id). Resolva manualmente antes de aplicar esta migration.', duplicate_count;
   END IF;
-END $$;
-
-DROP INDEX "plano_aula_user_turma_quinzena_unique";
-CREATE UNIQUE INDEX "plano_aula_turma_quinzena_unique"
-  ON "plano_aula" USING btree ("turma_id","quinzena_id");
+END $$;--> statement-breakpoint
+DROP INDEX "plano_aula_user_turma_quinzena_unique";--> statement-breakpoint
+CREATE UNIQUE INDEX "plano_aula_turma_quinzena_unique" ON "plano_aula" USING btree ("turma_id","quinzena_id");
