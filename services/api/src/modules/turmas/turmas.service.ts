@@ -1,4 +1,4 @@
-import { and, asc, eq, getDb, inArray } from "@essencia/db";
+import { and, asc, eq, getDb, inArray, isNull } from "@essencia/db";
 import {
   turmas,
   units,
@@ -406,6 +406,7 @@ export class TurmasService {
         eq(users.role, "professora"),
         eq(users.unitId, turma.unitId),
         eq(users.stageId, turma.stageId),
+        isNull(users.inativadoEm),
       ),
       orderBy: [asc(users.name)],
     });
