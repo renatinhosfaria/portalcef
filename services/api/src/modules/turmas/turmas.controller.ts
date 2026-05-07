@@ -192,10 +192,22 @@ export class TurmasController {
   async assignProfessora(
     @Param("id") turmaId: string,
     @Body() body: { professoraId: string },
+    @CurrentUser()
+    user: {
+      userId: string;
+      role: string;
+      schoolId: string;
+      unitId: string | null;
+      stageId: string | null;
+    },
   ) {
     const turma = await this.turmasService.assignProfessora(
       turmaId,
       body.professoraId,
+      {
+        userId: user.userId,
+        userRole: user.role,
+      },
     );
 
     return {

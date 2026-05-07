@@ -4,6 +4,11 @@ import { PlanoAulaService } from "../plano-aula/plano-aula.service";
 import { TurmasService } from "./turmas.service";
 
 const mockTx = {
+  query: {
+    users: {
+      findFirst: jest.fn(),
+    },
+  },
   update: jest.fn().mockReturnThis(),
   set: jest.fn().mockReturnThis(),
   where: jest.fn().mockReturnThis(),
@@ -51,7 +56,6 @@ describe("TurmasService — assignProfessora", () => {
 
   const ator = {
     userId: "coord-1",
-    userName: "Coordenadora Ana",
     userRole: "coordenadora_geral",
   };
 
@@ -90,6 +94,7 @@ describe("TurmasService — assignProfessora", () => {
       professoraId: "prof-antiga",
     });
     mockDb.query.users.findFirst.mockResolvedValue(profValida);
+    mockTx.query.users.findFirst.mockResolvedValue({ name: "Coordenadora Ana" });
     mockTx.returning.mockResolvedValueOnce([
       { ...turmaBase, professoraId: profValida.id },
     ]);
@@ -97,8 +102,7 @@ describe("TurmasService — assignProfessora", () => {
       planosTransferidos: ["plano-1"],
     });
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (service as any).assignProfessora("turma-1", profValida.id, ator);
+    await service.assignProfessora("turma-1", profValida.id, ator);
 
     expect(mockDb.transaction).toHaveBeenCalledTimes(1);
     expect(planoAulaServiceMock.transferirPlanosPendentes).toHaveBeenCalledWith(
@@ -106,7 +110,11 @@ describe("TurmasService — assignProfessora", () => {
       "turma-1",
       "prof-antiga",
       profValida.id,
-      ator,
+      {
+        userId: "coord-1",
+        userName: "Coordenadora Ana",
+        userRole: "coordenadora_geral",
+      },
     );
   });
 

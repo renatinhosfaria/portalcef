@@ -273,7 +273,7 @@ export class TurmasService {
   async assignProfessora(
     turmaId: string,
     professoraId: string,
-    ator: { userId: string; userName: string; userRole: string },
+    ator: { userId: string; userRole: string },
   ): Promise<Turma> {
     const db = getDb();
 
@@ -328,6 +328,18 @@ export class TurmasService {
 
     // Troca real: atualizar turma e transferir planos pendentes na mesma transação
     return await db.transaction(async (tx: DbTransaction) => {
+      // Buscar nome do ator para denormalizar no histórico
+      const atorUser = await tx.query.users.findFirst({
+        where: eq(users.id, ator.userId),
+        columns: { name: true },
+      });
+
+      const atorCompleto = {
+        userId: ator.userId,
+        userName: atorUser?.name ?? "Usuário",
+        userRole: ator.userRole,
+      };
+
       const [updated] = await tx
         .update(turmas)
         .set({ professoraId, updatedAt: new Date() })
@@ -339,7 +351,7 @@ export class TurmasService {
         turmaId,
         professoraAnteriorId,
         professoraId,
-        ator,
+        atorCompleto,
       );
 
       return updated;
