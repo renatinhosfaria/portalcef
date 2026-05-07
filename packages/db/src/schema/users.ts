@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { type AnyPgColumn, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 
 import { educationStages } from "./education-stages.js";
 import { schools } from "./schools.js";
@@ -37,6 +37,11 @@ export const users = pgTable("users", {
   stageId: uuid("stage_id").references(() => educationStages.id, {
     onDelete: "set null",
   }),
+  inativadoEm: timestamp("inativado_em", { withTimezone: true }),
+  inativadoPor: uuid("inativado_por").references(
+    (): AnyPgColumn => users.id,
+    { onDelete: "set null" },
+  ),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
