@@ -12,6 +12,7 @@ export type AcaoHistorico =
   | "DOCUMENTO_IMPRESSO"
   | "RECUPERADO"
   | "COMENTARIO_ADICIONADO"
+  | "TRANSFERIDO"
   // Ações específicas do módulo de provas
   | "SUBMETIDO_IMPRESSAO"
   | "ENVIADO_RESPONDER"
