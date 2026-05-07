@@ -11,6 +11,7 @@ import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
   ArrowRight,
+  ArrowRightLeft,
   Check,
   CheckCheck,
   MessageSquare,
@@ -63,6 +64,8 @@ function getAcaoIcon(acao: AcaoHistorico) {
       return <Undo className="h-4 w-4" />;
     case "COMENTARIO_ADICIONADO":
       return <MessageSquare className="h-4 w-4" />;
+    case "TRANSFERIDO":
+      return <ArrowRightLeft className="h-4 w-4" />;
     default:
       return <Check className="h-4 w-4" />;
   }
@@ -89,6 +92,8 @@ function getAcaoColor(acao: AcaoHistorico): string {
       return "bg-amber-100 text-amber-600";
     case "COMENTARIO_ADICIONADO":
       return "bg-blue-100 text-blue-600";
+    case "TRANSFERIDO":
+      return "bg-purple-100 text-purple-600";
     default:
       return "bg-gray-100 text-gray-600";
   }
@@ -117,6 +122,8 @@ function getAcaoLabel(acao: AcaoHistorico): string {
       return "Plano recuperado pela professora";
     case "COMENTARIO_ADICIONADO":
       return "Comentário adicionado";
+    case "TRANSFERIDO":
+      return "Plano transferido entre professoras";
     default:
       return acao;
   }
@@ -155,6 +162,18 @@ function getDetalhesMensagem(entry: HistoricoEntry): string | null {
         ? entry.detalhes.documentoNome
         : "Documento";
     return `Comentário adicionado ao documento "${documentoNome}"`;
+  }
+
+  if (entry.acao === "TRANSFERIDO") {
+    const anteriorNome =
+      typeof entry.detalhes?.professoraAnteriorNome === "string"
+        ? entry.detalhes.professoraAnteriorNome
+        : "professora anterior";
+    const novaNome =
+      typeof entry.detalhes?.novaProfessoraNome === "string"
+        ? entry.detalhes.novaProfessoraNome
+        : "nova professora";
+    return `Plano transferido de ${anteriorNome} para ${novaNome}`;
   }
 
   return null;
