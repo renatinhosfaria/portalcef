@@ -39,6 +39,11 @@ export class AuthService {
       throw new UnauthorizedException("Credenciais invalidas");
     }
 
+    // Block inactive users with same generic message (defense against account enumeration)
+    if (user.inativadoEm !== null) {
+      throw new UnauthorizedException("Credenciais invalidas");
+    }
+
     // Create session with tenant context
     const token = await this.sessionService.createSession(
       user.id,
