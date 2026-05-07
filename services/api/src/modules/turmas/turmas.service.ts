@@ -12,11 +12,23 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
+import { PlanoAulaService } from "../plano-aula/plano-aula.service";
 import { CreateTurmaDto } from "./dto/create-turma.dto";
 import { UpdateTurmaDto } from "./dto/update-turma.dto";
 
+// ============================================
+// Types auxiliares para transações Drizzle
+// ============================================
+type DbInstance = ReturnType<typeof getDb>;
+type DbTransaction = Parameters<DbInstance["transaction"]>[0] extends (
+  tx: infer T,
+) => Promise<unknown>
+  ? T
+  : never;
+
 @Injectable()
 export class TurmasService {
+  constructor(private readonly planoAulaService: PlanoAulaService) {}
   /**
    * Lista todas as turmas com filtros opcionais
    *
@@ -249,13 +261,19 @@ export class TurmasService {
   }
 
   /**
-   * Atribui professora titular a uma turma
+   * Atribui ou altera professora titular de uma turma.
+   *
+   * Quando a turma já tem professora titular e a nova é diferente,
+   * abre uma transação que também transfere todos os planos de aula
+   * não-aprovados para a nova professora (via PlanoAulaService).
+   *
    * @throws NotFoundException se turma ou professora não existe
    * @throws BadRequestException se professora não pertence à mesma unidade/etapa
    */
   async assignProfessora(
     turmaId: string,
     professoraId: string,
+    ator: { userId: string; userName: string; userRole: string },
   ): Promise<Turma> {
     const db = getDb();
 
@@ -281,7 +299,6 @@ export class TurmasService {
       throw new BadRequestException("Usuário selecionado não é professora");
     }
 
-    // Verificar se professora pertence à mesma unidade e etapa
     if (professora.unitId !== turma.unitId) {
       throw new BadRequestException(
         "Professora deve pertencer à mesma unidade da turma",
@@ -294,14 +311,39 @@ export class TurmasService {
       );
     }
 
-    // Atualizar turma com a professora
-    const [updated] = await db
-      .update(turmas)
-      .set({ professoraId, updatedAt: new Date() })
-      .where(eq(turmas.id, turmaId))
-      .returning();
+    const professoraAnteriorId = turma.professoraId;
+    const houveTrocaReal =
+      professoraAnteriorId !== null &&
+      professoraAnteriorId !== professoraId;
 
-    return updated;
+    if (!houveTrocaReal) {
+      // Atribuição inicial ou mesma professora — não há planos para transferir
+      const [updated] = await db
+        .update(turmas)
+        .set({ professoraId, updatedAt: new Date() })
+        .where(eq(turmas.id, turmaId))
+        .returning();
+      return updated;
+    }
+
+    // Troca real: atualizar turma e transferir planos pendentes na mesma transação
+    return await db.transaction(async (tx: DbTransaction) => {
+      const [updated] = await tx
+        .update(turmas)
+        .set({ professoraId, updatedAt: new Date() })
+        .where(eq(turmas.id, turmaId))
+        .returning();
+
+      await this.planoAulaService.transferirPlanosPendentes(
+        tx,
+        turmaId,
+        professoraAnteriorId,
+        professoraId,
+        ator,
+      );
+
+      return updated;
+    });
   }
 
   /**
