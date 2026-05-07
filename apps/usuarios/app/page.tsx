@@ -16,15 +16,25 @@ type ApiUser = {
   schoolId?: string | null;
   unitId?: string | null;
   stageId?: string | null;
+  inativadoEm?: string | null;
+  inativadoPor?: string | null;
 };
-export default async function Page() {
+
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<{ inativos?: string }>;
+}) {
   const cookieStore = await cookies();
   const cookieString = cookieStore.toString();
+  const params = await searchParams;
+  const incluirInativos = params.inativos === "true";
 
   let users: UserSummary[] = [];
 
   try {
-    const fetchedUsers = await serverApi.get<ApiUser[]>("/api/users", {
+    const url = incluirInativos ? "/api/users?inativos=true" : "/api/users";
+    const fetchedUsers = await serverApi.get<ApiUser[]>(url, {
       cookies: cookieString,
     });
 
@@ -38,14 +48,13 @@ export default async function Page() {
       schoolId: user.schoolId ?? null,
       unitId: user.unitId ?? null,
       stageId: user.stageId ?? null,
-      status: "active",
-      lastActive: "N/A",
+      status: user.inativadoEm ? "inactive" : "active",
+      inativadoEm: user.inativadoEm ?? null,
+      lastActive: user.inativadoEm ?? "N/A",
     }));
   } catch (error) {
     console.error("Failed to fetch users:", error);
-    // In production, might want to redirect or show error state
-    // For now, returning empty list which will show "No users found"
   }
 
-  return <UsersPageContent users={users} />;
+  return <UsersPageContent users={users} incluirInativos={incluirInativos} />;
 }

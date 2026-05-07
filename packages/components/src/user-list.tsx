@@ -21,6 +21,8 @@ import {
   Ban,
   MoreHorizontal,
   Plus,
+  Power,
+  PowerOff,
   Search,
   SlidersHorizontal,
   Trash2,
@@ -71,9 +73,22 @@ interface UserListProps {
   onCreateClick: () => void;
   onEditClick: (user: UserSummary) => void;
   onDeleteClick: (user: UserSummary) => void;
+  onInativarClick: (user: UserSummary) => void;
+  onReativarClick: (user: UserSummary) => void;
+  incluirInativos: boolean;
+  onToggleInativos: (incluir: boolean) => void;
 }
 
-export function UserList({ users, onCreateClick, onEditClick, onDeleteClick }: UserListProps) {
+export function UserList({
+  users,
+  onCreateClick,
+  onEditClick,
+  onDeleteClick,
+  onInativarClick,
+  onReativarClick,
+  incluirInativos,
+  onToggleInativos,
+}: UserListProps) {
   const { role: currentUserRole } = useTenant();
   const [filter, setFilter] = useState("");
 
@@ -115,6 +130,15 @@ export function UserList({ users, onCreateClick, onEditClick, onDeleteClick }: U
               className="pl-9 pr-4 h-10 w-full sm:w-64 rounded-xl border border-slate-200 bg-white shadow-sm focus:ring-2 focus:ring-[#A3D154]/20 focus:border-[#A3D154] outline-none transition-all text-sm"
             />
           </div>
+          <label className="flex items-center gap-2 text-sm text-slate-600 px-3 py-2 rounded-xl border border-slate-200 bg-white shrink-0 cursor-pointer hover:bg-slate-50">
+            <input
+              type="checkbox"
+              checked={incluirInativos}
+              onChange={(e) => onToggleInativos(e.target.checked)}
+              className="rounded"
+            />
+            Mostrar inativos
+          </label>
           <Button variant="outline" size="icon" className="shrink-0 rounded-xl">
             <SlidersHorizontal className="w-4 h-4 text-slate-600" />
           </Button>
@@ -237,6 +261,23 @@ export function UserList({ users, onCreateClick, onEditClick, onDeleteClick }: U
                               <UserCog className="w-4 h-4 text-slate-500" />
                               Editar Dados
                             </DropdownMenuItem>
+                            {user.status === "active" ? (
+                              <DropdownMenuItem
+                                className="gap-2 cursor-pointer text-amber-700 focus:text-amber-800 bg-amber-50/50 hover:bg-amber-50"
+                                onClick={() => onInativarClick(user)}
+                              >
+                                <PowerOff className="w-4 h-4" />
+                                Inativar
+                              </DropdownMenuItem>
+                            ) : (
+                              <DropdownMenuItem
+                                className="gap-2 cursor-pointer text-emerald-700 focus:text-emerald-800 bg-emerald-50/50 hover:bg-emerald-50"
+                                onClick={() => onReativarClick(user)}
+                              >
+                                <Power className="w-4 h-4" />
+                                Reativar
+                              </DropdownMenuItem>
+                            )}
                             <DropdownMenuItem
                               className="gap-2 cursor-pointer text-red-600 focus:text-red-700 bg-red-50/50 hover:bg-red-50"
                               onClick={() => onDeleteClick(user)}
