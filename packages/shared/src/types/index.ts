@@ -199,7 +199,7 @@ export interface User {
   schoolId: string | null; // null for master
   unitId: string | null; // null for master and diretora_geral
   stageId: string | null; // null for non stage-scoped roles
-  inativadoEm: string | null;
+  inativadoEm: Date | null;
   inativadoPor: string | null;
   createdAt: Date;
   updatedAt: Date;

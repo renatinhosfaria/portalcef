@@ -1,5 +1,4 @@
 import { Test, TestingModule } from "@nestjs/testing";
-import { UnauthorizedException } from "@nestjs/common";
 import * as bcrypt from "bcrypt";
 
 import { AuthService } from "./auth.service";

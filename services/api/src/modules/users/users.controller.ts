@@ -450,6 +450,9 @@ export class UsersController {
       stageId: string | null;
     },
   ) {
+    const tenantError = await this.checkTenantScope(id, currentUser);
+    if (tenantError) return tenantError;
+
     const user = await this.usersService.inativar(id, currentUser);
     return {
       success: true,
@@ -471,10 +474,72 @@ export class UsersController {
       stageId: string | null;
     },
   ) {
+    const tenantError = await this.checkTenantScope(id, currentUser);
+    if (tenantError) return tenantError;
+
     const user = await this.usersService.reativar(id, currentUser);
     return {
       success: true,
       data: user,
     };
+  }
+
+  /**
+   * Verifica que o usuário-alvo (id) pertence ao escopo de tenant do ator.
+   * Reproduz o mesmo padrão usado em update/delete.
+   * Retorna objeto de erro se houver violação, ou null se ok.
+   */
+  private async checkTenantScope(
+    targetId: string,
+    currentUser: {
+      userId: string;
+      role: string;
+      schoolId: string;
+      unitId: string;
+      stageId: string | null;
+    },
+  ): Promise<{ success: false; error: { code: string; message: string } } | null> {
+    const target = await this.usersService.findById(targetId);
+    if (!target) {
+      return {
+        success: false,
+        error: { code: "NOT_FOUND", message: "Usuario nao encontrado" },
+      };
+    }
+
+    if (
+      currentUser.role !== "master" &&
+      target.schoolId !== currentUser.schoolId
+    ) {
+      return {
+        success: false,
+        error: { code: "FORBIDDEN", message: "Acesso negado" },
+      };
+    }
+
+    if (
+      currentUser.role !== "master" &&
+      currentUser.role !== "diretora_geral" &&
+      target.unitId !== currentUser.unitId
+    ) {
+      return {
+        success: false,
+        error: { code: "FORBIDDEN", message: "Acesso negado" },
+      };
+    }
+
+    if (
+      stageRequiredRoles.includes(
+        currentUser.role as (typeof stageRequiredRoles)[number],
+      ) &&
+      target.stageId !== currentUser.stageId
+    ) {
+      return {
+        success: false,
+        error: { code: "FORBIDDEN", message: "Acesso negado" },
+      };
+    }
+
+    return null;
   }
 }
