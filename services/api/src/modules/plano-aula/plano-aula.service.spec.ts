@@ -1,8 +1,27 @@
 import { BadRequestException } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
 
+import { PdfGeneratorService } from "../../common/sharepoint/pdf-generator.service";
+import { StorageService } from "../../common/storage/storage.service";
 import { PlanoAulaHistoricoService } from "./plano-aula-historico.service";
 import { PlanoAulaService } from "./plano-aula.service";
+
+const mockTx = {
+  query: {
+    planoAula: {
+      findMany: jest.fn(),
+    },
+    users: {
+      findMany: jest.fn(),
+    },
+  },
+  update: jest.fn().mockReturnThis(),
+  set: jest.fn().mockReturnThis(),
+  where: jest.fn().mockReturnThis(),
+  returning: jest.fn(),
+  insert: jest.fn().mockReturnThis(),
+  values: jest.fn().mockReturnThis(),
+};
 
 const mockDb = {
   query: {
@@ -12,11 +31,15 @@ const mockDb = {
     users: {
       findFirst: jest.fn(),
     },
+    planoAula: {
+      findMany: jest.fn(),
+    },
   },
   update: jest.fn().mockReturnThis(),
   set: jest.fn().mockReturnThis(),
   where: jest.fn().mockReturnThis(),
   returning: jest.fn(),
+  transaction: jest.fn(async (cb: (tx: typeof mockTx) => unknown) => cb(mockTx)),
 };
 
 jest.mock("@essencia/db", () => ({
@@ -28,7 +51,10 @@ jest.mock("@essencia/db", () => ({
   gte: jest.fn(),
   lte: jest.fn(),
   inArray: jest.fn(),
+  isNotNull: jest.fn(),
+  ne: jest.fn(),
   planoAula: {},
+  planoAulaHistorico: {},
   planoDocumento: {},
   documentoComentario: {},
   quinzenaConfig: {},
@@ -50,6 +76,9 @@ describe("PlanoAulaService", () => {
     stageId: null,
   };
 
+  const pdfGeneratorServiceMock = {};
+  const storageServiceMock = {};
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -57,6 +86,14 @@ describe("PlanoAulaService", () => {
         {
           provide: PlanoAulaHistoricoService,
           useValue: historicoServiceMock,
+        },
+        {
+          provide: PdfGeneratorService,
+          useValue: pdfGeneratorServiceMock,
+        },
+        {
+          provide: StorageService,
+          useValue: storageServiceMock,
         },
       ],
     }).compile();
@@ -147,6 +184,109 @@ describe("PlanoAulaService", () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (service as any).registrarImpressaoDocumento(usuarioLogado, "doc-2"),
       ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe("transferirPlanosPendentes", () => {
+    const ator = {
+      userId: "coord-1",
+      userName: "Coordenadora Ana",
+      userRole: "coordenadora_geral",
+    };
+
+    it("transfere planos não-aprovados, atualiza userId e cria histórico TRANSFERIDO", async () => {
+      // Planos pendentes da turma
+      mockTx.query.planoAula.findMany.mockResolvedValue([
+        { id: "plano-1", status: "RASCUNHO" },
+        { id: "plano-2", status: "DEVOLVIDO_ANALISTA" },
+      ]);
+
+      // Nomes das professoras
+      mockTx.query.users.findMany.mockResolvedValue([
+        { id: "prof-antiga", name: "Maria da Silva" },
+        { id: "prof-nova", name: "Joana Souza" },
+      ]);
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = await (service as any).transferirPlanosPendentes(
+        mockTx,
+        "turma-1",
+        "prof-antiga",
+        "prof-nova",
+        ator,
+      );
+
+      expect(result.planosTransferidos).toEqual(["plano-1", "plano-2"]);
+      // Confirma UPDATE
+      expect(mockTx.update).toHaveBeenCalled();
+      expect(mockTx.set).toHaveBeenCalledWith(
+        expect.objectContaining({ userId: "prof-nova" }),
+      );
+      // Confirma INSERT no histórico — uma chamada por plano transferido
+      expect(mockTx.insert).toHaveBeenCalledTimes(2);
+      expect(mockTx.values).toHaveBeenCalledWith(
+        expect.objectContaining({
+          planoId: "plano-1",
+          userId: "coord-1",
+          userName: "Coordenadora Ana",
+          userRole: "coordenadora_geral",
+          acao: "TRANSFERIDO",
+          statusAnterior: "RASCUNHO",
+          statusNovo: "RASCUNHO",
+          detalhes: expect.objectContaining({
+            professoraAnteriorId: "prof-antiga",
+            professoraAnteriorNome: "Maria da Silva",
+            novaProfessoraId: "prof-nova",
+            novaProfessoraNome: "Joana Souza",
+            motivo: "troca_titular_turma",
+          }),
+        }),
+      );
+    });
+
+    it("retorna lista vazia e não cria histórico quando turma não tem planos pendentes", async () => {
+      mockTx.query.planoAula.findMany.mockResolvedValue([]);
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = await (service as any).transferirPlanosPendentes(
+        mockTx,
+        "turma-1",
+        "prof-antiga",
+        "prof-nova",
+        ator,
+      );
+
+      expect(result.planosTransferidos).toEqual([]);
+      expect(mockTx.update).not.toHaveBeenCalled();
+      expect(mockTx.insert).not.toHaveBeenCalled();
+    });
+
+    it("chama findMany com filtro WHERE para excluir APROVADOS", async () => {
+      mockTx.query.planoAula.findMany.mockResolvedValue([
+        { id: "plano-1", status: "RASCUNHO" },
+      ]);
+      mockTx.query.users.findMany.mockResolvedValue([
+        { id: "prof-antiga", name: "Maria" },
+        { id: "prof-nova", name: "Joana" },
+      ]);
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (service as any).transferirPlanosPendentes(
+        mockTx,
+        "turma-1",
+        "prof-antiga",
+        "prof-nova",
+        ator,
+      );
+
+      expect(mockTx.query.planoAula.findMany).toHaveBeenCalledTimes(1);
+      expect(mockTx.query.planoAula.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          columns: expect.objectContaining({ id: true, status: true }),
+        }),
+      );
+      const callArg = mockTx.query.planoAula.findMany.mock.calls[0][0];
+      expect(callArg).toHaveProperty("where");
     });
   });
 });

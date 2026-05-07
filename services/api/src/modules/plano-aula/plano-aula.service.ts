@@ -10,12 +10,14 @@ import {
   and,
   eq,
   or,
+  ne,
   desc,
   gte,
   lte,
   inArray,
   isNotNull,
   planoAula,
+  planoAulaHistorico,
   planoDocumento,
   documentoComentario,
   quinzenaConfig,
@@ -42,6 +44,16 @@ import {
   isGestao,
   getSegmentosPermitidos,
 } from "./dto/plano-aula.dto";
+
+// ============================================
+// Types auxiliares para transações Drizzle
+// ============================================
+type DbInstance = ReturnType<typeof getDb>;
+type DbTransaction = Parameters<DbInstance["transaction"]>[0] extends (
+  tx: infer T,
+) => Promise<unknown>
+  ? T
+  : never;
 
 // ============================================
 // Types
@@ -1604,4 +1616,85 @@ export class PlanoAulaService {
       .where(eq(planoDocumento.id, documentoId));
   }
 
+  /**
+   * Transfere todos os planos não-aprovados de uma turma para uma nova professora.
+   * Usado quando a professora titular da turma é trocada (assignProfessora).
+   *
+   * Mantém planos APROVADOS com a autora original (registro histórico fiel).
+   * Cria uma linha em plano_aula_historico para cada plano transferido.
+   *
+   * Deve ser chamado dentro de uma transação Drizzle (tx) iniciada pelo TurmasService.
+   *
+   * @param tx Transação Drizzle ativa
+   * @param turmaId Turma cuja titular foi trocada
+   * @param professoraAnteriorId Professora que estava na turma
+   * @param novaProfessoraId Nova professora titular
+   * @param ator Usuário que disparou a operação (normalmente coordenadora)
+   * @returns Lista de IDs de planos transferidos
+   */
+  async transferirPlanosPendentes(
+    tx: DbTransaction,
+    turmaId: string,
+    professoraAnteriorId: string,
+    novaProfessoraId: string,
+    ator: { userId: string; userName: string; userRole: string },
+  ): Promise<{ planosTransferidos: string[] }> {
+    // 1. Buscar planos pendentes da turma (status != APROVADO)
+    const planosPendentes: Array<{ id: string; status: PlanoAulaStatus }> =
+      await tx.query.planoAula.findMany({
+        where: and(
+          eq(planoAula.turmaId, turmaId),
+          ne(planoAula.status, "APROVADO"),
+        ),
+        columns: { id: true, status: true },
+      });
+
+    if (planosPendentes.length === 0) {
+      return { planosTransferidos: [] };
+    }
+
+    const planoIds = planosPendentes.map((p) => p.id);
+
+    // 2. Atualizar userId nos planos
+    await tx
+      .update(planoAula)
+      .set({ userId: novaProfessoraId, updatedAt: new Date() })
+      .where(inArray(planoAula.id, planoIds));
+
+    // 3. Buscar nomes das professoras (para histórico denormalizado)
+    const usuariosEnvolvidos: Array<{ id: string; name: string | null }> =
+      await tx.query.users.findMany({
+        where: inArray(users.id, [professoraAnteriorId, novaProfessoraId]),
+        columns: { id: true, name: true },
+      });
+
+    const nomeAnterior =
+      usuariosEnvolvidos.find((u) => u.id === professoraAnteriorId)?.name ??
+      "Professora anterior";
+    const nomeNovo =
+      usuariosEnvolvidos.find((u) => u.id === novaProfessoraId)?.name ??
+      "Nova professora";
+
+    // 4. Inserir histórico TRANSFERIDO para cada plano
+    for (const plano of planosPendentes) {
+      await tx.insert(planoAulaHistorico).values({
+        planoId: plano.id,
+        userId: ator.userId,
+        userName: ator.userName,
+        userRole: ator.userRole,
+        acao: "TRANSFERIDO",
+        statusAnterior: plano.status,
+        statusNovo: plano.status,
+        detalhes: {
+          professoraAnteriorId,
+          professoraAnteriorNome: nomeAnterior,
+          novaProfessoraId,
+          novaProfessoraNome: nomeNovo,
+          motivo: "troca_titular_turma",
+        },
+      });
+    }
+
+    return { planosTransferidos: planoIds };
+  }
 }
