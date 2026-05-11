@@ -184,17 +184,20 @@ export class EventoInscricoesService {
       throw new Error("Falha ao gerar número de inscrição único");
     }
 
-    // Inserir filhos
-    const filhosInseridos = await this.db
-      .insert(eventoInscricaoFilhos)
-      .values(
-        dto.filhos.map((f) => ({
-          inscricaoId: inscricao.id,
-          nomeFilho: f.nome,
-          turmaFilho: f.turma,
-        })),
-      )
-      .returning();
+    // Inserir filhos (array pode ser vazio para convidadas externas)
+    const filhosInseridos =
+      dto.filhos.length > 0
+        ? await this.db
+            .insert(eventoInscricaoFilhos)
+            .values(
+              dto.filhos.map((f) => ({
+                inscricaoId: inscricao!.id,
+                nomeFilho: f.nome,
+                turmaFilho: f.turma,
+              })),
+            )
+            .returning()
+        : [];
 
     this.logger.log(
       `Nova inscrição: evento=${eventoSlug} numero=${inscricao.numeroInscricao} cpf=${dto.cpf} filhos=${dto.filhos.length}`,
