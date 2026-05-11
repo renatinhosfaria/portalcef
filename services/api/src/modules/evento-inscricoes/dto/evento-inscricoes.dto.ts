@@ -51,7 +51,7 @@ export const criarInscricaoSchema = z.object({
         }),
       }),
     )
-    .min(1, "Informe pelo menos um filho")
+    .min(0)
     .max(10, "Limite de filhos por inscrição: 10"),
 });
 
