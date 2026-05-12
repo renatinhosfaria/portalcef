@@ -1,0 +1,637 @@
+# Landing Page para Convidadas — Mãe por Inteiro
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Criar `landing-mae-por-inteiro/convidada.html` — versão da landing page principal adaptada para convidadas externas ao colégio.
+
+**Architecture:** Arquivo HTML estático, cópia do `index.html` com 4 ajustes de conteúdo: meta tags, seção de público, caixa exclusiva e botão de inscrição. Nenhuma alteração em arquivos existentes.
+
+**Tech Stack:** HTML estático, Docker (nginx alpine), mesmo `style.css` e `script.js` do original.
+
+---
+
+## Arquivos
+
+| Ação | Arquivo |
+|------|---------|
+| Criar | `landing-mae-por-inteiro/convidada.html` |
+
+---
+
+## Task 1: Criar `convidada.html`
+
+**Files:**
+- Criar: `landing-mae-por-inteiro/convidada.html`
+
+- [ ] **Step 1: Criar o arquivo**
+
+Criar `landing-mae-por-inteiro/convidada.html` com o conteúdo abaixo (é o `index.html` com os 4 ajustes aplicados):
+
+```html
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <base href="/evento-mae-por-inteiro/">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="🌷 Mãe por Inteiro — 16 de Maio, 09h, no Auditório do Parque Una (Uberlândia). Você foi convidada para um encontro especial. Vagas exclusivas.">
+  <meta name="keywords" content="evento mães, maternidade, educação infantil, Parque Una, mãe por inteiro, Colégio Essência Feliz, Uberlândia">
+
+  <!-- Open Graph (WhatsApp, Facebook, LinkedIn) -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Colégio Essência Feliz">
+  <meta property="og:locale" content="pt_BR">
+  <meta property="og:url" content="https://www.portalcef.com.br/evento-mae-por-inteiro/convidada.html">
+  <meta property="og:title" content="🌷 Mãe por Inteiro — Amor, Propósito & Vida Real">
+  <meta property="og:description" content="16 de Maio · 09h · Auditório do Parque Una, Uberlândia. Você recebeu um convite especial para este encontro.">
+  <meta property="og:image" content="https://www.portalcef.com.br/evento-mae-por-inteiro/assets/img/og-card.jpg">
+  <meta property="og:image:secure_url" content="https://www.portalcef.com.br/evento-mae-por-inteiro/assets/img/og-card.jpg">
+  <meta property="og:image:type" content="image/jpeg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Mãe por Inteiro — encontro 16 de Maio às 9h no Parque Una.">
+
+  <!-- Twitter / X -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="🌷 Mãe por Inteiro — Amor, Propósito & Vida Real">
+  <meta name="twitter:description" content="16 de Maio · 09h · Auditório do Parque Una, Uberlândia. Você foi convidada para este encontro especial.">
+  <meta name="twitter:image" content="https://www.portalcef.com.br/evento-mae-por-inteiro/assets/img/og-card.jpg">
+  <meta name="twitter:image:alt" content="Mãe por Inteiro — encontro 16 de Maio às 9h no Parque Una.">
+
+  <title>Mãe por Inteiro — Amor, Propósito e Vida Real</title>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Inter:wght@300;400;500;600;700&family=Allura&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Lora:ital,wght@0,400..700;1,400..700&display=swap" rel="stylesheet">
+
+  <!-- GSAP -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <link rel="stylesheet" href="style.css?v=20260505-deadline-13-05">
+</head>
+<body>
+
+  <!-- ═══════════════════════════════════════ -->
+  <!-- NAVBAR                                  -->
+  <!-- ═══════════════════════════════════════ -->
+  <nav class="navbar" id="navbar">
+    <div class="nav-container">
+      <a href="#hero" class="nav-logo">
+        <span class="logo-icon">🌷</span>
+        <span class="logo-text">Mãe por Inteiro</span>
+      </a>
+      <div class="nav-links" id="navLinks">
+        <a href="#sobre" class="nav-link">Sobre</a>
+        <a href="#temas" class="nav-link">Propósito</a>
+        <a href="#palestrantes" class="nav-link">Palestrantes</a>
+        <a href="#info" class="nav-link">Informações</a>
+        <a href="#inscricao" class="nav-cta">Inscreva-se</a>
+      </div>
+      <button class="nav-toggle" id="navToggle" aria-label="Menu">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- ═══════════════════════════════════════ -->
+  <!-- HERO                                    -->
+  <!-- ═══════════════════════════════════════ -->
+  <section class="hero" id="hero">
+    <div class="hero-bg-image"></div>
+    <div class="hero-overlay"></div>
+    <canvas id="particleCanvas" class="particle-canvas"></canvas>
+
+    <div class="hero-content">
+      <div class="hero-badge" data-animate="fade-down">
+        <span class="badge-dot"></span>
+        16 de Maio · 09h · Parque Una
+      </div>
+      <h1 class="hero-title" data-animate="fade-up">
+        <span class="title-script">Mãe por Inteiro</span>
+        <span class="title-sub">amor, propósito e vida real</span>
+      </h1>
+      <div class="hero-actions" data-animate="fade-up" data-delay="0.4">
+        <a href="#inscricao" class="btn btn-primary btn-glow">
+          <span>Garanta sua Vaga</span>
+          <i data-lucide="arrow-right"></i>
+        </a>
+        <a href="#sobre" class="btn btn-outline">
+          <i data-lucide="play-circle"></i>
+          <span>Saiba Mais</span>
+        </a>
+      </div>
+      <div class="hero-stats" data-animate="fade-up" data-delay="0.6">
+        <div class="stat">
+          <span class="stat-number" data-count="100">0</span>
+          <span class="stat-label">Vagas</span>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="stat">
+          <span class="stat-number" data-count="5">0</span>
+          <span class="stat-label">Palestrantes</span>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="stat">
+          <span class="stat-number">3h</span>
+          <span class="stat-label">de Conexão</span>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="stat">
+          <span class="stat-number">100%</span>
+          <span class="stat-label">Gratuito</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="hero-scroll">
+      <a href="#sobre">
+        <i data-lucide="chevrons-down"></i>
+      </a>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════ -->
+  <!-- SOBRE                                   -->
+  <!-- ═══════════════════════════════════════ -->
+  <section class="section section-about" id="sobre">
+    <div class="container">
+      <div class="section-header" data-animate="fade-up">
+        <span class="section-tag">✨ O Propósito</span>
+        <h2 class="section-title">Um encontro leve, verdadeiro<br><em>e feito para você</em></h2>
+      </div>
+
+      <div class="about-grid">
+        <div class="about-card about-card-main" data-animate="fade-right">
+          <div class="about-card-inner">
+            <div class="about-icon">💛</div>
+            <p class="about-text">
+              Ser mãe é viver uma das experiências mais transformadoras da vida. É aprender todos os dias, crescer, se reinventar… e construir histórias cheias de amor.
+            </p>
+            <p class="about-text">
+              E que tal viver um momento só seu, para trocar experiências, aprender e se fortalecer junto com outras mães que vivem a mesma realidade que você?
+            </p>
+            <p class="about-text">
+              Foi com esse propósito que nasceu o <strong>Mãe por Inteiro</strong>.
+            </p>
+          </div>
+        </div>
+
+        <div class="about-card about-card-highlight" data-animate="fade-left">
+          <div class="about-card-inner">
+            <div class="about-quote-mark">"</div>
+            <p class="about-quote">
+              Se você faz parte da nossa escola e está vivendo essa fase, esse encontro foi pensado especialmente para você 💛
+            </p>
+            <div class="about-quote-author">— Colégio Essência Feliz</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════ -->
+  <!-- TEMAS / SOBRE O EVENTO                  -->
+  <!-- ═══════════════════════════════════════ -->
+  <section class="section section-topics" id="temas">
+    <div class="container">
+      <div class="section-header" data-animate="fade-up">
+        <span class="section-tag">✨ Sobre o Evento</span>
+        <h2 class="section-title">O que vamos promover<br><em>neste encontro especial</em></h2>
+      </div>
+
+      <div class="topics-grid">
+        <div class="topic-card" data-animate="fade-up" data-delay="0">
+          <div class="topic-icon-wrap">
+            <i data-lucide="users"></i>
+          </div>
+          <h3 class="topic-title">Trocas Reais</h3>
+          <p class="topic-desc">Trocas reais entre mães da nossa comunidade</p>
+          <div class="topic-glow"></div>
+        </div>
+
+        <div class="topic-card" data-animate="fade-up" data-delay="0.1">
+          <div class="topic-icon-wrap">
+            <i data-lucide="scale"></i>
+          </div>
+          <h3 class="topic-title">Reflexões</h3>
+          <p class="topic-desc">Reflexões sobre maternidade, propósito e equilíbrio</p>
+          <div class="topic-glow"></div>
+        </div>
+
+        <div class="topic-card" data-animate="fade-up" data-delay="0.2">
+          <div class="topic-icon-wrap">
+            <i data-lucide="heart-handshake"></i>
+          </div>
+          <h3 class="topic-title">Conexão</h3>
+          <p class="topic-desc">Conexão com outras mães que vivem a mesma fase</p>
+          <div class="topic-glow"></div>
+        </div>
+
+        <div class="topic-card" data-animate="fade-up" data-delay="0.3">
+          <div class="topic-icon-wrap">
+            <i data-lucide="gift"></i>
+          </div>
+          <h3 class="topic-title">Brindes</h3>
+          <p class="topic-desc">Brindes preparados com carinho para cada mãe</p>
+          <div class="topic-glow"></div>
+        </div>
+
+        <div class="topic-card" data-animate="fade-up" data-delay="0.4">
+          <div class="topic-icon-wrap">
+            <i data-lucide="sparkles"></i>
+          </div>
+          <h3 class="topic-title">Sorteios</h3>
+          <p class="topic-desc">Sorteios especiais durante o encontro</p>
+          <div class="topic-glow"></div>
+        </div>
+      </div>
+
+      <p class="topics-footer" data-animate="fade-up">
+        Será um momento de bate-papo enriquecedor, com especialistas e mães que vivem na prática a maternidade.
+      </p>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════ -->
+  <!-- PÚBLICO                                 -->
+  <!-- ═══════════════════════════════════════ -->
+  <section class="section section-audience" id="publico">
+    <div class="container">
+      <div class="section-header" data-animate="fade-up">
+        <span class="section-tag">💌 Seu convite especial</span>
+        <h2 class="section-title">Temos a honra de <em>recebê-la</em></h2>
+      </div>
+
+      <div class="audience-content" data-animate="fade-up">
+        <div class="audience-card">
+          <div class="audience-card-inner">
+            <p class="audience-intro">
+              Você recebeu um <strong>convite especial</strong> para participar do Mãe por Inteiro.
+            </p>
+            <p class="audience-cta-text" style="margin-top: 20px;">
+              Este encontro foi pensado com carinho e temos a honra de tê-la conosco neste dia especial 💛
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════ -->
+  <!-- PALESTRANTES                            -->
+  <!-- ═══════════════════════════════════════ -->
+  <section class="section section-speakers" id="palestrantes">
+    <div class="container">
+      <div class="section-header" data-animate="fade-up">
+        <span class="section-tag">🎤 Um talk com especialistas</span>
+        <h2 class="section-title">Profissionais e mães<br><em>experiências reais</em></h2>
+        <p style="margin-top:20px; font-size:1.1rem; color:var(--text-light); max-width:700px; margin-inline:auto;">
+          Você vai participar de um talk dinâmico e envolvente, com profissionais experientes e mães que vivem a maternidade na prática.<br>
+          Teremos a presença de psicólogas, especialistas em desenvolvimento infantil, educadoras e mães reais.<br>
+          <strong>Tudo isso em um formato leve, acessível e cheio de conexão.</strong>
+        </p>
+      </div>
+
+      <div class="speakers-grid" style="margin-top: 50px;">
+
+        <!-- Daviane -->
+        <div class="speaker-card" data-animate="fade-up" data-delay="0">
+          <div class="speaker-image-wrap">
+            <img src="assets/img/Daviane.jpeg" alt="Daviane Vieira" class="speaker-image speaker-image-daviane" loading="lazy">
+            <div class="speaker-image-ring"></div>
+          </div>
+          <div class="speaker-info">
+            <h3 class="speaker-name">Daviane Vieira</h3>
+            <span class="speaker-role">Pedagoga · Especialista na formação de crianças</span>
+            <p class="speaker-bio">
+              Empresária na área da educação há mais de 20 anos, pedagoga e especialista na 
+              formação de crianças. Traz uma visão prática e estratégica sobre o desenvolvimento 
+              dos filhos e o papel da família.
+            </p>
+          </div>
+        </div>
+
+        <!-- Luiza -->
+        <div class="speaker-card" data-animate="fade-up" data-delay="0.1">
+          <div class="speaker-image-wrap">
+            <img src="assets/img/Luiza.jpeg" alt="Luiza Moraes" class="speaker-image speaker-image-luiza" loading="lazy">
+            <div class="speaker-image-ring"></div>
+          </div>
+          <div class="speaker-info">
+            <h3 class="speaker-name">Luiza Moraes</h3>
+            <span class="speaker-role">Mãe de Três · Empresária</span>
+            <p class="speaker-bio">
+              Compartilha, de forma leve e verdadeira, a realidade de conciliar 
+              maternidade e vida profissional.
+            </p>
+          </div>
+        </div>
+
+        <!-- Dayane -->
+        <div class="speaker-card" data-animate="fade-up" data-delay="0.2">
+          <div class="speaker-image-wrap">
+            <img src="assets/img/Dayane.jpeg" alt="Dayane Caroline" class="speaker-image speaker-image-dayane" loading="lazy">
+            <div class="speaker-image-ring"></div>
+          </div>
+          <div class="speaker-info">
+            <h3 class="speaker-name">Dayane Caroline</h3>
+            <span class="speaker-role">Psicóloga Clínica · Mãe de Três</span>
+            <p class="speaker-bio">
+              Psicóloga clínica com mais de 12 anos de experiência em saúde mental.
+              Mãe de três filhos, traz uma abordagem sensível sobre equilíbrio emocional e maternidade.
+            </p>
+          </div>
+        </div>
+
+        <!-- Andreza -->
+        <div class="speaker-card" data-animate="fade-up" data-delay="0.3">
+          <div class="speaker-image-wrap">
+            <img src="assets/img/Andreza.jpeg" alt="Andreza Lima" class="speaker-image speaker-image-andreza" loading="lazy">
+            <div class="speaker-image-ring"></div>
+          </div>
+          <div class="speaker-info">
+            <h3 class="speaker-name">Andreza Lima</h3>
+            <span class="speaker-role">Psicóloga · Pedagoga</span>
+            <p class="speaker-bio">
+              Com atuação em desenvolvimento emocional. Ajuda mães a lidarem com emoções, ansiedade e fortalecimento dos vínculos familiares.
+            </p>
+          </div>
+        </div>
+
+        <!-- Patrícia -->
+        <div class="speaker-card" data-animate="fade-up" data-delay="0.4">
+          <div class="speaker-image-wrap">
+            <img src="assets/img/Patricia.jpeg" alt="Patrícia Aline Silva" class="speaker-image speaker-image-patricia" loading="lazy">
+            <div class="speaker-image-ring"></div>
+          </div>
+          <div class="speaker-info">
+            <h3 class="speaker-name">Patrícia Aline Silva</h3>
+            <span class="speaker-role">Pedagoga · Neuropsicopedagoga</span>
+            <p class="speaker-bio">
+              Com mais de 15 anos de experiência, é referência em alfabetização e desenvolvimento infantil.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════ -->
+  <!-- SURPRESAS / MOMENTO SÓ SEU              -->
+  <!-- ═══════════════════════════════════════ -->
+  <section class="section section-surprises" id="surpresas">
+    <div class="container surprises-grid">
+      
+      <div class="surprise-card" data-animate="fade-up">
+        <span class="section-tag">🎁 Surpresas</span>
+        <h3 class="surprise-title">Um momento especial<br>preparado para você</h3>
+        <ul class="surprise-list">
+          <li class="surprise-item"><i data-lucide="gift" class="surprise-icon"></i> Sorteios especiais</li>
+          <li class="surprise-item"><i data-lucide="sparkles" class="surprise-icon"></i> Brindes preparados com carinho</li>
+        </ul>
+        <p class="surprise-note">Porque esse momento também é sobre cuidar de você 💛</p>
+      </div>
+
+      <div class="surprise-card" data-animate="fade-up" data-delay="0.2">
+        <span class="section-tag">💛 Cuide-se</span>
+        <h3 class="surprise-title">Um momento só seu</h3>
+        <p class="surprise-text">Esse encontro foi pensado para que você tenha um tempo de qualidade com você mesma. Por isso, <strong>não teremos estrutura para receber crianças no local</strong>.</p>
+        <p class="surprise-text">Nossa intenção é que você consiga se desconectar um pouco da rotina e viver esse momento com leveza.</p>
+        <p class="surprise-note">Se possível, organize-se para deixar seu filho com o papai, com a vovó ou alguém de confiança — e permita-se viver essa experiência por completo 💛</p>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════ -->
+  <!-- INFORMAÇÕES DO EVENTO                   -->
+  <!-- ═══════════════════════════════════════ -->
+  <section class="section section-info" id="info">
+    <div class="container">
+      <div class="section-header" data-animate="fade-up">
+        <span class="section-tag">📅 Informações do Evento</span>
+        <h2 class="section-title">Quando e onde<br><em>nos encontramos</em></h2>
+      </div>
+
+      <div class="info-grid">
+        <div class="info-card" data-animate="fade-up" data-delay="0">
+          <div class="info-icon-wrap">
+            <i data-lucide="map-pin"></i>
+          </div>
+          <h3 class="info-label">Local</h3>
+          <p class="info-value">Auditório do Parque Una</p>
+          <span class="info-detail">R. Nininha Rocha, 125 — Gávea<br>Uberlândia – MG · 38411-852</span>
+        </div>
+
+        <div class="info-card" data-animate="fade-up" data-delay="0.1">
+          <div class="info-icon-wrap">
+            <i data-lucide="calendar-heart"></i>
+          </div>
+          <h3 class="info-label">Data</h3>
+          <p class="info-value">16 de Maio</p>
+          <span class="info-detail">Sábado</span>
+        </div>
+
+        <div class="info-card" data-animate="fade-up" data-delay="0.2">
+          <div class="info-icon-wrap">
+            <i data-lucide="clock"></i>
+          </div>
+          <h3 class="info-label">Horário</h3>
+          <p class="info-value">9h às 12h</p>
+          <span class="info-detail">3 horas de evento</span>
+        </div>
+
+        <div class="info-card" data-animate="fade-up" data-delay="0.3">
+          <div class="info-icon-wrap">
+            <i data-lucide="users"></i>
+          </div>
+          <h3 class="info-label">Público</h3>
+          <p class="info-value" style="font-size:1.1rem;margin-top:10px;">Convidadas especiais</p>
+          <span class="info-detail info-alert" style="margin-top:10px;">⚠️ Vagas limitadas</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════ -->
+  <!-- POR QUE PARTICIPAR                      -->
+  <!-- ═══════════════════════════════════════ -->
+  <section class="section section-why" id="porque">
+    <div class="container">
+      <div class="why-content" data-animate="fade-up">
+        <span class="section-tag">💛 Por que participar?</span>
+        <h2 class="why-title">Motivos para <em>estar presente</em></h2>
+        <div class="why-reasons" style="text-align: left; max-width: 600px; margin: 0 auto;">
+          <div class="why-reason">
+            <span class="why-icon">✔</span>
+            <p>Para trocar experiências com mães da nossa comunidade</p>
+          </div>
+          <div class="why-reason">
+            <span class="why-icon">✔</span>
+            <p>Para ouvir especialistas de forma leve e prática</p>
+          </div>
+          <div class="why-reason">
+            <span class="why-icon">✔</span>
+            <p>Para se conectar ainda mais com o Colégio e outras famílias</p>
+          </div>
+          <div class="why-reason">
+            <span class="why-icon">✔</span>
+            <p>Para viver um momento especial na sua rotina</p>
+          </div>
+        </div>
+
+        <div class="exclusive-box">
+          <h3 class="exclusive-title">💛 Convite Especial</h3>
+          <p class="exclusive-text">
+            Você foi convidada especialmente pela equipe do Colégio Essência Feliz.
+          </p>
+          <p class="exclusive-text" style="margin-top:10px;">
+            Sua presença é muito especial para nós e estamos felizes em compartilhar esse momento com você 💛
+          </p>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════ -->
+  <!-- INSCRIÇÃO (CTA)                         -->
+  <!-- ═══════════════════════════════════════ -->
+  <section class="section section-cta" id="inscricao">
+    <div class="container">
+      <div class="cta-card" data-animate="fade-up">
+        <div class="cta-badge">🎟️ Inscrição 100% Gratuita</div>
+        <h2 class="cta-title">Garanta sua vaga<br><em>agora mesmo</em></h2>
+        <p class="cta-desc">
+          As vagas são limitadas. Confirme sua presença neste encontro especial.
+        </p>
+        <p class="cta-deadline">
+          <i data-lucide="clock" style="width:16px;height:16px;display:inline-block;vertical-align:-3px;margin-right:6px;color:var(--rose-deep);"></i>
+          <strong>Inscrições até 13/05/2026 às 23h59</strong>
+          <span style="display:block;font-size:.8rem;opacity:.7;margin-top:2px;">horário de Brasília</span>
+        </p>
+        <a href="inscricao-convidada.html" class="btn btn-primary btn-glow btn-large" id="btnInscrever">
+          <span>Clique Aqui para se Inscrever</span>
+          <i data-lucide="arrow-right"></i>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════ -->
+  <!-- COUNTDOWN                               -->
+  <!-- ═══════════════════════════════════════ -->
+  <section class="section section-countdown" id="countdown">
+    <div class="container">
+      <h3 id="countdownLabel" class="countdown-label" data-animate="fade-up">As inscrições encerram em:</h3>
+      <p class="countdown-deadline" data-animate="fade-up">13 de Maio de 2026 · até 23h59</p>
+      <div class="countdown-timer" id="countdownTimer" data-animate="fade-up">
+        <div class="countdown-unit">
+          <span class="countdown-number" id="countDays">00</span>
+          <span class="countdown-text">Dias</span>
+        </div>
+        <div class="countdown-separator">:</div>
+        <div class="countdown-unit">
+          <span class="countdown-number" id="countHours">00</span>
+          <span class="countdown-text">Horas</span>
+        </div>
+        <div class="countdown-separator">:</div>
+        <div class="countdown-unit">
+          <span class="countdown-number" id="countMinutes">00</span>
+          <span class="countdown-text">Minutos</span>
+        </div>
+        <div class="countdown-separator">:</div>
+        <div class="countdown-unit">
+          <span class="countdown-number" id="countSeconds">00</span>
+          <span class="countdown-text">Segundos</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════ -->
+  <!-- FOOTER                                  -->
+  <!-- ═══════════════════════════════════════ -->
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-content">
+        <div class="footer-brand">
+          <span class="logo-icon">🌷</span>
+          <span class="footer-brand-text">Mãe por Inteiro</span>
+        </div>
+        <p class="footer-tagline">
+          ✨ Um encontro preparado com propósito, carinho e conexão<br>
+          para fortalecer ainda mais a nossa comunidade 💛
+        </p>
+        <div class="footer-divider"></div>
+        <p class="footer-copy">© 2026 Mãe por Inteiro. Todos os direitos reservados.</p>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Back to Top -->
+  <button class="back-to-top" id="backToTop" aria-label="Voltar ao topo">
+    <i data-lucide="chevron-up"></i>
+  </button>
+
+  <script src="script.js?v=20260505-deadline-13-05"></script>
+</body>
+</html>
+```
+
+- [ ] **Step 2: Verificar os 4 ajustes no arquivo criado**
+
+Confirmar que o arquivo contém exatamente:
+
+1. `<meta name="description" content="...Você foi convidada para um encontro especial...">` — meta tags de convite
+2. `<section class="section section-audience" id="publico">` com `section-tag` = `"💌 Seu convite especial"` e sem listagem de turmas
+3. `<div class="exclusive-box">` com título `"💛 Convite Especial"` (sem texto de restrição)
+4. `<a href="inscricao-convidada.html"` no botão de inscrição (sem o bloco `⚠️ Importante` abaixo)
+
+```bash
+grep -n "Você foi convidada para um encontro especial" landing-mae-por-inteiro/convidada.html
+grep -n "inscricao-convidada.html" landing-mae-por-inteiro/convidada.html
+grep -n "Convite Especial" landing-mae-por-inteiro/convidada.html
+grep -n "Seu convite especial" landing-mae-por-inteiro/convidada.html
+```
+
+Esperado: cada grep retorna exatamente 1 resultado.
+
+- [ ] **Step 3: Confirmar que texto de restrição foi removido**
+
+```bash
+grep -n "exclusivo para mães do Colégio Essência Feliz" landing-mae-por-inteiro/convidada.html
+grep -n "convidados externos ou terceiros" landing-mae-por-inteiro/convidada.html
+grep -n "inscricao.html" landing-mae-por-inteiro/convidada.html
+```
+
+Esperado: todos retornam **0 resultados**.
+
+- [ ] **Step 4: Rebuild e redeploy do container da landing page**
+
+```bash
+docker compose -f /var/www/essencia/docker-compose.prod.yml build landing-mae
+docker compose -f /var/www/essencia/docker-compose.prod.yml up -d landing-mae
+```
+
+Esperado: container recriado sem erros.
+
+- [ ] **Step 5: Confirmar que o arquivo está no container**
+
+```bash
+docker exec essencia-landing-mae ls /usr/share/nginx/html/evento-mae-por-inteiro/ | grep convidada
+```
+
+Esperado: `convidada.html`
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add landing-mae-por-inteiro/convidada.html
+git commit -m "feat(landing): landing page para convidadas externas — Mãe por Inteiro"
+```
