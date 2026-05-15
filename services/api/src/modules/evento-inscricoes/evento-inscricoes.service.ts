@@ -1,9 +1,11 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
 } from "@nestjs/common";
 import {
   and,
@@ -12,11 +14,14 @@ import {
   eq,
   ilike,
   inArray,
+  isNotNull,
   or,
   sql,
   eventoInscricoes,
   eventoInscricaoFilhos,
+  eventoSorteios,
   type EventoInscricao,
+  type EventoSorteio,
 } from "@essencia/db";
 
 import { DatabaseService } from "../../common/database/database.service";
@@ -31,6 +36,19 @@ export interface InscricaoComFilhos extends EventoInscricao {
     nome: string;
     turma: string;
   }>;
+}
+
+export interface SorteioEvento {
+  id: string;
+  eventoSlug: string;
+  brinde: string;
+  inscricaoId: string;
+  numeroInscricao: string;
+  nome: string;
+  telefone: string;
+  email: string;
+  sorteadoEm: Date;
+  sorteadoPor: string | null;
 }
 
 /**
@@ -51,6 +69,42 @@ export class EventoInscricoesService {
 
   private get db() {
     return this.databaseService.db;
+  }
+
+  private async listarFilhos(
+    inscricaoId: string,
+  ): Promise<InscricaoComFilhos["filhos"]> {
+    const filhos = await this.db
+      .select()
+      .from(eventoInscricaoFilhos)
+      .where(eq(eventoInscricaoFilhos.inscricaoId, inscricaoId))
+      .orderBy(asc(eventoInscricaoFilhos.createdAt));
+
+    return filhos.map(
+      (f: { id: string; nomeFilho: string; turmaFilho: string }) => ({
+        id: f.id,
+        nome: f.nomeFilho,
+        turma: f.turmaFilho,
+      }),
+    );
+  }
+
+  private montarSorteioEvento(
+    sorteio: EventoSorteio,
+    inscricao: EventoInscricao,
+  ): SorteioEvento {
+    return {
+      id: sorteio.id,
+      eventoSlug: sorteio.eventoSlug,
+      brinde: sorteio.brinde,
+      inscricaoId: sorteio.inscricaoId,
+      numeroInscricao: sorteio.numeroInscricao,
+      nome: inscricao.nome,
+      telefone: inscricao.telefone,
+      email: inscricao.email,
+      sorteadoEm: sorteio.sorteadoEm,
+      sorteadoPor: sorteio.sorteadoPor,
+    };
   }
 
   /**
@@ -229,15 +283,17 @@ export class EventoInscricoesService {
     const buscaCondicao =
       filtros.q && filtros.q.length > 0
         ? or(
+            ilike(eventoInscricoes.numeroInscricao, `%${filtros.q}%`),
             ilike(eventoInscricoes.nome, `%${filtros.q}%`),
             ilike(eventoInscricoes.cpf, `%${filtros.q}%`),
             ilike(eventoInscricoes.email, `%${filtros.q}%`),
             ilike(eventoInscricoes.telefone, `%${filtros.q}%`),
           )
         : undefined;
-    const where = buscaCondicao
-      ? and(baseCondicao, buscaCondicao)
-      : baseCondicao;
+    const presencaCondicao = filtros.somentePresentes
+      ? isNotNull(eventoInscricoes.presencaConfirmadaEm)
+      : undefined;
+    const where = and(baseCondicao, buscaCondicao, presencaCondicao);
 
     // Total para paginação
     const [totalRow] = await this.db
@@ -321,21 +377,162 @@ export class EventoInscricoesService {
       throw new NotFoundException("Inscrição não encontrada");
     }
 
-    const filhos = await this.db
-      .select()
-      .from(eventoInscricaoFilhos)
-      .where(eq(eventoInscricaoFilhos.inscricaoId, id))
-      .orderBy(asc(eventoInscricaoFilhos.createdAt));
+    const filhos = await this.listarFilhos(id);
 
     return {
       ...inscricao,
-      filhos: filhos.map(
-        (f: { id: string; nomeFilho: string; turmaFilho: string }) => ({
-          id: f.id,
-          nome: f.nomeFilho,
-          turma: f.turmaFilho,
-        }),
-      ),
+      filhos,
     };
+  }
+
+  async atualizarPresenca(
+    eventoSlug: string,
+    id: string,
+    presente: boolean,
+    userId: string,
+  ): Promise<InscricaoComFilhos> {
+    const [inscricao] = await this.db
+      .update(eventoInscricoes)
+      .set({
+        presencaConfirmadaEm: presente ? new Date() : null,
+        presencaConfirmadaPor: presente ? userId : null,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(eventoInscricoes.id, id),
+          eq(eventoInscricoes.eventoSlug, eventoSlug),
+        ),
+      )
+      .returning();
+
+    if (!inscricao) {
+      throw new NotFoundException("Inscrição não encontrada");
+    }
+
+    const filhos = await this.listarFilhos(id);
+
+    return {
+      ...inscricao,
+      filhos,
+    };
+  }
+
+  async listarSorteios(eventoSlug: string): Promise<SorteioEvento[]> {
+    const sorteios = await this.db
+      .select({
+        id: eventoSorteios.id,
+        eventoSlug: eventoSorteios.eventoSlug,
+        brinde: eventoSorteios.brinde,
+        inscricaoId: eventoSorteios.inscricaoId,
+        numeroInscricao: eventoSorteios.numeroInscricao,
+        sorteadoEm: eventoSorteios.sorteadoEm,
+        sorteadoPor: eventoSorteios.sorteadoPor,
+        nome: eventoInscricoes.nome,
+        telefone: eventoInscricoes.telefone,
+        email: eventoInscricoes.email,
+      })
+      .from(eventoSorteios)
+      .innerJoin(
+        eventoInscricoes,
+        eq(eventoSorteios.inscricaoId, eventoInscricoes.id),
+      )
+      .where(eq(eventoSorteios.eventoSlug, eventoSlug))
+      .orderBy(desc(eventoSorteios.sorteadoEm));
+
+    return sorteios.map(
+      (s: {
+        id: string;
+        eventoSlug: string;
+        brinde: string;
+        inscricaoId: string;
+        numeroInscricao: string;
+        nome: string;
+        telefone: string;
+        email: string;
+        sorteadoEm: Date;
+        sorteadoPor: string | null;
+      }) => ({
+        id: s.id,
+        eventoSlug: s.eventoSlug,
+        brinde: s.brinde,
+        inscricaoId: s.inscricaoId,
+        numeroInscricao: s.numeroInscricao,
+        nome: s.nome,
+        telefone: s.telefone,
+        email: s.email,
+        sorteadoEm: s.sorteadoEm,
+        sorteadoPor: s.sorteadoPor,
+      }),
+    );
+  }
+
+  async sortearBrinde(
+    eventoSlug: string,
+    brinde: string,
+    userId: string,
+  ): Promise<SorteioEvento> {
+    const brindeNormalizado = brinde.trim();
+    if (!brindeNormalizado) {
+      throw new BadRequestException("Informe o nome do brinde");
+    }
+
+    for (let tentativa = 1; tentativa <= 3; tentativa++) {
+      try {
+        return await this.db.transaction(async (tx: typeof this.db) => {
+          const [ganhadora] = await tx
+            .select()
+            .from(eventoInscricoes)
+            .where(
+              and(
+                eq(eventoInscricoes.eventoSlug, eventoSlug),
+                isNotNull(eventoInscricoes.presencaConfirmadaEm),
+                sql`not exists (
+                  select 1
+                  from evento_sorteios s
+                  where s.evento_slug = ${eventoInscricoes.eventoSlug}
+                    and s.inscricao_id = ${eventoInscricoes.id}
+                )`,
+              ),
+            )
+            .orderBy(sql`random()`)
+            .limit(1);
+
+          if (!ganhadora) {
+            throw new BadRequestException(
+              "Não há inscritas presentes elegíveis para sorteio.",
+            );
+          }
+
+          const [sorteio] = await tx
+            .insert(eventoSorteios)
+            .values({
+              eventoSlug,
+              brinde: brindeNormalizado,
+              inscricaoId: ganhadora.id,
+              numeroInscricao: ganhadora.numeroInscricao,
+              sorteadoPor: userId,
+            })
+            .returning();
+
+          return this.montarSorteioEvento(sorteio, ganhadora);
+        });
+      } catch (err) {
+        const code = (err as { code?: string })?.code;
+        const constraint = (err as { constraint?: string })?.constraint;
+        if (
+          code === "23505" &&
+          constraint === "uq_evento_sorteios_evento_inscricao" &&
+          tentativa < 3
+        ) {
+          continue;
+        }
+        throw err;
+      }
+    }
+
+    throw new ServiceUnavailableException(
+      "Não foi possível concluir o sorteio. Tente novamente.",
+    );
   }
 }
