@@ -63,8 +63,27 @@ export type CriarInscricaoDto = z.infer<typeof criarInscricaoSchema>;
 export const listarInscricoesSchema = z.object({
   turma: z.string().trim().optional(),
   q: z.string().trim().optional(),
+  somentePresentes: z.coerce.boolean().optional().default(false),
   limit: z.coerce.number().int().min(1).max(500).optional().default(200),
   offset: z.coerce.number().int().min(0).optional().default(0),
 });
 
 export type ListarInscricoesDto = z.infer<typeof listarInscricoesSchema>;
+
+// ============================================
+// PATCH /api/eventos/:slug/inscricoes/:id/presenca — body
+// ============================================
+export const atualizarPresencaSchema = z.object({
+  presente: z.boolean(),
+});
+
+export type AtualizarPresencaDto = z.infer<typeof atualizarPresencaSchema>;
+
+// ============================================
+// POST /api/eventos/:slug/sorteios — body
+// ============================================
+export const criarSorteioSchema = z.object({
+  brinde: z.string().trim().min(1, "Informe o nome do brinde").max(200),
+});
+
+export type CriarSorteioDto = z.infer<typeof criarSorteioSchema>;

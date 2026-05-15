@@ -1,4 +1,9 @@
-import { criarInscricaoSchema } from "./evento-inscricoes.dto";
+import {
+  atualizarPresencaSchema,
+  criarInscricaoSchema,
+  criarSorteioSchema,
+  listarInscricoesSchema,
+} from "./evento-inscricoes.dto";
 
 const baseValido = {
   nome: "Maria Convidada Silva",
@@ -28,5 +33,33 @@ describe("criarInscricaoSchema", () => {
       filhos: [{ nome: "João", turma: "Turma Inexistente" }],
     });
     expect(result.success).toBe(false);
+  });
+});
+
+describe("listarInscricoesSchema", () => {
+  it("aceita filtro somentePresentes como boolean coercido", () => {
+    const result = listarInscricoesSchema.parse({ somentePresentes: "true" });
+
+    expect(result.somentePresentes).toBe(true);
+  });
+});
+
+describe("atualizarPresencaSchema", () => {
+  it("exige campo presente booleano", () => {
+    expect(atualizarPresencaSchema.parse({ presente: true })).toEqual({
+      presente: true,
+    });
+
+    expect(() => atualizarPresencaSchema.parse({ presente: "sim" })).toThrow();
+  });
+});
+
+describe("criarSorteioSchema", () => {
+  it("normaliza brinde e rejeita texto vazio", () => {
+    expect(criarSorteioSchema.parse({ brinde: "  Cesta de café  " })).toEqual({
+      brinde: "Cesta de café",
+    });
+
+    expect(() => criarSorteioSchema.parse({ brinde: "   " })).toThrow();
   });
 });
