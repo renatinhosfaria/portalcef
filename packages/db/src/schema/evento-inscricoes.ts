@@ -34,6 +34,12 @@ export const eventoInscricoes = pgTable(
     email: varchar("email", { length: 200 }).notNull(),
     telefone: varchar("telefone", { length: 20 }).notNull(),
 
+    // Presença no dia do evento
+    presencaConfirmadaEm: timestamp("presenca_confirmada_em", {
+      withTimezone: true,
+    }),
+    presencaConfirmadaPor: uuid("presenca_confirmada_por"),
+
     // Metadata opcional para auditoria
     ipAddress: varchar("ip_address", { length: 45 }),
     userAgent: text("user_agent"),
@@ -59,6 +65,10 @@ export const eventoInscricoes = pgTable(
     ),
     eventoSlugIdx: index("idx_evento_inscricoes_evento_slug").on(
       table.eventoSlug,
+    ),
+    presencaIdx: index("idx_evento_inscricoes_presenca").on(
+      table.eventoSlug,
+      table.presencaConfirmadaEm,
     ),
     createdAtIdx: index("idx_evento_inscricoes_created_at").on(table.createdAt),
   }),
@@ -99,12 +109,57 @@ export type EventoInscricaoFilho = typeof eventoInscricaoFilhos.$inferSelect;
 export type NewEventoInscricaoFilho = typeof eventoInscricaoFilhos.$inferInsert;
 
 // ============================================
+// Table: evento_sorteios
+// Histórico de brindes sorteados por evento.
+// ============================================
+export const eventoSorteios = pgTable(
+  "evento_sorteios",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+
+    eventoSlug: varchar("evento_slug", { length: 80 }).notNull(),
+    brinde: varchar("brinde", { length: 200 }).notNull(),
+
+    inscricaoId: uuid("inscricao_id")
+      .notNull()
+      .references(() => eventoInscricoes.id, { onDelete: "restrict" }),
+
+    // Snapshot do número no momento do sorteio para facilitar auditoria/export.
+    numeroInscricao: varchar("numero_inscricao", { length: 7 }).notNull(),
+
+    sorteadoEm: timestamp("sorteado_em", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    sorteadoPor: uuid("sorteado_por"),
+
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    eventoInscricaoUnique: uniqueIndex(
+      "uq_evento_sorteios_evento_inscricao",
+    ).on(table.eventoSlug, table.inscricaoId),
+    eventoSlugIdx: index("idx_evento_sorteios_evento_slug").on(
+      table.eventoSlug,
+    ),
+    sorteadoEmIdx: index("idx_evento_sorteios_sorteado_em").on(
+      table.sorteadoEm,
+    ),
+  }),
+);
+
+export type EventoSorteio = typeof eventoSorteios.$inferSelect;
+export type NewEventoSorteio = typeof eventoSorteios.$inferInsert;
+
+// ============================================
 // Drizzle Relations
 // ============================================
 export const eventoInscricoesRelations = relations(
   eventoInscricoes,
   ({ many }) => ({
     filhos: many(eventoInscricaoFilhos),
+    sorteios: many(eventoSorteios),
   }),
 );
 
@@ -118,6 +173,13 @@ export const eventoInscricaoFilhosRelations = relations(
   }),
 );
 
+export const eventoSorteiosRelations = relations(eventoSorteios, ({ one }) => ({
+  inscricao: one(eventoInscricoes, {
+    fields: [eventoSorteios.inscricaoId],
+    references: [eventoInscricoes.id],
+  }),
+}));
+
 // ============================================
 // Zod Schemas (drizzle-zod)
 // ============================================
@@ -130,3 +192,6 @@ export const insertEventoInscricaoFilhoSchema = createInsertSchema(
 export const selectEventoInscricaoFilhoSchema = createSelectSchema(
   eventoInscricaoFilhos,
 );
+
+export const insertEventoSorteioSchema = createInsertSchema(eventoSorteios);
+export const selectEventoSorteioSchema = createSelectSchema(eventoSorteios);
