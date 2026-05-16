@@ -6,6 +6,7 @@ import {
   HttpCode,
   Logger,
   Param,
+  Patch,
   Post,
   Query,
   Req,
@@ -13,17 +14,25 @@ import {
 } from "@nestjs/common";
 import type { FastifyRequest } from "fastify";
 
+import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { Public } from "../../common/decorators/public.decorator";
 import { Roles } from "../../common/decorators/roles.decorator";
 import { AuthGuard } from "../../common/guards/auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
 import {
+  atualizarPresencaSchema,
   criarInscricaoSchema,
+  criarSorteioSchema,
   listarInscricoesSchema,
 } from "./dto/evento-inscricoes.dto";
 import { EventoInscricoesService } from "./evento-inscricoes.service";
 
-const ADMIN_ROLES = ["master", "diretora_geral", "gerente_unidade"];
+const ADMIN_ROLES = [
+  "master",
+  "diretora_geral",
+  "gerente_unidade",
+  "auxiliar_administrativo",
+];
 const SLUG_REGEX = /^[a-z0-9-]{3,80}$/;
 
 @Controller("eventos")
@@ -93,7 +102,7 @@ export class EventoInscricoesController {
 
   /**
    * GET /api/eventos/:slug/inscricoes
-   * Restrito: master, diretora_geral, gerente_unidade.
+   * Restrito: master, diretora_geral, gerente_unidade, auxiliar_administrativo.
    */
   @Get(":slug/inscricoes")
   @Roles(...ADMIN_ROLES)
@@ -121,5 +130,81 @@ export class EventoInscricoesController {
       throw new BadRequestException("Slug do evento inválido");
     }
     return this.eventoInscricoesService.obter(slug, id);
+  }
+
+  /**
+   * PATCH /api/eventos/:slug/inscricoes/:id/presenca
+   * Confirma ou desfaz presença de uma inscrita (mesmas roles).
+   */
+  @Patch(":slug/inscricoes/:id/presenca")
+  @Roles(...ADMIN_ROLES)
+  async atualizarPresenca(
+    @Param("slug") slug: string,
+    @Param("id") id: string,
+    @Body() body: unknown,
+    @CurrentUser() user: { userId: string },
+  ) {
+    if (!SLUG_REGEX.test(slug)) {
+      throw new BadRequestException("Slug do evento inválido");
+    }
+
+    const parsed = atualizarPresencaSchema.safeParse(body);
+    if (!parsed.success) {
+      throw new BadRequestException("Dados de presença inválidos");
+    }
+
+    return this.eventoInscricoesService.atualizarPresenca(
+      slug,
+      id,
+      parsed.data.presente,
+      user.userId,
+    );
+  }
+
+  /**
+   * GET /api/eventos/:slug/sorteios
+   * Histórico de sorteios do evento (mesmas roles).
+   */
+  @Get(":slug/sorteios")
+  @Roles(...ADMIN_ROLES)
+  async listarSorteios(@Param("slug") slug: string) {
+    if (!SLUG_REGEX.test(slug)) {
+      throw new BadRequestException("Slug do evento inválido");
+    }
+
+    return this.eventoInscricoesService.listarSorteios(slug);
+  }
+
+  /**
+   * POST /api/eventos/:slug/sorteios
+   * Sorteia um brinde entre inscritas presentes e ainda não premiadas.
+   */
+  @Post(":slug/sorteios")
+  @Roles(...ADMIN_ROLES)
+  @HttpCode(201)
+  async sortearBrinde(
+    @Param("slug") slug: string,
+    @Body() body: unknown,
+    @CurrentUser() user: { userId: string },
+  ) {
+    if (!SLUG_REGEX.test(slug)) {
+      throw new BadRequestException("Slug do evento inválido");
+    }
+
+    const parsed = criarSorteioSchema.safeParse(body);
+    if (!parsed.success) {
+      const issue = parsed.error.issues[0];
+      throw new BadRequestException(
+        issue
+          ? `${issue.path.join(".") || "campo"}: ${issue.message}`
+          : "Dados de sorteio inválidos",
+      );
+    }
+
+    return this.eventoInscricoesService.sortearBrinde(
+      slug,
+      parsed.data.brinde,
+      user.userId,
+    );
   }
 }
