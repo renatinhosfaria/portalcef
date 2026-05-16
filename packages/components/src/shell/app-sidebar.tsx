@@ -44,7 +44,12 @@ const MODULE_ACCESS_RULES = {
   turmas: ["master", "diretora_geral", "gerente_unidade", "gerente_financeiro"],
   planejamento: "ALL", // Todos os perfis pedagógicos
   calendario: "ALL", // Todos os usuários
-  eventos: ["master", "diretora_geral", "gerente_unidade"],
+  eventos: [
+    "master",
+    "diretora_geral",
+    "gerente_unidade",
+    "auxiliar_administrativo",
+  ],
   tarefas: [
     "master",
     "diretora_geral",

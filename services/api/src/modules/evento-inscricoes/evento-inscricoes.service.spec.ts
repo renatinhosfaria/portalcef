@@ -138,6 +138,7 @@ describe("EventoInscricoesService", () => {
   let service: EventoInscricoesService;
 
   beforeEach(() => {
+    jest.clearAllMocks();
     db = criarDbMock();
     service = new EventoInscricoesService({
       db,
@@ -223,6 +224,24 @@ describe("EventoInscricoesService", () => {
         numeroInscricao: "123-456",
         sorteadoPor: "usuario-2",
       });
+
+      const dbModule = jest.requireMock("@essencia/db");
+      expect(dbModule.isNotNull).toHaveBeenCalledWith(
+        dbModule.eventoInscricoes.presencaConfirmadaEm,
+      );
+
+      const sqlChamadas = dbModule.sql.mock.calls.map(
+        ([strings]: [TemplateStringsArray]) => Array.from(strings).join(" "),
+      );
+      expect(
+        sqlChamadas.some(
+          (sql: string) =>
+            sql.includes("not exists") && sql.includes("evento_sorteios"),
+        ),
+      ).toBe(true);
+      expect(sqlChamadas.some((sql: string) => sql.includes("random()"))).toBe(
+        true,
+      );
     });
 
     it("retorna erro claro quando não há inscritas elegíveis", async () => {

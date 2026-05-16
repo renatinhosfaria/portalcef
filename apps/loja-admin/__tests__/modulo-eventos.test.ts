@@ -45,4 +45,54 @@ describe("módulo eventos", () => {
     expect(adminShell).not.toContain("/inscricoes-evento");
     expect(adminShell).not.toContain("Mãe por Inteiro");
   });
+
+  it("libera o módulo eventos para auxiliar administrativo", () => {
+    const appSidebar = lerArquivoRepositorio(
+      "packages/components/src/shell/app-sidebar.tsx",
+    );
+    const eventosPage = lerArquivoRepositorio(
+      "apps/eventos/app/inscricoes-evento/page.tsx",
+    );
+    const eventosController = lerArquivoRepositorio(
+      "services/api/src/modules/evento-inscricoes/evento-inscricoes.controller.ts",
+    );
+
+    expect(appSidebar).toMatch(
+      /eventos:\s*\[[^\]]*"auxiliar_administrativo"[^\]]*\]/,
+    );
+    expect(eventosPage).toMatch(
+      /ALLOWED_ROLES\s*=\s*\[[^\]]*"auxiliar_administrativo"[^\]]*\]/,
+    );
+    expect(eventosController).toMatch(
+      /ADMIN_ROLES\s*=\s*\[[^\]]*"auxiliar_administrativo"[^\]]*\]/,
+    );
+  });
+
+  it("exibe controles para confirmar presença no evento", () => {
+    const eventosPage = lerArquivoRepositorio(
+      "apps/eventos/app/inscricoes-evento/page.tsx",
+    );
+
+    expect(eventosPage).toContain("Presentes confirmadas");
+    expect(eventosPage).toContain("Somente presentes");
+    expect(eventosPage).toContain("Confirmar presença");
+    expect(eventosPage).toContain("Desfazer presença");
+    expect(eventosPage).toContain("presencaConfirmadaEm");
+    expect(eventosPage).toContain('method: "PATCH"');
+    expect(eventosPage).toContain("somentePresentes");
+  });
+
+  it("exibe sorteio por brinde com histórico e elegibilidade", () => {
+    const eventosPage = lerArquivoRepositorio(
+      "apps/eventos/app/inscricoes-evento/page.tsx",
+    );
+
+    expect(eventosPage).toContain("Sorteio de brindes");
+    expect(eventosPage).toContain("Nome do brinde");
+    expect(eventosPage).toContain("Sortear entre presentes");
+    expect(eventosPage).toContain("Elegíveis para sorteio");
+    expect(eventosPage).toContain("Histórico de sorteios");
+    expect(eventosPage).toContain("/sorteios");
+    expect(eventosPage).toContain("inscricaoId");
+  });
 });

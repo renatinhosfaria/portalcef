@@ -1,6 +1,7 @@
 "use client";
 
 import { useTenant } from "@essencia/shared/providers/tenant";
+import { Badge } from "@essencia/ui/components/badge";
 import { Button } from "@essencia/ui/components/button";
 import {
   Card,
@@ -8,6 +9,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@essencia/ui/components/card";
+import { Checkbox } from "@essencia/ui/components/checkbox";
 import { Input } from "@essencia/ui/components/input";
 import {
   Select,
@@ -24,21 +26,31 @@ import {
   TableHeader,
   TableRow,
 } from "@essencia/ui/components/table";
+import { toast } from "@essencia/ui/components/toaster";
 import {
   Calendar,
   ChevronDown,
   ChevronRight,
   FileSpreadsheet,
   FileText,
+  Gift,
   Mail,
   Phone,
   Search,
+  Shuffle,
+  TicketCheck,
+  Trophy,
   Users,
 } from "lucide-react";
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 
 const EVENTO_SLUG = "mae-por-inteiro";
-const ALLOWED_ROLES = ["master", "diretora_geral", "gerente_unidade"];
+const ALLOWED_ROLES = [
+  "master",
+  "diretora_geral",
+  "gerente_unidade",
+  "auxiliar_administrativo",
+];
 
 const TURMAS = [
   "Berçário",
@@ -70,7 +82,22 @@ interface Inscricao {
   email: string;
   telefone: string;
   createdAt: string;
+  presencaConfirmadaEm: string | null;
+  presencaConfirmadaPor: string | null;
   filhos: Filho[];
+}
+
+interface Sorteio {
+  id: string;
+  eventoSlug: string;
+  brinde: string;
+  inscricaoId: string;
+  numeroInscricao: string;
+  nome: string;
+  telefone: string;
+  email: string;
+  sorteadoEm: string;
+  sorteadoPor: string;
 }
 
 function formatarData(iso: string) {
@@ -100,6 +127,8 @@ const EXPORT_HEADERS = [
   "Data Nascimento",
   "Email",
   "Telefone",
+  "Presença",
+  "Presença confirmada em",
   "Filhos",
 ] as const;
 
@@ -112,6 +141,8 @@ function buildExportRows(items: Inscricao[]) {
     formatarDataNascimento(i.dataNascimento),
     i.email,
     i.telefone,
+    i.presencaConfirmadaEm ? "Presente" : "Pendente",
+    i.presencaConfirmadaEm ? formatarData(i.presencaConfirmadaEm) : "",
     i.filhos.map((f) => `${f.nome} (${f.turma})`).join(" | "),
   ]);
 }
@@ -168,6 +199,8 @@ async function exportarXLSX(items: Inscricao[]) {
     { header: "Data Nascimento", key: "nasc", width: 16 },
     { header: "Email", key: "email", width: 36 },
     { header: "Telefone", key: "telefone", width: 18 },
+    { header: "Presença", key: "presenca", width: 14 },
+    { header: "Presença confirmada em", key: "presencaEm", width: 24 },
     { header: "Filhos", key: "filhos", width: 60 },
   ];
 
@@ -192,6 +225,10 @@ async function exportarXLSX(items: Inscricao[]) {
       nasc: formatarDataNascimento(i.dataNascimento),
       email: i.email,
       telefone: i.telefone,
+      presenca: i.presencaConfirmadaEm ? "Presente" : "Pendente",
+      presencaEm: i.presencaConfirmadaEm
+        ? formatarData(i.presencaConfirmadaEm)
+        : "",
       filhos: i.filhos.map((f) => `${f.nome} (${f.turma})`).join(" | "),
     });
   }
@@ -236,9 +273,18 @@ export default function InscricoesEventoPage() {
   const [erro, setErro] = useState<string | null>(null);
   const [q, setQ] = useState("");
   const [turma, setTurma] = useState<string>("__all__");
+  const [somentePresentes, setSomentePresentes] = useState(false);
   const [expandidoId, setExpandidoId] = useState<string | null>(null);
+  const [atualizandoPresencaId, setAtualizandoPresencaId] = useState<
+    string | null
+  >(null);
+  const [sorteios, setSorteios] = useState<Sorteio[]>([]);
+  const [loadingSorteios, setLoadingSorteios] = useState(false);
+  const [brinde, setBrinde] = useState("");
+  const [sorteando, setSorteando] = useState(false);
+  const [ultimoSorteio, setUltimoSorteio] = useState<Sorteio | null>(null);
 
-  const podeAcessar = role && ALLOWED_ROLES.includes(role);
+  const podeAcessar = Boolean(role && ALLOWED_ROLES.includes(role));
 
   const carregar = useCallback(async () => {
     if (!podeAcessar) return;
@@ -248,6 +294,7 @@ export default function InscricoesEventoPage() {
       const params = new URLSearchParams();
       if (q.trim()) params.set("q", q.trim());
       if (turma && turma !== "__all__") params.set("turma", turma);
+      if (somentePresentes) params.set("somentePresentes", "true");
       const url = `/api/eventos/${EVENTO_SLUG}/inscricoes${
         params.toString() ? `?${params.toString()}` : ""
       }`;
@@ -273,7 +320,27 @@ export default function InscricoesEventoPage() {
     } finally {
       setLoading(false);
     }
-  }, [podeAcessar, q, turma]);
+  }, [podeAcessar, q, somentePresentes, turma]);
+
+  const carregarSorteios = useCallback(async () => {
+    if (!podeAcessar) return;
+    try {
+      setLoadingSorteios(true);
+      const resp = await fetch(`/api/eventos/${EVENTO_SLUG}/sorteios`, {
+        credentials: "include",
+      });
+      if (!resp.ok) {
+        throw new Error(`Erro ${resp.status} ao carregar sorteios.`);
+      }
+      const data = (await resp.json()) as Sorteio[];
+      setSorteios(data);
+    } catch (err) {
+      console.error(err);
+      toast.error("Não foi possível carregar o histórico de sorteios.");
+    } finally {
+      setLoadingSorteios(false);
+    }
+  }, [podeAcessar]);
 
   useEffect(() => {
     if (!podeAcessar) {
@@ -284,10 +351,108 @@ export default function InscricoesEventoPage() {
     return () => clearTimeout(id);
   }, [carregar, podeAcessar]);
 
+  useEffect(() => {
+    if (!podeAcessar) return;
+    carregarSorteios();
+  }, [carregarSorteios, podeAcessar]);
+
   const totalFilhos = useMemo(
     () => inscricoes.reduce((acc, i) => acc + i.filhos.length, 0),
     [inscricoes],
   );
+
+  const presentesConfirmadas = useMemo(
+    () => inscricoes.filter((i) => i.presencaConfirmadaEm).length,
+    [inscricoes],
+  );
+
+  const sorteadosIds = useMemo(
+    () => new Set(sorteios.map((s) => s.inscricaoId)),
+    [sorteios],
+  );
+
+  const elegiveisSorteio = useMemo(
+    () =>
+      inscricoes.filter(
+        (i) => i.presencaConfirmadaEm && !sorteadosIds.has(i.id),
+      ).length,
+    [inscricoes, sorteadosIds],
+  );
+
+  async function atualizarPresenca(inscricao: Inscricao, presente: boolean) {
+    try {
+      setAtualizandoPresencaId(inscricao.id);
+      const resp = await fetch(
+        `/api/eventos/${EVENTO_SLUG}/inscricoes/${inscricao.id}/presenca`,
+        {
+          method: "PATCH",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ presente }),
+        },
+      );
+      if (!resp.ok) {
+        const data = await resp.json().catch(() => null);
+        throw new Error(data?.message ?? `Erro ${resp.status}`);
+      }
+      const atualizada = (await resp.json()) as Inscricao;
+      setInscricoes((atuais) => {
+        if (somentePresentes && !atualizada.presencaConfirmadaEm) {
+          return atuais.filter((i) => i.id !== atualizada.id);
+        }
+        return atuais.map((i) => (i.id === atualizada.id ? atualizada : i));
+      });
+      if (somentePresentes && !atualizada.presencaConfirmadaEm) {
+        setTotal((atual) => Math.max(0, atual - 1));
+      }
+      toast.success(
+        presente ? "Presença confirmada." : "Presença desfeita.",
+      );
+    } catch (err) {
+      console.error(err);
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : "Não foi possível atualizar a presença.",
+      );
+    } finally {
+      setAtualizandoPresencaId(null);
+    }
+  }
+
+  async function sortearBrinde() {
+    const nomeBrinde = brinde.trim();
+    if (!nomeBrinde) {
+      toast.error("Informe o nome do brinde antes de sortear.");
+      return;
+    }
+
+    try {
+      setSorteando(true);
+      const resp = await fetch(`/api/eventos/${EVENTO_SLUG}/sorteios`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ brinde: nomeBrinde }),
+      });
+      if (!resp.ok) {
+        const data = await resp.json().catch(() => null);
+        throw new Error(data?.message ?? `Erro ${resp.status}`);
+      }
+      const sorteio = (await resp.json()) as Sorteio;
+      setSorteios((atuais) => [sorteio, ...atuais]);
+      setUltimoSorteio(sorteio);
+      setBrinde("");
+      toast.success(`Brinde sorteado para Nº ${sorteio.numeroInscricao}.`);
+    } catch (err) {
+      console.error(err);
+      toast.error(
+        err instanceof Error ? err.message : "Não foi possível sortear.",
+      );
+    } finally {
+      setSorteando(false);
+    }
+  }
 
   if (!podeAcessar) {
     return (
@@ -298,7 +463,8 @@ export default function InscricoesEventoPage() {
           </CardHeader>
           <CardContent>
             <p className="text-slate-600">
-              Esta página é exclusiva para Diretora Geral e Gerente de Unidade.
+              Esta página é exclusiva para Diretora Geral, Gerente de Unidade
+              e Auxiliar Administrativo.
             </p>
           </CardContent>
         </Card>
@@ -339,7 +505,7 @@ export default function InscricoesEventoPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
           <CardContent className="p-6 flex items-center gap-4">
             <Users className="w-8 h-8 text-[#A3D154]" />
@@ -364,6 +530,17 @@ export default function InscricoesEventoPage() {
         </Card>
         <Card>
           <CardContent className="p-6 flex items-center gap-4">
+            <TicketCheck className="w-8 h-8 text-emerald-600" />
+            <div>
+              <p className="text-2xl font-semibold text-slate-900">
+                {presentesConfirmadas}
+              </p>
+              <p className="text-sm text-slate-500">Presentes confirmadas</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-6 flex items-center gap-4">
             <Calendar className="w-8 h-8 text-amber-500" />
             <div>
               <p className="text-2xl font-semibold text-slate-900">100</p>
@@ -372,6 +549,137 @@ export default function InscricoesEventoPage() {
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <CardTitle>Sorteio de brindes</CardTitle>
+            <p className="mt-1 text-sm text-slate-500">
+              Cada Nº Inscrição só pode ganhar uma vez.
+            </p>
+          </div>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+            <div className="space-y-1.5">
+              <label
+                className="text-sm font-medium text-slate-700"
+                htmlFor="brinde"
+              >
+                Nome do brinde
+              </label>
+              <Input
+                id="brinde"
+                value={brinde}
+                onChange={(e) => setBrinde(e.target.value)}
+                placeholder="Ex.: cesta de café"
+                className="w-full sm:w-72"
+              />
+            </div>
+            <Button
+              onClick={sortearBrinde}
+              disabled={sorteando || brinde.trim().length === 0}
+              className="sm:mb-0"
+            >
+              <Shuffle className="w-4 h-4" />
+              {sorteando ? "Sorteando..." : "Sortear entre presentes"}
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+            <div className="rounded-md border border-slate-200 px-4 py-3">
+              <p className="text-sm text-slate-500">Elegíveis para sorteio</p>
+              <p className="mt-1 text-2xl font-semibold text-slate-900">
+                {elegiveisSorteio}
+              </p>
+              <p className="mt-1 text-xs text-slate-500">na lista atual</p>
+            </div>
+            <div className="rounded-md border border-slate-200 px-4 py-3">
+              <p className="text-sm text-slate-500">Brindes sorteados</p>
+              <p className="mt-1 text-2xl font-semibold text-slate-900">
+                {sorteios.length}
+              </p>
+            </div>
+            <div className="rounded-md border border-slate-200 px-4 py-3">
+              <p className="text-sm text-slate-500">Último sorteio</p>
+              {ultimoSorteio ? (
+                <div className="mt-1">
+                  <p className="font-mono text-lg font-semibold text-slate-900">
+                    {ultimoSorteio.numeroInscricao}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    {ultimoSorteio.brinde}
+                  </p>
+                </div>
+              ) : (
+                <p className="mt-1 text-sm text-slate-500">
+                  Nenhum nesta sessão.
+                </p>
+              )}
+            </div>
+          </div>
+
+          <div>
+            <div className="mb-3 flex items-center gap-2">
+              <Trophy className="h-4 w-4 text-amber-500" />
+              <h2 className="text-sm font-semibold text-slate-900">
+                Histórico de sorteios
+              </h2>
+            </div>
+            {loadingSorteios ? (
+              <p className="py-6 text-sm text-slate-500">
+                Carregando sorteios...
+              </p>
+            ) : sorteios.length === 0 ? (
+              <p className="py-6 text-sm text-slate-500">
+                Nenhum brinde sorteado ainda.
+              </p>
+            ) : (
+              <div className="overflow-hidden rounded-md border border-slate-200">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Brinde</TableHead>
+                      <TableHead>Nº Inscrição</TableHead>
+                      <TableHead>Ganhadora</TableHead>
+                      <TableHead>Contato</TableHead>
+                      <TableHead>Sorteado em</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {sorteios.map((s) => (
+                      <TableRow key={s.id}>
+                        <TableCell className="font-medium text-slate-900">
+                          <span className="inline-flex items-center gap-2">
+                            <Gift className="h-4 w-4 text-rose-500" />
+                            {s.brinde}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="inline-block rounded-md border border-amber-200 bg-amber-50 px-2 py-1 font-mono text-sm font-semibold tracking-wider text-slate-900">
+                            {s.numeroInscricao}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-slate-700">
+                          {s.nome}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-col gap-0.5 text-xs text-slate-700">
+                            <span>{s.telefone}</span>
+                            <span>{s.email}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-sm text-slate-500">
+                          {formatarData(s.sorteadoEm)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -399,6 +707,15 @@ export default function InscricoesEventoPage() {
                 ))}
               </SelectContent>
             </Select>
+            <label className="flex h-10 items-center gap-2 rounded-md border border-slate-200 px-3 text-sm text-slate-700">
+              <Checkbox
+                checked={somentePresentes}
+                onCheckedChange={(checked) =>
+                  setSomentePresentes(checked === true)
+                }
+              />
+              Somente presentes
+            </label>
           </div>
         </CardHeader>
         <CardContent>
@@ -422,6 +739,7 @@ export default function InscricoesEventoPage() {
                   <TableHead>CPF</TableHead>
                   <TableHead>Contato</TableHead>
                   <TableHead className="text-center">Filhos</TableHead>
+                  <TableHead>Presença</TableHead>
                   <TableHead>Inscrita em</TableHead>
                 </TableRow>
               </TableHeader>
@@ -470,13 +788,47 @@ export default function InscricoesEventoPage() {
                           {i.filhos.length}
                         </span>
                       </TableCell>
+                      <TableCell onClick={(e) => e.stopPropagation()}>
+                        <div className="flex min-w-40 flex-col gap-2">
+                          {i.presencaConfirmadaEm ? (
+                            <div className="space-y-1">
+                              <Badge className="w-fit border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-50">
+                                Presente
+                              </Badge>
+                              <p className="text-xs text-slate-500">
+                                {formatarData(i.presencaConfirmadaEm)}
+                              </p>
+                            </div>
+                          ) : (
+                            <Badge
+                              variant="outline"
+                              className="w-fit border-slate-200 text-slate-500"
+                            >
+                              Pendente
+                            </Badge>
+                          )}
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={atualizandoPresencaId === i.id}
+                            onClick={() =>
+                              atualizarPresenca(i, !i.presencaConfirmadaEm)
+                            }
+                          >
+                            <TicketCheck className="w-4 h-4" />
+                            {i.presencaConfirmadaEm
+                              ? "Desfazer presença"
+                              : "Confirmar presença"}
+                          </Button>
+                        </div>
+                      </TableCell>
                       <TableCell className="text-slate-500 text-sm">
                         {formatarData(i.createdAt)}
                       </TableCell>
                     </TableRow>
                     {expandidoId === i.id && (
                       <TableRow>
-                        <TableCell colSpan={7} className="bg-slate-50">
+                        <TableCell colSpan={8} className="bg-slate-50">
                           <div className="py-2">
                             <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">
                               Filhos matriculados
