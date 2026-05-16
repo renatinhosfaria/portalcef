@@ -1,0 +1,2 @@
+-- Migration histórica ausente no repositório.
+-- Mantida como no-op para preservar a sequência do Drizzle journal.

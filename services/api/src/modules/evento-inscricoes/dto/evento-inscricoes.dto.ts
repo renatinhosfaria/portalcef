@@ -25,6 +25,16 @@ const cpfRegex = /^\d{3}\.\d{3}\.\d{3}-\d{2}$/;
 // Telefone (00) 00000-0000 ou (00) 0000-0000
 const telefoneRegex = /^\(\d{2}\)\s?\d{4,5}-\d{4}$/;
 
+const booleanQuerySchema = z.preprocess((value) => {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    const normalizado = value.trim().toLowerCase();
+    if (normalizado === "true") return true;
+    if (normalizado === "false") return false;
+  }
+  return value;
+}, z.boolean());
+
 // ============================================
 // POST /api/eventos/:slug/inscricoes — body
 // ============================================
@@ -63,7 +73,7 @@ export type CriarInscricaoDto = z.infer<typeof criarInscricaoSchema>;
 export const listarInscricoesSchema = z.object({
   turma: z.string().trim().optional(),
   q: z.string().trim().optional(),
-  somentePresentes: z.coerce.boolean().optional().default(false),
+  somentePresentes: booleanQuerySchema.optional().default(false),
   limit: z.coerce.number().int().min(1).max(500).optional().default(200),
   offset: z.coerce.number().int().min(0).optional().default(0),
 });

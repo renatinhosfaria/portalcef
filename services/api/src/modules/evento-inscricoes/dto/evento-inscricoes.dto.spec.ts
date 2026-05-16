@@ -37,10 +37,16 @@ describe("criarInscricaoSchema", () => {
 });
 
 describe("listarInscricoesSchema", () => {
-  it("aceita filtro somentePresentes como boolean coercido", () => {
+  it("aceita somentePresentes=true como verdadeiro", () => {
     const result = listarInscricoesSchema.parse({ somentePresentes: "true" });
 
     expect(result.somentePresentes).toBe(true);
+  });
+
+  it("mantém somentePresentes=false como falso", () => {
+    const result = listarInscricoesSchema.parse({ somentePresentes: "false" });
+
+    expect(result.somentePresentes).toBe(false);
   });
 });
 
