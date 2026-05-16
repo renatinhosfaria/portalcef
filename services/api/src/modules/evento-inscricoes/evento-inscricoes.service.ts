@@ -30,7 +30,21 @@ import type {
   ListarInscricoesDto,
 } from "./dto/evento-inscricoes.dto";
 
-export interface InscricaoComFilhos extends EventoInscricao {
+export interface InscricaoComFilhos {
+  id: string;
+  eventoSlug: string;
+  numeroInscricao: string;
+  nome: string;
+  cpf: string;
+  dataNascimento: string;
+  email: string;
+  telefone: string;
+  presencaConfirmadaEm: Date | null;
+  presencaConfirmadaPor: string | null;
+  ipAddress: string | null;
+  userAgent: string | null;
+  createdAt: Date;
+  updatedAt: Date;
   filhos: Array<{
     id: string;
     nome: string;
@@ -49,6 +63,13 @@ export interface SorteioEvento {
   email: string;
   sorteadoEm: Date;
   sorteadoPor: string | null;
+}
+
+export interface ResumoSorteiosEvento {
+  totalInscricoes: number;
+  totalPresentes: number;
+  totalSorteios: number;
+  totalElegiveis: number;
 }
 
 /**
@@ -293,7 +314,22 @@ export class EventoInscricoesService {
     const presencaCondicao = filtros.somentePresentes
       ? isNotNull(eventoInscricoes.presencaConfirmadaEm)
       : undefined;
-    const where = and(baseCondicao, buscaCondicao, presencaCondicao);
+    const turmaFiltro =
+      filtros.turma && filtros.turma.length > 0 ? filtros.turma : undefined;
+    const turmaCondicao = turmaFiltro
+      ? sql`exists (
+          select 1
+          from evento_inscricao_filhos f
+          where f.inscricao_id = ${eventoInscricoes.id}
+            and f.turma_filho = ${turmaFiltro}
+        )`
+      : undefined;
+    const where = and(
+      baseCondicao,
+      buscaCondicao,
+      presencaCondicao,
+      turmaCondicao,
+    );
 
     // Total para paginação
     const [totalRow] = await this.db
@@ -317,7 +353,6 @@ export class EventoInscricoesService {
     const ids = inscricoes.map((i: EventoInscricao) => i.id);
 
     // Buscar filhos de todas as inscrições em batch
-    const turmaFiltro = filtros.turma;
     const filhosWhere = turmaFiltro
       ? and(
           inArray(eventoInscricaoFilhos.inscricaoId, ids),
@@ -342,15 +377,10 @@ export class EventoInscricoesService {
       filhosPorInscricao.set(f.inscricaoId, arr);
     }
 
-    let items: InscricaoComFilhos[] = inscricoes.map((i: EventoInscricao) => ({
+    const items: InscricaoComFilhos[] = inscricoes.map((i: EventoInscricao) => ({
       ...i,
       filhos: filhosPorInscricao.get(i.id) ?? [],
     }));
-
-    // Se filtrou por turma, removemos inscrições sem filhos da turma desejada
-    if (turmaFiltro && turmaFiltro.length > 0) {
-      items = items.filter((i) => i.filhos.length > 0);
-    }
 
     return { items, total };
   }
@@ -467,6 +497,53 @@ export class EventoInscricoesService {
     );
   }
 
+  async obterResumoSorteios(
+    eventoSlug: string,
+  ): Promise<ResumoSorteiosEvento> {
+    const [totalInscricoesRow] = await this.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(eventoInscricoes)
+      .where(eq(eventoInscricoes.eventoSlug, eventoSlug));
+
+    const [totalPresentesRow] = await this.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(eventoInscricoes)
+      .where(
+        and(
+          eq(eventoInscricoes.eventoSlug, eventoSlug),
+          isNotNull(eventoInscricoes.presencaConfirmadaEm),
+        ),
+      );
+
+    const [totalSorteiosRow] = await this.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(eventoSorteios)
+      .where(eq(eventoSorteios.eventoSlug, eventoSlug));
+
+    const [totalElegiveisRow] = await this.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(eventoInscricoes)
+      .where(
+        and(
+          eq(eventoInscricoes.eventoSlug, eventoSlug),
+          isNotNull(eventoInscricoes.presencaConfirmadaEm),
+          sql`not exists (
+            select 1
+            from evento_sorteios s
+            where s.evento_slug = ${eventoInscricoes.eventoSlug}
+              and s.inscricao_id = ${eventoInscricoes.id}
+          )`,
+        ),
+      );
+
+    return {
+      totalInscricoes: totalInscricoesRow?.count ?? 0,
+      totalPresentes: totalPresentesRow?.count ?? 0,
+      totalSorteios: totalSorteiosRow?.count ?? 0,
+      totalElegiveis: totalElegiveisRow?.count ?? 0,
+    };
+  }
+
   async sortearBrinde(
     eventoSlug: string,
     brinde: string,
@@ -526,6 +603,12 @@ export class EventoInscricoesService {
           tentativa < 3
         ) {
           continue;
+        }
+        if (
+          code === "23505" &&
+          constraint === "uq_evento_sorteios_evento_brinde"
+        ) {
+          throw new ConflictException("Este brinde já foi sorteado.");
         }
         throw err;
       }

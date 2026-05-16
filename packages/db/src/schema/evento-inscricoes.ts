@@ -1,4 +1,4 @@
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import {
   date,
   index,
@@ -10,6 +10,8 @@ import {
   varchar,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
+
+import { users } from "./users.js";
 
 // ============================================
 // Table: evento_inscricoes
@@ -38,7 +40,10 @@ export const eventoInscricoes = pgTable(
     presencaConfirmadaEm: timestamp("presenca_confirmada_em", {
       withTimezone: true,
     }),
-    presencaConfirmadaPor: uuid("presenca_confirmada_por"),
+    presencaConfirmadaPor: uuid("presenca_confirmada_por").references(
+      () => users.id,
+      { onDelete: "set null" },
+    ),
 
     // Metadata opcional para auditoria
     ipAddress: varchar("ip_address", { length: 45 }),
@@ -130,7 +135,9 @@ export const eventoSorteios = pgTable(
     sorteadoEm: timestamp("sorteado_em", { withTimezone: true })
       .notNull()
       .defaultNow(),
-    sorteadoPor: uuid("sorteado_por"),
+    sorteadoPor: uuid("sorteado_por").references(() => users.id, {
+      onDelete: "set null",
+    }),
 
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -140,6 +147,10 @@ export const eventoSorteios = pgTable(
     eventoInscricaoUnique: uniqueIndex(
       "uq_evento_sorteios_evento_inscricao",
     ).on(table.eventoSlug, table.inscricaoId),
+    eventoBrindeUnique: uniqueIndex("uq_evento_sorteios_evento_brinde").on(
+      table.eventoSlug,
+      sql`lower(btrim(${table.brinde}))`,
+    ),
     eventoSlugIdx: index("idx_evento_sorteios_evento_slug").on(
       table.eventoSlug,
     ),

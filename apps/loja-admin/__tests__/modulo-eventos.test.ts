@@ -80,6 +80,7 @@ describe("módulo eventos", () => {
     expect(eventosPage).toContain("presencaConfirmadaEm");
     expect(eventosPage).toContain('method: "PATCH"');
     expect(eventosPage).toContain("somentePresentes");
+    expect(eventosPage).toContain("resumoSorteios");
   });
 
   it("exibe sorteio por brinde com histórico e elegibilidade", () => {
@@ -92,6 +93,7 @@ describe("módulo eventos", () => {
     expect(eventosPage).toContain("Sortear entre presentes");
     expect(eventosPage).toContain("Elegíveis para sorteio");
     expect(eventosPage).toContain("Histórico de sorteios");
+    expect(eventosPage).toContain("sorteios/resumo");
     expect(eventosPage).toContain("/sorteios");
     expect(eventosPage).toContain("inscricaoId");
   });

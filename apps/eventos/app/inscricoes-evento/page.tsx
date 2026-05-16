@@ -97,8 +97,22 @@ interface Sorteio {
   telefone: string;
   email: string;
   sorteadoEm: string;
-  sorteadoPor: string;
+  sorteadoPor: string | null;
 }
+
+interface ResumoSorteios {
+  totalInscricoes: number;
+  totalPresentes: number;
+  totalSorteios: number;
+  totalElegiveis: number;
+}
+
+const RESUMO_SORTEIOS_INICIAL: ResumoSorteios = {
+  totalInscricoes: 0,
+  totalPresentes: 0,
+  totalSorteios: 0,
+  totalElegiveis: 0,
+};
 
 function formatarData(iso: string) {
   if (!iso) return "—";
@@ -268,7 +282,7 @@ async function exportarXLSX(items: Inscricao[]) {
 export default function InscricoesEventoPage() {
   const { role } = useTenant();
   const [inscricoes, setInscricoes] = useState<Inscricao[]>([]);
-  const [total, setTotal] = useState(0);
+  const [totalLista, setTotalLista] = useState(0);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
   const [q, setQ] = useState("");
@@ -283,6 +297,9 @@ export default function InscricoesEventoPage() {
   const [brinde, setBrinde] = useState("");
   const [sorteando, setSorteando] = useState(false);
   const [ultimoSorteio, setUltimoSorteio] = useState<Sorteio | null>(null);
+  const [resumoSorteios, setResumoSorteios] = useState<ResumoSorteios>(
+    RESUMO_SORTEIOS_INICIAL,
+  );
 
   const podeAcessar = Boolean(role && ALLOWED_ROLES.includes(role));
 
@@ -306,21 +323,42 @@ export default function InscricoesEventoPage() {
           setErro(`Erro ${resp.status} ao carregar inscrições.`);
         }
         setInscricoes([]);
-        setTotal(0);
+        setTotalLista(0);
         return;
       }
       const data = await resp.json();
       setInscricoes(data.items ?? []);
-      setTotal(data.total ?? 0);
+      setTotalLista(data.total ?? 0);
     } catch (err) {
       console.error(err);
       setErro("Não foi possível carregar as inscrições.");
       setInscricoes([]);
-      setTotal(0);
+      setTotalLista(0);
     } finally {
       setLoading(false);
     }
   }, [podeAcessar, q, somentePresentes, turma]);
+
+  const carregarResumoSorteios = useCallback(async () => {
+    if (!podeAcessar) return;
+    try {
+      const resp = await fetch(
+        `/api/eventos/${EVENTO_SLUG}/sorteios/resumo`,
+        {
+          credentials: "include",
+        },
+      );
+      if (!resp.ok) {
+        throw new Error(`Erro ${resp.status} ao carregar resumo.`);
+      }
+      const data = (await resp.json()) as ResumoSorteios;
+      setResumoSorteios(data);
+    } catch (err) {
+      console.error(err);
+      toast.error("Não foi possível carregar o resumo do sorteio.");
+      setResumoSorteios(RESUMO_SORTEIOS_INICIAL);
+    }
+  }, [podeAcessar]);
 
   const carregarSorteios = useCallback(async () => {
     if (!podeAcessar) return;
@@ -354,29 +392,12 @@ export default function InscricoesEventoPage() {
   useEffect(() => {
     if (!podeAcessar) return;
     carregarSorteios();
-  }, [carregarSorteios, podeAcessar]);
+    carregarResumoSorteios();
+  }, [carregarResumoSorteios, carregarSorteios, podeAcessar]);
 
   const totalFilhos = useMemo(
     () => inscricoes.reduce((acc, i) => acc + i.filhos.length, 0),
     [inscricoes],
-  );
-
-  const presentesConfirmadas = useMemo(
-    () => inscricoes.filter((i) => i.presencaConfirmadaEm).length,
-    [inscricoes],
-  );
-
-  const sorteadosIds = useMemo(
-    () => new Set(sorteios.map((s) => s.inscricaoId)),
-    [sorteios],
-  );
-
-  const elegiveisSorteio = useMemo(
-    () =>
-      inscricoes.filter(
-        (i) => i.presencaConfirmadaEm && !sorteadosIds.has(i.id),
-      ).length,
-    [inscricoes, sorteadosIds],
   );
 
   async function atualizarPresenca(inscricao: Inscricao, presente: boolean) {
@@ -403,8 +424,9 @@ export default function InscricoesEventoPage() {
         return atuais.map((i) => (i.id === atualizada.id ? atualizada : i));
       });
       if (somentePresentes && !atualizada.presencaConfirmadaEm) {
-        setTotal((atual) => Math.max(0, atual - 1));
+        setTotalLista((atual) => Math.max(0, atual - 1));
       }
+      await carregarResumoSorteios();
       toast.success(
         presente ? "Presença confirmada." : "Presença desfeita.",
       );
@@ -443,6 +465,7 @@ export default function InscricoesEventoPage() {
       setSorteios((atuais) => [sorteio, ...atuais]);
       setUltimoSorteio(sorteio);
       setBrinde("");
+      await carregarResumoSorteios();
       toast.success(`Brinde sorteado para Nº ${sorteio.numeroInscricao}.`);
     } catch (err) {
       console.error(err);
@@ -510,7 +533,9 @@ export default function InscricoesEventoPage() {
           <CardContent className="p-6 flex items-center gap-4">
             <Users className="w-8 h-8 text-[#A3D154]" />
             <div>
-              <p className="text-2xl font-semibold text-slate-900">{total}</p>
+              <p className="text-2xl font-semibold text-slate-900">
+                {resumoSorteios.totalInscricoes}
+              </p>
               <p className="text-sm text-slate-500">Inscrições no total</p>
             </div>
           </CardContent>
@@ -533,7 +558,7 @@ export default function InscricoesEventoPage() {
             <TicketCheck className="w-8 h-8 text-emerald-600" />
             <div>
               <p className="text-2xl font-semibold text-slate-900">
-                {presentesConfirmadas}
+                {resumoSorteios.totalPresentes}
               </p>
               <p className="text-sm text-slate-500">Presentes confirmadas</p>
             </div>
@@ -589,14 +614,14 @@ export default function InscricoesEventoPage() {
             <div className="rounded-md border border-slate-200 px-4 py-3">
               <p className="text-sm text-slate-500">Elegíveis para sorteio</p>
               <p className="mt-1 text-2xl font-semibold text-slate-900">
-                {elegiveisSorteio}
+                {resumoSorteios.totalElegiveis}
               </p>
-              <p className="mt-1 text-xs text-slate-500">na lista atual</p>
+              <p className="mt-1 text-xs text-slate-500">no evento</p>
             </div>
             <div className="rounded-md border border-slate-200 px-4 py-3">
               <p className="text-sm text-slate-500">Brindes sorteados</p>
               <p className="mt-1 text-2xl font-semibold text-slate-900">
-                {sorteios.length}
+                {resumoSorteios.totalSorteios}
               </p>
             </div>
             <div className="rounded-md border border-slate-200 px-4 py-3">
@@ -683,7 +708,12 @@ export default function InscricoesEventoPage() {
 
       <Card>
         <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <CardTitle>Lista de inscritas</CardTitle>
+          <div>
+            <CardTitle>Lista de inscritas</CardTitle>
+            <p className="mt-1 text-sm text-slate-500">
+              {totalLista} encontradas nos filtros atuais
+            </p>
+          </div>
           <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />

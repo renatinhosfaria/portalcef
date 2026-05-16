@@ -1,4 +1,4 @@
-import { BadRequestException } from "@nestjs/common";
+import { BadRequestException, ConflictException } from "@nestjs/common";
 
 import type { DatabaseService } from "../../common/database/database.service";
 import { EventoInscricoesService } from "./evento-inscricoes.service";
@@ -67,7 +67,7 @@ type SelectChain = PromiseLike<Resultado[]> & {
   innerJoin: jest.MockedFunction<Encadeador<SelectChain>>;
   where: jest.MockedFunction<Encadeador<SelectChain>>;
   orderBy: jest.MockedFunction<Encadeador<SelectChain>>;
-  limit: jest.MockedFunction<Encadeador<Promise<Resultado[]>>>;
+  limit: jest.MockedFunction<Encadeador<SelectChain>>;
   offset: jest.MockedFunction<Encadeador<Promise<Resultado[]>>>;
 };
 
@@ -86,6 +86,7 @@ type DbMock = {
   selectResults: Resultado[][];
   updateResults: Resultado[][];
   insertResults: Resultado[][];
+  insertErrors: unknown[];
   updateSetValues: Resultado[];
   insertValues: Resultado[];
   select: jest.MockedFunction<() => SelectChain>;
@@ -102,7 +103,7 @@ function criarSelectChain(resultado: Resultado[]) {
     innerJoin: jest.fn(() => chain),
     where: jest.fn(() => chain),
     orderBy: jest.fn(() => chain),
-    limit: jest.fn(() => Promise.resolve(resultado)),
+    limit: jest.fn(() => chain),
     offset: jest.fn(() => Promise.resolve(resultado)),
     then: Promise.resolve(resultado).then.bind(Promise.resolve(resultado)),
   };
@@ -114,6 +115,7 @@ function criarDbMock() {
   const selectResults: Resultado[][] = [];
   const updateResults: Resultado[][] = [];
   const insertResults: Resultado[][] = [];
+  const insertErrors: unknown[] = [];
   const updateSetValues: Resultado[] = [];
   const insertValues: Resultado[] = [];
 
@@ -131,13 +133,18 @@ function criarDbMock() {
       insertValues.push(values);
       return insertChain;
     }),
-    returning: jest.fn(() => Promise.resolve(insertResults.shift() ?? [])),
+    returning: jest.fn(() => {
+      const erro = insertErrors.shift();
+      if (erro) return Promise.reject(erro);
+      return Promise.resolve(insertResults.shift() ?? []);
+    }),
   };
 
   const db: DbMock = {
     selectResults,
     updateResults,
     insertResults,
+    insertErrors,
     updateSetValues,
     insertValues,
     select: jest.fn(() => criarSelectChain(selectResults.shift() ?? [])),
@@ -222,7 +229,61 @@ describe("EventoInscricoesService", () => {
     });
   });
 
+  describe("listagem", () => {
+    it("aplica filtro de turma na consulta principal antes de paginar", async () => {
+      db.selectResults.push([{ count: 1 }]);
+      db.selectResults.push([inscricaoBase]);
+      db.selectResults.push([
+        {
+          id: "filho-1",
+          inscricaoId: "inscricao-1",
+          nomeFilho: "Ana",
+          turmaFilho: "Infantil 1",
+          createdAt: new Date("2026-05-15T12:00:00.000Z"),
+        },
+      ]);
+
+      const result = await service.listar("mae-por-inteiro", {
+        turma: "Infantil 1",
+        q: "",
+        somentePresentes: false,
+        limit: 200,
+        offset: 0,
+      });
+
+      expect(result.total).toBe(1);
+      expect(result.items).toHaveLength(1);
+
+      const dbModule = jest.requireMock("@essencia/db");
+      const sqlChamadas = dbModule.sql.mock.calls.map(
+        ([strings]: [TemplateStringsArray]) => Array.from(strings).join(" "),
+      );
+      expect(
+        sqlChamadas.some(
+          (sql: string) =>
+            sql.includes("exists") && sql.includes("evento_inscricao_filhos"),
+        ),
+      ).toBe(true);
+    });
+  });
+
   describe("sorteios", () => {
+    it("calcula resumo global de presentes e elegíveis do evento", async () => {
+      db.selectResults.push([{ count: 12 }]);
+      db.selectResults.push([{ count: 8 }]);
+      db.selectResults.push([{ count: 3 }]);
+      db.selectResults.push([{ count: 5 }]);
+
+      const result = await service.obterResumoSorteios("mae-por-inteiro");
+
+      expect(result).toEqual({
+        totalInscricoes: 12,
+        totalPresentes: 8,
+        totalSorteios: 3,
+        totalElegiveis: 5,
+      });
+    });
+
     it("sorteia apenas inscrita presente que ainda não ganhou brinde", async () => {
       const ganhadora = {
         ...inscricaoBase,
@@ -287,6 +348,23 @@ describe("EventoInscricoesService", () => {
       ).rejects.toBeInstanceOf(BadRequestException);
 
       expect(db.insert).not.toHaveBeenCalled();
+    });
+
+    it("não cria segundo ganhador para o mesmo brinde", async () => {
+      const ganhadora = {
+        ...inscricaoBase,
+        presencaConfirmadaEm: new Date("2026-05-16T12:00:00.000Z"),
+        presencaConfirmadaPor: "usuario-1",
+      };
+      db.selectResults.push([ganhadora]);
+      db.insertErrors.push({
+        code: "23505",
+        constraint: "uq_evento_sorteios_evento_brinde",
+      });
+
+      await expect(
+        service.sortearBrinde("mae-por-inteiro", "Cesta de café", "usuario-2"),
+      ).rejects.toBeInstanceOf(ConflictException);
     });
 
     it("não permite sortear brinde sem nome", async () => {

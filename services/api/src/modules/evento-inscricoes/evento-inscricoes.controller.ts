@@ -162,6 +162,20 @@ export class EventoInscricoesController {
   }
 
   /**
+   * GET /api/eventos/:slug/sorteios/resumo
+   * Resumo global de presença e elegibilidade para sorteio (mesmas roles).
+   */
+  @Get(":slug/sorteios/resumo")
+  @Roles(...ADMIN_ROLES)
+  async obterResumoSorteios(@Param("slug") slug: string) {
+    if (!SLUG_REGEX.test(slug)) {
+      throw new BadRequestException("Slug do evento inválido");
+    }
+
+    return this.eventoInscricoesService.obterResumoSorteios(slug);
+  }
+
+  /**
    * GET /api/eventos/:slug/sorteios
    * Histórico de sorteios do evento (mesmas roles).
    */
