@@ -60,9 +60,44 @@ jest.mock("@essencia/db", () => {
 });
 
 type Resultado = Record<string, unknown>;
+type Encadeador<T> = (...args: unknown[]) => T;
+
+type SelectChain = PromiseLike<Resultado[]> & {
+  from: jest.MockedFunction<Encadeador<SelectChain>>;
+  innerJoin: jest.MockedFunction<Encadeador<SelectChain>>;
+  where: jest.MockedFunction<Encadeador<SelectChain>>;
+  orderBy: jest.MockedFunction<Encadeador<SelectChain>>;
+  limit: jest.MockedFunction<Encadeador<Promise<Resultado[]>>>;
+  offset: jest.MockedFunction<Encadeador<Promise<Resultado[]>>>;
+};
+
+type UpdateChain = {
+  set: jest.MockedFunction<(values: Resultado) => UpdateChain>;
+  where: jest.MockedFunction<Encadeador<UpdateChain>>;
+  returning: jest.MockedFunction<() => Promise<Resultado[]>>;
+};
+
+type InsertChain = {
+  values: jest.MockedFunction<(values: Resultado) => InsertChain>;
+  returning: jest.MockedFunction<() => Promise<Resultado[]>>;
+};
+
+type DbMock = {
+  selectResults: Resultado[][];
+  updateResults: Resultado[][];
+  insertResults: Resultado[][];
+  updateSetValues: Resultado[];
+  insertValues: Resultado[];
+  select: jest.MockedFunction<() => SelectChain>;
+  update: jest.MockedFunction<() => UpdateChain>;
+  insert: jest.MockedFunction<() => InsertChain>;
+  transaction: jest.MockedFunction<
+    (callback: (tx: DbMock) => Promise<unknown>) => Promise<unknown>
+  >;
+};
 
 function criarSelectChain(resultado: Resultado[]) {
-  const chain: any = {
+  const chain: SelectChain = {
     from: jest.fn(() => chain),
     innerJoin: jest.fn(() => chain),
     where: jest.fn(() => chain),
@@ -82,7 +117,7 @@ function criarDbMock() {
   const updateSetValues: Resultado[] = [];
   const insertValues: Resultado[] = [];
 
-  const updateChain: any = {
+  const updateChain: UpdateChain = {
     set: jest.fn((values: Resultado) => {
       updateSetValues.push(values);
       return updateChain;
@@ -91,7 +126,7 @@ function criarDbMock() {
     returning: jest.fn(() => Promise.resolve(updateResults.shift() ?? [])),
   };
 
-  const insertChain: any = {
+  const insertChain: InsertChain = {
     values: jest.fn((values: Resultado) => {
       insertValues.push(values);
       return insertChain;
@@ -99,7 +134,7 @@ function criarDbMock() {
     returning: jest.fn(() => Promise.resolve(insertResults.shift() ?? [])),
   };
 
-  const db: any = {
+  const db: DbMock = {
     selectResults,
     updateResults,
     insertResults,
@@ -108,7 +143,7 @@ function criarDbMock() {
     select: jest.fn(() => criarSelectChain(selectResults.shift() ?? [])),
     update: jest.fn(() => updateChain),
     insert: jest.fn(() => insertChain),
-    transaction: jest.fn(async (callback: (tx: any) => Promise<unknown>) =>
+    transaction: jest.fn(async (callback: (tx: DbMock) => Promise<unknown>) =>
       callback(db),
     ),
   };
