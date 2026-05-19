@@ -1,6 +1,7 @@
 'use client';
 
 import { formatarDataHora } from '@essencia/shared/formatar-data';
+import type { OrderSource } from '@essencia/shared/types';
 import { ArrowLeft, Calendar, User, Phone, DollarSign, Package, Clock, CheckCircle2, XCircle, Store, Globe } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
@@ -32,7 +33,7 @@ interface Order {
     orderNumber: string;
     schoolId: string;
     unitId: string;
-    orderSource: string;
+    orderSource: OrderSource;
     status: string;
     totalAmount: number;
     customer: {
@@ -181,11 +182,15 @@ export default function OrderDetailsPage() {
                 </div>
 
                 <div className="flex items-center gap-2">
-                    <span className={`badge ${order.orderSource === 'ONLINE' ? 'badge-info' : 'badge-neutral'} flex items-center gap-1.5`}>
-                        {order.orderSource === 'ONLINE' ? (
+                    <span className={`badge ${order.orderSource === 'PRE_VENDA' ? 'badge-warning' : order.orderSource === 'ONLINE' ? 'badge-info' : 'badge-neutral'} flex items-center gap-1.5`}>
+                        {order.orderSource === 'PRE_VENDA' ? (
+                            <><Store className="w-3 h-3" /> Pré-venda</>
+                        ) : order.orderSource === 'ONLINE' ? (
                             <><Globe className="w-3 h-3" /> Loja Online</>
-                        ) : (
+                        ) : order.orderSource === 'PRESENCIAL' ? (
                             <><Store className="w-3 h-3" /> Venda Presencial</>
+                        ) : (
+                            <><Store className="w-3 h-3" /> Origem desconhecida</>
                         )}
                     </span>
                 </div>
