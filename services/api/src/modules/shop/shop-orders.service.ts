@@ -17,6 +17,7 @@ import {
   type ShopOrderItem,
   shopProductVariants,
   type ShopProductVariant,
+  shopInventory,
   units,
   eq,
   and,
@@ -74,6 +75,8 @@ type OrderWithItems = ShopOrder & {
   payments?: ShopOrderPayment[];
   updatedAt?: Date | null;
 };
+
+const LIMITE_PRE_VENDA_POR_PRODUTO_ALUNO = 2;
 
 /**
  * ShopOrdersService
@@ -195,6 +198,22 @@ export class ShopOrdersService {
     return variant;
   }
 
+  private async getAvailableStock(variantId: string, unitId: string) {
+    const db = getDb();
+    const inventory = await db.query.shopInventory.findFirst({
+      where: and(
+        eq(shopInventory.variantId, variantId),
+        eq(shopInventory.unitId, unitId),
+      ),
+    });
+
+    if (!inventory) {
+      return 0;
+    }
+
+    return inventory.quantity - inventory.reservedQuantity;
+  }
+
   private async createPendingOnlineOrder(
     dto: CreateOrderDto,
     expiresAt: Date,
@@ -303,6 +322,153 @@ export class ShopOrdersService {
       orderNumber: order.orderNumber,
       totalAmount: order.totalAmount,
       expiresAt: order.expiresAt,
+    };
+  }
+
+  /**
+   * POST /shop/orders/pre-venda
+   *
+   * Cria voucher de pré-venda sem reservar nem baixar estoque.
+   * A escola confirma pagamento e retirada manualmente quando o produto chegar.
+   */
+  async createPreSaleOrder(dto: CreateOrderDto) {
+    const db = getDb();
+    await this.assertUnitBelongsToSchool(dto.schoolId, dto.unitId);
+    await this.assertShopEnabled(dto.unitId);
+
+    const orderNumber = await this.generateOrderNumber();
+    const lockTargets = dto.items.map((item) => ({
+      variantId: item.variantId,
+      unitId: dto.unitId,
+    }));
+
+    const order = await this.inventoryService.withInventoryLocks(
+      lockTargets,
+      async () => {
+        let totalAmount = 0;
+        const itemsWithPrice: OrderItemWithPrice[] = [];
+        const variantsById = new Map<
+          string,
+          Awaited<ReturnType<typeof this.getActiveVariantForOrder>>
+        >();
+
+        for (const item of dto.items) {
+          variantsById.set(
+            item.variantId,
+            await this.getActiveVariantForOrder(item.variantId, dto.schoolId),
+          );
+        }
+
+        const quantitiesByProductAndStudent = new Map<
+          string,
+          {
+            productId: string;
+            studentName: string;
+            quantity: number;
+          }
+        >();
+
+        for (const item of dto.items) {
+          const variant = variantsById.get(item.variantId)!;
+          const normalizedStudentName = item.studentName
+            .trim()
+            .toLocaleLowerCase("pt-BR");
+          const key = `${variant.product.id}:${normalizedStudentName}`;
+          const current = quantitiesByProductAndStudent.get(key) ?? {
+            productId: variant.product.id,
+            studentName: item.studentName,
+            quantity: 0,
+          };
+
+          current.quantity += item.quantity;
+          quantitiesByProductAndStudent.set(key, current);
+
+          if (current.quantity > LIMITE_PRE_VENDA_POR_PRODUTO_ALUNO) {
+            throw new BadRequestException({
+              code: "QUANTITY_LIMIT_EXCEEDED",
+              message:
+                "Limite de 2 unidades por produto por aluno atingido na pré-venda.",
+              details: {
+                limit: LIMITE_PRE_VENDA_POR_PRODUTO_ALUNO,
+                productId: current.productId,
+                studentName: current.studentName,
+                requestedQuantity: current.quantity,
+              },
+            });
+          }
+        }
+
+        for (const item of dto.items) {
+          const variant = variantsById.get(item.variantId)!;
+          const available = await this.getAvailableStock(
+            item.variantId,
+            dto.unitId,
+          );
+
+          if (available > 0) {
+            throw new BadRequestException({
+              code: "PRE_SALE_STOCK_AVAILABLE",
+              message:
+                "Este tamanho já está disponível para pronta entrega. Atualize o carrinho antes de finalizar.",
+              details: {
+                variantId: item.variantId,
+                availableStock: available,
+              },
+            });
+          }
+
+          const itemPrice = variant.priceOverride ?? variant.product.basePrice;
+          const itemTotal = itemPrice * item.quantity;
+          totalAmount += itemTotal;
+
+          itemsWithPrice.push({
+            variantId: item.variantId,
+            studentName: item.studentName,
+            quantity: item.quantity,
+            unitPrice: itemPrice,
+            subtotal: itemTotal,
+            productName: variant.product.name,
+            variantSize: variant.size,
+          });
+        }
+
+        return db.transaction(async (tx: DbTransaction) => {
+          const [createdOrder] = await tx
+            .insert(shopOrders)
+            .values({
+              orderNumber,
+              schoolId: dto.schoolId,
+              unitId: dto.unitId,
+              orderSource: "PRE_VENDA",
+              status: "AGUARDANDO_PAGAMENTO",
+              totalAmount,
+              customerName: dto.customerName,
+              customerPhone: dto.customerPhone,
+              customerEmail: dto.customerEmail || null,
+              expiresAt: null,
+            })
+            .returning();
+
+          const orderItemsValues = itemsWithPrice.map((item) => ({
+            orderId: createdOrder.id,
+            variantId: item.variantId,
+            studentName: item.studentName,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+          }));
+
+          await tx.insert(shopOrderItems).values(orderItemsValues);
+
+          return createdOrder;
+        });
+      },
+    );
+
+    return {
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      totalAmount: order.totalAmount,
+      expiresAt: order.expiresAt ?? null,
     };
   }
 

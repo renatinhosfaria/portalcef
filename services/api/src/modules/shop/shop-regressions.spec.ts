@@ -802,6 +802,327 @@ describe("Regressões da loja", () => {
     ]);
   });
 
+  it("cria pedido de pré-venda sem reservar estoque e com preço recalculado", async () => {
+    const inventoryService = {
+      withInventoryLocks: jest.fn(async (_items, callback) => callback()),
+      reserveStockInTransaction: jest.fn(),
+      reserveStock: jest.fn(),
+      releaseReservation: jest.fn(),
+    };
+    const paymentsService = { refundPayment: jest.fn() };
+    const service = new ShopOrdersService(
+      inventoryService as never,
+      paymentsService as never,
+    );
+
+    mockOrderInsert.returning.mockResolvedValue([
+      {
+        id: "order-pre-venda-1",
+        orderNumber: "654321",
+        totalAmount: 17000,
+        expiresAt: null,
+        orderSource: "PRE_VENDA",
+      },
+    ]);
+    mockDb.query.units.findFirst.mockResolvedValue({
+      id: "unit-1",
+      schoolId: "school-1",
+    });
+    mockDb.query.shopProductVariants.findFirst.mockResolvedValue({
+      id: "variant-1",
+      isActive: true,
+      priceOverride: 8500,
+      product: {
+        id: "product-1",
+        name: "Moletom",
+        schoolId: "school-1",
+        basePrice: 17000,
+        isActive: true,
+      },
+    });
+    mockDb.query.shopOrders.findFirst.mockResolvedValue(null);
+    mockDb.query.shopInventory.findFirst.mockResolvedValue({
+      id: "inventory-1",
+      variantId: "variant-1",
+      unitId: "unit-1",
+      quantity: 0,
+      reservedQuantity: 0,
+    });
+
+    const result = await (
+      service as unknown as {
+        createPreSaleOrder: typeof service.createOrder;
+      }
+    ).createPreSaleOrder({
+      schoolId: "school-1",
+      unitId: "unit-1",
+      customerName: "Maria Silva",
+      customerPhone: "11987654321",
+      items: [
+        {
+          variantId: "variant-1",
+          quantity: 2,
+          studentName: "João Silva",
+        },
+      ],
+    });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        orderNumber: "654321",
+        totalAmount: 17000,
+        expiresAt: null,
+      }),
+    );
+    expect(mockOrderInsert.values).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderSource: "PRE_VENDA",
+        status: "AGUARDANDO_PAGAMENTO",
+        totalAmount: 17000,
+        expiresAt: null,
+      }),
+    );
+    expect(inventoryService.withInventoryLocks).toHaveBeenCalledWith(
+      [{ variantId: "variant-1", unitId: "unit-1" }],
+      expect.any(Function),
+    );
+    expect(inventoryService.reserveStockInTransaction).not.toHaveBeenCalled();
+    expect(inventoryService.reserveStock).not.toHaveBeenCalled();
+    expect(mockOrderItemsInsert.values).toHaveBeenCalledWith([
+      expect.objectContaining({
+        orderId: "order-pre-venda-1",
+        variantId: "variant-1",
+        quantity: 2,
+        unitPrice: 8500,
+      }),
+    ]);
+  });
+
+  it("revalida produto e preço da pré-venda dentro do lock de estoque", async () => {
+    const inventoryService = {
+      withInventoryLocks: jest.fn(async (_items, callback) => {
+        mockDb.query.shopProductVariants.findFirst.mockResolvedValue({
+          id: "variant-1",
+          isActive: false,
+          priceOverride: 8500,
+          product: {
+            id: "product-1",
+            name: "Moletom",
+            schoolId: "school-1",
+            basePrice: 17000,
+            isActive: true,
+          },
+        });
+
+        return callback();
+      }),
+      reserveStockInTransaction: jest.fn(),
+      reserveStock: jest.fn(),
+      releaseReservation: jest.fn(),
+    };
+    const paymentsService = { refundPayment: jest.fn() };
+    const service = new ShopOrdersService(
+      inventoryService as never,
+      paymentsService as never,
+    );
+
+    mockDb.query.units.findFirst.mockResolvedValue({
+      id: "unit-1",
+      schoolId: "school-1",
+    });
+    mockDb.query.shopInventory.findFirst.mockResolvedValue({
+      id: "inventory-1",
+      variantId: "variant-1",
+      unitId: "unit-1",
+      quantity: 0,
+      reservedQuantity: 0,
+    });
+
+    await expect(
+      (
+        service as unknown as {
+          createPreSaleOrder: typeof service.createOrder;
+        }
+      ).createPreSaleOrder({
+        schoolId: "school-1",
+        unitId: "unit-1",
+        customerName: "Maria Silva",
+        customerPhone: "11987654321",
+        items: [
+          {
+            variantId: "variant-1",
+            quantity: 1,
+            studentName: "João Silva",
+          },
+        ],
+      }),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        code: "RESOURCE_NOT_FOUND",
+      }),
+    });
+
+    expect(mockOrderInsert.values).not.toHaveBeenCalled();
+  });
+
+  it("rejeita pré-venda quando o tamanho já tem estoque disponível", async () => {
+    const inventoryService = {
+      withInventoryLocks: jest.fn(async (_items, callback) => callback()),
+      reserveStockInTransaction: jest.fn(),
+      reserveStock: jest.fn(),
+      releaseReservation: jest.fn(),
+    };
+    const paymentsService = { refundPayment: jest.fn() };
+    const service = new ShopOrdersService(
+      inventoryService as never,
+      paymentsService as never,
+    );
+
+    mockDb.query.units.findFirst.mockResolvedValue({
+      id: "unit-1",
+      schoolId: "school-1",
+    });
+    mockDb.query.shopProductVariants.findFirst.mockResolvedValue({
+      id: "variant-1",
+      isActive: true,
+      priceOverride: null,
+      product: {
+        id: "product-1",
+        name: "Moletom",
+        schoolId: "school-1",
+        basePrice: 17000,
+        isActive: true,
+      },
+    });
+    mockDb.query.shopInventory.findFirst.mockResolvedValue({
+      id: "inventory-1",
+      variantId: "variant-1",
+      unitId: "unit-1",
+      quantity: 2,
+      reservedQuantity: 0,
+    });
+
+    await expect(
+      (
+        service as unknown as {
+          createPreSaleOrder: typeof service.createOrder;
+        }
+      ).createPreSaleOrder({
+        schoolId: "school-1",
+        unitId: "unit-1",
+        customerName: "Maria Silva",
+        customerPhone: "11987654321",
+        items: [
+          {
+            variantId: "variant-1",
+            quantity: 1,
+            studentName: "João Silva",
+          },
+        ],
+      }),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        code: "PRE_SALE_STOCK_AVAILABLE",
+        details: expect.objectContaining({
+          variantId: "variant-1",
+          availableStock: 2,
+        }),
+      }),
+    });
+
+    expect(mockOrderInsert.values).not.toHaveBeenCalled();
+    expect(inventoryService.withInventoryLocks).toHaveBeenCalledWith(
+      [{ variantId: "variant-1", unitId: "unit-1" }],
+      expect.any(Function),
+    );
+    expect(inventoryService.reserveStockInTransaction).not.toHaveBeenCalled();
+  });
+
+  it("rejeita pré-venda quando produto ultrapassa limite por aluno", async () => {
+    const inventoryService = {
+      withInventoryLocks: jest.fn(async (_items, callback) => callback()),
+      reserveStockInTransaction: jest.fn(),
+      reserveStock: jest.fn(),
+      releaseReservation: jest.fn(),
+    };
+    const paymentsService = { refundPayment: jest.fn() };
+    const service = new ShopOrdersService(
+      inventoryService as never,
+      paymentsService as never,
+    );
+
+    mockDb.query.units.findFirst.mockResolvedValue({
+      id: "unit-1",
+      schoolId: "school-1",
+    });
+    mockDb.query.shopProductVariants.findFirst
+      .mockResolvedValueOnce({
+        id: "variant-1",
+        isActive: true,
+        priceOverride: null,
+        product: {
+          id: "product-1",
+          name: "Moletom",
+          schoolId: "school-1",
+          basePrice: 17000,
+          isActive: true,
+        },
+      })
+      .mockResolvedValueOnce({
+        id: "variant-2",
+        isActive: true,
+        priceOverride: null,
+        product: {
+          id: "product-1",
+          name: "Moletom",
+          schoolId: "school-1",
+          basePrice: 17000,
+          isActive: true,
+        },
+      });
+    mockDb.query.shopInventory.findFirst.mockResolvedValue({
+      id: "inventory-1",
+      unitId: "unit-1",
+      quantity: 0,
+      reservedQuantity: 0,
+    });
+
+    await expect(
+      (
+        service as unknown as {
+          createPreSaleOrder: typeof service.createOrder;
+        }
+      ).createPreSaleOrder({
+        schoolId: "school-1",
+        unitId: "unit-1",
+        customerName: "Maria Silva",
+        customerPhone: "11987654321",
+        items: [
+          {
+            variantId: "variant-1",
+            quantity: 2,
+            studentName: "João Silva",
+          },
+          {
+            variantId: "variant-2",
+            quantity: 1,
+            studentName: "João Silva",
+          },
+        ],
+      }),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        code: "QUANTITY_LIMIT_EXCEEDED",
+        details: expect.objectContaining({
+          limit: 2,
+        }),
+      }),
+    });
+
+    expect(mockOrderInsert.values).not.toHaveBeenCalled();
+    expect(inventoryService.reserveStockInTransaction).not.toHaveBeenCalled();
+  });
+
   it("cria checkout Stripe com pedido reservado por 30 minutos", async () => {
     const expiresAtAntes = Date.now() + 29 * 60 * 1000;
     const inventoryService = {
@@ -1825,6 +2146,50 @@ describe("Controller público da loja", () => {
     );
   });
 
+  it("cria pré-venda pública pelo service de pedidos", async () => {
+    const ordersService = {
+      createPreSaleOrder: jest.fn().mockResolvedValue({
+        orderId: "order-pre-venda-1",
+        orderNumber: "654321",
+        totalAmount: 17000,
+        expiresAt: null,
+      }),
+    };
+    const controller = new ShopPublicController(
+      {} as never,
+      ordersService as never,
+      {} as never,
+      {} as never,
+    );
+
+    const result = await controller.createPreSaleOrder({
+      schoolId: "11111111-1111-4111-8111-111111111111",
+      unitId: "22222222-2222-4222-8222-222222222222",
+      customerName: "Maria Silva",
+      customerPhone: "11987654321",
+      items: [
+        {
+          variantId: "33333333-3333-4333-8333-333333333333",
+          quantity: 1,
+          studentName: "João Silva",
+        },
+      ],
+    } as never);
+
+    expect(result).toEqual({
+      success: true,
+      data: expect.objectContaining({
+        orderNumber: "654321",
+        expiresAt: null,
+      }),
+    });
+    expect(ordersService.createPreSaleOrder).toHaveBeenCalledWith(
+      expect.objectContaining({
+        customerPhone: "11987654321",
+      }),
+    );
+  });
+
   it("aplica rate limit na consulta pública de pedido", () => {
     expect(
       Reflect.getMetadata(
@@ -1866,6 +2231,21 @@ describe("Controller público da loja", () => {
       Reflect.getMetadata(
         "THROTTLER:TTLstrict",
         ShopPublicController.prototype.initCheckout,
+      ),
+    ).toBeDefined();
+  });
+
+  it("aplica rate limit na criação pública de pré-venda", () => {
+    expect(
+      Reflect.getMetadata(
+        "THROTTLER:LIMITstrict",
+        ShopPublicController.prototype.createPreSaleOrder,
+      ),
+    ).toBeDefined();
+    expect(
+      Reflect.getMetadata(
+        "THROTTLER:TTLstrict",
+        ShopPublicController.prototype.createPreSaleOrder,
       ),
     ).toBeDefined();
   });
