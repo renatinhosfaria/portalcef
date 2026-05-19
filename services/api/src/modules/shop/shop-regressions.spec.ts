@@ -17,7 +17,8 @@ import { ShopPublicController } from "./shop-public.controller";
 import { PaymentsWebhookController } from "../payments/payments-webhook.controller";
 import { PaymentsService } from "../payments/payments.service";
 import { ShopExpirationJob } from "./jobs/shop-expiration.job";
-import { CreateProductDto } from "./dto/product.dto";
+import { CatalogFiltersDto, CreateProductDto } from "./dto/product.dto";
+import { ListOrdersDto } from "./dto/order.dto";
 import { gte, sql } from "@essencia/db";
 import {
   canAccessShopSchool,
@@ -2102,6 +2103,62 @@ describe("Ambiente de produção da loja", () => {
     );
     expect(migration).toContain(
       'CREATE INDEX IF NOT EXISTS "shop_interest_requests_status_idx"',
+    );
+  });
+});
+
+describe("Validação de DTOs da loja", () => {
+  it.each(["PRONTA_ENTREGA", "PRE_VENDA"] as const)(
+    "valida modoVenda %s no filtro de catálogo",
+    async (modoVenda) => {
+      const dto = Object.assign(new CatalogFiltersDto(), { modoVenda });
+
+      const errors = await validate(dto);
+
+      expect(errors).toEqual([]);
+    },
+  );
+
+  it("valida rejeição de modoVenda fora do contrato", async () => {
+    const dto = Object.assign(new CatalogFiltersDto(), {
+      modoVenda: "ONLINE",
+    });
+
+    const errors = await validate(dto);
+
+    expect(errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          property: "modoVenda",
+        }),
+      ]),
+    );
+  });
+
+  it.each(["ONLINE", "PRESENCIAL", "PRE_VENDA"] as const)(
+    "valida orderSource %s no filtro administrativo de pedidos",
+    async (orderSource) => {
+      const dto = Object.assign(new ListOrdersDto(), { orderSource });
+
+      const errors = await validate(dto);
+
+      expect(errors).toEqual([]);
+    },
+  );
+
+  it("valida rejeição de orderSource fora do contrato", async () => {
+    const dto = Object.assign(new ListOrdersDto(), {
+      orderSource: "WHATSAPP",
+    });
+
+    const errors = await validate(dto);
+
+    expect(errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          property: "orderSource",
+        }),
+      ]),
     );
   });
 });

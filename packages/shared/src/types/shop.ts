@@ -13,7 +13,7 @@ export type OrderStatus =
   | "RETIRADO"
   | "CANCELADO"
   | "EXPIRADO";
-export type OrderSource = "ONLINE" | "PRESENCIAL";
+export type OrderSource = "ONLINE" | "PRESENCIAL" | "PRE_VENDA";
 export type PaymentMethod =
   | "PIX"
   | "CARTAO_CREDITO"

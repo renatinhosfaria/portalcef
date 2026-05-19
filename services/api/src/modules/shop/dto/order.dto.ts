@@ -11,6 +11,13 @@ import {
   ArrayMinSize,
 } from "class-validator";
 import { Type } from "class-transformer";
+import type { OrderSource } from "@essencia/db";
+
+const orderSourceFilterValues = [
+  "ONLINE",
+  "PRESENCIAL",
+  "PRE_VENDA",
+] as const satisfies readonly OrderSource[];
 
 /**
  * Item do pedido
@@ -91,8 +98,8 @@ export class ListOrdersDto {
   status?: string;
 
   @IsOptional()
-  @IsString()
-  orderSource?: string;
+  @IsEnum(orderSourceFilterValues)
+  orderSource?: OrderSource;
 
   @IsOptional()
   @IsString()

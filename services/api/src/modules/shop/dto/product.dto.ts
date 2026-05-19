@@ -124,4 +124,8 @@ export class CatalogFiltersDto {
   @IsOptional()
   @IsBoolean()
   inStock?: boolean; // Filtrar apenas com estoque disponível
+
+  @IsOptional()
+  @IsEnum(["PRONTA_ENTREGA", "PRE_VENDA"])
+  modoVenda?: "PRONTA_ENTREGA" | "PRE_VENDA";
 }
