@@ -32,6 +32,7 @@ interface ApiOrderItem {
 
 export interface ApiOrderResponse {
     orderNumber: string;
+    orderSource?: 'ONLINE' | 'PRESENCIAL' | 'PRE_VENDA';
     status: 'AGUARDANDO_PAGAMENTO' | 'PAGO' | 'RETIRADO' | 'EXPIRADO' | 'CANCELADO';
     totalAmount: number;
     createdAt: string;
@@ -48,10 +49,11 @@ export interface ApiOrderResponse {
 
 export interface Order {
     orderNumber: string;
+    orderSource?: ApiOrderResponse['orderSource'];
     status: ApiOrderResponse['status'];
     totalAmount: number;
     createdAt: string;
-    expiresAt: string;
+    expiresAt: string | null;
     items: OrderItem[];
     pickupInstructions: string;
     customerName: string;
@@ -61,10 +63,11 @@ export interface Order {
 export function transformOrderResponse(orderData: ApiOrderResponse): Order {
     return {
         orderNumber: orderData.orderNumber,
+        orderSource: orderData.orderSource,
         status: orderData.status,
         totalAmount: orderData.totalAmount,
         createdAt: orderData.createdAt,
-        expiresAt: orderData.expiresAt || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+        expiresAt: orderData.expiresAt ?? null,
         customerName: orderData.customer?.name ?? orderData.customerName ?? '',
         customerPhone: orderData.customer?.phone ?? orderData.customerPhone ?? '',
         pickupInstructions: orderData.pickupInstructions || INSTRUCOES_RETIRADA_PADRAO,

@@ -295,6 +295,45 @@ describe('Voucher público', () => {
         expect(orderSource).toContain('orderData.customer?.name ?? orderData.customerName');
         expect(orderSource).toContain('orderData.customer?.phone ?? orderData.customerPhone');
     });
+
+    it('diferencia voucher de pré-venda sem validade obrigatória', () => {
+        const orderSource = readFileSync(join(process.cwd(), 'lib/order.ts'), 'utf8');
+        const pageSource = readFileSync(join(process.cwd(), 'app/pedido/[orderNumber]/page.tsx'), 'utf8');
+
+        expect(orderSource).toContain('orderSource');
+        expect(orderSource).toContain('expiresAt: orderData.expiresAt ?? null');
+        expect(pageSource).toContain("order.orderSource === 'PRE_VENDA'");
+        expect(pageSource).toContain('Sem validade definida');
+    });
+
+    it('possui proxy público para pedidos de pré-venda', () => {
+        const source = readFileSync(
+            join(process.cwd(), 'app/api/shop/orders/pre-venda/[schoolId]/route.ts'),
+            'utf8',
+        );
+
+        expect(source).toContain('/api/shop/orders/pre-venda');
+        expect(source).toContain('schoolId');
+        expect(source).toContain('RATE_LIMIT');
+        expect(source).toContain('FETCH_ERROR');
+    });
+
+    it('voucher rotula pré-venda aguardando pagamento como reserva', () => {
+        const pageSource = readFileSync(
+            join(process.cwd(), 'app/pedido/[orderNumber]/page.tsx'),
+            'utf8',
+        );
+        const pdfSource = readFileSync(
+            join(process.cwd(), 'app/pedido/[orderNumber]/VoucherPDF.tsx'),
+            'utf8',
+        );
+
+        expect(pageSource).toContain("order.orderSource === 'PRE_VENDA'");
+        expect(pageSource).toContain('Reservado em pré-venda');
+        expect(pageSource).toContain('Sem validade definida');
+        expect(pdfSource).toContain('Reservado em pré-venda');
+        expect(pdfSource).toContain('Sem validade definida');
+    });
 });
 
 describe('Voucher Page', () => {
