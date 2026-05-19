@@ -350,6 +350,7 @@ export class ShopProductsService {
           price: variant.priceOverride || product.basePrice,
           availableStock: Math.max(0, available),
           isAvailable: available > 0,
+          modoVenda: this.getModoVenda(available),
         };
       });
 

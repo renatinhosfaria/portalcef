@@ -19,7 +19,7 @@ import { PaymentsService } from "../payments/payments.service";
 import { ShopExpirationJob } from "./jobs/shop-expiration.job";
 import { CatalogFiltersDto, CreateProductDto } from "./dto/product.dto";
 import { ListOrdersDto } from "./dto/order.dto";
-import { gte, sql } from "@essencia/db";
+import { gte, shopProducts, sql } from "@essencia/db";
 import {
   canAccessShopSchool,
   canAccessShopUnit,
@@ -405,7 +405,7 @@ describe("Regressões da loja", () => {
     expect(chamadasSqlComData).toHaveLength(0);
   });
 
-  it("retorna detalhe público sem variantes inativas nem estoque interno", async () => {
+  it("retorna detalhe público com pronta entrega e pré-venda sem estoque interno", async () => {
     const service = new ShopProductsService();
 
     mockDb.query.shopProducts.findFirst.mockResolvedValue({
@@ -434,6 +434,20 @@ describe("Regressões da loja", () => {
           ],
         },
         {
+          id: "variant-pre-venda",
+          size: "12",
+          sku: "CAM-12",
+          priceOverride: null,
+          isActive: true,
+          inventory: [
+            {
+              unitId: "unit-1",
+              quantity: 0,
+              reservedQuantity: 0,
+            },
+          ],
+        },
+        {
           id: "variant-inactive",
           size: "10",
           sku: "CAM-10",
@@ -455,17 +469,40 @@ describe("Regressões da loja", () => {
       "school-1",
       "unit-1",
     );
+    expect(mockDb.query.shopProducts.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          conditions: expect.arrayContaining([
+            expect.objectContaining({
+              column: shopProducts.isActive,
+              value: true,
+            }),
+          ]),
+        }),
+      }),
+    );
 
     expect(product.variants).toEqual([
       expect.objectContaining({
         id: "variant-active",
         availableStock: 7,
         isAvailable: true,
+        modoVenda: "PRONTA_ENTREGA",
+      }),
+      expect.objectContaining({
+        id: "variant-pre-venda",
+        availableStock: 0,
+        isAvailable: false,
+        modoVenda: "PRE_VENDA",
       }),
     ]);
-    expect(product.variants[0]).not.toHaveProperty("inventory");
-    expect(product.variants[0]).not.toHaveProperty("reserved");
-    expect(product.variants[0]).not.toHaveProperty("total");
+    for (const variant of product.variants) {
+      expect(variant).not.toHaveProperty("inventory");
+      expect(variant).not.toHaveProperty("quantity");
+      expect(variant).not.toHaveProperty("reservedQuantity");
+      expect(variant).not.toHaveProperty("reserved");
+      expect(variant).not.toHaveProperty("total");
+    }
   });
 
   it("classifica variantes públicas entre pronta entrega e pré-venda pelo estoque", async () => {
