@@ -16,6 +16,7 @@ interface ProductCardProps {
   images?: string[];
   category: string;
   availableStock: number;
+  modoVenda?: 'PRONTA_ENTREGA' | 'PRE_VENDA';
 }
 
 export function ProductCard({
@@ -28,11 +29,13 @@ export function ProductCard({
   images,
   category,
   availableStock,
+  modoVenda = 'PRONTA_ENTREGA',
 }: ProductCardProps) {
   const [isHovered, setIsHovered] = useState(false);
 
   const isLowStock = availableStock > 0 && availableStock < 5;
-  const isOutOfStock = availableStock === 0;
+  const isPreSale = modoVenda === 'PRE_VENDA';
+  const isOutOfStock = availableStock === 0 && !isPreSale;
 
   return (
     <Link
@@ -63,6 +66,11 @@ export function ProductCard({
             {isOutOfStock && (
               <span className="badge badge-danger animate-fade-in-down shadow-lg">
                 Esgotado
+              </span>
+            )}
+            {isPreSale && (
+              <span className="badge badge-warning animate-fade-in-down shadow-lg">
+                Pré-venda
               </span>
             )}
             {isLowStock && (
@@ -105,7 +113,9 @@ export function ProductCard({
               </span>
             </div>
 
-            {isOutOfStock ? (
+            {isPreSale ? (
+              <span className="text-xs text-amber-600 font-semibold">Reservar</span>
+            ) : isOutOfStock ? (
               <span className="text-xs text-red-500 font-semibold">Indisponível</span>
             ) : (
               <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#F0FDF4] border border-[#A3D154]/20">

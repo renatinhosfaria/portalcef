@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
+import { ProductCard } from '../ProductCard';
 import { ProductCardCarousel } from '../ProductCardCarousel';
 
 describe('ProductCardCarousel', () => {
@@ -157,5 +158,27 @@ describe('ProductCardCarousel', () => {
     expect(screen.getByLabelText('Ver imagem 1')).toBeInTheDocument();
     expect(screen.getByLabelText('Ver imagem 2')).toBeInTheDocument();
     expect(screen.getByLabelText('Ver imagem 3')).toBeInTheDocument();
+  });
+});
+
+describe('ProductCard', () => {
+  it('mostra pré-venda como reservável mesmo sem estoque', () => {
+    render(
+      <ProductCard
+        id="produto-1"
+        name="Camiseta"
+        price={89.9}
+        schoolId="escola-1"
+        unitId="unidade-1"
+        category="UNIFORME_DIARIO"
+        availableStock={0}
+        modoVenda="PRE_VENDA"
+      />
+    );
+
+    expect(screen.getByText('Pré-venda')).toBeInTheDocument();
+    expect(screen.getByText('Reservar')).toBeInTheDocument();
+    expect(screen.queryByText('Indisponível')).not.toBeInTheDocument();
+    expect(screen.queryByText('Esgotado')).not.toBeInTheDocument();
   });
 });

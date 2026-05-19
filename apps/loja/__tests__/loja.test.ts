@@ -336,6 +336,39 @@ describe('Voucher público', () => {
     });
 });
 
+describe('Pré-venda pública', () => {
+    it('catálogo busca pronta entrega e pré-venda separadamente', () => {
+        const source = readFileSync(join(process.cwd(), 'app/[schoolId]/[unitId]/page.tsx'), 'utf8');
+
+        expect(source).toContain("fetch(buildCatalogUrl('PRONTA_ENTREGA'))");
+        expect(source).toContain("fetch(buildCatalogUrl('PRE_VENDA'))");
+        expect(source).toContain('setPreSaleProducts');
+        expect(source).toContain('Pronta entrega');
+        expect(source).toContain('Pré-venda');
+        expect(source).toContain('{products.length} produto(s)');
+        expect(source).toContain('{preSaleProducts.length} produto(s)');
+    });
+
+    it('detalhe permite selecionar tamanho sem estoque como pré-venda', () => {
+        const source = readFileSync(join(process.cwd(), 'app/[schoolId]/[unitId]/produto/[id]/page.tsx'), 'utf8');
+
+        expect(source).toContain("modoVenda: selectedModoVenda");
+        expect(source).toContain("selectedModoVenda === 'PRE_VENDA'");
+        expect(source).not.toContain('disabled={isOutOfStock}');
+    });
+
+    it('card de produto rotula pré-venda como reservável', () => {
+        const source = readFileSync(join(process.cwd(), 'components/ProductCard.tsx'), 'utf8');
+
+        expect(source).toContain("modoVenda = 'PRONTA_ENTREGA'");
+        expect(source).toContain("const isPreSale = modoVenda === 'PRE_VENDA'");
+        expect(source).toContain('availableStock === 0 && !isPreSale');
+        expect(source).toContain('Pré-venda');
+        expect(source).toContain('Reservar');
+        expect(source).not.toContain("const isOutOfStock = availableStock === 0;");
+    });
+});
+
 describe('Voucher Page', () => {
     describe('Order Number Display', () => {
         it('should display 6-digit order number', () => {

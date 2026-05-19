@@ -1,13 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { use, useEffect, useState } from 'react';
 
 import { LoadingSpinner } from '@/components/Loading';
 import { ProductDetailCarousel } from '@/components/ProductDetailCarousel';
 import { Toast, useToast } from '@/components/Toast';
-import { useCart, MAX_QUANTITY_PER_STUDENT } from '@/lib/useCart';
+import { useCart, MAX_QUANTITY_PER_STUDENT, type ModoVenda } from '@/lib/useCart';
 
 interface ProductVariant {
   id: string;
@@ -15,6 +14,7 @@ interface ProductVariant {
   priceOverride: number | null; // Price in cents
   availableStock?: number;
   available_stock?: number; // Calculated on frontend
+  modoVenda?: ModoVenda;
 }
 
 interface Product {
@@ -35,7 +35,6 @@ export default function ProductDetailPage({
 }) {
   const resolvedParams = use(params);
   const { schoolId, unitId, id } = resolvedParams;
-  const router = useRouter();
   const { addItem, getTotalItems, getQuantityForProductStudent } = useCart();
   const { toast, showToast } = useToast();
   const cartItemCount = getTotalItems();
@@ -78,6 +77,7 @@ export default function ProductDetailPage({
           priceOverride: number | null;
           isActive?: boolean;
           availableStock?: number;
+          modoVenda?: ModoVenda;
         }
 
         const mappedProduct: Product = {
@@ -88,6 +88,9 @@ export default function ProductDetailPage({
               ...v,
               priceOverride: v.priceOverride,
               available_stock: v.availableStock || 0,
+              modoVenda:
+                v.modoVenda ||
+                ((v.availableStock || 0) > 0 ? 'PRONTA_ENTREGA' : 'PRE_VENDA'),
             })),
         };
 
@@ -111,8 +114,15 @@ export default function ProductDetailPage({
 
     const variant = product?.variants.find((v) => v.id === selectedVariant);
     const availableStock = variant?.available_stock || 0;
+    const selectedModoVenda: ModoVenda =
+      variant?.modoVenda || (availableStock > 0 ? 'PRONTA_ENTREGA' : 'PRE_VENDA');
 
-    if (!variant || availableStock < quantity) {
+    if (!variant) {
+      showToast({ message: 'Tamanho não encontrado', type: 'error' });
+      return;
+    }
+
+    if (selectedModoVenda !== 'PRE_VENDA' && availableStock < quantity) {
       showToast({ message: 'Estoque insuficiente', type: 'error' });
       return;
     }
@@ -133,6 +143,7 @@ export default function ProductDetailPage({
         studentName: studentName.trim(),
         imageUrl: product!.imageUrl,
         availableStock: availableStock,
+        modoVenda: selectedModoVenda,
       });
 
       if (!result.success) {
@@ -140,7 +151,13 @@ export default function ProductDetailPage({
         return;
       }
 
-      showToast({ message: 'Produto adicionado ao carrinho!', type: 'success' });
+      showToast({
+        message:
+          selectedModoVenda === 'PRE_VENDA'
+            ? 'Reserva adicionada ao carrinho de pré-venda!'
+            : 'Produto adicionado ao carrinho!',
+        type: 'success',
+      });
       setStudentName('');
       setQuantity(1);
       setSelectedVariant(null);
@@ -149,10 +166,6 @@ export default function ProductDetailPage({
     } finally {
       setAdding(false);
     }
-  };
-
-  const handleInterest = () => {
-    router.push(`/${schoolId}/${unitId}/interesse?product=${id}`);
   };
 
   if (loading) {
@@ -177,7 +190,9 @@ export default function ProductDetailPage({
   }
 
   const selectedVariantData = product.variants.find((v) => v.id === selectedVariant);
-  const allOutOfStock = product.variants.every((v) => v.available_stock === 0);
+  const selectedModoVenda: ModoVenda =
+    selectedVariantData?.modoVenda ||
+    ((selectedVariantData?.available_stock || 0) > 0 ? 'PRONTA_ENTREGA' : 'PRE_VENDA');
 
   // Calcula quantidade máxima permitida considerando limite por aluno
   const quantityInCart = product && studentName.trim()
@@ -185,7 +200,9 @@ export default function ProductDetailPage({
     : 0;
   const remainingAllowed = MAX_QUANTITY_PER_STUDENT - quantityInCart;
   const maxAllowedForStudent = Math.max(0, Math.min(
-    selectedVariantData?.available_stock || 0,
+    selectedModoVenda === 'PRE_VENDA'
+      ? remainingAllowed
+      : selectedVariantData?.available_stock || 0,
     remainingAllowed
   ));
 
@@ -241,13 +258,15 @@ export default function ProductDetailPage({
                   {product.variants.map((variant) => {
                     const isSelected = selectedVariant === variant.id;
                     const isOutOfStock = variant.available_stock === 0;
+                    const isPreSale = variant.modoVenda === 'PRE_VENDA' || isOutOfStock;
                     return (
                       <button
                         key={variant.id}
-                        onClick={() => !isOutOfStock && setSelectedVariant(variant.id)}
-                        disabled={isOutOfStock}
-                        className={`py-2 px-4 rounded-lg border-2 font-medium transition-colors duration-150 ${isOutOfStock
-                          ? 'bg-slate-50 text-slate-400 border-slate-200 cursor-not-allowed'
+                        onClick={() => setSelectedVariant(variant.id)}
+                        className={`py-2 px-4 rounded-lg border-2 font-medium transition-colors duration-150 ${isPreSale
+                          ? isSelected
+                            ? 'bg-amber-500 text-white border-amber-500'
+                            : 'bg-amber-50 text-amber-700 border-amber-200 hover:border-amber-400'
                           : isSelected
                             ? 'bg-[#A3D154] text-white border-[#A3D154]'
                             : 'bg-white text-slate-700 border-slate-300 hover:border-[#A3D154]'
@@ -263,10 +282,18 @@ export default function ProductDetailPage({
               {/* Estoque */}
               {selectedVariant && (
                 <p className="text-sm text-slate-600">
-                  Estoque disponível:{' '}
-                  <span className="font-semibold tabular-nums">
-                    {selectedVariantData?.available_stock || 0} unidades
-                  </span>
+                  {selectedModoVenda === 'PRE_VENDA' ? (
+                    <span className="font-semibold text-amber-700">
+                      Pré-venda: reserve agora e pague na retirada.
+                    </span>
+                  ) : (
+                    <>
+                      Estoque disponível:{' '}
+                      <span className="font-semibold tabular-nums">
+                        {selectedVariantData?.available_stock || 0} unidades
+                      </span>
+                    </>
+                  )}
                 </p>
               )}
 
@@ -293,7 +320,6 @@ export default function ProductDetailPage({
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => setStudentName(e.target.value)}
                   className="input w-full"
                   placeholder="Ex: Maria Silva"
-                  disabled={allOutOfStock}
                 />
               </div>
 
@@ -305,7 +331,7 @@ export default function ProductDetailPage({
                 <div className="flex items-center gap-3">
                   <button
                     onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                    disabled={quantity <= 1 || allOutOfStock || maxAllowedForStudent === 0}
+                    disabled={quantity <= 1 || maxAllowedForStudent === 0}
                     className="w-10 h-10 rounded-lg border border-slate-300 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed font-semibold transition-colors duration-150"
                   >
                     −
@@ -321,14 +347,13 @@ export default function ProductDetailPage({
                     className="input w-20 text-center"
                     min="1"
                     max={maxAllowedForStudent}
-                    disabled={allOutOfStock || maxAllowedForStudent === 0}
+                    disabled={maxAllowedForStudent === 0}
                   />
                   <button
                     onClick={() => {
                       setQuantity(Math.min(quantity + 1, maxAllowedForStudent || 1));
                     }}
                     disabled={
-                      allOutOfStock ||
                       !selectedVariant ||
                       quantity >= maxAllowedForStudent
                     }
@@ -356,18 +381,19 @@ export default function ProductDetailPage({
 
               {/* Botões */}
               <div className="space-y-3 pt-4">
-                {!allOutOfStock ? (
-                  <button onClick={handleAddToCart} disabled={adding} className="btn-primary w-full">
-                    {adding ? <LoadingSpinner size="sm" /> : 'Adicionar ao Carrinho'}
-                  </button>
-                ) : (
-                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-center">
-                    <p className="text-amber-800 font-semibold mb-3">Produto sem estoque em todos os tamanhos</p>
-                    <button onClick={handleInterest} className="btn-primary w-full">
-                      Registrar Interesse
-                    </button>
-                  </div>
-                )}
+                <button
+                  onClick={handleAddToCart}
+                  disabled={adding || !selectedVariant || maxAllowedForStudent === 0}
+                  className="btn-primary w-full disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {adding ? (
+                    <LoadingSpinner size="sm" />
+                  ) : selectedModoVenda === 'PRE_VENDA' ? (
+                    'Reservar em Pré-venda'
+                  ) : (
+                    'Adicionar ao Carrinho'
+                  )}
+                </button>
               </div>
             </div>
           </div>
