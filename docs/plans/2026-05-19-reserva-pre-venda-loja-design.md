@@ -75,16 +75,21 @@ Quando as unidades chegarem fisicamente, a escola atendera manualmente as reserv
 
 A API deve diferenciar pedidos de pronta entrega e reservas de pre-venda.
 
-Opcao recomendada:
+Opcao consolidada:
 
 - Novo `orderSource`: `PRE_VENDA`.
-- Novo status inicial: `RESERVADO_PRE_VENDA`.
+- Status inicial existente: `AGUARDANDO_PAGAMENTO`.
+
+Nao sera criado um status `RESERVADO_PRE_VENDA` nesta etapa. A reserva de pre-venda
+sera identificada pela combinacao `orderSource = PRE_VENDA` e
+`status = AGUARDANDO_PAGAMENTO`. A UI pode exibir esse estado como
+`Reservado em pre-venda`, mas o contrato de dados continua usando o status atual.
 
 Transicoes previstas para pre-venda:
 
 ```txt
-RESERVADO_PRE_VENDA -> PAGO -> RETIRADO
-RESERVADO_PRE_VENDA -> CANCELADO
+AGUARDANDO_PAGAMENTO -> PAGO -> RETIRADO
+AGUARDANDO_PAGAMENTO -> CANCELADO
 ```
 
 As acoes de confirmar pagamento e retirada continuam separadas.
