@@ -367,6 +367,14 @@ describe('Pré-venda pública', () => {
         expect(source).toContain('Reservar');
         expect(source).not.toContain("const isOutOfStock = availableStock === 0;");
     });
+
+    it('checkout gera pedidos separados para pronta entrega e pré-venda', () => {
+        const source = readFileSync(join(process.cwd(), 'app/checkout/page.tsx'), 'utf8');
+
+        expect(source).toContain('getProntaEntregaItems');
+        expect(source).toContain('getPreVendaItems');
+        expect(source).toContain('/api/shop/orders/pre-venda/');
+    });
 });
 
 describe('Voucher Page', () => {

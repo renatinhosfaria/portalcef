@@ -162,6 +162,14 @@ export function useCart() {
     );
   };
 
+  const removeItems = (keys: CartItemKey[]) => {
+    setItems((current) =>
+      current.filter(
+        (item) => !keys.some((key) => itemMatchesKey(item, key)),
+      ),
+    );
+  };
+
   const updateQuantity = (
     variantId: string,
     studentName: string,
@@ -256,6 +264,7 @@ export function useCart() {
     items,
     addItem,
     removeItem,
+    removeItems,
     updateQuantity,
     clearCart,
     getTotalAmount,
