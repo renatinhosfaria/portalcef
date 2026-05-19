@@ -1343,6 +1343,107 @@ describe("Regressões da loja", () => {
     expect(inventoryService.confirmSale).not.toHaveBeenCalled();
   });
 
+  it("confirma pagamento de pré-venda sem baixar estoque", async () => {
+    const inventoryService = {
+      withOrderLock: jest.fn(async (_orderId, callback) => callback()),
+      withInventoryLocks: jest.fn(async (_items, callback) => callback()),
+      confirmSaleInTransaction: jest.fn().mockResolvedValue({ success: true }),
+      confirmSale: jest.fn(),
+    };
+    const paymentsService = { refundPayment: jest.fn() };
+    const service = new ShopOrdersService(
+      inventoryService as never,
+      paymentsService as never,
+    );
+    const order = {
+      id: "order-pre-venda-1",
+      orderNumber: "654321",
+      orderSource: "PRE_VENDA",
+      status: "AGUARDANDO_PAGAMENTO",
+      totalAmount: 17000,
+      unitId: "unit-1",
+      expiresAt: new Date("2026-01-01T10:00:00Z"),
+      items: [{ variantId: "variant-1", quantity: 1 }],
+    };
+    mockDb.query.shopOrders.findFirst.mockResolvedValue(order);
+
+    await service.confirmPayment(
+      "order-pre-venda-1",
+      { payments: [{ method: "PIX", amount: 17000 }] },
+      "admin-1",
+      {
+        userId: "admin-1",
+        role: "gerente_unidade",
+        schoolId: "school-1",
+        unitId: "unit-1",
+      },
+    );
+
+    expect(inventoryService.withOrderLock).toHaveBeenCalledWith(
+      "order-pre-venda-1",
+      expect.any(Function),
+    );
+    expect(inventoryService.withInventoryLocks).not.toHaveBeenCalled();
+    expect(inventoryService.confirmSaleInTransaction).not.toHaveBeenCalled();
+    expect(inventoryService.confirmSale).not.toHaveBeenCalled();
+    expect(mockDb.transaction).toHaveBeenCalled();
+    expect(mockDb.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "PAGO",
+        paymentMethod: "PIX",
+      }),
+    );
+    expect(mockOrderPaymentsInsert.values).toHaveBeenCalledWith([
+      {
+        orderId: "order-pre-venda-1",
+        paymentMethod: "PIX",
+        amount: 17000,
+      },
+    ]);
+  });
+
+  it("marca retirada de pré-venda paga sem movimentar estoque", async () => {
+    const inventoryService = {
+      withInventoryLocks: jest.fn(async (_items, callback) => callback()),
+      addStockInTransaction: jest.fn(),
+      addStock: jest.fn(),
+      confirmSaleInTransaction: jest.fn(),
+      releaseReservationInTransaction: jest.fn(),
+    };
+    const paymentsService = { refundPayment: jest.fn() };
+    const service = new ShopOrdersService(
+      inventoryService as never,
+      paymentsService as never,
+    );
+
+    mockDb.query.shopOrders.findFirst.mockResolvedValue({
+      id: "order-pre-venda-1",
+      orderNumber: "654321",
+      orderSource: "PRE_VENDA",
+      status: "PAGO",
+      unitId: "unit-1",
+    });
+
+    await service.markAsPickedUp("order-pre-venda-1", "admin-1", {
+      userId: "admin-1",
+      role: "gerente_unidade",
+      schoolId: "school-1",
+      unitId: "unit-1",
+    });
+
+    expect(inventoryService.withInventoryLocks).not.toHaveBeenCalled();
+    expect(inventoryService.addStockInTransaction).not.toHaveBeenCalled();
+    expect(inventoryService.addStock).not.toHaveBeenCalled();
+    expect(inventoryService.confirmSaleInTransaction).not.toHaveBeenCalled();
+    expect(inventoryService.releaseReservationInTransaction).not.toHaveBeenCalled();
+    expect(mockDb.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "RETIRADO",
+        pickedUpBy: "admin-1",
+      }),
+    );
+  });
+
   it("confirma pagamento Stripe por webhook com lock, baixa e conciliação", async () => {
     const inventoryService = {
       withOrderLock: jest.fn(async (_orderId, callback) => callback()),
@@ -1709,6 +1810,110 @@ describe("Regressões da loja", () => {
     expect(inventoryService.releaseReservation).not.toHaveBeenCalled();
   });
 
+  it("cancela pedido de pré-venda sem liberar reserva de estoque", async () => {
+    const inventoryService = {
+      withOrderLock: jest.fn(async (_orderId, callback) => callback()),
+      withInventoryLocks: jest.fn(async (_items, callback) => callback()),
+      releaseReservationInTransaction: jest.fn(),
+      releaseReservation: jest.fn(),
+      addStockInTransaction: jest.fn(),
+    };
+    const paymentsService = { refundPayment: jest.fn() };
+    const service = new ShopOrdersService(
+      inventoryService as never,
+      paymentsService as never,
+    );
+
+    mockDb.query.shopOrders.findFirst.mockResolvedValue({
+      id: "order-pre-venda-1",
+      orderNumber: "654321",
+      orderSource: "PRE_VENDA",
+      status: "AGUARDANDO_PAGAMENTO",
+      unitId: "unit-1",
+      items: [{ variantId: "variant-1", quantity: 1 }],
+    });
+
+    await service.cancelOrder("order-pre-venda-1", "admin-1", "Cliente solicitou", {
+      userId: "admin-1",
+      role: "gerente_unidade",
+      schoolId: "school-1",
+      unitId: "unit-1",
+    });
+
+    expect(inventoryService.withOrderLock).toHaveBeenCalledWith(
+      "order-pre-venda-1",
+      expect.any(Function),
+    );
+    expect(inventoryService.withInventoryLocks).not.toHaveBeenCalled();
+    expect(inventoryService.releaseReservationInTransaction).not.toHaveBeenCalled();
+    expect(inventoryService.releaseReservation).not.toHaveBeenCalled();
+    expect(inventoryService.addStockInTransaction).not.toHaveBeenCalled();
+    expect(mockDb.transaction).toHaveBeenCalled();
+    expect(mockDb.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "CANCELADO",
+        cancelledBy: "admin-1",
+        cancellationReason: "Cliente solicitou",
+      }),
+    );
+  });
+
+  it("cancela pedido pago de pré-venda sem estornar estoque", async () => {
+    const inventoryService = {
+      withOrderLock: jest.fn(async (_orderId, callback) => callback()),
+      withInventoryLocks: jest.fn(async (_items, callback) => callback()),
+      releaseReservationInTransaction: jest.fn(),
+      releaseReservation: jest.fn(),
+      addStockInTransaction: jest.fn(),
+      addStock: jest.fn(),
+    };
+    const paymentsService = { refundPayment: jest.fn() };
+    const service = new ShopOrdersService(
+      inventoryService as never,
+      paymentsService as never,
+    );
+
+    mockDb.query.shopOrders.findFirst.mockResolvedValue({
+      id: "order-pre-venda-pago-1",
+      orderNumber: "654322",
+      orderSource: "PRE_VENDA",
+      status: "PAGO",
+      unitId: "unit-1",
+      stripePaymentIntentId: null,
+      items: [{ variantId: "variant-1", quantity: 1 }],
+    });
+
+    await service.cancelOrder(
+      "order-pre-venda-pago-1",
+      "admin-1",
+      "Cliente solicitou",
+      {
+        userId: "admin-1",
+        role: "gerente_unidade",
+        schoolId: "school-1",
+        unitId: "unit-1",
+      },
+    );
+
+    expect(inventoryService.withOrderLock).toHaveBeenCalledWith(
+      "order-pre-venda-pago-1",
+      expect.any(Function),
+    );
+    expect(inventoryService.withInventoryLocks).not.toHaveBeenCalled();
+    expect(inventoryService.releaseReservationInTransaction).not.toHaveBeenCalled();
+    expect(inventoryService.releaseReservation).not.toHaveBeenCalled();
+    expect(inventoryService.addStockInTransaction).not.toHaveBeenCalled();
+    expect(inventoryService.addStock).not.toHaveBeenCalled();
+    expect(mockDb.transaction).toHaveBeenCalled();
+    expect(mockDb.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "CANCELADO",
+        cancelledBy: "admin-1",
+        cancellationReason: "Cliente solicitou",
+      }),
+    );
+  });
+
   it("cria venda presencial em transação junto com baixa de estoque", async () => {
     const inventoryService = {
       withInventoryLocks: jest.fn(async (_items, callback) => callback()),
@@ -2019,6 +2224,43 @@ describe("Regressões da loja", () => {
 
     expect(inventoryService.addStock).not.toHaveBeenCalled();
     expect(mockDb.delete).not.toHaveBeenCalled();
+  });
+
+  it("exclui pedido de pré-venda aguardando pagamento sem liberar reserva", async () => {
+    const inventoryService = {
+      withOrderLock: jest.fn(async (_orderId, callback) => callback()),
+      withInventoryLocks: jest.fn(async (_items, callback) => callback()),
+      releaseReservationInTransaction: jest.fn(),
+    };
+    const paymentsService = { refundPayment: jest.fn() };
+    const service = new ShopOrdersService(
+      inventoryService as never,
+      paymentsService as never,
+    );
+
+    mockDb.query.shopOrders.findFirst.mockResolvedValue({
+      id: "order-pre-venda-1",
+      orderNumber: "654321",
+      orderSource: "PRE_VENDA",
+      status: "AGUARDANDO_PAGAMENTO",
+      unitId: "unit-1",
+      items: [{ variantId: "variant-1", quantity: 1 }],
+    });
+
+    await service.deleteOrder("order-pre-venda-1", "admin-1", {
+      userId: "admin-1",
+      role: "gerente_unidade",
+      schoolId: "school-1",
+      unitId: "unit-1",
+    });
+
+    expect(inventoryService.withOrderLock).toHaveBeenCalledWith(
+      "order-pre-venda-1",
+      expect.any(Function),
+    );
+    expect(inventoryService.withInventoryLocks).not.toHaveBeenCalled();
+    expect(inventoryService.releaseReservationInTransaction).not.toHaveBeenCalled();
+    expect(mockDb.delete).toHaveBeenCalled();
   });
 });
 

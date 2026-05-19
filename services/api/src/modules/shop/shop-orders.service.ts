@@ -895,6 +895,23 @@ export class ShopOrdersService {
           });
         }
 
+        const cancelOrderInTransaction = async (tx: DbTransaction) => {
+          await tx
+            .update(shopOrders)
+            .set({
+              status: "CANCELADO",
+              cancelledAt: new Date(),
+              cancelledBy: userId,
+              cancellationReason: reason,
+            })
+            .where(this.orderWhere(orderId, scope));
+        };
+
+        if (order.orderSource === "PRE_VENDA") {
+          await db.transaction(cancelOrderInTransaction);
+          return order;
+        }
+
         const lockTargets = order.items.map((item: ShopOrderItem) => ({
           variantId: item.variantId,
           unitId: order.unitId,
@@ -924,15 +941,7 @@ export class ShopOrdersService {
               }
             }
 
-            await tx
-              .update(shopOrders)
-              .set({
-                status: "CANCELADO",
-                cancelledAt: new Date(),
-                cancelledBy: userId,
-                cancellationReason: reason,
-              })
-              .where(this.orderWhere(orderId, scope));
+            await cancelOrderInTransaction(tx);
           }),
         );
 
@@ -1274,7 +1283,11 @@ export class ShopOrdersService {
         });
       }
 
-      if (order.expiresAt && new Date() > order.expiresAt) {
+      if (
+        order.orderSource !== "PRE_VENDA" &&
+        order.expiresAt &&
+        new Date() > order.expiresAt
+      ) {
         throw new BadRequestException({
           code: "ORDER_EXPIRED",
           message: `Pedido expirado em ${order.expiresAt.toLocaleString("pt-BR")}. Por favor, crie um novo pedido.`,
@@ -1293,44 +1306,43 @@ export class ShopOrdersService {
         throw new BadRequestException(`Valor pago (${totalPaid}) diverge do total do pedido (${order.totalAmount})`);
       }
 
-      const lockTargets = order.items.map((item: ShopOrderItem) => ({
-        variantId: item.variantId,
-        unitId: order.unitId,
-      }));
+      const confirmPaymentInTransaction = async (tx: DbTransaction) => {
+        const currentOrder = await tx.query.shopOrders.findFirst({
+          where: this.orderWhere(orderId, scope),
+          with: { items: true },
+        });
 
-      return this.inventoryService.withInventoryLocks(lockTargets, async () =>
-        db.transaction(async (tx: DbTransaction) => {
-          const currentOrder = await tx.query.shopOrders.findFirst({
-            where: this.orderWhere(orderId, scope),
-            with: { items: true },
+        if (!currentOrder) {
+          throw new NotFoundException({
+            code: "RESOURCE_NOT_FOUND",
+            message: `Pedido ${orderId} não encontrado`,
           });
+        }
 
-          if (!currentOrder) {
-            throw new NotFoundException({
-              code: "RESOURCE_NOT_FOUND",
-              message: `Pedido ${orderId} não encontrado`,
-            });
-          }
+        if (currentOrder.status !== "AGUARDANDO_PAGAMENTO") {
+          throw new BadRequestException({
+            code: "INVALID_STATUS",
+            message: `Apenas pedidos aguardando pagamento podem ter pagamento confirmado. Status atual: ${currentOrder.status}`,
+          });
+        }
 
-          if (currentOrder.status !== "AGUARDANDO_PAGAMENTO") {
-            throw new BadRequestException({
-              code: "INVALID_STATUS",
-              message: `Apenas pedidos aguardando pagamento podem ter pagamento confirmado. Status atual: ${currentOrder.status}`,
-            });
-          }
+        if (
+          currentOrder.orderSource !== "PRE_VENDA" &&
+          currentOrder.expiresAt &&
+          new Date() > currentOrder.expiresAt
+        ) {
+          throw new BadRequestException({
+            code: "ORDER_EXPIRED",
+            message: `Pedido expirado em ${currentOrder.expiresAt.toLocaleString("pt-BR")}. Por favor, crie um novo pedido.`,
+          });
+        }
 
-          if (currentOrder.expiresAt && new Date() > currentOrder.expiresAt) {
-            throw new BadRequestException({
-              code: "ORDER_EXPIRED",
-              message: `Pedido expirado em ${currentOrder.expiresAt.toLocaleString("pt-BR")}. Por favor, crie um novo pedido.`,
-            });
-          }
+        const currentTotalPaid = payments.reduce((acc, p) => acc + p.amount, 0);
+        if (currentTotalPaid !== currentOrder.totalAmount) {
+          throw new BadRequestException(`Valor pago (${currentTotalPaid}) diverge do total do pedido (${currentOrder.totalAmount})`);
+        }
 
-          const currentTotalPaid = payments.reduce((acc, p) => acc + p.amount, 0);
-          if (currentTotalPaid !== currentOrder.totalAmount) {
-            throw new BadRequestException(`Valor pago (${currentTotalPaid}) diverge do total do pedido (${currentOrder.totalAmount})`);
-          }
-
+        if (currentOrder.orderSource !== "PRE_VENDA") {
           for (const item of currentOrder.items) {
             await this.inventoryService.confirmSaleInTransaction(
               item.variantId,
@@ -1340,35 +1352,48 @@ export class ShopOrdersService {
               tx,
             );
           }
+        }
 
-          const primaryPaymentMethod = payments.length === 1 ? payments[0].method : "MULTIPLO";
+        const primaryPaymentMethod = payments.length === 1 ? payments[0].method : "MULTIPLO";
 
-          await tx
-            .update(shopOrders)
-            .set({
-              status: "PAGO",
-              paymentMethod: primaryPaymentMethod,
-              paidAt: new Date(),
-            })
-            .where(this.orderWhere(orderId, scope));
-
-          if (payments.length > 0) {
-            const paymentValues = payments.map(p => ({
-              orderId: currentOrder.id,
-              paymentMethod: p.method,
-              amount: p.amount,
-            }));
-
-            await tx.insert(shopOrderPayments).values(paymentValues);
-          }
-
-          return {
-            success: true,
-            message: "Pagamento confirmado com sucesso",
-            orderNumber: currentOrder.orderNumber,
+        await tx
+          .update(shopOrders)
+          .set({
+            status: "PAGO",
             paymentMethod: primaryPaymentMethod,
-          };
-        }),
+            paidAt: new Date(),
+          })
+          .where(this.orderWhere(orderId, scope));
+
+        if (payments.length > 0) {
+          const paymentValues = payments.map(p => ({
+            orderId: currentOrder.id,
+            paymentMethod: p.method,
+            amount: p.amount,
+          }));
+
+          await tx.insert(shopOrderPayments).values(paymentValues);
+        }
+
+        return {
+          success: true,
+          message: "Pagamento confirmado com sucesso",
+          orderNumber: currentOrder.orderNumber,
+          paymentMethod: primaryPaymentMethod,
+        };
+      };
+
+      if (order.orderSource === "PRE_VENDA") {
+        return db.transaction(confirmPaymentInTransaction);
+      }
+
+      const lockTargets = order.items.map((item: ShopOrderItem) => ({
+        variantId: item.variantId,
+        unitId: order.unitId,
+      }));
+
+      return this.inventoryService.withInventoryLocks(lockTargets, async () =>
+        db.transaction(confirmPaymentInTransaction),
       );
     });
   }
@@ -1401,6 +1426,13 @@ export class ShopOrdersService {
           message:
             "Pedidos pagos ou retirados não podem ser excluídos definitivamente",
         });
+      }
+
+      if (order.orderSource === "PRE_VENDA") {
+        await db.transaction(async (tx: DbTransaction) => {
+          await tx.delete(shopOrders).where(this.orderWhere(orderId, scope));
+        });
+        return;
       }
 
       const lockTargets = order.items.map((item: ShopOrderItem) => ({
