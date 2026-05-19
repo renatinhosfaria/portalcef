@@ -468,6 +468,92 @@ describe("Regressões da loja", () => {
     expect(product.variants[0]).not.toHaveProperty("total");
   });
 
+  it("classifica variantes públicas entre pronta entrega e pré-venda pelo estoque", async () => {
+    const service = new ShopProductsService();
+    const produtoComEstoqueMisto = {
+      id: "product-1",
+      schoolId: "school-1",
+      name: "Moletom",
+      description: "Uniforme",
+      category: "UNIFORME_UNISSEX",
+      basePrice: 17000,
+      imageUrl: "/moletom.png",
+      isActive: true,
+      images: [{ imageUrl: "/moletom.png" }],
+      variants: [
+        {
+          id: "variant-pronta-entrega",
+          size: "8",
+          sku: "MOL-8",
+          priceOverride: null,
+          isActive: true,
+          inventory: [
+            {
+              unitId: "unit-1",
+              quantity: 2,
+              reservedQuantity: 0,
+            },
+          ],
+        },
+        {
+          id: "variant-pre-venda",
+          size: "10",
+          sku: "MOL-10",
+          priceOverride: null,
+          isActive: true,
+          inventory: [
+            {
+              unitId: "unit-1",
+              quantity: 0,
+              reservedQuantity: 0,
+            },
+          ],
+        },
+      ],
+    };
+
+    mockDb.query.shopProducts.findMany.mockResolvedValue([
+      produtoComEstoqueMisto,
+    ]);
+
+    const catalogoCompleto = await service.getProducts(
+      "school-1",
+      "unit-1",
+      {},
+    );
+    const produtosProntaEntrega = await service.getProducts(
+      "school-1",
+      "unit-1",
+      { modoVenda: "PRONTA_ENTREGA" } as never,
+    );
+    const produtosPreVenda = await service.getProducts(
+      "school-1",
+      "unit-1",
+      { modoVenda: "PRE_VENDA" } as never,
+    );
+
+    expect(catalogoCompleto[0].variants).toEqual([
+      expect.objectContaining({
+        id: "variant-pronta-entrega",
+        availableStock: 2,
+        isAvailable: true,
+        modoVenda: "PRONTA_ENTREGA",
+      }),
+      expect.objectContaining({
+        id: "variant-pre-venda",
+        availableStock: 0,
+        isAvailable: false,
+        modoVenda: "PRE_VENDA",
+      }),
+    ]);
+    expect(produtosProntaEntrega[0].variants).toEqual([
+      expect.objectContaining({ id: "variant-pronta-entrega" }),
+    ]);
+    expect(produtosPreVenda[0].variants).toEqual([
+      expect.objectContaining({ id: "variant-pre-venda" }),
+    ]);
+  });
+
   it("rejeita pedido público com variante inativa", async () => {
     const inventoryService = {
       reserveStock: jest.fn().mockResolvedValue({ success: true }),
