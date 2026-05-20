@@ -153,9 +153,7 @@ export default function ProductDetailPage({
               ...v,
               priceOverride: v.priceOverride,
               available_stock: v.availableStock || 0,
-              modoVenda:
-                v.modoVenda ||
-                ((v.availableStock || 0) > 0 ? 'PRONTA_ENTREGA' : 'PRE_VENDA'),
+              modoVenda: v.modoVenda || 'PRONTA_ENTREGA',
             })),
         };
 
@@ -190,8 +188,7 @@ export default function ProductDetailPage({
 
     const variant = product?.variants.find((v) => v.id === selectedVariant);
     const availableStock = variant?.available_stock || 0;
-    const selectedModoVenda: ModoVenda =
-      variant?.modoVenda || (availableStock > 0 ? 'PRONTA_ENTREGA' : 'PRE_VENDA');
+    const selectedModoVenda: ModoVenda = variant?.modoVenda || 'PRONTA_ENTREGA';
 
     if (!variant) {
       showToast({ message: 'Tamanho não encontrado', type: 'error' });
@@ -276,9 +273,7 @@ export default function ProductDetailPage({
   }
 
   const selectedVariantData = product.variants.find((v) => v.id === selectedVariant);
-  const selectedModoVenda: ModoVenda =
-    selectedVariantData?.modoVenda ||
-    ((selectedVariantData?.available_stock || 0) > 0 ? 'PRONTA_ENTREGA' : 'PRE_VENDA');
+  const selectedModoVenda: ModoVenda = selectedVariantData?.modoVenda || 'PRONTA_ENTREGA';
 
   // Calcula quantidade máxima permitida considerando limite por aluno
   const quantityInCart = product && studentName.trim()
@@ -343,8 +338,8 @@ export default function ProductDetailPage({
                 <div className="grid grid-cols-4 gap-2">
                   {product.variants.map((variant) => {
                     const isSelected = selectedVariant === variant.id;
-                    const isOutOfStock = variant.available_stock === 0;
-                    const isPreSale = variant.modoVenda === 'PRE_VENDA' || isOutOfStock;
+                    const isPreSale = variant.modoVenda === 'PRE_VENDA';
+                    const isOutOfStock = !isPreSale && variant.available_stock === 0;
                     return (
                       <button
                         key={variant.id}

@@ -391,6 +391,18 @@ describe('Pré-venda pública', () => {
         expect(source).toContain('getPreVendaItems');
         expect(source).toContain('/api/shop/orders/pre-venda/');
     });
+
+    it('nao usa estoque zero como criterio automatico de pre-venda', () => {
+        const catalogSource = readFileSync(join(process.cwd(), 'app/[schoolId]/[unitId]/catalog-page-content.tsx'), 'utf8');
+        const detailSource = readFileSync(join(process.cwd(), 'app/[schoolId]/[unitId]/produto/[id]/page.tsx'), 'utf8');
+        const cardSource = readFileSync(join(process.cwd(), 'components/ProductCard.tsx'), 'utf8');
+
+        expect(detailSource).not.toContain("((v.availableStock || 0) > 0 ? 'PRONTA_ENTREGA' : 'PRE_VENDA')");
+        expect(detailSource).not.toContain("variant.modoVenda === 'PRE_VENDA' || isOutOfStock");
+        expect(cardSource).toContain('!isPreSale && availableStock > 10');
+        expect(cardSource).toContain('!isPreSale && availableStock > 0 && availableStock < 5');
+        expect(catalogSource).toContain("fetch(buildCatalogUrl('PRE_VENDA'))");
+    });
 });
 
 describe('URLs amigáveis da loja', () => {

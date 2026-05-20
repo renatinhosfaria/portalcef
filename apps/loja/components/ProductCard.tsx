@@ -33,8 +33,8 @@ export function ProductCard({
 }: ProductCardProps) {
   const [isHovered, setIsHovered] = useState(false);
 
-  const isLowStock = availableStock > 0 && availableStock < 5;
   const isPreSale = modoVenda === 'PRE_VENDA';
+  const isLowStock = !isPreSale && availableStock > 0 && availableStock < 5;
   const isOutOfStock = availableStock === 0 && !isPreSale;
 
   return (
@@ -82,7 +82,7 @@ export function ProductCard({
           </div>
 
           {/* Promoção badge (exemplo) */}
-          {availableStock > 10 && (
+          {!isPreSale && availableStock > 10 && (
             <div className="absolute top-3 right-3 z-10">
               <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#F59E0B] text-white text-xs font-bold shadow-lg animate-glow-pulse">
                 <Sparkles className="w-3 h-3" />
