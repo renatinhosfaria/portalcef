@@ -156,6 +156,8 @@ Invariantes obrigatórias:
 | Lock tem ownership | Redis lock grava token único e libera com compare-and-delete atômico via Lua. |
 | Ordem de locks é determinística | Múltiplos itens são bloqueados em ordem estável para reduzir deadlock. |
 | Estoque compartilhado é protegido entre pedidos | Confirmação de pedidos diferentes com mesma variante/unidade usa lock de inventário, não apenas lock de pedido. |
+| Pré-venda revalida disponibilidade sob lock | Criação de `PRE_VENDA` bloqueia `variantId:unitId` antes de decidir se a variante ainda está sem estoque. |
+| Pré-venda não movimenta estoque | Criação, pagamento, retirada, cancelamento e exclusão de `PRE_VENDA` não alteram `quantity`, `reservedQuantity` ou ledger. |
 | Ledger usa enum válido | Saída manual usa `AJUSTE` com `quantityChange` negativo e motivo em `notes`. |
 
 Testes obrigatórios:
@@ -165,6 +167,8 @@ Testes obrigatórios:
 | API | `services/api/src/modules/shop/shop-inventory.service.spec.ts` | `withInventoryLocks` usa token e libera via script compare-and-delete. |
 | API | `services/api/src/modules/shop/shop-regressions.spec.ts` | Lock expirado não permite apagar lock de outro processo. |
 | API | `services/api/src/modules/shop/shop-orders.service.spec.ts` | `confirmPayment` adquire locks de inventário dos itens antes de converter reserva. |
+| API | `services/api/src/modules/shop/shop-regressions.spec.ts` | Pré-venda rejeita variante que voltou a ter estoque com `PRE_SALE_STOCK_AVAILABLE`. |
+| API | `services/api/src/modules/shop/shop-regressions.spec.ts` | Fluxos de `PRE_VENDA` não alteram `quantity`, `reservedQuantity` ou ledger. |
 | API | `services/api/src/modules/shop/shop-inventory.service.spec.ts` | Saída manual grava `movementType: "AJUSTE"` e motivo em `notes`. |
 
 Comando mínimo:
@@ -185,6 +189,10 @@ Invariantes obrigatórias:
 | Pagamento não baixa estoque duas vezes | Segunda confirmação concorrente recebe erro de status/conflito sem alterar estoque. |
 | Pagamentos conciliam o total | Soma de pagamentos deve ser igual a `totalAmount`, inclusive quando houver `BRINDE`. |
 | Venda presencial é atômica | Baixa de estoque, pedido, itens, ledger e pagamentos entram ou saem juntos. |
+| Pré-venda usa origem e status próprios | Voucher de pré-venda nasce com `orderSource = PRE_VENDA` e `status = AGUARDANDO_PAGAMENTO`. |
+| Pré-venda preserva estoque em todo ciclo | Criação, confirmação de pagamento, retirada, cancelamento e exclusão de `PRE_VENDA` não mexem em `quantity` nem `reservedQuantity`. |
+| Pré-venda bloqueia estoque recuperado | Variante que voltou a ter estoque é recusada na criação com `PRE_SALE_STOCK_AVAILABLE` para o carrinho migrar para pronta entrega. |
+| Resumo de pré-venda vem de pedidos | Relatório usa `orders/pre-venda/summary` e agrega quantidades reservadas, pagas e retiradas por produto/tamanho. |
 | Status dirige métricas | Retirada pendente usa `PAGO`; vendas usam `paidAt` com status `PAGO` ou `RETIRADO`. |
 
 Testes obrigatórios:
@@ -194,6 +202,9 @@ Testes obrigatórios:
 | API | `services/api/src/modules/shop/shop-orders.service.spec.ts` | Criação rollbacka reserva se insert de pedido/itens falhar. |
 | API | `services/api/src/modules/shop/shop-orders.service.spec.ts` | Confirmação concorrente não duplica baixa nem pagamentos. |
 | API | `services/api/src/modules/shop/shop-orders.service.spec.ts` | Confirmação de pedidos diferentes com mesmo estoque usa lock de inventário. |
+| API | `services/api/src/modules/shop/shop-regressions.spec.ts` | `POST /shop/orders/pre-venda` cria `PRE_VENDA` em `AGUARDANDO_PAGAMENTO` sem reserva de estoque. |
+| API | `services/api/src/modules/shop/shop-regressions.spec.ts` | Pagamento, retirada, cancelamento e exclusão de `PRE_VENDA` preservam `quantity` e `reservedQuantity`. |
+| API | `services/api/src/modules/shop/shop-regressions.spec.ts` | Listagem admin aceita `orderSource=PRE_VENDA` e resumo usa `orders/pre-venda/summary`. |
 | API | `services/api/src/modules/shop/shop-orders.service.spec.ts` | `BRINDE` não desativa validação da soma dos pagamentos. |
 | API | `services/api/src/modules/shop/shop-regressions.spec.ts` | Dashboard retorna `data.stats` e `recentOrders` com status corretos. |
 | loja-admin | `apps/loja-admin/__tests__/venda-presencial.test.ts` | Venda presencial usa preço efetivo e total em centavos compatível com API. |
@@ -245,6 +256,7 @@ Invariantes obrigatórias:
 | Proxy preserva basePath | `loja-admin` chama rotas internas com `/loja-admin` quando necessário. |
 | Proxy preserva autenticação | Rotas internas encaminham cookies e usam `API_INTERNAL_URL`. |
 | Voucher público usa contrato real | Responsável, telefone e email vêm de `customer.name`, `customer.phone`, `customer.email`. |
+| Checkout misto usa contrato real | Itens `PRONTA_ENTREGA` e `PRE_VENDA` geram vouchers separados, fallback de estoque usa o erro da API e pagamento online fica bloqueado com pré-venda. |
 | Testes de fonte protegem contratos | Testes podem inspecionar fonte quando renderização completa for cara, desde que validem o contrato real. |
 
 Testes obrigatórios:
@@ -253,6 +265,7 @@ Testes obrigatórios:
 | --- | --- | --- |
 | loja | `apps/loja/__tests__/loja.test.ts` | Voucher usa `orderData.customer.name` e `orderData.customer.phone`. |
 | loja | `apps/loja/__tests__/carrinho-page.test.tsx` | Total renderizado bate com subtotais. |
+| loja | `apps/loja/__tests__/checkout-page.test.tsx` | Checkout cria vouchers separados, converte item sem estoque para pré-venda e bloqueia pagamento online com `PRE_VENDA`. |
 | loja-admin | `apps/loja-admin/__tests__/dashboard-source.test.ts` | Dashboard lê `result.data.stats` e `result.data.recentOrders`. |
 | loja-admin | `apps/loja-admin/__tests__/pedidos-source.test.ts` | Páginas de pedidos usam contrato real de pedidos e pagamentos. |
 | loja-admin | `apps/loja-admin/__tests__/storage-upload-route.test.ts` | Proxy de upload preserva cookies e URL interna. |
@@ -260,7 +273,7 @@ Testes obrigatórios:
 Comando mínimo:
 
 ```bash
-pnpm --filter @essencia/loja test -- loja carrinho-page
+pnpm --filter @essencia/loja test -- loja carrinho-page checkout-page
 pnpm --filter @essencia/loja-admin test -- dashboard-source pedidos-source storage-upload-route
 ```
 
@@ -274,6 +287,7 @@ Invariantes obrigatórias:
 | Carrinho público usa reais | Estado do carrinho público mantém `unitPrice` e totais em reais. |
 | Não há divisão dupla | UI não divide por 100 valor que já está em reais. |
 | Quantidade respeita limite por aluno | `addItem` e `updateQuantity` aplicam `MAX_QUANTITY_PER_STUDENT`. |
+| Limite por aluno vale na pré-venda | Backend rejeita pré-venda acima do limite por produto/aluno com `QUANTITY_LIMIT_EXCEEDED`. |
 | Quantidade respeita estoque disponível | Botão de incremento e atualização direta não ultrapassam disponibilidade. |
 | Preço de variante é efetivo | UI usa `priceOverride ?? product.basePrice`; backend recalcula antes de aceitar venda. |
 
@@ -285,13 +299,14 @@ Testes obrigatórios:
 | loja | `apps/loja/__tests__/carrinho-page.test.tsx` | Total do carrinho não é dividido por 100 duas vezes. |
 | loja-admin | `apps/loja-admin/__tests__/venda-presencial.test.ts` | Preço efetivo de variante é usado no total local. |
 | API | `services/api/src/modules/shop/shop-orders.service.spec.ts` | Backend rejeita venda se total pago divergir do total recalculado. |
+| API | `services/api/src/modules/shop/shop-regressions.spec.ts` | Pré-venda acima do limite por produto/aluno retorna `QUANTITY_LIMIT_EXCEEDED`. |
 
 Comando mínimo:
 
 ```bash
 pnpm --filter @essencia/loja test -- use-cart carrinho-page
 pnpm --filter @essencia/loja-admin test -- venda-presencial
-pnpm --filter @essencia/api test -- src/modules/shop/shop-orders.service.spec.ts --runInBand
+pnpm --filter @essencia/api test -- src/modules/shop/shop-orders.service.spec.ts src/modules/shop/shop-regressions.spec.ts --runInBand
 ```
 
 ## LOJA-10: Permissões Visuais

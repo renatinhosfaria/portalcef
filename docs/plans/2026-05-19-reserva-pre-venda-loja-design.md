@@ -68,6 +68,7 @@ Esse fluxo nao deve mexer em estoque fisico em nenhum momento:
 - Ao reservar, nao incrementa `reservedQuantity`.
 - Ao confirmar pagamento, nao baixa `quantity`.
 - Ao marcar como retirado, nao altera estoque.
+- Ao cancelar ou excluir, nao libera reserva e nao altera `quantity` nem `reservedQuantity`.
 
 Quando as unidades chegarem fisicamente, a escola atendera manualmente as reservas. Apenas as pecas que sobrarem e nao tinham sido reservadas serao lancadas no estoque como pronta entrega.
 
@@ -145,13 +146,22 @@ A listagem de pre-venda deve incluir produtos com alguma variante em pre-venda.
 
 A criacao de pedido deve separar os itens por modo de venda. Se a finalizacao tiver itens dos dois tipos, deve criar dois pedidos e retornar os dois numeros de voucher.
 
+Contrato operacional final:
+
+- API publica: `POST /shop/orders/pre-venda`.
+- Proxy publico da loja: `POST /api/shop/orders/pre-venda/:schoolId`, repassando para `POST /api/shop/orders/pre-venda`.
+- Pedido de pre-venda nasce com `orderSource = PRE_VENDA`, `status = AGUARDANDO_PAGAMENTO` e `expiresAt = null`.
+- Admin filtra reservas com `GET /shop/admin/orders?orderSource=PRE_VENDA`.
+- Admin consulta resumo em `GET /shop/admin/orders/pre-venda/summary`.
+- Pagamento, retirada, cancelamento e exclusao de `PRE_VENDA` preservam `quantity`, `reservedQuantity` e ledger de estoque.
+
 ## Tratamento de Erros
 
 Antes de finalizar, a API deve revalidar estoque e modo de venda de cada variante.
 
 Casos esperados:
 
-- Item de pre-venda agora tem estoque: migrar para pronta entrega.
+- Item de pre-venda agora tem estoque: API retorna `PRE_SALE_STOCK_AVAILABLE` e o carrinho migra para pronta entrega.
 - Item de pronta entrega ficou sem estoque: retornar erro recuperavel pedindo confirmacao para transformar em pre-venda.
 - Produto ou variante inativa: bloquear finalizacao com mensagem clara.
 - Mistura de itens pronta entrega e pre-venda: criar pedidos separados.
