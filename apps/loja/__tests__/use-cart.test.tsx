@@ -392,4 +392,52 @@ describe('useCart', () => {
     expect(result.current.getProntaEntregaItems()[0].quantity).toBe(1);
     expect(result.current.getPreVendaItems()[0].quantity).toBe(2);
   });
+
+  it('remove somente os itens informados quando há sucesso parcial no checkout', async () => {
+    const { result } = renderHook(() => useCart());
+
+    await waitFor(() => expect(result.current.isLoaded).toBe(true));
+
+    act(() => {
+      result.current.addItem({
+        schoolId: 'school-1',
+        unitId: 'unit-1',
+        variantId: 'variant-pronta',
+        productId: 'product-1',
+        productName: 'Camiseta',
+        variantSize: '8',
+        quantity: 1,
+        unitPrice: 80,
+        studentName: 'João',
+        availableStock: 1,
+        modoVenda: 'PRONTA_ENTREGA',
+      });
+      result.current.addItem({
+        schoolId: 'school-1',
+        unitId: 'unit-1',
+        variantId: 'variant-pre-venda',
+        productId: 'product-2',
+        productName: 'Moletom',
+        variantSize: '10',
+        quantity: 1,
+        unitPrice: 170,
+        studentName: 'João',
+        availableStock: 0,
+        modoVenda: 'PRE_VENDA',
+      });
+    });
+
+    act(() => {
+      result.current.removeItems([
+        {
+          variantId: 'variant-pronta',
+          studentName: 'João',
+          modoVenda: 'PRONTA_ENTREGA',
+        },
+      ]);
+    });
+
+    expect(result.current.getProntaEntregaItems()).toHaveLength(0);
+    expect(result.current.getPreVendaItems()).toHaveLength(1);
+  });
 });
