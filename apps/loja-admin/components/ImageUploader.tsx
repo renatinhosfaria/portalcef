@@ -18,6 +18,19 @@ interface ImageUploaderProps {
     maxFiles?: number;
 }
 
+function obterMensagemErroUpload(payload: unknown): string | null {
+    if (!payload || typeof payload !== 'object') {
+        return null;
+    }
+
+    const dados = payload as Record<string, unknown>;
+    if (typeof dados.message === 'string' && dados.message.trim().length > 0) {
+        return dados.message;
+    }
+
+    return obterMensagemErroUpload(dados.error);
+}
+
 export function ImageUploader({ value, onChange, maxFiles = 5 }: ImageUploaderProps) {
     const [isDragging, setIsDragging] = useState(false);
     const [uploading, setUploading] = useState<{ [key: string]: number }>({});
@@ -47,7 +60,7 @@ export function ImageUploader({ value, onChange, maxFiles = 5 }: ImageUploaderPr
 
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}));
-                throw new Error(errorData.error?.message || 'Erro no upload');
+                throw new Error(obterMensagemErroUpload(errorData) || 'Erro no upload');
             }
 
             const result = await response.json();
@@ -107,8 +120,11 @@ export function ImageUploader({ value, onChange, maxFiles = 5 }: ImageUploaderPr
                         return newState;
                     });
                 }, 500);
-            } catch {
-                setError(`Erro ao fazer upload de ${file.name}`);
+            } catch (err) {
+                const message = err instanceof Error && err.message
+                    ? err.message
+                    : `Erro ao fazer upload de ${file.name}`;
+                setError(message);
                 setUploading(prev => {
                     const newState = { ...prev };
                     delete newState[fileId];
