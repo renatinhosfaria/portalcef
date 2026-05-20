@@ -203,6 +203,13 @@ export default function CheckoutPage() {
         );
       };
 
+      const isPreVendaStockAvailableError = (error: unknown): error is OrderRequestError => {
+        return (
+          error instanceof Error &&
+          (error as OrderRequestError).code === 'PRE_SALE_STOCK_AVAILABLE'
+        );
+      };
+
       const createOrder = async (
         sourceItems: CartItem[],
         tipo: CreatedOrder['tipo'],
@@ -285,8 +292,36 @@ export default function CheckoutPage() {
         }
       };
 
+      const createPreVendaWithFallback = async (sourceItems: CartItem[]) => {
+        let pendingItems = [...sourceItems];
+
+        while (pendingItems.length > 0) {
+          try {
+            await createOrder(pendingItems, 'PRE_VENDA', preVendaUrl);
+            return;
+          } catch (error: unknown) {
+            if (!isPreVendaStockAvailableError(error)) {
+              throw error;
+            }
+
+            const affectedItems = error.variantId
+              ? pendingItems.filter((item) => item.variantId === error.variantId)
+              : pendingItems;
+
+            if (affectedItems.length === 0) {
+              throw error;
+            }
+
+            await createOrder(affectedItems, 'PRONTA_ENTREGA', orderUrl);
+            pendingItems = pendingItems.filter(
+              (item) => !affectedItems.some((affected) => isSameCartItem(item, affected)),
+            );
+          }
+        }
+      };
+
       await createProntaEntregaWithFallback(prontaEntregaItems);
-      await createOrder(preVendaItems, 'PRE_VENDA', preVendaUrl);
+      await createPreVendaWithFallback(preVendaItems);
 
       setOrderCreated(true);
       setCreatedOrders(created);

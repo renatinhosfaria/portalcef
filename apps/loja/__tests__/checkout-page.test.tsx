@@ -425,6 +425,83 @@ describe('CheckoutPage', () => {
     });
   });
 
+  it('migra item de pré-venda para pronta entrega quando o estoque voltou', async () => {
+    mocks.cartItems.splice(0, mocks.cartItems.length, {
+      variantId: 'variant-pre-venda',
+      productName: 'Moletom',
+      variantSize: '10',
+      quantity: 1,
+      unitPrice: 170,
+      studentName: 'João Silva',
+      availableStock: 0,
+      modoVenda: 'PRE_VENDA',
+    });
+
+    vi.mocked(fetch)
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 400,
+        json: async () => ({
+          success: false,
+          error: {
+            code: 'PRE_SALE_STOCK_AVAILABLE',
+            message: 'O item voltou a ter estoque disponível',
+            details: {
+              variantId: 'variant-pre-venda',
+              availableStock: 2,
+            },
+          },
+        }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 201,
+        json: async () => ({
+          success: true,
+          data: { orderNumber: '333333' },
+        }),
+      } as Response);
+
+    render(<CheckoutPage />);
+
+    fireEvent.change(screen.getByLabelText('Nome Completo'), {
+      target: { value: 'Maria Silva' },
+    });
+    fireEvent.change(screen.getByLabelText('Telefone'), {
+      target: { value: '(11) 98765-4321' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /gerar voucher de pré-venda/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText('#333333')).toBeTruthy();
+    });
+
+    expect(fetch).toHaveBeenNthCalledWith(
+      1,
+      '/api/shop/orders/pre-venda/school-1',
+      expect.objectContaining({ method: 'POST' }),
+    );
+    expect(fetch).toHaveBeenNthCalledWith(
+      2,
+      '/api/shop/orders/school-1',
+      expect.objectContaining({
+        body: JSON.stringify({
+          schoolId: 'school-1',
+          unitId: 'unit-1',
+          items: [
+            {
+              variantId: 'variant-pre-venda',
+              quantity: 1,
+              studentName: 'João Silva',
+            },
+          ],
+          customerName: 'Maria Silva',
+          customerPhone: '11987654321',
+        }),
+      }),
+    );
+  });
+
   it('bloqueia pagamento online quando há item de pré-venda', async () => {
     mocks.cartItems.splice(0, mocks.cartItems.length, {
       variantId: 'variant-pre-venda',

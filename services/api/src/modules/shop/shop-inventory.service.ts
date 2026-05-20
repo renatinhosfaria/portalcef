@@ -215,6 +215,10 @@ export class ShopInventoryService implements OnModuleDestroy {
       throw new BadRequestException({
         code: "INSUFFICIENT_STOCK",
         message: "Estoque indisponível para esta unidade",
+        details: {
+          variantId,
+          availableStock: 0,
+        },
       });
     }
 
@@ -345,6 +349,10 @@ export class ShopInventoryService implements OnModuleDestroy {
       throw new BadRequestException({
         code: "INSUFFICIENT_STOCK",
         message: `Estoque insuficiente. Disponível: ${available}, solicitado: ${quantity}`,
+        details: {
+          variantId,
+          availableStock: available,
+        },
       });
     }
 
@@ -413,6 +421,10 @@ export class ShopInventoryService implements OnModuleDestroy {
       throw new BadRequestException({
         code: "INSUFFICIENT_STOCK",
         message: "Reserva insuficiente para confirmar a venda",
+        details: {
+          variantId,
+          availableStock: inventory.quantity - inventory.reservedQuantity,
+        },
       });
     }
 
@@ -487,6 +499,10 @@ export class ShopInventoryService implements OnModuleDestroy {
       throw new BadRequestException({
         code: "INSUFFICIENT_STOCK",
         message: `Estoque insuficiente. Disponível: ${available}, solicitado: ${quantity}`,
+        details: {
+          variantId,
+          availableStock: available,
+        },
       });
     }
 
@@ -791,6 +807,10 @@ export class ShopInventoryService implements OnModuleDestroy {
           throw new BadRequestException({
             code: "INSUFFICIENT_STOCK",
             message: `Estoque disponível insuficiente. Disponível: ${available}, solicitado: ${quantity}`,
+            details: {
+              variantId,
+              availableStock: available,
+            },
           });
         }
 

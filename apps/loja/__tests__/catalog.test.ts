@@ -16,12 +16,22 @@ describe('catálogo público', () => {
         expect(getCatalogCardPrice(product)).toBe(45);
     });
 
-    it('usa preço base quando nenhuma variante disponível informa preço efetivo', () => {
+    it('usa menor preço efetivo da pré-venda quando não há variante disponível', () => {
         const product = {
             basePrice: 5000,
             variants: [
-                { price: 4500, availableStock: 0 },
+                { priceOverride: 4500, availableStock: 0 },
+                { price: 4700, availableStock: 0 },
             ],
+        };
+
+        expect(getCatalogCardPrice(product)).toBe(45);
+    });
+
+    it('usa preço base quando produto não tem variantes precificadas', () => {
+        const product = {
+            basePrice: 5000,
+            variants: [],
         };
 
         expect(getCatalogCardPrice(product)).toBe(50);
