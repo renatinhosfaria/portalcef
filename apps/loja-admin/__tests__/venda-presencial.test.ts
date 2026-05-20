@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import {
+    getProductsForPresentialSale,
     getSelectableVariants,
     getVariantEffectivePrice,
 } from '../lib/venda-presencial';
@@ -51,6 +52,16 @@ describe('venda presencial', () => {
             'variant-price',
             'variant-base',
         ]);
+    });
+
+    it('nao lista produto de pre-venda na venda presencial', () => {
+        const products = [
+            { id: 'p1', name: 'Moletom', isPreSale: true, basePrice: 10000, variants: [{ id: 'v1', size: '8', priceOverride: null, isActive: true, availableStock: 10 }] },
+            { id: 'p2', name: 'Camiseta', isPreSale: false, basePrice: 5000, variants: [{ id: 'v2', size: '8', priceOverride: null, isActive: true, availableStock: 10 }] },
+        ] as never;
+
+        expect(getProductsForPresentialSale(products)).toHaveLength(1);
+        expect(getProductsForPresentialSale(products)[0].id).toBe('p2');
     });
 
     it('não permite BRINDE parcial como atalho de quitação', () => {

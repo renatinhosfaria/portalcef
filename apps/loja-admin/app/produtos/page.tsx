@@ -23,6 +23,7 @@ interface Product {
     imageUrl?: string;
     images?: string[];
     isActive: boolean;
+    isPreSale: boolean;
     variantsCount: number;
 }
 
@@ -51,6 +52,7 @@ export default function ProdutosPage() {
         basePrice: '',
         description: '',
         images: [] as string[],
+        isPreSale: false,
     });
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [formError, setFormError] = useState<string | null>(null);
@@ -98,6 +100,7 @@ export default function ProdutosPage() {
             basePrice: '',
             description: '',
             images: [],
+            isPreSale: false,
         });
         setFormError(null);
         setFormSuccess(false);
@@ -114,6 +117,7 @@ export default function ProdutosPage() {
             images: product.images && product.images.length > 0
                 ? product.images
                 : (product.imageUrl ? [product.imageUrl] : []),
+            isPreSale: product.isPreSale,
         });
         setFormError(null);
         setFormSuccess(false);
@@ -163,6 +167,7 @@ export default function ProdutosPage() {
                 description: formData.description.trim() || undefined,
                 imageUrl: formData.images[0] || undefined,
                 images: formData.images,
+                isPreSale: formData.isPreSale,
             };
 
             const payload = isEditing
@@ -309,7 +314,12 @@ export default function ProdutosPage() {
                             ) : (
                                 products.map((product) => (
                                     <tr key={product.id}>
-                                        <td className="font-semibold text-slate-800">{product.name}</td>
+                                        <td className="font-semibold text-slate-800">
+                                            {product.name}
+                                            {product.isPreSale && (
+                                                <span className="ml-2 badge badge-warning text-xs">Pré-venda</span>
+                                            )}
+                                        </td>
                                         <td>
                                             <span className="badge badge-info">
                                                 {getCategoryLabel(product.category)}
@@ -453,6 +463,19 @@ export default function ProdutosPage() {
                             onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                         />
                     </div>
+
+                    <label className="flex items-start gap-3 rounded-lg border border-slate-200 p-4">
+                        <input
+                            type="checkbox"
+                            checked={formData.isPreSale}
+                            onChange={(event) => setFormData({ ...formData, isPreSale: event.target.checked })}
+                            className="mt-1 h-4 w-4"
+                        />
+                        <span>
+                            <span className="block text-sm font-semibold text-slate-800">Produto de pré-venda</span>
+                            <span className="block text-xs text-slate-500">Aparece na categoria Pré-venda e gera reserva sem baixar estoque.</span>
+                        </span>
+                    </label>
 
                     <div className="space-y-2">
                         <Label>Imagens do Produto</Label>

@@ -1,6 +1,8 @@
 /**
  * @vitest-environment jsdom
  */
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 describe('Admin Dashboard', () => {
@@ -360,5 +362,17 @@ describe('Presential Sale', () => {
             const formCleared = true;
             expect(formCleared).toBe(true);
         });
+    });
+});
+
+describe('Produtos admin', () => {
+    it('formulario de produto controla checkbox de pre-venda', () => {
+        const source = readFileSync(join(process.cwd(), 'app/produtos/page.tsx'), 'utf8');
+
+        expect(source).toContain('isPreSale: false');
+        expect(source).toContain('Produto de pré-venda');
+        expect(source).toContain('checked={formData.isPreSale}');
+        expect(source).toContain('isPreSale: formData.isPreSale');
+        expect(source).toContain('product.isPreSale');
     });
 });

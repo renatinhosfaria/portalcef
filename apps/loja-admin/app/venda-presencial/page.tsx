@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 
 import { apiFetch } from '../../lib/api';
 import {
+    getProductsForPresentialSale,
     getSelectableVariants,
     getVariantAvailableStock,
     getVariantEffectivePrice,
@@ -59,7 +60,8 @@ export default function VendaPresencialPage() {
         fetchProducts();
     }, []);
 
-    const activeProduct = products.find(p => p.id === selectedProduct);
+    const presentialProducts = getProductsForPresentialSale(products);
+    const activeProduct = presentialProducts.find(p => p.id === selectedProduct);
     const selectableVariants = activeProduct ? getSelectableVariants(activeProduct) : [];
     const totalAmount = items.reduce((sum, item) => sum + (item.unitPrice * item.quantity), 0);
     const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
@@ -257,7 +259,7 @@ export default function VendaPresencialPage() {
                                         className="form-select"
                                     >
                                         <option value="">Selecione um produto</option>
-                                        {products.map(p => (
+                                        {presentialProducts.map(p => (
                                             <option key={p.id} value={p.id}>{p.name} - {formatCurrency(p.basePrice)}</option>
                                         ))}
                                     </select>

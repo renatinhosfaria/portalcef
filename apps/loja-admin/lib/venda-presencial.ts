@@ -16,7 +16,14 @@ export interface VendaPresencialProduct {
     id: string;
     name: string;
     basePrice: number;
+    isPreSale?: boolean;
     variants: VendaPresencialVariant[];
+}
+
+export function getProductsForPresentialSale(
+    products: VendaPresencialProduct[],
+): VendaPresencialProduct[] {
+    return products.filter((p) => !p.isPreSale);
 }
 
 export function getVariantEffectivePrice(
