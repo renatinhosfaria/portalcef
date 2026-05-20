@@ -338,7 +338,7 @@ describe('Voucher público', () => {
 
 describe('Pré-venda pública', () => {
     it('catálogo busca pronta entrega e pré-venda separadamente', () => {
-        const source = readFileSync(join(process.cwd(), 'app/[schoolId]/[unitId]/page.tsx'), 'utf8');
+        const source = readFileSync(join(process.cwd(), 'app/[schoolId]/[unitId]/catalog-page-content.tsx'), 'utf8');
 
         expect(source).toContain("fetch(buildCatalogUrl('PRONTA_ENTREGA'))");
         expect(source).toContain("fetch(buildCatalogUrl('PRE_VENDA'))");
@@ -389,13 +389,28 @@ describe('URLs amigáveis da loja', () => {
     });
 
     it('catálogo resolve a rota amigável antes de buscar produtos', () => {
-        const source = readFileSync(join(process.cwd(), 'app/[schoolId]/[unitId]/page.tsx'), 'utf8');
+        const source = readFileSync(join(process.cwd(), 'app/[schoolId]/[unitId]/catalog-page-content.tsx'), 'utf8');
 
         expect(source).toContain('resolveStorefrontParams');
-        expect(source).toContain('router.replace(resolvedStorefront.canonicalPath)');
+        expect(source).toContain('router.replace(`${resolvedStorefront.canonicalPath}${canonicalSuffix}`)');
         expect(source).toContain('/api/shop/catalog/${resolvedStorefront.schoolId}/${resolvedStorefront.unitId}');
         expect(source).toContain('schoolId={resolvedStorefront.schoolSlug}');
         expect(source).toContain('unitId={resolvedStorefront.unitSlug}');
+    });
+
+    it('rota /pre-venda abre o catálogo com filtro de pré-venda ativo', () => {
+        const catalogSource = readFileSync(join(process.cwd(), 'app/[schoolId]/[unitId]/catalog-page-content.tsx'), 'utf8');
+        const preSaleRouteSource = readFileSync(
+            join(process.cwd(), 'app/[schoolId]/[unitId]/pre-venda/page.tsx'),
+            'utf8',
+        );
+
+        expect(catalogSource).toContain('initialCategoryFilter =');
+        expect(catalogSource).toContain("useState<string>(initialCategoryFilter)");
+        expect(catalogSource).toContain('canonicalSuffix =');
+        expect(preSaleRouteSource).toContain('CatalogPage');
+        expect(preSaleRouteSource).toContain('initialCategoryFilter="PRE_VENDA"');
+        expect(preSaleRouteSource).toContain('canonicalSuffix="/pre-venda"');
     });
 
     it('detalhe usa slugs na navegação e IDs internos nas chamadas da API', () => {
