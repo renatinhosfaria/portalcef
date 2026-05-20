@@ -85,40 +85,6 @@ document.addEventListener('DOMContentLoaded', () => {
   }, { threshold: 0.5 });
   counters.forEach(c => counterObserver.observe(c));
 
-  /* ========== COUNTDOWN ========== */
-  const countDaysEl = document.getElementById('countDays');
-  const countHoursEl = document.getElementById('countHours');
-  const countMinutesEl = document.getElementById('countMinutes');
-  const countSecondsEl = document.getElementById('countSeconds');
-
-  if (countDaysEl && countHoursEl && countMinutesEl && countSecondsEl) {
-    // Encerramento das inscrições: 13/05/2026 às 23:59:59 (horário de Brasília)
-    const deadline = new Date('2026-05-13T23:59:59-03:00').getTime();
-    function updateCountdown() {
-      const now = Date.now();
-      const diff = deadline - now;
-      if (diff <= 0) {
-        // Inscrições encerradas
-        countDaysEl.textContent = '00';
-        countHoursEl.textContent = '00';
-        countMinutesEl.textContent = '00';
-        countSecondsEl.textContent = '00';
-        const label = document.getElementById('countdownLabel');
-        if (label) label.textContent = 'Inscrições encerradas';
-        return;
-      }
-      const d = Math.floor(diff / 86400000);
-      const h = Math.floor((diff % 86400000) / 3600000);
-      const m = Math.floor((diff % 3600000) / 60000);
-      const s = Math.floor((diff % 60000) / 1000);
-      countDaysEl.textContent = String(d).padStart(2, '0');
-      countHoursEl.textContent = String(h).padStart(2, '0');
-      countMinutesEl.textContent = String(m).padStart(2, '0');
-      countSecondsEl.textContent = String(s).padStart(2, '0');
-    }
-    updateCountdown();
-    setInterval(updateCountdown, 1000);
-  }
 
   /* ========== PARTICLE CANVAS ========== */
   const canvas = document.getElementById('particleCanvas');

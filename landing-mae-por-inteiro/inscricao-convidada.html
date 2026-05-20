@@ -40,17 +40,8 @@
     <div class="container" data-animate="fade-up">
       <h1 class="title-script" style="font-size: clamp(2.5rem, 8vw, 4rem);">Inscreva-se</h1>
       <p style="color: var(--text-light); margin-top: 10px; font-size: 1.1rem;">Preencha seus dados para garantir sua vaga neste encontro especial.</p>
-      <p id="deadlineNote" style="margin-top: 12px; font-size: .9rem; color: var(--rose-deep); font-weight: 500;">
-        ⏳ As inscrições encerram em <strong>13/05/2026 às 23h59</strong> (horário de Brasília).
-      </p>
     </div>
   </header>
-
-  <!-- BANNER DE INSCRIÇÕES ENCERRADAS (visível só após o deadline) -->
-  <div id="inscricoesEncerradasBanner" style="display:none; background:#FEE2E2; border:1px solid #FCA5A5; color:#7F1D1D; padding:20px; max-width:600px; margin:24px auto; border-radius:12px; text-align:center;">
-    <strong style="display:block; margin-bottom:6px;">⚠️ Inscrições encerradas</strong>
-    <span style="font-size:.95rem;">O prazo para inscrição neste evento já se encerrou. Em caso de dúvidas, entre em contato com a secretaria do Colégio Essência Feliz.</span>
-  </div>
 
   <!-- FORMULÁRIO -->
   <section class="section" style="padding-top: 0;">
@@ -115,12 +106,8 @@
         if (!r.ok) return;
         const data = await r.json();
         if (data && data.inscricoesAbertas === false) {
-          const banner = document.getElementById('inscricoesEncerradasBanner');
           const formCard = document.querySelector('.form-card');
-          const deadlineNote = document.getElementById('deadlineNote');
-          if (banner) banner.style.display = 'block';
           if (formCard) formCard.style.display = 'none';
-          if (deadlineNote) deadlineNote.style.display = 'none';
         }
       } catch (_e) {
         // Em caso de falha, deixamos a API rejeitar no submit (403)
