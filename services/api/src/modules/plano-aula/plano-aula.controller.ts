@@ -466,10 +466,12 @@ export class PlanoAulaController {
 
     // Reusar item existente se não expirou
     let itemId: string | null = null;
+    let reutilizouItemExistente = false;
     if (documento.sharepointItemId && documento.editandoDesde) {
       const expirado = this.sharePointService.calcularLimiteEdicao();
       if (documento.editandoDesde > expirado) {
         itemId = documento.sharepointItemId;
+        reutilizouItemExistente = true;
       }
     }
 
@@ -483,11 +485,46 @@ export class PlanoAulaController {
       // Persistir itemId para permitir reuso e garantir cleanup
       await this.planoAulaService.atualizarDocumento(docId, {
         sharepointItemId: itemId,
+        sharepointEditUrl: null,
         editandoDesde: new Date(),
       });
     }
 
-    const { embedUrl } = await this.sharePointService.criarLinkVisualizacao(itemId);
+    let embedUrl: string;
+    try {
+      ({ embedUrl } = await this.sharePointService.criarLinkVisualizacao(itemId));
+    } catch (error) {
+      if (
+        !reutilizouItemExistente ||
+        !this.sharePointService.isItemNaoEncontrado(error)
+      ) {
+        throw error;
+      }
+
+      this.logger.warn(
+        `[visualizarSharePoint] Item ${itemId} do documento ${docId} não existe mais no SharePoint; reenviando arquivo`,
+      );
+
+      await this.planoAulaService.atualizarDocumento(docId, {
+        sharepointItemId: null,
+        sharepointEditUrl: null,
+        editandoDesde: null,
+      });
+
+      itemId = await this.sharePointService.uploadParaSharePoint(
+        documento.storageKey,
+        documento.fileName || "documento.docx",
+        docId,
+      );
+
+      await this.planoAulaService.atualizarDocumento(docId, {
+        sharepointItemId: itemId,
+        sharepointEditUrl: null,
+        editandoDesde: new Date(),
+      });
+
+      ({ embedUrl } = await this.sharePointService.criarLinkVisualizacao(itemId));
+    }
 
     return {
       success: true,

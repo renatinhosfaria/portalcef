@@ -305,6 +305,51 @@ export class SharePointService {
     }
   }
 
+  isItemNaoEncontrado(error: unknown): boolean {
+    const erro = error as {
+      code?: unknown;
+      status?: unknown;
+      statusCode?: unknown;
+      message?: unknown;
+      body?: unknown;
+      error?: { code?: unknown; message?: unknown };
+      response?: {
+        status?: unknown;
+        data?: { error?: { code?: unknown; message?: unknown } };
+      };
+    };
+
+    const codigos = [
+      erro.code,
+      erro.error?.code,
+      erro.response?.data?.error?.code,
+    ]
+      .filter((codigo): codigo is string => typeof codigo === "string")
+      .map((codigo) => codigo.toLowerCase());
+
+    if (codigos.includes("itemnotfound")) {
+      return true;
+    }
+
+    const status = Number(erro.statusCode ?? erro.status ?? erro.response?.status);
+    const mensagens = [
+      erro.message,
+      erro.body,
+      erro.error?.message,
+      erro.response?.data?.error?.message,
+    ]
+      .filter((mensagem): mensagem is string => typeof mensagem === "string")
+      .join(" ")
+      .toLowerCase();
+
+    return (
+      status === 404 &&
+      (mensagens.includes("itemnotfound") ||
+        mensagens.includes("resource could not be found") ||
+        mensagens.includes("not found"))
+    );
+  }
+
   async removerArquivo(itemId: string, tentativas = 3): Promise<boolean> {
     const client = this.getClient();
 
@@ -320,7 +365,15 @@ export class SharePointService {
         return true;
       } catch (error) {
         const mensagem = error instanceof Error ? error.message : String(error);
+        const naoEncontrado = this.isItemNaoEncontrado(error);
         const isLocked = mensagem.includes("locked");
+
+        if (naoEncontrado) {
+          this.logger.warn(
+            `Arquivo ${itemId} não existe mais no SharePoint; referência local será limpa`,
+          );
+          return true;
+        }
 
         if (isLocked && i < tentativas - 1) {
           const delay = Math.pow(2, i) * 5000; // 5s, 10s, 20s

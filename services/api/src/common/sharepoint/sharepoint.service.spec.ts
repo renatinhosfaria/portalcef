@@ -130,4 +130,19 @@ describe("SharePointService", () => {
       expirationDateTime: "2026-05-05T00:00:00.000Z",
     });
   });
+
+  it("deve tratar itemNotFound como arquivo já removido no SharePoint", async () => {
+    const erro = Object.assign(new Error("The resource could not be found."), {
+      code: "itemNotFound",
+      statusCode: 404,
+    });
+    const deleteMock = jest.fn().mockRejectedValue(erro);
+
+    (service as unknown as { client: { api: jest.Mock } }).client = {
+      api: jest.fn().mockReturnValue({ delete: deleteMock }),
+    };
+
+    await expect(service.removerArquivo("item-inexistente")).resolves.toBe(true);
+    expect(deleteMock).toHaveBeenCalledTimes(1);
+  });
 });
