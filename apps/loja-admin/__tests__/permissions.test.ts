@@ -7,10 +7,17 @@ import {
 } from '../lib/permissions';
 
 describe('permissões do loja-admin', () => {
-    it('não permite gestão de catálogo, estoque ou configurações para auxiliar_administrativo', () => {
-        expect(canManageCatalog('auxiliar_administrativo')).toBe(false);
-        expect(canManageInventory('auxiliar_administrativo')).toBe(false);
-        expect(canManageShopSettings('auxiliar_administrativo')).toBe(false);
+    it('concede ao auxiliar_administrativo as mesmas permissões de gerente_unidade', () => {
+        const permissoes = [
+            canManageCatalog,
+            canManageInventory,
+            canManageShopSettings,
+        ];
+
+        for (const permissao of permissoes) {
+            expect(permissao('auxiliar_administrativo')).toBe(permissao('gerente_unidade'));
+            expect(permissao('auxiliar_administrativo')).toBe(true);
+        }
     });
 
     it('permite gestão operacional para roles administrativas de unidade/escola', () => {

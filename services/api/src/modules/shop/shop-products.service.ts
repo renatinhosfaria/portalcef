@@ -122,8 +122,15 @@ export class ShopProductsService {
     }
   }
 
-  private getModoVenda(available: number): ModoVenda {
-    return available > 0 ? "PRONTA_ENTREGA" : "PRE_VENDA";
+  private getModoVenda(isPreSale: boolean): ModoVenda {
+    return isPreSale ? "PRE_VENDA" : "PRONTA_ENTREGA";
+  }
+
+  private isVarianteDisponivelNoPublico(
+    isPreSale: boolean,
+    available: number,
+  ) {
+    return isPreSale || available > 0;
   }
 
   /**
@@ -173,11 +180,32 @@ export class ShopProductsService {
     // Transform and filter
     const result = products
       .map((product: ProductWithVariants) => {
+        const isPreSale = product.isPreSale === true;
+        const modoVenda = this.getModoVenda(isPreSale);
+
+        if (filters.modoVenda && filters.modoVenda !== modoVenda) {
+          return {
+            id: product.id,
+            name: product.name,
+            description: product.description,
+            category: product.category,
+            basePrice: product.basePrice,
+            imageUrl: product.imageUrl,
+            images:
+              product.images?.map((img: { imageUrl: string }) => img.imageUrl) ||
+              [],
+            variants: [],
+          };
+        }
+
         const variants = product.variants
           .filter((variant: ProductVariantWithInventory) => {
             const inv = variant.inventory?.[0];
             const available = inv ? inv.quantity - inv.reservedQuantity : 0;
-            const modoVenda = this.getModoVenda(available);
+            const isAvailable = this.isVarianteDisponivelNoPublico(
+              isPreSale,
+              available,
+            );
 
             // Filter by size if requested
             if (filters.size && variant.size !== filters.size) {
@@ -185,11 +213,7 @@ export class ShopProductsService {
             }
 
             // Filter by stock if requested
-            if (filters.inStock && available <= 0) {
-              return false;
-            }
-
-            if (filters.modoVenda && filters.modoVenda !== modoVenda) {
+            if (filters.inStock && !isAvailable) {
               return false;
             }
 
@@ -198,7 +222,10 @@ export class ShopProductsService {
           .map((variant: ProductVariantWithInventory) => {
             const inv = variant.inventory?.[0];
             const available = inv ? inv.quantity - inv.reservedQuantity : 0;
-            const modoVenda = this.getModoVenda(available);
+            const isAvailable = this.isVarianteDisponivelNoPublico(
+              isPreSale,
+              available,
+            );
 
             return {
               id: variant.id,
@@ -206,7 +233,7 @@ export class ShopProductsService {
               sku: variant.sku,
               price: variant.priceOverride || product.basePrice,
               availableStock: Math.max(0, available),
-              isAvailable: available > 0,
+              isAvailable,
               modoVenda,
             };
           });
@@ -342,6 +369,7 @@ export class ShopProductsService {
       .map((variant: ProductVariantWithInventory) => {
         const inv = variant.inventory?.[0];
         const available = inv ? inv.quantity - inv.reservedQuantity : 0;
+        const isPreSale = product.isPreSale === true;
 
         return {
           id: variant.id,
@@ -350,8 +378,11 @@ export class ShopProductsService {
           priceOverride: variant.priceOverride,
           price: variant.priceOverride || product.basePrice,
           availableStock: Math.max(0, available),
-          isAvailable: available > 0,
-          modoVenda: this.getModoVenda(available),
+          isAvailable: this.isVarianteDisponivelNoPublico(
+            isPreSale,
+            available,
+          ),
+          modoVenda: this.getModoVenda(isPreSale),
         };
       });
 

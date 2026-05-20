@@ -2,6 +2,7 @@ const SHOP_MANAGEMENT_ROLES = new Set([
     'master',
     'diretora_geral',
     'gerente_unidade',
+    'auxiliar_administrativo',
 ]);
 
 export function canManageCatalog(role?: string | null): boolean {

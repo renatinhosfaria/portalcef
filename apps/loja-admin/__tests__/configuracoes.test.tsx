@@ -43,20 +43,20 @@ describe('Configurações da loja-admin', () => {
         } as Response);
     });
 
-    it('mantém configurações somente leitura para auxiliar_administrativo', async () => {
+    it('permite editar configurações para auxiliar_administrativo como gerente_unidade', async () => {
         render(<ConfiguracoesPage />);
 
         await waitFor(() => {
             expect(screen.getByText('Configurações')).toBeTruthy();
         });
 
-        expect(screen.queryByText('Salvar Alterações')).toBeNull();
+        expect(screen.getByText('Salvar Alterações')).toBeTruthy();
         const installmentSelect = screen.getByRole('combobox') as HTMLSelectElement;
         const instructionsField = screen.getByDisplayValue('Retirada na secretaria.') as HTMLTextAreaElement;
 
         expect(installmentSelect.value).toBe('3');
-        expect(installmentSelect.disabled).toBe(true);
-        expect(instructionsField.disabled).toBe(true);
+        expect(installmentSelect.disabled).toBe(false);
+        expect(instructionsField.disabled).toBe(false);
     });
 
     it('não fica carregando indefinidamente quando usuário não tem unidade operacional', async () => {

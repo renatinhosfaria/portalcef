@@ -77,7 +77,7 @@ interface UserContext {
  * - diretora_geral: todas as unidades da escola
  * - gerente_unidade: apenas sua unidade
  * - gerente_financeiro: apenas sua unidade
- * - auxiliar_administrativo: leitura e operações de venda (não pode gerenciar produtos/estoque)
+ * - auxiliar_administrativo: mesmas permissões do gerente_unidade na loja
  */
 @Controller("shop/admin")
 @ExactRoles()
@@ -101,7 +101,7 @@ export class ShopAdminController {
    * GET /shop/admin/dashboard
    *
    * Retorna estatísticas do dashboard administrativo
-   * Roles: master, diretora_geral, gerente_unidade, gerente_financeiro
+   * Roles: master, diretora_geral, gerente_unidade, gerente_financeiro, auxiliar_administrativo
    */
   @Get("dashboard")
   @Roles(
@@ -359,13 +359,14 @@ export class ShopAdminController {
    * POST /shop/admin/products
    *
    * Cria novo produto
-   * Roles: master, diretora_geral, gerente_unidade
+   * Roles: master, diretora_geral, gerente_unidade, auxiliar_administrativo
    */
   @Post("products")
   @Roles(
     "master",
     "diretora_geral",
     "gerente_unidade",
+    "auxiliar_administrativo",
   )
   @HttpCode(HttpStatus.CREATED)
   async createProduct(
@@ -388,13 +389,14 @@ export class ShopAdminController {
    * PATCH /shop/admin/products/:id
    *
    * Atualiza produto existente
-   * Roles: master, diretora_geral, gerente_unidade
+   * Roles: master, diretora_geral, gerente_unidade, auxiliar_administrativo
    */
   @Patch("products/:id")
   @Roles(
     "master",
     "diretora_geral",
     "gerente_unidade",
+    "auxiliar_administrativo",
   )
   async updateProduct(
     @Req() req: { user: UserContext },
@@ -418,13 +420,14 @@ export class ShopAdminController {
    * DELETE /shop/admin/products/:id
    *
    * Remove produto (soft delete - marca isActive=false)
-   * Roles: master, diretora_geral
+   * Roles: master, diretora_geral, gerente_unidade, auxiliar_administrativo
    */
   @Delete("products/:id")
   @Roles(
     "master",
     "diretora_geral",
     "gerente_unidade",
+    "auxiliar_administrativo",
   )
   @HttpCode(HttpStatus.NO_CONTENT)
   async deleteProduct(
@@ -444,13 +447,14 @@ export class ShopAdminController {
    * POST /shop/admin/variants
    *
    * Cria nova variante de produto
-   * Roles: master, diretora_geral, gerente_unidade
+   * Roles: master, diretora_geral, gerente_unidade, auxiliar_administrativo
    */
   @Post("variants")
   @Roles(
     "master",
     "diretora_geral",
     "gerente_unidade",
+    "auxiliar_administrativo",
   )
   @HttpCode(HttpStatus.CREATED)
   async createVariant(
@@ -480,13 +484,14 @@ export class ShopAdminController {
    * PATCH /shop/admin/variants/:id
    *
    * Atualiza variante existente
-   * Roles: master, diretora_geral, gerente_unidade
+   * Roles: master, diretora_geral, gerente_unidade, auxiliar_administrativo
    */
   @Patch("variants/:id")
   @Roles(
     "master",
     "diretora_geral",
     "gerente_unidade",
+    "auxiliar_administrativo",
   )
   async updateVariant(
     @Req() req: { user: UserContext },
@@ -516,13 +521,14 @@ export class ShopAdminController {
    * DELETE /shop/admin/variants/:id
    *
    * Remove variante permanentemente
-   * Roles: master, diretora_geral, gerente_unidade
+   * Roles: master, diretora_geral, gerente_unidade, auxiliar_administrativo
    */
   @Delete("variants/:id")
   @Roles(
     "master",
     "diretora_geral",
     "gerente_unidade",
+    "auxiliar_administrativo",
   )
   @HttpCode(HttpStatus.NO_CONTENT)
   async deleteVariant(
@@ -670,13 +676,14 @@ export class ShopAdminController {
    * POST /shop/admin/inventory/entry
    *
    * Adiciona estoque (ENTRADA)
-   * Roles: master, diretora_geral, gerente_unidade
+   * Roles: master, diretora_geral, gerente_unidade, auxiliar_administrativo
    */
   @Post("inventory/entry")
   @Roles(
     "master",
     "diretora_geral",
     "gerente_unidade",
+    "auxiliar_administrativo",
   )
   @HttpCode(HttpStatus.CREATED)
   async addInventory(
@@ -709,6 +716,7 @@ export class ShopAdminController {
     "master",
     "diretora_geral",
     "gerente_unidade",
+    "auxiliar_administrativo",
   )
   @HttpCode(HttpStatus.CREATED)
   async removeInventory(
@@ -735,13 +743,14 @@ export class ShopAdminController {
    * POST /shop/admin/inventory/adjust
    *
    * Ajusta estoque (positivo ou negativo)
-   * Roles: master, diretora_geral, gerente_unidade
+   * Roles: master, diretora_geral, gerente_unidade, auxiliar_administrativo
    */
   @Post("inventory/adjust")
   @Roles(
     "master",
     "diretora_geral",
     "gerente_unidade",
+    "auxiliar_administrativo",
   )
   @HttpCode(HttpStatus.CREATED)
   async adjustInventory(
@@ -951,13 +960,14 @@ export class ShopAdminController {
    * PATCH /shop/admin/orders/:id/cancel
    *
    * Cancela pedido (libera estoque + refund Stripe se PAGO)
-   * Roles: master, diretora_geral, gerente_unidade
+   * Roles: master, diretora_geral, gerente_unidade, auxiliar_administrativo
    */
   @Patch("orders/:id/cancel")
   @Roles(
     "master",
     "diretora_geral",
     "gerente_unidade",
+    "auxiliar_administrativo",
   )
   async cancelOrder(
     @Req() req: { user: UserContext },
@@ -1047,13 +1057,14 @@ export class ShopAdminController {
    * Exclui permanentemente um pedido (hard delete)
    * Apenas pedidos AGUARDANDO_PAGAMENTO, CANCELADO ou EXPIRADO podem ser excluídos
    *
-   * Roles: master, diretora_geral, gerente_unidade
+   * Roles: master, diretora_geral, gerente_unidade, auxiliar_administrativo
    */
   @Delete("orders/:id")
   @Roles(
     "master",
     "diretora_geral",
     "gerente_unidade",
+    "auxiliar_administrativo",
   )
   @HttpCode(HttpStatus.NO_CONTENT)
   async deleteOrder(
@@ -1200,13 +1211,14 @@ export class ShopAdminController {
    * PATCH /shop/admin/settings/:unitId
    *
    * Atualiza configurações da loja
-   * Roles: master, diretora_geral, gerente_unidade
+   * Roles: master, diretora_geral, gerente_unidade, auxiliar_administrativo
    */
   @Patch("settings/:unitId")
   @Roles(
     "master",
     "diretora_geral",
     "gerente_unidade",
+    "auxiliar_administrativo",
   )
   async updateSettings(
     @Req() req: { user: UserContext },

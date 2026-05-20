@@ -410,7 +410,7 @@ describe("Regressões da loja", () => {
     expect(chamadasSqlComData).toHaveLength(0);
   });
 
-  it("retorna detalhe público com pronta entrega e pré-venda sem estoque interno", async () => {
+  it("retorna detalhe público de produto normal sem estoque como pronta entrega esgotada", async () => {
     const service = new ShopProductsService();
 
     mockDb.query.shopProducts.findFirst.mockResolvedValue({
@@ -422,6 +422,7 @@ describe("Regressões da loja", () => {
       basePrice: 4500,
       imageUrl: "/camiseta.png",
       isActive: true,
+      isPreSale: false,
       images: [{ imageUrl: "/camiseta.png" }],
       variants: [
         {
@@ -439,7 +440,7 @@ describe("Regressões da loja", () => {
           ],
         },
         {
-          id: "variant-pre-venda",
+          id: "variant-sem-estoque",
           size: "12",
           sku: "CAM-12",
           priceOverride: null,
@@ -495,10 +496,10 @@ describe("Regressões da loja", () => {
         modoVenda: "PRONTA_ENTREGA",
       }),
       expect.objectContaining({
-        id: "variant-pre-venda",
+        id: "variant-sem-estoque",
         availableStock: 0,
         isAvailable: false,
-        modoVenda: "PRE_VENDA",
+        modoVenda: "PRONTA_ENTREGA",
       }),
     ]);
     for (const variant of product.variants) {
@@ -510,10 +511,58 @@ describe("Regressões da loja", () => {
     }
   });
 
-  it("classifica variantes públicas entre pronta entrega e pré-venda pelo estoque", async () => {
+  it("retorna detalhe público de produto pré-venda com estoque como pré-venda disponível", async () => {
     const service = new ShopProductsService();
-    const produtoComEstoqueMisto = {
-      id: "product-1",
+
+    mockDb.query.shopProducts.findFirst.mockResolvedValue({
+      id: "product-pre-venda",
+      schoolId: "school-1",
+      name: "Jaqueta",
+      description: "Uniforme",
+      category: "UNIFORME_UNISSEX",
+      basePrice: 22000,
+      imageUrl: "/jaqueta.png",
+      isActive: true,
+      isPreSale: true,
+      images: [{ imageUrl: "/jaqueta.png" }],
+      variants: [
+        {
+          id: "variant-com-estoque",
+          size: "8",
+          sku: "JAQ-8",
+          priceOverride: null,
+          isActive: true,
+          inventory: [
+            {
+              unitId: "unit-1",
+              quantity: 5,
+              reservedQuantity: 1,
+            },
+          ],
+        },
+      ],
+    });
+
+    const product = await service.getPublicProductById(
+      "product-pre-venda",
+      "school-1",
+      "unit-1",
+    );
+
+    expect(product.variants).toEqual([
+      expect.objectContaining({
+        id: "variant-com-estoque",
+        availableStock: 4,
+        isAvailable: true,
+        modoVenda: "PRE_VENDA",
+      }),
+    ]);
+  });
+
+  it("classifica catálogo público e filtros de modoVenda pelo campo manual de pré-venda", async () => {
+    const service = new ShopProductsService();
+    const produtoProntaEntregaSemEstoque = {
+      id: "product-pronta-entrega",
       schoolId: "school-1",
       name: "Moletom",
       description: "Uniforme",
@@ -521,26 +570,13 @@ describe("Regressões da loja", () => {
       basePrice: 17000,
       imageUrl: "/moletom.png",
       isActive: true,
+      isPreSale: false,
       images: [{ imageUrl: "/moletom.png" }],
       variants: [
         {
-          id: "variant-pronta-entrega",
+          id: "variant-sem-estoque",
           size: "8",
           sku: "MOL-8",
-          priceOverride: null,
-          isActive: true,
-          inventory: [
-            {
-              unitId: "unit-1",
-              quantity: 2,
-              reservedQuantity: 0,
-            },
-          ],
-        },
-        {
-          id: "variant-pre-venda",
-          size: "10",
-          sku: "MOL-10",
           priceOverride: null,
           isActive: true,
           inventory: [
@@ -553,9 +589,38 @@ describe("Regressões da loja", () => {
         },
       ],
     };
+    const produtoPreVendaComEstoque = {
+      id: "product-pre-venda",
+      schoolId: "school-1",
+      name: "Agasalho",
+      description: "Uniforme",
+      category: "UNIFORME_UNISSEX",
+      basePrice: 19000,
+      imageUrl: "/agasalho.png",
+      isActive: true,
+      isPreSale: true,
+      images: [{ imageUrl: "/agasalho.png" }],
+      variants: [
+        {
+          id: "variant-com-estoque",
+          size: "10",
+          sku: "AGA-10",
+          priceOverride: null,
+          isActive: true,
+          inventory: [
+            {
+              unitId: "unit-1",
+              quantity: 3,
+              reservedQuantity: 0,
+            },
+          ],
+        },
+      ],
+    };
 
     mockDb.query.shopProducts.findMany.mockResolvedValue([
-      produtoComEstoqueMisto,
+      produtoPreVendaComEstoque,
+      produtoProntaEntregaSemEstoque,
     ]);
 
     const catalogoCompleto = await service.getProducts(
@@ -576,23 +641,25 @@ describe("Regressões da loja", () => {
 
     expect(catalogoCompleto[0].variants).toEqual([
       expect.objectContaining({
-        id: "variant-pronta-entrega",
-        availableStock: 2,
+        id: "variant-com-estoque",
+        availableStock: 3,
         isAvailable: true,
-        modoVenda: "PRONTA_ENTREGA",
-      }),
-      expect.objectContaining({
-        id: "variant-pre-venda",
-        availableStock: 0,
-        isAvailable: false,
         modoVenda: "PRE_VENDA",
       }),
     ]);
-    expect(produtosProntaEntrega[0].variants).toEqual([
-      expect.objectContaining({ id: "variant-pronta-entrega" }),
+    expect(catalogoCompleto[1].variants).toEqual([
+      expect.objectContaining({
+        id: "variant-sem-estoque",
+        availableStock: 0,
+        isAvailable: false,
+        modoVenda: "PRONTA_ENTREGA",
+      }),
     ]);
-    expect(produtosPreVenda[0].variants).toEqual([
-      expect.objectContaining({ id: "variant-pre-venda" }),
+    expect(produtosProntaEntrega).toEqual([
+      expect.objectContaining({ id: "product-pronta-entrega" }),
+    ]);
+    expect(produtosPreVenda).toEqual([
+      expect.objectContaining({ id: "product-pre-venda" }),
     ]);
   });
 
@@ -807,7 +874,7 @@ describe("Regressões da loja", () => {
     ]);
   });
 
-  it("cria pedido de pré-venda sem reservar estoque e com preço recalculado", async () => {
+  it("cria pedido de pré-venda para produto manualmente marcado mesmo com estoque disponível", async () => {
     const inventoryService = {
       withInventoryLocks: jest.fn(async (_items, callback) => callback()),
       reserveStockInTransaction: jest.fn(),
@@ -843,6 +910,7 @@ describe("Regressões da loja", () => {
         schoolId: "school-1",
         basePrice: 17000,
         isActive: true,
+        isPreSale: true,
       },
     });
     mockDb.query.shopOrders.findFirst.mockResolvedValue(null);
@@ -850,7 +918,7 @@ describe("Regressões da loja", () => {
       id: "inventory-1",
       variantId: "variant-1",
       unitId: "unit-1",
-      quantity: 0,
+      quantity: 5,
       reservedQuantity: 0,
     });
 
@@ -970,7 +1038,7 @@ describe("Regressões da loja", () => {
     expect(mockOrderInsert.values).not.toHaveBeenCalled();
   });
 
-  it("rejeita pré-venda quando o tamanho já tem estoque disponível", async () => {
+  it("rejeita pré-venda quando produto não está marcado como pré-venda", async () => {
     const inventoryService = {
       withInventoryLocks: jest.fn(async (_items, callback) => callback()),
       reserveStockInTransaction: jest.fn(),
@@ -997,6 +1065,7 @@ describe("Regressões da loja", () => {
         schoolId: "school-1",
         basePrice: 17000,
         isActive: true,
+        isPreSale: false,
       },
     });
     mockDb.query.shopInventory.findFirst.mockResolvedValue({
@@ -1027,10 +1096,9 @@ describe("Regressões da loja", () => {
       }),
     ).rejects.toMatchObject({
       response: expect.objectContaining({
-        code: "PRE_SALE_STOCK_AVAILABLE",
+        code: "PRODUCT_NOT_PRE_SALE",
         details: expect.objectContaining({
-          variantId: "variant-1",
-          availableStock: 2,
+          productId: "product-1",
         }),
       }),
     });
@@ -1071,6 +1139,7 @@ describe("Regressões da loja", () => {
           schoolId: "school-1",
           basePrice: 17000,
           isActive: true,
+          isPreSale: true,
         },
       })
       .mockResolvedValueOnce({
@@ -1083,6 +1152,7 @@ describe("Regressões da loja", () => {
           schoolId: "school-1",
           basePrice: 17000,
           isActive: true,
+          isPreSale: true,
         },
       });
     mockDb.query.shopInventory.findFirst.mockResolvedValue({
@@ -3513,41 +3583,43 @@ describe("Persistência de produto da loja", () => {
 });
 
 describe("Permissões administrativas da loja", () => {
-  const metodosBloqueadosParaAuxiliar = [
-    "createProduct",
-    "updateProduct",
-    "deleteProduct",
-    "createVariant",
-    "updateVariant",
-    "deleteVariant",
-    "addInventory",
-    "removeInventory",
-    "adjustInventory",
-    "updateSettings",
-  ] as const;
+  const shopAdminPrototype = ShopAdminController.prototype as unknown as Record<
+    string,
+    object
+  >;
+  const metodosComPermissaoDeGerenteDaUnidade = Object.getOwnPropertyNames(
+    ShopAdminController.prototype,
+  )
+    .filter((methodName) => methodName !== "constructor")
+    .filter((methodName) => {
+      const roles =
+        Reflect.getMetadata(
+          ROLES_KEY,
+          shopAdminPrototype[methodName],
+        ) ?? [];
 
-  it.each(metodosBloqueadosParaAuxiliar)(
-    "não permite auxiliar_administrativo em %s",
+      return roles.includes("gerente_unidade");
+    });
+
+  it.each(metodosComPermissaoDeGerenteDaUnidade)(
+    "concede ao auxiliar_administrativo a mesma permissão de gerente_unidade em %s",
     (methodName) => {
       const roles =
         Reflect.getMetadata(
           ROLES_KEY,
-          ShopAdminController.prototype[methodName],
+          shopAdminPrototype[methodName],
         ) ?? [];
 
-      expect(roles).not.toContain("auxiliar_administrativo");
+      expect(roles).toContain("auxiliar_administrativo");
     },
   );
 
-  it("restringe upload de storage a roles de gestão da loja", () => {
+  it("concede ao auxiliar_administrativo a mesma permissão de upload de gerente_unidade", () => {
     const roles =
       Reflect.getMetadata(ROLES_KEY, StorageController.prototype.upload) ?? [];
 
-    expect(roles).toEqual([
-      "master",
-      "diretora_geral",
-      "gerente_unidade",
-    ]);
+    expect(roles).toContain("gerente_unidade");
+    expect(roles).toContain("auxiliar_administrativo");
   });
 });
 
