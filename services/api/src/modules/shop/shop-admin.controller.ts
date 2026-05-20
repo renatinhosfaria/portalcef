@@ -840,6 +840,31 @@ export class ShopAdminController {
   }
 
   /**
+   * GET /shop/admin/orders/pre-venda/summary
+   *
+   * Resume demanda administrativa de pré-venda por produto e tamanho
+   * Roles: master, diretora_geral, gerente_unidade, gerente_financeiro, auxiliar_administrativo
+   */
+  @Get("orders/pre-venda/summary")
+  @Roles(
+    "master",
+    "diretora_geral",
+    "gerente_unidade",
+    "gerente_financeiro",
+    "auxiliar_administrativo",
+  )
+  async getPreSaleSummary(@Req() req: { user: UserContext }) {
+    const data = await this.ordersService.getPreSaleSummary(
+      createShopTenantScope(req.user),
+    );
+
+    return {
+      success: true,
+      data,
+    };
+  }
+
+  /**
    * GET /shop/admin/orders/:id
    *
    * Detalhes de um pedido específico

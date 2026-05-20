@@ -36,4 +36,23 @@ describe('pedidos admin', () => {
         expect(detailSource).toContain("order.orderSource === 'PRE_VENDA'");
         expect(detailSource).toContain('Pré-venda');
     });
+
+    it('carrega relatório de pré-venda pela API real', () => {
+        const source = readFileSync(join(process.cwd(), 'app/relatorios/page.tsx'), 'utf8');
+
+        expect(source).toContain("apiFetch('/api/shop/admin/orders/pre-venda/summary')");
+        expect(source).toContain('Pré-venda');
+        expect(source).toContain("activeTab === 'pre-venda'");
+        expect(source).not.toContain('setPreSaleReport({');
+    });
+
+    it('mantém erro de pré-venda separado de relatório vazio', () => {
+        const source = readFileSync(join(process.cwd(), 'app/relatorios/page.tsx'), 'utf8');
+
+        expect(source).toContain('preSaleError');
+        expect(source).toContain('Não foi possível carregar o relatório de pré-venda');
+        expect(source).toContain('Tentar novamente');
+        expect(source).not.toContain("} else {\n        setPreSaleReport([]);\n      }");
+        expect(source).not.toContain("catch (error) {\n      console.error('Erro ao carregar relatórios:', error);\n      setPreSaleReport([]);");
+    });
 });

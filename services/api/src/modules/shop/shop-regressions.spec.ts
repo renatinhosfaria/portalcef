@@ -19,7 +19,7 @@ import { PaymentsService } from "../payments/payments.service";
 import { ShopExpirationJob } from "./jobs/shop-expiration.job";
 import { CatalogFiltersDto, CreateProductDto } from "./dto/product.dto";
 import { ListOrdersDto } from "./dto/order.dto";
-import { gte, shopProducts, sql } from "@essencia/db";
+import { gte, inArray, shopProducts, sql } from "@essencia/db";
 import {
   canAccessShopSchool,
   canAccessShopUnit,
@@ -169,6 +169,10 @@ jest.mock("@essencia/db", () => ({
   shopOrders: {
     table: "shop_orders",
     createdAt: "created_at",
+    customerName: "customer_name",
+    customerPhone: "customer_phone",
+    id: "id",
+    orderSource: "order_source",
     paidAt: "paid_at",
     schoolId: "school_id",
     status: "status",
@@ -2325,6 +2329,193 @@ describe("Escopo tenant da loja", () => {
     ).rejects.toBeInstanceOf(NotFoundException);
 
     expect(mockDb.query.shopOrders.findMany).not.toHaveBeenCalled();
+  });
+
+  it("resume demanda de pre-venda por produto e tamanho", async () => {
+    const service = new ShopOrdersService({} as never, {} as never);
+
+    mockDb.query.shopOrders.findMany.mockResolvedValue([
+      {
+        id: "order-aguardando",
+        status: "AGUARDANDO_PAGAMENTO",
+        customerName: "Maria Silva",
+        customerPhone: "11987654321",
+        items: [
+          {
+            quantity: 2,
+            variant: {
+              id: "variant-8",
+              size: "8",
+              sku: "CAM-8",
+              product: {
+                id: "product-camiseta",
+                name: "Camiseta",
+              },
+            },
+          },
+        ],
+      },
+      {
+        id: "order-pago",
+        status: "PAGO",
+        customerName: "Joana Souza",
+        customerPhone: "11911112222",
+        items: [
+          {
+            quantity: 1,
+            variant: {
+              id: "variant-8",
+              size: "8",
+              sku: "CAM-8",
+              product: {
+                id: "product-camiseta",
+                name: "Camiseta",
+              },
+            },
+          },
+          {
+            quantity: 4,
+            variant: {
+              id: "variant-10",
+              size: "10",
+              sku: "CAM-10",
+              product: {
+                id: "product-camiseta",
+                name: "Camiseta",
+              },
+            },
+          },
+        ],
+      },
+      {
+        id: "order-retirado",
+        status: "RETIRADO",
+        customerName: "Maria Silva",
+        customerPhone: "11987654321",
+        items: [
+          {
+            quantity: 3,
+            variant: {
+              id: "variant-8",
+              size: "8",
+              sku: "CAM-8",
+              product: {
+                id: "product-camiseta",
+                name: "Camiseta",
+              },
+            },
+          },
+        ],
+      },
+    ]);
+
+    const result = await (
+      service as ShopOrdersService & {
+        getPreSaleSummary: (
+          scope: {
+            userId: string;
+            role: string;
+            schoolId: string;
+            unitId: string;
+          },
+        ) => Promise<unknown>;
+      }
+    ).getPreSaleSummary({
+      userId: "admin-1",
+      role: "gerente_unidade",
+      schoolId: "school-1",
+      unitId: "unit-1",
+    });
+
+    expect(mockDb.query.shopOrders.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        columns: {
+          status: true,
+          customerName: true,
+          customerPhone: true,
+        },
+        where: expect.objectContaining({
+          type: "and",
+          conditions: expect.arrayContaining([
+            expect.objectContaining({
+              column: "order_source",
+              value: "PRE_VENDA",
+            }),
+            expect.objectContaining({
+              type: "inArray",
+              column: "status",
+              value: ["AGUARDANDO_PAGAMENTO", "PAGO", "RETIRADO"],
+            }),
+            expect.objectContaining({
+              column: "school_id",
+              value: "school-1",
+            }),
+            expect.objectContaining({
+              column: "unit_id",
+              value: "unit-1",
+            }),
+          ]),
+        }),
+        with: {
+          items: {
+            columns: {
+              quantity: true,
+            },
+            with: {
+              variant: {
+                columns: {
+                  id: true,
+                  size: true,
+                  sku: true,
+                },
+                with: {
+                  product: {
+                    columns: {
+                      id: true,
+                      name: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      }),
+    );
+    expect(inArray).toHaveBeenCalledWith("status", [
+      "AGUARDANDO_PAGAMENTO",
+      "PAGO",
+      "RETIRADO",
+    ]);
+    expect(result).toEqual([
+      {
+        productId: "product-camiseta",
+        variantId: "variant-8",
+        productName: "Camiseta",
+        variantSize: "8",
+        variantSku: "CAM-8",
+        reservedQuantity: 2,
+        paidQuantity: 1,
+        pickedUpQuantity: 3,
+        totalQuantity: 6,
+        customers: [
+          { name: "Maria Silva", phone: "11987654321" },
+          { name: "Joana Souza", phone: "11911112222" },
+        ],
+      },
+      {
+        productId: "product-camiseta",
+        variantId: "variant-10",
+        productName: "Camiseta",
+        variantSize: "10",
+        variantSku: "CAM-10",
+        reservedQuantity: 0,
+        paidQuantity: 4,
+        pickedUpQuantity: 0,
+        totalQuantity: 4,
+        customers: [{ name: "Joana Souza", phone: "11911112222" }],
+      },
+    ]);
   });
 
   it("retorna não encontrado quando telefone público não corresponde ao pedido", async () => {

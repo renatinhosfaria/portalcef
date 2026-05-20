@@ -22,6 +22,7 @@ import {
   eq,
   and,
   or,
+  inArray,
   sql,
   desc,
   type ShopProduct,
@@ -74,6 +75,43 @@ type OrderWithItems = ShopOrder & {
   items: OrderItemWithVariant[];
   payments?: ShopOrderPayment[];
   updatedAt?: Date | null;
+};
+
+const PRE_SALE_SUMMARY_STATUSES = [
+  "AGUARDANDO_PAGAMENTO",
+  "PAGO",
+  "RETIRADO",
+] as const;
+
+type PreSaleSummaryOrder = Pick<
+  ShopOrder,
+  "customerName" | "customerPhone"
+> & {
+  status: (typeof PRE_SALE_SUMMARY_STATUSES)[number];
+  items: Array<
+    Pick<ShopOrderItem, "quantity"> & {
+      variant: Pick<ShopProductVariant, "id" | "size" | "sku"> & {
+        product: Pick<ShopProduct, "id" | "name">;
+      };
+    }
+  >;
+};
+
+type PreSaleSummaryItem = {
+  productId: string;
+  variantId: string;
+  productName: string;
+  variantSize: string;
+  variantSku: string | null;
+  reservedQuantity: number;
+  paidQuantity: number;
+  pickedUpQuantity: number;
+  totalQuantity: number;
+  customers: Array<{ name: string; phone: string }>;
+};
+
+type PreSaleSummaryAccumulator = PreSaleSummaryItem & {
+  customersByKey: Map<string, { name: string; phone: string }>;
 };
 
 const LIMITE_PRE_VENDA_POR_PRODUTO_ALUNO = 2;
@@ -722,6 +760,121 @@ export class ShopOrdersService {
         hasPrev: page > 1,
       },
     };
+  }
+
+  async getPreSaleSummary(
+    scope?: ShopTenantScope,
+  ): Promise<PreSaleSummaryItem[]> {
+    const db = getDb();
+    const conditions = [
+      eq(shopOrders.orderSource, "PRE_VENDA"),
+      inArray(shopOrders.status, [...PRE_SALE_SUMMARY_STATUSES]),
+    ];
+
+    if (!isMasterShopScope(scope)) {
+      assertShopTenantScope(scope);
+      const scopedTenant = scope!;
+      conditions.push(eq(shopOrders.schoolId, scopedTenant.schoolId!));
+      if (scopedTenant.unitId) {
+        conditions.push(eq(shopOrders.unitId, scopedTenant.unitId));
+      }
+    }
+
+    const orders = (await db.query.shopOrders.findMany({
+      columns: {
+        status: true,
+        customerName: true,
+        customerPhone: true,
+      },
+      where: and(...conditions),
+      with: {
+        items: {
+          columns: {
+            quantity: true,
+          },
+          with: {
+            variant: {
+              columns: {
+                id: true,
+                size: true,
+                sku: true,
+              },
+              with: {
+                product: {
+                  columns: {
+                    id: true,
+                    name: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    })) as PreSaleSummaryOrder[];
+
+    const summaryByVariant = new Map<string, PreSaleSummaryAccumulator>();
+
+    for (const order of orders) {
+      for (const item of order.items) {
+        const { variant } = item;
+        const { product } = variant;
+        const summaryKey = variant.id;
+        const current =
+          summaryByVariant.get(summaryKey) ??
+          {
+            productId: product.id,
+            variantId: variant.id,
+            productName: product.name,
+            variantSize: variant.size,
+            variantSku: variant.sku,
+            reservedQuantity: 0,
+            paidQuantity: 0,
+            pickedUpQuantity: 0,
+            totalQuantity: 0,
+            customers: [],
+            customersByKey: new Map<string, { name: string; phone: string }>(),
+          };
+
+        if (order.status === "AGUARDANDO_PAGAMENTO") {
+          current.reservedQuantity += item.quantity;
+        } else if (order.status === "PAGO") {
+          current.paidQuantity += item.quantity;
+        } else if (order.status === "RETIRADO") {
+          current.pickedUpQuantity += item.quantity;
+        }
+
+        current.totalQuantity += item.quantity;
+
+        const customerKey = `${order.customerPhone}:${order.customerName}`;
+        if (!current.customersByKey.has(customerKey)) {
+          current.customersByKey.set(customerKey, {
+            name: order.customerName,
+            phone: order.customerPhone,
+          });
+        }
+
+        summaryByVariant.set(summaryKey, current);
+      }
+    }
+
+    return Array.from(summaryByVariant.values())
+      .map(({ customersByKey, ...item }) => ({
+        ...item,
+        customers: Array.from(customersByKey.values()),
+      }))
+      .sort((a, b) => {
+        const productComparison = a.productName.localeCompare(
+          b.productName,
+          "pt-BR",
+          { numeric: true },
+        );
+        if (productComparison !== 0) return productComparison;
+
+        return a.variantSize.localeCompare(b.variantSize, "pt-BR", {
+          numeric: true,
+        });
+      });
   }
 
   /**
