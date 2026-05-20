@@ -175,33 +175,19 @@ describe('CheckoutPage', () => {
     });
   });
 
-  it('oferece transformar em pré-venda quando o estoque acaba ao gerar voucher', async () => {
-    vi.mocked(fetch)
-      .mockResolvedValueOnce({
-        ok: false,
-        status: 400,
-        json: async () => ({
-          success: false,
-          error: {
-            code: 'INSUFFICIENT_STOCK',
-            message: 'Estoque insuficiente. Disponível: 0, solicitado: 1',
-            variantId: 'variant-1',
-          },
-        }),
-      } as Response)
-      .mockResolvedValueOnce({
-        ok: true,
-        status: 201,
-        json: async () => ({
-          success: true,
-          data: {
-            orderId: 'order-pre-venda-1',
-            orderNumber: '654321',
-            totalAmount: 4500,
-            expiresAt: null,
-          },
-        }),
-      } as Response);
+  it('exibe erro de estoque sem oferecer conversao automatica para pre-venda', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: false,
+      status: 400,
+      json: async () => ({
+        success: false,
+        error: {
+          code: 'INSUFFICIENT_STOCK',
+          message: 'Estoque insuficiente. Disponível: 0, solicitado: 1',
+          variantId: 'variant-1',
+        },
+      }),
+    } as Response);
 
     render(<CheckoutPage />);
 
@@ -214,147 +200,13 @@ describe('CheckoutPage', () => {
     fireEvent.click(screen.getByRole('button', { name: /gerar voucher presencial/i }));
 
     await waitFor(() => {
-      expect(mocks.confirm).toHaveBeenCalledWith(
-        expect.stringContaining('estoque acabou'),
+      expect(mocks.showToast).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'error' }),
       );
     });
 
-    await waitFor(() => {
-      expect(fetch).toHaveBeenLastCalledWith(
-        '/api/shop/orders/pre-venda/school-1',
-        expect.objectContaining({
-          method: 'POST',
-          body: JSON.stringify({
-            schoolId: 'school-1',
-            unitId: 'unit-1',
-            items: [
-              {
-                variantId: 'variant-1',
-                quantity: 1,
-                studentName: 'João Silva',
-              },
-            ],
-            customerName: 'Maria Silva',
-            customerPhone: '11987654321',
-          }),
-        }),
-      );
-      expect(screen.getByText('#654321')).toBeTruthy();
-    });
-  });
-
-  it('transforma em pré-venda apenas o item sem estoque informado nos detalhes do erro', async () => {
-    mocks.cartItems.splice(
-      0,
-      mocks.cartItems.length,
-      {
-        variantId: 'variant-disponivel',
-        productName: 'Camiseta',
-        variantSize: '8',
-        quantity: 1,
-        unitPrice: 80,
-        studentName: 'João Silva',
-        availableStock: 2,
-        modoVenda: 'PRONTA_ENTREGA',
-      },
-      {
-        variantId: 'variant-sem-estoque',
-        productName: 'Moletom',
-        variantSize: '10',
-        quantity: 1,
-        unitPrice: 170,
-        studentName: 'João Silva',
-        availableStock: 1,
-        modoVenda: 'PRONTA_ENTREGA',
-      },
-    );
-
-    vi.mocked(fetch)
-      .mockResolvedValueOnce({
-        ok: false,
-        status: 400,
-        json: async () => ({
-          success: false,
-          error: {
-            code: 'INSUFFICIENT_STOCK',
-            message: 'Estoque insuficiente. Disponível: 0, solicitado: 1',
-            details: {
-              variantId: 'variant-sem-estoque',
-              availableStock: 0,
-            },
-          },
-        }),
-      } as Response)
-      .mockResolvedValueOnce({
-        ok: true,
-        status: 201,
-        json: async () => ({
-          success: true,
-          data: { orderNumber: '222222' },
-        }),
-      } as Response)
-      .mockResolvedValueOnce({
-        ok: true,
-        status: 201,
-        json: async () => ({
-          success: true,
-          data: { orderNumber: '111111' },
-        }),
-      } as Response);
-
-    render(<CheckoutPage />);
-
-    fireEvent.change(screen.getByLabelText('Nome Completo'), {
-      target: { value: 'Maria Silva' },
-    });
-    fireEvent.change(screen.getByLabelText('Telefone'), {
-      target: { value: '(11) 98765-4321' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: /gerar voucher presencial/i }));
-
-    await waitFor(() => {
-      expect(screen.getByText('#222222')).toBeTruthy();
-      expect(screen.getByText('#111111')).toBeTruthy();
-    });
-
-    expect(fetch).toHaveBeenNthCalledWith(
-      2,
-      '/api/shop/orders/pre-venda/school-1',
-      expect.objectContaining({
-        body: JSON.stringify({
-          schoolId: 'school-1',
-          unitId: 'unit-1',
-          items: [
-            {
-              variantId: 'variant-sem-estoque',
-              quantity: 1,
-              studentName: 'João Silva',
-            },
-          ],
-          customerName: 'Maria Silva',
-          customerPhone: '11987654321',
-        }),
-      }),
-    );
-    expect(fetch).toHaveBeenNthCalledWith(
-      3,
-      '/api/shop/orders/school-1',
-      expect.objectContaining({
-        body: JSON.stringify({
-          schoolId: 'school-1',
-          unitId: 'unit-1',
-          items: [
-            {
-              variantId: 'variant-disponivel',
-              quantity: 1,
-              studentName: 'João Silva',
-            },
-          ],
-          customerName: 'Maria Silva',
-          customerPhone: '11987654321',
-        }),
-      }),
-    );
+    expect(mocks.confirm).not.toHaveBeenCalled();
+    expect(fetch).toHaveBeenCalledTimes(1);
   });
 
   it('gera vouchers separados para pronta entrega e pré-venda', async () => {
@@ -425,7 +277,7 @@ describe('CheckoutPage', () => {
     });
   });
 
-  it('migra item de pré-venda para pronta entrega quando o estoque voltou', async () => {
+  it('exibe erro quando produto de pre-venda nao esta mais marcado como tal', async () => {
     mocks.cartItems.splice(0, mocks.cartItems.length, {
       variantId: 'variant-pre-venda',
       productName: 'Moletom',
@@ -437,30 +289,18 @@ describe('CheckoutPage', () => {
       modoVenda: 'PRE_VENDA',
     });
 
-    vi.mocked(fetch)
-      .mockResolvedValueOnce({
-        ok: false,
-        status: 400,
-        json: async () => ({
-          success: false,
-          error: {
-            code: 'PRE_SALE_STOCK_AVAILABLE',
-            message: 'O item voltou a ter estoque disponível',
-            details: {
-              variantId: 'variant-pre-venda',
-              availableStock: 2,
-            },
-          },
-        }),
-      } as Response)
-      .mockResolvedValueOnce({
-        ok: true,
-        status: 201,
-        json: async () => ({
-          success: true,
-          data: { orderNumber: '333333' },
-        }),
-      } as Response);
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: false,
+      status: 400,
+      json: async () => ({
+        success: false,
+        error: {
+          code: 'PRODUCT_NOT_PRE_SALE',
+          message: 'Este produto não está marcado como pré-venda.',
+          details: { productId: 'product-1' },
+        },
+      }),
+    } as Response);
 
     render(<CheckoutPage />);
 
@@ -473,32 +313,15 @@ describe('CheckoutPage', () => {
     fireEvent.click(screen.getByRole('button', { name: /gerar voucher de pré-venda/i }));
 
     await waitFor(() => {
-      expect(screen.getByText('#333333')).toBeTruthy();
+      expect(mocks.showToast).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'error' }),
+      );
     });
 
-    expect(fetch).toHaveBeenNthCalledWith(
-      1,
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch).toHaveBeenCalledWith(
       '/api/shop/orders/pre-venda/school-1',
       expect.objectContaining({ method: 'POST' }),
-    );
-    expect(fetch).toHaveBeenNthCalledWith(
-      2,
-      '/api/shop/orders/school-1',
-      expect.objectContaining({
-        body: JSON.stringify({
-          schoolId: 'school-1',
-          unitId: 'unit-1',
-          items: [
-            {
-              variantId: 'variant-pre-venda',
-              quantity: 1,
-              studentName: 'João Silva',
-            },
-          ],
-          customerName: 'Maria Silva',
-          customerPhone: '11987654321',
-        }),
-      }),
     );
   });
 
@@ -592,5 +415,14 @@ describe('CheckoutPage', () => {
         modoVenda: 'PRONTA_ENTREGA',
       },
     ]);
+  });
+
+  it('nao converte pronta entrega sem estoque para pre-venda automaticamente', () => {
+    const { readFileSync } = require('node:fs');
+    const { join } = require('node:path');
+    const source = readFileSync(join(process.cwd(), 'app/checkout/page.tsx'), 'utf8');
+
+    expect(source).not.toContain('Deseja transformar esse item em pré-venda');
+    expect(source).not.toContain('PRE_SALE_STOCK_AVAILABLE');
   });
 });

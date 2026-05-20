@@ -187,29 +187,6 @@ export default function CheckoutPage() {
           modoVenda: item.modoVenda ?? 'PRONTA_ENTREGA',
         }));
 
-      const isSameCartItem = (a: CartItem, b: CartItem) =>
-        a.variantId === b.variantId &&
-        a.studentName.toLowerCase() === b.studentName.toLowerCase() &&
-        (a.modoVenda ?? 'PRONTA_ENTREGA') === (b.modoVenda ?? 'PRONTA_ENTREGA');
-
-      const isStockError = (error: unknown): error is OrderRequestError => {
-        return (
-          error instanceof Error &&
-          (
-            (error as OrderRequestError).code === 'INSUFFICIENT_STOCK' ||
-            error.message.toLowerCase().includes('estoque insuficiente') ||
-            error.message.toLowerCase().includes('estoque indisponível')
-          )
-        );
-      };
-
-      const isPreVendaStockAvailableError = (error: unknown): error is OrderRequestError => {
-        return (
-          error instanceof Error &&
-          (error as OrderRequestError).code === 'PRE_SALE_STOCK_AVAILABLE'
-        );
-      };
-
       const createOrder = async (
         sourceItems: CartItem[],
         tipo: CreatedOrder['tipo'],
@@ -256,72 +233,8 @@ export default function CheckoutPage() {
         processedItems.push(...toCartKeys(sourceItems));
       };
 
-      const createProntaEntregaWithFallback = async (sourceItems: CartItem[]) => {
-        let pendingItems = [...sourceItems];
-
-        while (pendingItems.length > 0) {
-          try {
-            await createOrder(pendingItems, 'PRONTA_ENTREGA', orderUrl);
-            return;
-          } catch (error: unknown) {
-            if (!isStockError(error)) {
-              throw error;
-            }
-
-            const affectedItems = error.variantId
-              ? pendingItems.filter((item) => item.variantId === error.variantId)
-              : pendingItems;
-
-            if (affectedItems.length === 0) {
-              throw error;
-            }
-
-            const confirmed = window.confirm(
-              'O estoque acabou para um dos itens de pronta entrega. Deseja transformar esse item em pré-venda para pagamento na retirada?',
-            );
-
-            if (!confirmed) {
-              throw error;
-            }
-
-            await createOrder(affectedItems, 'PRE_VENDA', preVendaUrl);
-            pendingItems = pendingItems.filter(
-              (item) => !affectedItems.some((affected) => isSameCartItem(item, affected)),
-            );
-          }
-        }
-      };
-
-      const createPreVendaWithFallback = async (sourceItems: CartItem[]) => {
-        let pendingItems = [...sourceItems];
-
-        while (pendingItems.length > 0) {
-          try {
-            await createOrder(pendingItems, 'PRE_VENDA', preVendaUrl);
-            return;
-          } catch (error: unknown) {
-            if (!isPreVendaStockAvailableError(error)) {
-              throw error;
-            }
-
-            const affectedItems = error.variantId
-              ? pendingItems.filter((item) => item.variantId === error.variantId)
-              : pendingItems;
-
-            if (affectedItems.length === 0) {
-              throw error;
-            }
-
-            await createOrder(affectedItems, 'PRONTA_ENTREGA', orderUrl);
-            pendingItems = pendingItems.filter(
-              (item) => !affectedItems.some((affected) => isSameCartItem(item, affected)),
-            );
-          }
-        }
-      };
-
-      await createProntaEntregaWithFallback(prontaEntregaItems);
-      await createPreVendaWithFallback(preVendaItems);
+      await createOrder(prontaEntregaItems, 'PRONTA_ENTREGA', orderUrl);
+      await createOrder(preVendaItems, 'PRE_VENDA', preVendaUrl);
 
       setOrderCreated(true);
       setCreatedOrders(created);
