@@ -438,19 +438,13 @@ export class ShopOrdersService {
 
         for (const item of dto.items) {
           const variant = variantsById.get(item.variantId)!;
-          const available = await this.getAvailableStock(
-            item.variantId,
-            dto.unitId,
-          );
 
-          if (available > 0) {
+          if (!variant.product.isPreSale) {
             throw new BadRequestException({
-              code: "PRE_SALE_STOCK_AVAILABLE",
-              message:
-                "Este tamanho já está disponível para pronta entrega. Atualize o carrinho antes de finalizar.",
+              code: "PRODUCT_NOT_PRE_SALE",
+              message: "Este produto não está marcado como pré-venda.",
               details: {
-                variantId: item.variantId,
-                availableStock: available,
+                productId: variant.product.id,
               },
             });
           }
