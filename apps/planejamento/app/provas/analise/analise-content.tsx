@@ -35,6 +35,7 @@ import {
   type ProvaCiclo,
   type ProvaSummary,
 } from "../../../features/prova";
+import { obterMensagemErro } from "../../../lib/mensagens-erro";
 
 /**
  * Definicao dos segmentos para filtro
@@ -86,10 +87,10 @@ export function AnaliseProvasContent() {
       const resultado = await listarPendentes();
       setProvas(resultado);
     } catch (err) {
-      const mensagem =
-        err instanceof Error
-          ? err.message
-          : "Erro ao carregar provas pendentes";
+      const mensagem = obterMensagemErro(
+        err,
+        "Não foi possível carregar as provas pendentes. Tente novamente.",
+      );
       setError(mensagem);
     } finally {
       setIsLoading(false);

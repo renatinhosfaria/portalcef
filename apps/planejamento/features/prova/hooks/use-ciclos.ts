@@ -3,6 +3,7 @@
 import { api } from "@essencia/shared/fetchers/client";
 import { useEffect, useState, useCallback } from "react";
 
+import { obterMensagemErro } from "../../../lib/mensagens-erro";
 import type { ProvaCiclo } from "../types";
 
 interface UseCiclosReturn {
@@ -52,7 +53,12 @@ export function useCiclos(): UseCiclosReturn {
     } catch (err) {
       console.error("Erro ao buscar ciclos de prova:", err);
       setError(
-        err instanceof Error ? err : new Error("Erro ao buscar ciclos de prova"),
+        new Error(
+          obterMensagemErro(
+            err,
+            "Não foi possível carregar os ciclos de prova. Tente novamente.",
+          ),
+        ),
       );
     } finally {
       setIsLoading(false);
@@ -71,9 +77,18 @@ export function useCiclos(): UseCiclosReturn {
       dataFim: string;
       dataMaximaEntrega: string;
     }) => {
-      const response = await api.post<ProvaCiclo>("/prova-ciclo", dto);
-      await fetchCiclos();
-      return response;
+      try {
+        const response = await api.post<ProvaCiclo>("/prova-ciclo", dto);
+        await fetchCiclos();
+        return response;
+      } catch (err) {
+        throw new Error(
+          obterMensagemErro(
+            err,
+            "Não foi possível criar o ciclo. Revise as datas e tente novamente.",
+          ),
+        );
+      }
     },
     [fetchCiclos],
   );
@@ -88,17 +103,35 @@ export function useCiclos(): UseCiclosReturn {
         dataMaximaEntrega: string;
       }>,
     ) => {
-      const response = await api.put<ProvaCiclo>(`/prova-ciclo/${id}`, dto);
-      await fetchCiclos();
-      return response;
+      try {
+        const response = await api.put<ProvaCiclo>(`/prova-ciclo/${id}`, dto);
+        await fetchCiclos();
+        return response;
+      } catch (err) {
+        throw new Error(
+          obterMensagemErro(
+            err,
+            "Não foi possível salvar o ciclo. Revise as datas e tente novamente.",
+          ),
+        );
+      }
     },
     [fetchCiclos],
   );
 
   const excluirCiclo = useCallback(
     async (id: string) => {
-      await api.delete(`/prova-ciclo/${id}`);
-      await fetchCiclos();
+      try {
+        await api.delete(`/prova-ciclo/${id}`);
+        await fetchCiclos();
+      } catch (err) {
+        throw new Error(
+          obterMensagemErro(
+            err,
+            "Não foi possível excluir o ciclo. Tente novamente.",
+          ),
+        );
+      }
     },
     [fetchCiclos],
   );
@@ -150,7 +183,12 @@ export function useCiclosDaTurma(turmaId: string): UseCiclosDaTurmaReturn {
       }
     } catch (err) {
       console.error("Erro ao buscar ciclos da turma:", err);
-      setError(err instanceof Error ? err.message : "Erro ao buscar ciclos");
+      setError(
+        obterMensagemErro(
+          err,
+          "Não foi possível carregar os ciclos da turma. Tente novamente.",
+        ),
+      );
       setCiclos([]);
     } finally {
       setIsLoading(false);

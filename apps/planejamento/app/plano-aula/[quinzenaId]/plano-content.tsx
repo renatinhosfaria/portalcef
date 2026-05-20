@@ -55,6 +55,7 @@ import {
   type PlanoAula,
   type PlanoAulaStatus,
 } from "../../../features/plano-aula";
+import { obterMensagemErro } from "../../../lib/mensagens-erro";
 
 interface PlanoContentProps {
   periodoId: string; // UUID do período (não mais número hardcoded)
@@ -137,9 +138,10 @@ export function PlanoContent({
     } catch (err) {
       console.error("Erro ao carregar plano:", err);
       setError(
-        err instanceof Error
-          ? err.message
-          : "Erro ao carregar plano de aula. Tente novamente.",
+        obterMensagemErro(
+          err,
+          "Não foi possível carregar o plano de aula. Tente novamente.",
+        ),
       );
     } finally {
       setInitialLoading(false);
@@ -219,9 +221,10 @@ export function PlanoContent({
     } catch (err) {
       console.error("Erro ao submeter plano:", err);
       setError(
-        err instanceof Error
-          ? err.message
-          : "Erro ao enviar plano. Tente novamente.",
+        obterMensagemErro(
+          err,
+          "Não foi possível enviar o plano para análise. Tente novamente.",
+        ),
       );
     } finally {
       setSubmitting(false);
@@ -240,9 +243,10 @@ export function PlanoContent({
       setShowRecuperarDialog(false);
     } catch (err) {
       setError(
-        err instanceof Error
-          ? err.message
-          : "Erro ao recuperar plano. Tente novamente.",
+        obterMensagemErro(
+          err,
+          "Não foi possível recuperar o plano. Tente novamente.",
+        ),
       );
     } finally {
       setRecuperando(false);

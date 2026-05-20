@@ -1,7 +1,7 @@
 "use client";
 
-import type { Tarefa } from "@essencia/shared/types";
 import { api } from "@essencia/shared/fetchers/client";
+import type { Tarefa } from "@essencia/shared/types";
 import { Button } from "@essencia/ui/components/button";
 import { Input } from "@essencia/ui/components/input";
 import { Label } from "@essencia/ui/components/label";
@@ -25,6 +25,8 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+
+import { obterMensagemErro } from "../../../lib/mensagens-erro";
 
 interface Usuario {
   id: string;
@@ -169,9 +171,10 @@ export function TarefaForm({
     } catch (err) {
       console.error("Erro ao criar tarefa:", err);
       setError(
-        err instanceof Error
-          ? err.message
-          : "Erro ao criar tarefa. Tente novamente.",
+        obterMensagemErro(
+          err,
+          "Não foi possível criar a tarefa. Revise os campos e tente novamente.",
+        ),
       );
     } finally {
       setIsLoading(false);

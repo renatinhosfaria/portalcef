@@ -2,6 +2,8 @@
 
 import { api } from "@essencia/shared/fetchers/client";
 import { useCallback, useState } from "react";
+
+import { obterMensagemErro } from "../../../lib/mensagens-erro";
 import type {
   PlanoAula,
   PlanoAulaSummary,
@@ -59,10 +61,12 @@ export function usePlanoAula(): UsePlanoAulaReturn {
         });
         return result;
       } catch (err) {
-        const message =
-          err instanceof Error ? err.message : "Erro ao criar plano";
+        const message = obterMensagemErro(
+          err,
+          "Não foi possível criar o plano. Tente novamente.",
+        );
         setError(message);
-        throw err;
+        throw new Error(message);
       } finally {
         setLoading(false);
       }
@@ -77,10 +81,12 @@ export function usePlanoAula(): UsePlanoAulaReturn {
       const result = await api.get<PlanoAula>(`/plano-aula/${id}`);
       return result;
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Erro ao buscar plano";
+      const message = obterMensagemErro(
+        err,
+        "Não foi possível carregar o plano. Tente novamente.",
+      );
       setError(message);
-      throw err;
+      throw new Error(message);
     } finally {
       setLoading(false);
     }
@@ -100,10 +106,12 @@ export function usePlanoAula(): UsePlanoAulaReturn {
         );
         return result;
       } catch (err) {
-        const message =
-          err instanceof Error ? err.message : "Erro ao fazer upload";
+        const message = obterMensagemErro(
+          err,
+          "Não foi possível enviar o arquivo. Verifique sua conexão e tente novamente.",
+        );
         setError(message);
-        throw err;
+        throw new Error(message);
       } finally {
         setLoading(false);
       }
@@ -122,10 +130,12 @@ export function usePlanoAula(): UsePlanoAulaReturn {
         );
         return result;
       } catch (err) {
-        const message =
-          err instanceof Error ? err.message : "Erro ao adicionar link";
+        const message = obterMensagemErro(
+          err,
+          "Não foi possível adicionar o link. Verifique o endereço e tente novamente.",
+        );
         setError(message);
-        throw err;
+        throw new Error(message);
       } finally {
         setLoading(false);
       }
@@ -140,10 +150,12 @@ export function usePlanoAula(): UsePlanoAulaReturn {
       try {
         await api.delete(`/plano-aula/${planoId}/documentos/${docId}`);
       } catch (err) {
-        const message =
-          err instanceof Error ? err.message : "Erro ao excluir documento";
+        const message = obterMensagemErro(
+          err,
+          "Não foi possível excluir o documento. Tente novamente.",
+        );
         setError(message);
-        throw err;
+        throw new Error(message);
       } finally {
         setLoading(false);
       }
@@ -162,10 +174,12 @@ export function usePlanoAula(): UsePlanoAulaReturn {
         );
         return result;
       } catch (err) {
-        const message =
-          err instanceof Error ? err.message : "Erro ao aprovar documento";
+        const message = obterMensagemErro(
+          err,
+          "Não foi possível aprovar o documento. Tente novamente.",
+        );
         setError(message);
-        throw err;
+        throw new Error(message);
       } finally {
         setLoading(false);
       }
@@ -184,10 +198,12 @@ export function usePlanoAula(): UsePlanoAulaReturn {
         );
         return result;
       } catch (err) {
-        const message =
-          err instanceof Error ? err.message : "Erro ao desfazer aprovação";
+        const message = obterMensagemErro(
+          err,
+          "Não foi possível desfazer a aprovação. Tente novamente.",
+        );
         setError(message);
-        throw err;
+        throw new Error(message);
       } finally {
         setLoading(false);
       }
@@ -206,10 +222,12 @@ export function usePlanoAula(): UsePlanoAulaReturn {
         );
         return result;
       } catch (err) {
-        const message =
-          err instanceof Error ? err.message : "Erro ao registrar impressão";
+        const message = obterMensagemErro(
+          err,
+          "Não foi possível registrar a impressão. Tente novamente.",
+        );
         setError(message);
-        throw err;
+        throw new Error(message);
       } finally {
         setLoading(false);
       }
@@ -228,10 +246,12 @@ export function usePlanoAula(): UsePlanoAulaReturn {
         );
         return result;
       } catch (err) {
-        const message =
-          err instanceof Error ? err.message : "Erro ao submeter plano";
+        const message = obterMensagemErro(
+          err,
+          "Não foi possível enviar o plano para análise. Tente novamente.",
+        );
         setError(message);
-        throw err;
+        throw new Error(message);
       } finally {
         setLoading(false);
       }
@@ -250,10 +270,12 @@ export function usePlanoAula(): UsePlanoAulaReturn {
         );
         return result;
       } catch (err) {
-        const message =
-          err instanceof Error ? err.message : "Erro ao recuperar plano";
+        const message = obterMensagemErro(
+          err,
+          "Não foi possível recuperar o plano. Tente novamente.",
+        );
         setError(message);
-        throw err;
+        throw new Error(message);
       } finally {
         setLoading(false);
       }
@@ -298,16 +320,32 @@ export function useAnalistaActions(): UseAnalistaActionsReturn {
   const [loading, setLoading] = useState(false);
 
   const listarPendentes = useCallback(async (): Promise<PlanoAulaSummary[]> => {
-    const result = await api.get<PlanoAulaSummary[]>(
-      "/plano-aula/analista/pendentes",
-    );
-    return result || [];
+    try {
+      const result = await api.get<PlanoAulaSummary[]>(
+        "/plano-aula/analista/pendentes",
+      );
+      return result || [];
+    } catch (err) {
+      throw new Error(
+        obterMensagemErro(
+          err,
+          "Não foi possível carregar os planos pendentes. Tente novamente.",
+        ),
+      );
+    }
   }, []);
 
   const aprovar = useCallback(async (planoId: string): Promise<void> => {
     setLoading(true);
     try {
       await api.post(`/plano-aula/${planoId}/analista/aprovar`, {});
+    } catch (err) {
+      throw new Error(
+        obterMensagemErro(
+          err,
+          "Não foi possível aprovar o plano. Tente novamente.",
+        ),
+      );
     } finally {
       setLoading(false);
     }
@@ -318,6 +356,13 @@ export function useAnalistaActions(): UseAnalistaActionsReturn {
       setLoading(true);
       try {
         await api.post(`/plano-aula/${planoId}/analista/devolver`, {});
+      } catch (err) {
+        throw new Error(
+          obterMensagemErro(
+            err,
+            "Não foi possível devolver o plano. Tente novamente.",
+          ),
+        );
       } finally {
         setLoading(false);
       }
@@ -352,16 +397,32 @@ export function useCoordenadoraActions(): UseCoordenadoraActionsReturn {
   const [loading, setLoading] = useState(false);
 
   const listarPendentes = useCallback(async (): Promise<PlanoAulaSummary[]> => {
-    const result = await api.get<PlanoAulaSummary[]>(
-      "/plano-aula/coordenadora/pendentes",
-    );
-    return result || [];
+    try {
+      const result = await api.get<PlanoAulaSummary[]>(
+        "/plano-aula/coordenadora/pendentes",
+      );
+      return result || [];
+    } catch (err) {
+      throw new Error(
+        obterMensagemErro(
+          err,
+          "Não foi possível carregar os planos pendentes. Tente novamente.",
+        ),
+      );
+    }
   }, []);
 
   const aprovar = useCallback(async (planoId: string): Promise<void> => {
     setLoading(true);
     try {
       await api.post(`/plano-aula/${planoId}/coordenadora/aprovar`, {});
+    } catch (err) {
+      throw new Error(
+        obterMensagemErro(
+          err,
+          "Não foi possível aprovar o plano. Tente novamente.",
+        ),
+      );
     } finally {
       setLoading(false);
     }
@@ -377,6 +438,13 @@ export function useCoordenadoraActions(): UseCoordenadoraActionsReturn {
         await api.post(`/plano-aula/${planoId}/coordenadora/devolver`, {
           destino,
         });
+      } catch (err) {
+        throw new Error(
+          obterMensagemErro(
+            err,
+            "Não foi possível devolver o plano. Tente novamente.",
+          ),
+        );
       } finally {
         setLoading(false);
       }
@@ -509,10 +577,12 @@ export function useDashboard(): UseDashboardReturn {
         );
         setData(normalizarDashboardData(result));
       } catch (err) {
-        const message =
-          err instanceof Error ? err.message : "Erro ao buscar dashboard";
+        const message = obterMensagemErro(
+          err,
+          "Não foi possível carregar o painel. Tente novamente.",
+        );
         setError(message);
-        throw err;
+        throw new Error(message);
       } finally {
         setLoading(false);
       }
@@ -564,10 +634,12 @@ export function useDeadlines(): UseDeadlinesReturn {
       );
       setDeadlines(result);
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Erro ao buscar prazos";
+      const message = obterMensagemErro(
+        err,
+        "Não foi possível carregar os prazos. Tente novamente.",
+      );
       setError(message);
-      throw err;
+      throw new Error(message);
     } finally {
       setLoading(false);
     }
@@ -582,10 +654,12 @@ export function useDeadlines(): UseDeadlinesReturn {
         // Atualizar lista local
         await fetchDeadlines();
       } catch (err) {
-        const message =
-          err instanceof Error ? err.message : "Erro ao definir prazo";
+        const message = obterMensagemErro(
+          err,
+          "Não foi possível salvar o prazo. Tente novamente.",
+        );
         setError(message);
-        throw err;
+        throw new Error(message);
       } finally {
         setLoading(false);
       }
@@ -626,10 +700,12 @@ export function usePlanoDetalhe(planoId?: string): UsePlanoDetalheReturn {
       const result = await api.get<PlanoAula>(`/plano-aula/${id}`);
       setPlano(result);
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Erro ao buscar plano";
+      const message = obterMensagemErro(
+        err,
+        "Não foi possível carregar o plano. Tente novamente.",
+      );
       setError(message);
-      throw err;
+      throw new Error(message);
     } finally {
       setLoading(false);
     }
@@ -715,8 +791,10 @@ export function useGestaoPlanos(): UseGestaoPlanosReturn {
         setPlanos(result.data || []);
         setPagination(result.pagination);
       } catch (err) {
-        const message =
-          err instanceof Error ? err.message : "Erro ao buscar planos";
+        const message = obterMensagemErro(
+          err,
+          "Não foi possível carregar os planos. Tente novamente.",
+        );
         setError(message);
         setPlanos([]);
         setPagination({ total: 0, page: 1, limit: 20, totalPages: 0 });
@@ -729,7 +807,16 @@ export function useGestaoPlanos(): UseGestaoPlanosReturn {
 
   const deletarPlano = useCallback(
     async (planoId: string): Promise<void> => {
-      await api.delete(`/plano-aula/${planoId}`);
+      try {
+        await api.delete(`/plano-aula/${planoId}`);
+      } catch (err) {
+        throw new Error(
+          obterMensagemErro(
+            err,
+            "Não foi possível excluir o plano. Tente novamente.",
+          ),
+        );
+      }
     },
     [],
   );

@@ -45,6 +45,7 @@ import {
   useProva,
   useProvaDetalhe,
 } from "../../../../features/prova";
+import { obterMensagemErro } from "../../../../lib/mensagens-erro";
 
 interface RevisaoProvaContentProps {
   provaId: string;
@@ -82,8 +83,10 @@ export function RevisaoProvaContent({ provaId }: RevisaoProvaContentProps) {
         setSuccessMessage("Documento aprovado com sucesso!");
         setTimeout(() => setSuccessMessage(null), 3000);
       } catch (err) {
-        const message =
-          err instanceof Error ? err.message : "Erro ao aprovar documento";
+        const message = obterMensagemErro(
+          err,
+          "Não foi possível aprovar o documento. Tente novamente.",
+        );
         setActionError(message);
       }
     },
@@ -101,10 +104,10 @@ export function RevisaoProvaContent({ provaId }: RevisaoProvaContentProps) {
         setSuccessMessage("Aprovacao do documento desfeita!");
         setTimeout(() => setSuccessMessage(null), 3000);
       } catch (err) {
-        const message =
-          err instanceof Error
-            ? err.message
-            : "Erro ao desfazer aprovacao do documento";
+        const message = obterMensagemErro(
+          err,
+          "Não foi possível desfazer a aprovação do documento. Tente novamente.",
+        );
         setActionError(message);
       }
     },
@@ -122,8 +125,10 @@ export function RevisaoProvaContent({ provaId }: RevisaoProvaContentProps) {
         setSuccessMessage("Documento impresso e registrado no historico!");
         setTimeout(() => setSuccessMessage(null), 3000);
       } catch (err) {
-        const message =
-          err instanceof Error ? err.message : "Erro ao imprimir documento";
+        const message = obterMensagemErro(
+          err,
+          "Não foi possível registrar a impressão. Tente novamente.",
+        );
         setActionError(message);
       }
     },
@@ -156,8 +161,10 @@ export function RevisaoProvaContent({ provaId }: RevisaoProvaContentProps) {
         setSuccessMessage("Link adicionado com sucesso!");
         setTimeout(() => setSuccessMessage(null), 3000);
       } catch (err) {
-        const message =
-          err instanceof Error ? err.message : "Erro ao adicionar link";
+        const message = obterMensagemErro(
+          err,
+          "Não foi possível adicionar o link. Verifique o endereço e tente novamente.",
+        );
         setActionError(message);
       }
     },
@@ -178,8 +185,10 @@ export function RevisaoProvaContent({ provaId }: RevisaoProvaContentProps) {
         router.push("/provas/analise");
       }, 2000);
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Erro ao aprovar prova";
+      const message = obterMensagemErro(
+        err,
+        "Não foi possível aprovar a prova. Tente novamente.",
+      );
       setActionError(message);
     }
   }, [provaId, aprovar, router]);
@@ -198,8 +207,10 @@ export function RevisaoProvaContent({ provaId }: RevisaoProvaContentProps) {
         router.push("/provas/analise");
       }, 2000);
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Erro ao devolver prova";
+      const message = obterMensagemErro(
+        err,
+        "Não foi possível devolver a prova. Tente novamente.",
+      );
       setActionError(message);
     }
   }, [provaId, devolver, router]);

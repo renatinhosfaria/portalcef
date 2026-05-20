@@ -33,6 +33,7 @@ import {
   useAnalistaActions,
   type PlanoAulaSummary,
 } from "../../features/plano-aula";
+import { obterMensagemErro } from "../../lib/mensagens-erro";
 
 /**
  * Definicao dos segmentos para filtro
@@ -84,10 +85,10 @@ export function AnaliseContent() {
       const resultado = await listarPendentes();
       setPlanos(resultado);
     } catch (err) {
-      const mensagem =
-        err instanceof Error
-          ? err.message
-          : "Erro ao carregar planos pendentes";
+      const mensagem = obterMensagemErro(
+        err,
+        "Não foi possível carregar os planos pendentes. Tente novamente.",
+      );
       setError(mensagem);
     } finally {
       setIsLoading(false);

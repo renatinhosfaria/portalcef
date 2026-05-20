@@ -7,6 +7,11 @@ import {
 } from "@essencia/ui/components/dialog";
 import { useEffect, useRef, useState } from "react";
 
+import {
+  obterMensagemErro,
+  obterMensagemErroDaRespostaHttp,
+} from "../../../lib/mensagens-erro";
+
 interface DocumentoViewerProps {
   planoId: string;
   documentoId: string;
@@ -42,7 +47,13 @@ async function renderizarViaDocxPreview(
     `/api/${modulo}/${planoId}/documentos/${documentoId}/download`,
     { credentials: "include" },
   );
-  if (!res.ok) throw new Error("Falha ao baixar documento");
+  if (!res.ok) {
+    const mensagem = await obterMensagemErroDaRespostaHttp(
+      res,
+      "Não foi possível carregar o documento. Tente novamente.",
+    );
+    throw new Error(mensagem);
+  }
 
   const arrayBuffer = await res.arrayBuffer();
   const { renderAsync } = await import("docx-preview");
@@ -140,7 +151,12 @@ export function DocumentoEditorModal({
           iframeRef.current.srcdoc = iframeHtml;
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Erro desconhecido");
+        setError(
+          obterMensagemErro(
+            err,
+            "Não foi possível abrir o documento. Tente novamente.",
+          ),
+        );
       } finally {
         setCarregando(false);
       }

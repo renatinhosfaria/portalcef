@@ -9,6 +9,8 @@ import { LayoutDashboard, Loader2, Users } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { obterMensagemErro } from "../../../lib/mensagens-erro";
+
 interface Turma {
   id: string;
   name: string;
@@ -57,7 +59,12 @@ export function TurmasContent() {
         setStages(stagesList);
       } catch (err) {
         console.error("Erro ao buscar turmas:", err);
-        setError(err instanceof Error ? err.message : "Erro ao buscar turmas");
+        setError(
+          obterMensagemErro(
+            err,
+            "Não foi possível carregar suas turmas. Tente novamente.",
+          ),
+        );
       } finally {
         setIsLoading(false);
       }

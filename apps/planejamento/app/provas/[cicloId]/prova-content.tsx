@@ -61,6 +61,7 @@ import {
   PROVA_STATUS_LABELS,
   PROVA_STATUS_COLORS,
 } from "../../../features/prova/types";
+import { obterMensagemErro } from "../../../lib/mensagens-erro";
 
 interface ProvaDetailContentProps {
   cicloId: string;
@@ -118,9 +119,10 @@ export function ProvaDetailContent({
     } catch (err) {
       console.error("Erro ao carregar prova:", err);
       setError(
-        err instanceof Error
-          ? err.message
-          : "Erro ao carregar prova. Tente novamente.",
+        obterMensagemErro(
+          err,
+          "Não foi possível carregar a prova. Tente novamente.",
+        ),
       );
     } finally {
       setInitialLoading(false);
@@ -197,7 +199,10 @@ export function ProvaDetailContent({
       await refetchProva();
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Erro ao enviar para impressao. Tente novamente.",
+        obterMensagemErro(
+          err,
+          "Não foi possível enviar a prova para impressão. Tente novamente.",
+        ),
       );
     } finally {
       setSubmitting(false);
@@ -212,7 +217,10 @@ export function ProvaDetailContent({
       await refetchProva();
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Erro ao enviar para analise. Tente novamente.",
+        obterMensagemErro(
+          err,
+          "Não foi possível enviar a prova para análise. Tente novamente.",
+        ),
       );
     } finally {
       setSubmitting(false);
@@ -227,7 +235,10 @@ export function ProvaDetailContent({
       await refetchProva();
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Erro ao reenviar para analise. Tente novamente.",
+        obterMensagemErro(
+          err,
+          "Não foi possível reenviar a prova para análise. Tente novamente.",
+        ),
       );
     } finally {
       setSubmitting(false);
@@ -246,9 +257,10 @@ export function ProvaDetailContent({
       setShowRecuperarDialog(false);
     } catch (err) {
       setError(
-        err instanceof Error
-          ? err.message
-          : "Erro ao recuperar prova. Tente novamente.",
+        obterMensagemErro(
+          err,
+          "Não foi possível recuperar a prova. Tente novamente.",
+        ),
       );
     } finally {
       setRecuperando(false);

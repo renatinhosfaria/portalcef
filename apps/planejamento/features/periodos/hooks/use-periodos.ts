@@ -4,6 +4,8 @@
 import { api } from "@essencia/shared/fetchers/client";
 import { useEffect, useState, useCallback } from "react";
 
+import { obterMensagemErro } from "../../../lib/mensagens-erro";
+
 export interface Periodo {
   id: string;
   unidadeId: string;
@@ -65,7 +67,12 @@ export function usePeriodos(): UsePeriodosReturn {
     } catch (err) {
       console.error("Erro ao buscar períodos:", err);
       setError(
-        err instanceof Error ? err : new Error("Erro ao buscar períodos"),
+        new Error(
+          obterMensagemErro(
+            err,
+            "Não foi possível carregar os períodos. Tente novamente.",
+          ),
+        ),
       );
     } finally {
       setIsLoading(false);
@@ -84,9 +91,18 @@ export function usePeriodos(): UsePeriodosReturn {
       dataFim: string;
       dataMaximaEntrega: string;
     }) => {
-      const response = await api.post<Periodo>("/plano-aula-periodo", dto);
-      await fetchPeriodos();
-      return response;
+      try {
+        const response = await api.post<Periodo>("/plano-aula-periodo", dto);
+        await fetchPeriodos();
+        return response;
+      } catch (err) {
+        throw new Error(
+          obterMensagemErro(
+            err,
+            "Não foi possível criar o período. Revise as datas e tente novamente.",
+          ),
+        );
+      }
     },
     [fetchPeriodos],
   );
@@ -101,17 +117,35 @@ export function usePeriodos(): UsePeriodosReturn {
         dataMaximaEntrega: string;
       }>,
     ) => {
-      const response = await api.put<Periodo>(`/plano-aula-periodo/${id}`, dto);
-      await fetchPeriodos();
-      return response;
+      try {
+        const response = await api.put<Periodo>(`/plano-aula-periodo/${id}`, dto);
+        await fetchPeriodos();
+        return response;
+      } catch (err) {
+        throw new Error(
+          obterMensagemErro(
+            err,
+            "Não foi possível salvar o período. Revise as datas e tente novamente.",
+          ),
+        );
+      }
     },
     [fetchPeriodos],
   );
 
   const excluirPeriodo = useCallback(
     async (id: string) => {
-      await api.delete(`/plano-aula-periodo/${id}`);
-      await fetchPeriodos();
+      try {
+        await api.delete(`/plano-aula-periodo/${id}`);
+        await fetchPeriodos();
+      } catch (err) {
+        throw new Error(
+          obterMensagemErro(
+            err,
+            "Não foi possível excluir o período. Tente novamente.",
+          ),
+        );
+      }
     },
     [fetchPeriodos],
   );
@@ -163,7 +197,12 @@ export function usePeriodosDaTurma(turmaId: string): UsePeriodosDaTurmaReturn {
       }
     } catch (err) {
       console.error("Erro ao buscar períodos da turma:", err);
-      setError(err instanceof Error ? err.message : "Erro ao buscar períodos");
+      setError(
+        obterMensagemErro(
+          err,
+          "Não foi possível carregar os períodos da turma. Tente novamente.",
+        ),
+      );
       setPeriodos([]);
     } finally {
       setIsLoading(false);

@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { obterMensagemErro } from "../../../lib/mensagens-erro";
 import type { PlanoDocumento } from "../types";
 
 type FileUploadStatus = "pendente" | "enviando" | "sucesso" | "erro";
@@ -67,10 +68,10 @@ function gerarId(): string {
 function validateFile(file: File): string | null {
   const acceptedTypes = Object.keys(ACCEPTED_FILE_TYPES);
   if (!acceptedTypes.includes(file.type)) {
-    return "Tipo de arquivo não permitido. Use PDF, DOC, DOCX, XLS, XLSX, PNG ou JPG.";
+    return "Esse arquivo não é aceito. Envie PDF, Word, Excel, PNG ou JPG.";
   }
   if (file.size > MAX_FILE_SIZE) {
-    return "Arquivo muito grande. Tamanho máximo: 100MB.";
+    return "O arquivo é muito grande. Envie um arquivo de até 100 MB.";
   }
   return null;
 }
@@ -187,7 +188,10 @@ export function DocumentoUpload({
                     ...i,
                     status: "erro" as const,
                     tentativas: novaTentativa,
-                    erro: "Erro ao enviar arquivo. Tente novamente.",
+                    erro: obterMensagemErro(
+                      err,
+                      "Não foi possível enviar o arquivo. Verifique sua conexão e tente novamente.",
+                    ),
                   }
                 : i,
             ),
@@ -282,7 +286,7 @@ export function DocumentoUpload({
     }
 
     if (!validateYouTubeUrl(linkUrl)) {
-      setError("URL invalida. Insira uma URL valida do YouTube.");
+      setError("Cole um link válido do YouTube.");
       return;
     }
 
@@ -295,7 +299,12 @@ export function DocumentoUpload({
       setShowLinkInput(false);
     } catch (err) {
       console.error("Erro ao adicionar link:", err);
-      setError("Erro ao adicionar link. Tente novamente.");
+      setError(
+        obterMensagemErro(
+          err,
+          "Não foi possível adicionar o link. Verifique o endereço e tente novamente.",
+        ),
+      );
     } finally {
       setIsAddingLink(false);
     }

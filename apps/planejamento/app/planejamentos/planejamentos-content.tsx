@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 import { PeriodosEmptyState } from "../../features/periodos/components/periodos-empty-state";
 import { PlanoAulaGrid } from "../../features/periodos/components/plano-aula-grid";
 import { usePeriodosDaTurma } from "../../features/periodos/hooks/use-periodos";
+import { obterMensagemErro } from "../../lib/mensagens-erro";
 
 interface Turma {
   id: string;
@@ -95,7 +96,12 @@ export function PlanejamentosContent() {
         }
       } catch (err) {
         console.error("Erro ao buscar dados do usuário:", err);
-        setErrorTurma(err instanceof Error ? err.message : "Erro ao buscar turma");
+        setErrorTurma(
+          obterMensagemErro(
+            err,
+            "Não foi possível carregar suas turmas. Tente novamente.",
+          ),
+        );
       } finally {
         setIsLoadingTurma(false);
       }

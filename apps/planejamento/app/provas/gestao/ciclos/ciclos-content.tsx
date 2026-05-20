@@ -26,6 +26,10 @@ const ETAPAS = [
 
 type Etapa = (typeof ETAPAS)[number];
 
+function getMensagemErro(error: unknown, fallback: string) {
+  return error instanceof Error && error.message ? error.message : fallback;
+}
+
 /**
  * Retorna as etapas que a role pode gerenciar
  * - coordenadora_geral: todas as etapas
@@ -125,10 +129,11 @@ export function CiclosContent() {
       }
       setModalOpen(false);
       setEditingCiclo(null);
-    } catch {
+    } catch (error) {
       toast.error("Erro", {
-        description: "Nao foi possivel salvar a prova",
+        description: getMensagemErro(error, "Nao foi possivel salvar a prova"),
       });
+      throw error;
     }
   };
 

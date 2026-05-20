@@ -25,6 +25,7 @@ import {
   PROVA_STATUS_COLORS,
   PROVA_STATUS_LABELS,
 } from "../../features/prova";
+import { obterMensagemErro } from "../../lib/mensagens-erro";
 
 interface Turma {
   id: string;
@@ -116,7 +117,12 @@ export function ProvasContent() {
         }
       } catch (err) {
         console.error("Erro ao buscar dados do usuario:", err);
-        setErrorTurma(err instanceof Error ? err.message : "Erro ao buscar turma");
+        setErrorTurma(
+          obterMensagemErro(
+            err,
+            "Não foi possível carregar suas turmas. Tente novamente.",
+          ),
+        );
       } finally {
         setIsLoadingTurma(false);
       }

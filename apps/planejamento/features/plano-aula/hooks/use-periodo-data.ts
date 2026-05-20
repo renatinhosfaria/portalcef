@@ -3,6 +3,8 @@
 import { api } from "@essencia/shared/fetchers/client";
 import { useCallback, useEffect, useState } from "react";
 
+import { obterMensagemErro } from "../../../lib/mensagens-erro";
+
 interface PeriodoData {
   id: string;
   numero: number;
@@ -59,7 +61,10 @@ export function usePeriodoData(
     } catch (err) {
       console.error("Erro ao buscar dados do período:", err);
       setError(
-        err instanceof Error ? err.message : "Erro ao buscar período",
+        obterMensagemErro(
+          err,
+          "Não foi possível carregar os dados do período. Tente novamente.",
+        ),
       );
     } finally {
       setIsLoading(false);

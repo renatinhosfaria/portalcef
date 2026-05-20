@@ -4,6 +4,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DocumentoList } from "./documento-list";
 
+vi.mock("@essencia/ui/toaster", () => ({
+  toast: {
+    error: vi.fn(),
+    info: vi.fn(),
+    success: vi.fn(),
+  },
+}));
+
+import { toast } from "@essencia/ui/toaster";
+
 describe("DocumentoList", () => {
   const fetchMock = vi.fn();
 
@@ -43,6 +53,9 @@ describe("DocumentoList", () => {
   beforeEach(() => {
     vi.stubGlobal("fetch", fetchMock);
     fetchMock.mockReset();
+    vi.mocked(toast.error).mockReset();
+    vi.mocked(toast.info).mockReset();
+    vi.mocked(toast.success).mockReset();
   });
 
   afterEach(() => {
@@ -237,5 +250,38 @@ describe("DocumentoList", () => {
     );
 
     expect(screen.getByText(/impresso/i)).toBeInTheDocument();
+  });
+
+  it("mostra mensagem amigável quando a edição no Word recebe erro técnico da API", async () => {
+    const user = userEvent.setup();
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 404,
+      json: async () => ({
+        success: false,
+        error: {
+          code: "itemNotFound",
+          message: "The resource could not be found.",
+        },
+      }),
+    });
+
+    render(
+      <DocumentoList
+        documentos={[mockDocumentoWord]}
+        canEdit={true}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /^editar no word$/i }));
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith(
+        "Não conseguimos abrir esse documento agora. Tente abrir novamente em alguns instantes.",
+      );
+    });
+    expect(toast.error).not.toHaveBeenCalledWith(
+      expect.stringContaining("resource"),
+    );
   });
 });

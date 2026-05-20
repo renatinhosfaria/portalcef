@@ -25,6 +25,9 @@ import { educationStageLabels } from "@essencia/shared/types";
 
 import type { ProvaCiclo } from "../types";
 
+const ERRO_PRAZO_ENTREGA =
+  "O prazo de entrega deve ser anterior ao inicio do ciclo.";
+
 interface CicloModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -55,6 +58,8 @@ export function CicloModal({
   const [dataInicio, setDataInicio] = useState("");
   const [dataFim, setDataFim] = useState("");
   const [dataMaximaEntrega, setDataMaximaEntrega] = useState("");
+  const [erroDataMaximaEntrega, setErroDataMaximaEntrega] =
+    useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
@@ -71,10 +76,22 @@ export function CicloModal({
       setDataFim("");
       setDataMaximaEntrega("");
     }
+    setErroDataMaximaEntrega(null);
   }, [ciclo, etapas, open, defaultEtapa]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (
+      dataInicio &&
+      dataMaximaEntrega &&
+      dataMaximaEntrega >= dataInicio
+    ) {
+      setErroDataMaximaEntrega(ERRO_PRAZO_ENTREGA);
+      return;
+    }
+
+    setErroDataMaximaEntrega(null);
     setIsSubmitting(true);
 
     try {
@@ -157,7 +174,10 @@ export function CicloModal({
                   id="dataInicio"
                   type="date"
                   value={dataInicio}
-                  onChange={(e) => setDataInicio(e.target.value)}
+                  onChange={(e) => {
+                    setDataInicio(e.target.value);
+                    setErroDataMaximaEntrega(null);
+                  }}
                   disabled={loading || isSubmitting}
                   required
                 />
@@ -186,13 +206,34 @@ export function CicloModal({
                 id="dataMaximaEntrega"
                 type="date"
                 value={dataMaximaEntrega}
-                onChange={(e) => setDataMaximaEntrega(e.target.value)}
+                onChange={(e) => {
+                  setDataMaximaEntrega(e.target.value);
+                  setErroDataMaximaEntrega(null);
+                }}
                 disabled={loading || isSubmitting}
+                aria-invalid={!!erroDataMaximaEntrega}
+                aria-describedby={
+                  erroDataMaximaEntrega
+                    ? "dataMaximaEntrega-error"
+                    : "dataMaximaEntrega-help"
+                }
                 required
               />
-              <p className="text-sm text-muted-foreground">
-                Data limite para as professoras enviarem a prova
-              </p>
+              {erroDataMaximaEntrega ? (
+                <p
+                  id="dataMaximaEntrega-error"
+                  className="text-sm text-destructive"
+                >
+                  {erroDataMaximaEntrega}
+                </p>
+              ) : (
+                <p
+                  id="dataMaximaEntrega-help"
+                  className="text-sm text-muted-foreground"
+                >
+                  Data limite para as professoras enviarem a prova
+                </p>
+              )}
             </div>
           </div>
 

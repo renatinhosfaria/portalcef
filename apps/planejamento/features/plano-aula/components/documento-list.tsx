@@ -42,6 +42,10 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 
+import {
+  obterMensagemErro,
+  obterMensagemErroDaRespostaHttp,
+} from "../../../lib/mensagens-erro";
 import type { PlanoDocumento } from "../types";
 
 import { DocumentoEditorModal } from "./documento-editor";
@@ -220,8 +224,11 @@ export function DocumentoList({
     );
 
     if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.message || "Erro ao preparar edição no Word");
+      const mensagem = await obterMensagemErroDaRespostaHttp(
+        res,
+        "Não foi possível abrir o documento no Word. Tente novamente.",
+      );
+      throw new Error(mensagem);
     }
 
     const json = await res.json();
@@ -476,9 +483,10 @@ export function DocumentoList({
                           );
                         } catch (error) {
                           toast.error(
-                            error instanceof Error
-                              ? error.message
-                              : "Erro ao preparar edição no Word",
+                            obterMensagemErro(
+                              error,
+                              "Não foi possível abrir o documento no Word. Tente novamente.",
+                            ),
                           );
                         }
                       }}
@@ -502,16 +510,20 @@ export function DocumentoList({
                             { method: "POST", credentials: "include" },
                           );
                           if (!res.ok) {
-                            const err = await res.json();
-                            throw new Error(err.message || "Erro ao sincronizar");
+                            const mensagem = await obterMensagemErroDaRespostaHttp(
+                              res,
+                              "Não foi possível sincronizar o documento. Salve o arquivo no Word e tente novamente.",
+                            );
+                            throw new Error(mensagem);
                           }
                           toast.success("Documento sincronizado com sucesso!");
                           window.location.reload();
                         } catch (error) {
                           toast.error(
-                            error instanceof Error
-                              ? error.message
-                              : "Erro ao sincronizar documento",
+                            obterMensagemErro(
+                              error,
+                              "Não foi possível sincronizar o documento. Salve o arquivo no Word e tente novamente.",
+                            ),
                           );
                         } finally {
                           setSincronizandoId(null);

@@ -2,6 +2,8 @@
 
 import { api } from "@essencia/shared/fetchers/client";
 import { useCallback, useState } from "react";
+
+import { obterMensagemErro } from "../../../lib/mensagens-erro";
 import type {
   Prova,
   ProvaSummary,
@@ -59,10 +61,12 @@ export function useProva(): UseProvaReturn {
         });
         return result;
       } catch (err) {
-        const message =
-          err instanceof Error ? err.message : "Erro ao criar prova";
+        const message = obterMensagemErro(
+          err,
+          "Não foi possível criar a prova. Tente novamente.",
+        );
         setError(message);
-        throw err;
+        throw new Error(message);
       } finally {
         setLoading(false);
       }
@@ -77,10 +81,12 @@ export function useProva(): UseProvaReturn {
       const result = await api.get<Prova>(`/prova/${id}`);
       return result;
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Erro ao buscar prova";
+      const message = obterMensagemErro(
+        err,
+        "Não foi possível carregar a prova. Tente novamente.",
+      );
       setError(message);
-      throw err;
+      throw new Error(message);
     } finally {
       setLoading(false);
     }
@@ -100,10 +106,12 @@ export function useProva(): UseProvaReturn {
         );
         return result;
       } catch (err) {
-        const message =
-          err instanceof Error ? err.message : "Erro ao fazer upload";
+        const message = obterMensagemErro(
+          err,
+          "Não foi possível enviar o arquivo. Verifique sua conexão e tente novamente.",
+        );
         setError(message);
-        throw err;
+        throw new Error(message);
       } finally {
         setLoading(false);
       }
@@ -122,10 +130,12 @@ export function useProva(): UseProvaReturn {
         );
         return result;
       } catch (err) {
-        const message =
-          err instanceof Error ? err.message : "Erro ao adicionar link";
+        const message = obterMensagemErro(
+          err,
+          "Não foi possível adicionar o link. Verifique o endereço e tente novamente.",
+        );
         setError(message);
-        throw err;
+        throw new Error(message);
       } finally {
         setLoading(false);
       }
@@ -140,10 +150,12 @@ export function useProva(): UseProvaReturn {
       try {
         await api.delete(`/prova/${provaId}/documentos/${docId}`);
       } catch (err) {
-        const message =
-          err instanceof Error ? err.message : "Erro ao excluir documento";
+        const message = obterMensagemErro(
+          err,
+          "Não foi possível excluir o documento. Tente novamente.",
+        );
         setError(message);
-        throw err;
+        throw new Error(message);
       } finally {
         setLoading(false);
       }
@@ -162,10 +174,12 @@ export function useProva(): UseProvaReturn {
         );
         return result;
       } catch (err) {
-        const message =
-          err instanceof Error ? err.message : "Erro ao aprovar documento";
+        const message = obterMensagemErro(
+          err,
+          "Não foi possível aprovar o documento. Tente novamente.",
+        );
         setError(message);
-        throw err;
+        throw new Error(message);
       } finally {
         setLoading(false);
       }
@@ -184,10 +198,12 @@ export function useProva(): UseProvaReturn {
         );
         return result;
       } catch (err) {
-        const message =
-          err instanceof Error ? err.message : "Erro ao desfazer aprovacao";
+        const message = obterMensagemErro(
+          err,
+          "Não foi possível desfazer a aprovação. Tente novamente.",
+        );
         setError(message);
-        throw err;
+        throw new Error(message);
       } finally {
         setLoading(false);
       }
@@ -206,10 +222,12 @@ export function useProva(): UseProvaReturn {
         );
         return result;
       } catch (err) {
-        const message =
-          err instanceof Error ? err.message : "Erro ao registrar impressao";
+        const message = obterMensagemErro(
+          err,
+          "Não foi possível registrar a impressão. Tente novamente.",
+        );
         setError(message);
-        throw err;
+        throw new Error(message);
       } finally {
         setLoading(false);
       }
@@ -228,10 +246,12 @@ export function useProva(): UseProvaReturn {
         );
         return result;
       } catch (err) {
-        const message =
-          err instanceof Error ? err.message : "Erro ao enviar para impressao";
+        const message = obterMensagemErro(
+          err,
+          "Não foi possível enviar a prova para impressão. Tente novamente.",
+        );
         setError(message);
-        throw err;
+        throw new Error(message);
       } finally {
         setLoading(false);
       }
@@ -250,10 +270,12 @@ export function useProva(): UseProvaReturn {
         );
         return result;
       } catch (err) {
-        const message =
-          err instanceof Error ? err.message : "Erro ao enviar para analise";
+        const message = obterMensagemErro(
+          err,
+          "Não foi possível enviar a prova para análise. Tente novamente.",
+        );
         setError(message);
-        throw err;
+        throw new Error(message);
       } finally {
         setLoading(false);
       }
@@ -272,10 +294,12 @@ export function useProva(): UseProvaReturn {
         );
         return result;
       } catch (err) {
-        const message =
-          err instanceof Error ? err.message : "Erro ao reenviar para analise";
+        const message = obterMensagemErro(
+          err,
+          "Não foi possível reenviar a prova para análise. Tente novamente.",
+        );
         setError(message);
-        throw err;
+        throw new Error(message);
       } finally {
         setLoading(false);
       }
@@ -294,10 +318,12 @@ export function useProva(): UseProvaReturn {
         );
         return result;
       } catch (err) {
-        const message =
-          err instanceof Error ? err.message : "Erro ao recuperar prova";
+        const message = obterMensagemErro(
+          err,
+          "Não foi possível recuperar a prova. Tente novamente.",
+        );
         setError(message);
-        throw err;
+        throw new Error(message);
       } finally {
         setLoading(false);
       }
@@ -344,16 +370,32 @@ export function useAnalistaProvaActions(): UseAnalistaProvaActionsReturn {
   const [loading, setLoading] = useState(false);
 
   const listarPendentes = useCallback(async (): Promise<ProvaSummary[]> => {
-    const result = await api.get<ProvaSummary[]>(
-      "/prova/analista/pendentes",
-    );
-    return result || [];
+    try {
+      const result = await api.get<ProvaSummary[]>(
+        "/prova/analista/pendentes",
+      );
+      return result || [];
+    } catch (err) {
+      throw new Error(
+        obterMensagemErro(
+          err,
+          "Não foi possível carregar as provas pendentes. Tente novamente.",
+        ),
+      );
+    }
   }, []);
 
   const aprovar = useCallback(async (provaId: string): Promise<void> => {
     setLoading(true);
     try {
       await api.post(`/prova/${provaId}/analista/aprovar`, {});
+    } catch (err) {
+      throw new Error(
+        obterMensagemErro(
+          err,
+          "Não foi possível aprovar a prova. Tente novamente.",
+        ),
+      );
     } finally {
       setLoading(false);
     }
@@ -364,6 +406,13 @@ export function useAnalistaProvaActions(): UseAnalistaProvaActionsReturn {
       setLoading(true);
       try {
         await api.post(`/prova/${provaId}/analista/devolver`, {});
+      } catch (err) {
+        throw new Error(
+          obterMensagemErro(
+            err,
+            "Não foi possível devolver a prova. Tente novamente.",
+          ),
+        );
       } finally {
         setLoading(false);
       }
@@ -395,6 +444,13 @@ export function useGestaoImpressao(): UseGestaoImpressaoReturn {
       setLoading(true);
       try {
         await api.post(`/prova/${provaId}/enviar-responder`, {});
+      } catch (err) {
+        throw new Error(
+          obterMensagemErro(
+            err,
+            "Não foi possível enviar a prova para resposta. Tente novamente.",
+          ),
+        );
       } finally {
         setLoading(false);
       }
@@ -521,10 +577,12 @@ export function useProvaDashboard(): UseProvaDashboardReturn {
         );
         setData(normalizarDashboardData(result));
       } catch (err) {
-        const message =
-          err instanceof Error ? err.message : "Erro ao buscar dashboard";
+        const message = obterMensagemErro(
+          err,
+          "Não foi possível carregar o painel. Tente novamente.",
+        );
         setError(message);
-        throw err;
+        throw new Error(message);
       } finally {
         setLoading(false);
       }
@@ -605,8 +663,10 @@ export function useGestaoProvas(): UseGestaoProvasReturn {
         setProvas(result.data || []);
         setPagination(result.pagination);
       } catch (err) {
-        const message =
-          err instanceof Error ? err.message : "Erro ao buscar provas";
+        const message = obterMensagemErro(
+          err,
+          "Não foi possível carregar as provas. Tente novamente.",
+        );
         setError(message);
         setProvas([]);
         setPagination({ total: 0, page: 1, limit: 20, totalPages: 0 });
@@ -619,7 +679,16 @@ export function useGestaoProvas(): UseGestaoProvasReturn {
 
   const deletarProva = useCallback(
     async (provaId: string): Promise<void> => {
-      await api.delete(`/prova/${provaId}`);
+      try {
+        await api.delete(`/prova/${provaId}`);
+      } catch (err) {
+        throw new Error(
+          obterMensagemErro(
+            err,
+            "Não foi possível excluir a prova. Tente novamente.",
+          ),
+        );
+      }
     },
     [],
   );
@@ -657,10 +726,12 @@ export function useProvaDetalhe(provaId?: string): UseProvaDetalheReturn {
       const result = await api.get<Prova>(`/prova/${id}`);
       setProva(result);
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Erro ao buscar prova";
+      const message = obterMensagemErro(
+        err,
+        "Não foi possível carregar a prova. Tente novamente.",
+      );
       setError(message);
-      throw err;
+      throw new Error(message);
     } finally {
       setLoading(false);
     }

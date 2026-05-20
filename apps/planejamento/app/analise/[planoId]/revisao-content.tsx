@@ -44,6 +44,7 @@ import {
   usePlanoAula,
   usePlanoDetalhe,
 } from "../../../features/plano-aula";
+import { obterMensagemErro } from "../../../lib/mensagens-erro";
 
 import { TarefaForm } from "./tarefa-form";
 
@@ -88,8 +89,10 @@ export function RevisaoContent({ planoId }: RevisaoContentProps) {
         setSuccessMessage("Documento aprovado com sucesso!");
         setTimeout(() => setSuccessMessage(null), 3000);
       } catch (err) {
-        const message =
-          err instanceof Error ? err.message : "Erro ao aprovar documento";
+        const message = obterMensagemErro(
+          err,
+          "Não foi possível aprovar o documento. Tente novamente.",
+        );
         setActionError(message);
       }
     },
@@ -107,10 +110,10 @@ export function RevisaoContent({ planoId }: RevisaoContentProps) {
         setSuccessMessage("Aprovação do documento desfeita!");
         setTimeout(() => setSuccessMessage(null), 3000);
       } catch (err) {
-        const message =
-          err instanceof Error
-            ? err.message
-            : "Erro ao desfazer aprovação do documento";
+        const message = obterMensagemErro(
+          err,
+          "Não foi possível desfazer a aprovação do documento. Tente novamente.",
+        );
         setActionError(message);
       }
     },
@@ -128,8 +131,10 @@ export function RevisaoContent({ planoId }: RevisaoContentProps) {
         setSuccessMessage("Documento impresso e registrado no histórico!");
         setTimeout(() => setSuccessMessage(null), 3000);
       } catch (err) {
-        const message =
-          err instanceof Error ? err.message : "Erro ao imprimir documento";
+        const message = obterMensagemErro(
+          err,
+          "Não foi possível registrar a impressão. Tente novamente.",
+        );
         setActionError(message);
       }
     },
@@ -160,8 +165,10 @@ export function RevisaoContent({ planoId }: RevisaoContentProps) {
         setSuccessMessage("Link adicionado com sucesso!");
         setTimeout(() => setSuccessMessage(null), 3000);
       } catch (err) {
-        const message =
-          err instanceof Error ? err.message : "Erro ao adicionar link";
+        const message = obterMensagemErro(
+          err,
+          "Não foi possível adicionar o link. Verifique o endereço e tente novamente.",
+        );
         setActionError(message);
       }
     },
@@ -183,8 +190,10 @@ export function RevisaoContent({ planoId }: RevisaoContentProps) {
         router.push("/analise");
       }, 2000);
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Erro ao aprovar plano";
+      const message = obterMensagemErro(
+        err,
+        "Não foi possível aprovar o plano. Tente novamente.",
+      );
       setActionError(message);
     }
   }, [planoId, aprovar, router]);
@@ -205,8 +214,10 @@ export function RevisaoContent({ planoId }: RevisaoContentProps) {
         router.push("/analise");
       }, 2000);
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Erro ao devolver plano";
+      const message = obterMensagemErro(
+        err,
+        "Não foi possível devolver o plano. Tente novamente.",
+      );
       setActionError(message);
     }
   }, [planoId, devolver, router]);

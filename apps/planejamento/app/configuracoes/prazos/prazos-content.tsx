@@ -31,6 +31,7 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useDeadlines } from "../../../features/plano-aula";
+import { obterMensagemErro } from "../../../lib/mensagens-erro";
 
 /**
  * Interface para estado de edicao de um prazo
@@ -187,8 +188,10 @@ export function PrazosContent() {
           cancelarEdicao(quinzenaId);
         }, 2000);
       } catch (err) {
-        const mensagem =
-          err instanceof Error ? err.message : "Erro ao salvar prazo";
+        const mensagem = obterMensagemErro(
+          err,
+          "Não foi possível salvar o prazo. Tente novamente.",
+        );
         setEditStates((prev) => ({
           ...prev,
           [quinzenaId]: {
