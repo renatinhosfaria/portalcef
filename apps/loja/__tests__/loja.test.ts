@@ -337,6 +337,20 @@ describe('Voucher público', () => {
 });
 
 describe('Pré-venda pública', () => {
+    it('busca produtos pelo nome digitado no cabeçalho do catálogo', () => {
+        const headerSource = readFileSync(join(process.cwd(), 'components/ShopHeader.tsx'), 'utf8');
+        const catalogSource = readFileSync(join(process.cwd(), 'app/[schoolId]/[unitId]/catalog-page-content.tsx'), 'utf8');
+
+        expect(headerSource).toContain('searchTerm');
+        expect(headerSource).toContain('onSearchChange');
+        expect(headerSource).toContain('value={searchTerm}');
+        expect(headerSource).toContain('onChange={(event) => onSearchChange(event.target.value)}');
+        expect(catalogSource).toContain("const [searchTerm, setSearchTerm] = useState('')");
+        expect(catalogSource).toContain('normalizarBuscaProduto');
+        expect(catalogSource).toContain('produto.name');
+        expect(catalogSource).toContain('ShopHeader searchTerm={searchTerm} onSearchChange={setSearchTerm}');
+    });
+
     it('catálogo busca pronta entrega e pré-venda separadamente', () => {
         const source = readFileSync(join(process.cwd(), 'app/[schoolId]/[unitId]/catalog-page-content.tsx'), 'utf8');
 

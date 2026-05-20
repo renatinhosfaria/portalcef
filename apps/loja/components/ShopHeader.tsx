@@ -6,7 +6,15 @@ import { useState, useEffect } from 'react';
 
 import { useCart } from '@/lib/useCart';
 
-export function ShopHeader() {
+interface ShopHeaderProps {
+  searchTerm?: string;
+  onSearchChange?: (value: string) => void;
+}
+
+export function ShopHeader({
+  searchTerm = '',
+  onSearchChange = () => undefined,
+}: ShopHeaderProps) {
   const { getTotalItems } = useCart();
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
@@ -69,6 +77,8 @@ export function ShopHeader() {
                     ? 'bg-white border-2 border-[#A3D154] ring-4 ring-[#A3D154]/10 shadow-lg'
                     : 'bg-stone-50 border-2 border-stone-200 hover:border-stone-300 hover:bg-white'
                 } focus:outline-none`}
+                value={searchTerm}
+                onChange={(event) => onSearchChange(event.target.value)}
                 onFocus={() => setIsSearchFocused(true)}
                 onBlur={() => setIsSearchFocused(false)}
               />

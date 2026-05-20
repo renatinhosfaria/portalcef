@@ -26,6 +26,14 @@ interface Product {
   modoVenda: 'PRONTA_ENTREGA' | 'PRE_VENDA';
 }
 
+const normalizarBuscaProduto = (valor: string) =>
+  valor.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+
+const produtoCombinaComBusca = (produto: Product, termoBuscaNormalizado: string) => {
+  if (!termoBuscaNormalizado) return true;
+  return normalizarBuscaProduto(produto.name).includes(termoBuscaNormalizado);
+};
+
 // API response types
 interface ApiInventory {
   quantity: number;
@@ -73,6 +81,7 @@ export default function CatalogPageContent({
   // Filter States
   const [categoryFilter, setCategoryFilter] = useState<string>(initialCategoryFilter);
   const [sizeFilter, setSizeFilter] = useState<string>('');
+  const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -205,12 +214,16 @@ export default function CatalogPageContent({
     }
   }, [fetchProducts, resolvedStorefront]);
 
-  const visibleProducts = categoryFilter === 'PRE_VENDA' ? [] : products;
-  const visiblePreSaleProducts = preSaleProducts;
+  const termoBuscaNormalizado = normalizarBuscaProduto(searchTerm);
+  const productMatchesSearch = (produto: Product) => produtoCombinaComBusca(produto, termoBuscaNormalizado);
+  const visibleProducts = (categoryFilter === 'PRE_VENDA' ? [] : products).filter(productMatchesSearch);
+  const visiblePreSaleProducts = preSaleProducts.filter(productMatchesSearch);
   const totalProducts = visibleProducts.length + visiblePreSaleProducts.length;
+  const activeSearchLabel = searchTerm.trim();
   const activeCategoryLabel = categoryFilter === 'PRE_VENDA'
     ? 'Pré-venda'
     : categoryFilter.replace(/_/g, ' ');
+  const activeResultLabel = activeSearchLabel || activeCategoryLabel;
 
   // Polling for stock updates (every 30s)
   useEffect(() => {
@@ -268,7 +281,7 @@ export default function CatalogPageContent({
 
   return (
     <div className="min-h-screen bg-stone-50">
-      <ShopHeader />
+      <ShopHeader searchTerm={searchTerm} onSearchChange={setSearchTerm} />
 
       <main className="pt-28 pb-16 px-4 lg:px-8 max-w-7xl mx-auto">
         {/* Banner Hero */}
@@ -302,10 +315,10 @@ export default function CatalogPageContent({
           <div className="flex-1 product-grid-section">
             <div className="flex items-center justify-between mb-8">
               <h2 className="font-display text-2xl font-bold tracking-tight text-stone-800">
-                {categoryFilter ? (
+                {categoryFilter || activeSearchLabel ? (
                   <span className="flex items-center gap-2">
                     <span className="text-stone-600">Resultados para</span>
-                    <span className="text-gradient-brand">{activeCategoryLabel}</span>
+                    <span className="text-gradient-brand">{activeResultLabel}</span>
                   </span>
                 ) : (
                   <>
@@ -337,6 +350,7 @@ export default function CatalogPageContent({
                   onClick={() => {
                     setCategoryFilter('');
                     setSizeFilter('');
+                    setSearchTerm('');
                   }}
                   className="btn-primary"
                 >
