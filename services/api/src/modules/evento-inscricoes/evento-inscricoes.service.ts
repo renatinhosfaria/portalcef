@@ -76,10 +76,7 @@ export interface ResumoSorteiosEvento {
  * Deadlines de inscrição por evento (em ISO 8601 com fuso horário).
  * Após esse instante, novas inscrições são recusadas com 403.
  */
-const DEADLINES_INSCRICAO: Record<string, string> = {
-  // 13/05/2026 23:59:59 horário de Brasília
-  "mae-por-inteiro": "2026-05-13T23:59:59-03:00",
-};
+const DEADLINES_INSCRICAO: Record<string, string> = {};
 
 @Injectable()
 export class EventoInscricoesService {
