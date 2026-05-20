@@ -138,6 +138,11 @@ export class StorageService {
   ): string {
     const detectedMimeType = this.detectMimeType(buffer);
     const mimeType = detectedMimeType ?? declaredMimeType;
+    const detectedRasterMimeType =
+      detectedMimeType !== null &&
+      RASTER_IMAGE_MIME_TYPES.includes(
+        detectedMimeType as (typeof RASTER_IMAGE_MIME_TYPES)[number],
+      );
     const requiresRasterSignature =
       allowedMimeTypes?.every((allowed) =>
         RASTER_IMAGE_MIME_TYPES.includes(
@@ -153,7 +158,7 @@ export class StorageService {
     }
 
     if (
-      this.hasActiveTextContent(buffer) ||
+      (!detectedRasterMimeType && this.hasActiveTextContent(buffer)) ||
       (!detectedMimeType && SCRIPTABLE_MIME_TYPES.has(declaredMimeType))
     ) {
       throw new BadRequestException({

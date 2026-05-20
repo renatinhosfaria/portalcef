@@ -27,7 +27,7 @@ export class StorageController {
   constructor(private readonly storageService: StorageService) {}
 
   @Post("upload")
-  @Roles("master", "diretora_geral", "gerente_unidade")
+  @Roles("master", "diretora_geral", "gerente_unidade", "auxiliar_administrativo")
   async upload(@Req() req: FastifyMultipartRequest) {
     if (!req.isMultipart()) {
       throw new BadRequestException({

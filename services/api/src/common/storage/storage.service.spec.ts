@@ -128,4 +128,26 @@ describe("StorageService", () => {
       }),
     );
   });
+
+  it("aceita PNG real mesmo quando metadados textuais contem XML/SVG", async () => {
+    const service = new StorageService(configService);
+    const uploadFile = service.uploadFile.bind(service) as UploadFileComOpcoes;
+    const pngComMetadado = Buffer.concat([
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      Buffer.from('tEXtComment\0<svg xmlns="http://www.w3.org/2000/svg"></svg>'),
+    ]);
+    const arquivo = criarArquivoMultipart(
+      "chatgpt-image.png",
+      "image/png",
+      pngComMetadado,
+    );
+
+    await uploadFile(arquivo, { allowedMimeTypes: tiposImagem });
+
+    expect(awsMocks.putObjectCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ContentType: "image/png",
+      }),
+    );
+  });
 });
