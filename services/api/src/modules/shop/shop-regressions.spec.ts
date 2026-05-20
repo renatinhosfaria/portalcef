@@ -3189,6 +3189,32 @@ describe("Persistência de produto da loja", () => {
     mockDb.query.shopOrderItems.findFirst.mockResolvedValue(null);
   });
 
+  it("retorna isPreSale no detalhe administrativo do produto", async () => {
+    mockDb.query.shopProducts.findFirst.mockResolvedValueOnce({
+      id: "product-1",
+      name: "Produto de pre-venda",
+      description: null,
+      category: "UNIFORME_UNISSEX",
+      basePrice: 1000,
+      imageUrl: null,
+      images: [],
+      isActive: true,
+      isPreSale: true,
+      variants: [],
+    });
+
+    const service = new ShopProductsService();
+
+    await expect(
+      service.getProductById("product-1", { role: "master" } as never),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        id: "product-1",
+        isPreSale: true,
+      }),
+    );
+  });
+
   it("cria produto e imagens na mesma transação", async () => {
     const service = new ShopProductsService();
 
@@ -3219,6 +3245,30 @@ describe("Persistência de produto da loja", () => {
         displayOrder: 0,
       },
     ]);
+  });
+
+  it("persiste isPreSale ao criar produto", async () => {
+    mockProductInsert.returning.mockResolvedValueOnce([
+      { id: "product-1", isPreSale: true },
+    ]);
+
+    const service = new ShopProductsService();
+
+    await service.createProduct(
+      {
+        schoolId: "school-1",
+        name: "Produto de pre-venda",
+        category: "UNIFORME_UNISSEX",
+        basePrice: 1000,
+        isPreSale: true,
+      },
+      "admin-1",
+      { role: "master" } as never,
+    );
+
+    expect(mockProductInsert.values).toHaveBeenCalledWith(
+      expect.objectContaining({ isPreSale: true }),
+    );
   });
 
   it("rejeita produto com preço base zero na validação da API", async () => {
@@ -3268,6 +3318,29 @@ describe("Persistência de produto da loja", () => {
         displayOrder: 0,
       },
     ]);
+  });
+
+  it("permite atualizar isPreSale do produto", async () => {
+    mockDb.query.shopProducts.findFirst.mockResolvedValueOnce({
+      id: "product-1",
+      schoolId: "school-1",
+    });
+    mockDb.returning.mockResolvedValueOnce([
+      { id: "product-1", isPreSale: true },
+    ]);
+
+    const service = new ShopProductsService();
+
+    await service.updateProduct(
+      "product-1",
+      { isPreSale: true },
+      "admin-1",
+      { role: "master" } as never,
+    );
+
+    expect(mockDb.set).toHaveBeenCalledWith(
+      expect.objectContaining({ isPreSale: true }),
+    );
   });
 
   it("desativa produto e variantes em vez de apagar histórico", async () => {

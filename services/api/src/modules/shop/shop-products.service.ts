@@ -294,6 +294,7 @@ export class ShopProductsService {
       imageUrl: product.imageUrl,
       images: product.images.map((img: { imageUrl: string }) => img.imageUrl),
       isActive: product.isActive,
+      isPreSale: product.isPreSale,
       variants,
     };
   }
@@ -400,6 +401,7 @@ export class ShopProductsService {
           basePrice: dto.basePrice,
           imageUrl: mainImageUrl || null,
           isActive: dto.isActive !== undefined ? dto.isActive : true,
+          isPreSale: dto.isPreSale ?? false,
         })
         .returning();
 
@@ -449,6 +451,7 @@ export class ShopProductsService {
     if (dto.category !== undefined) updateData.category = dto.category;
     if (dto.basePrice !== undefined) updateData.basePrice = dto.basePrice;
     if (dto.isActive !== undefined) updateData.isActive = dto.isActive;
+    if (dto.isPreSale !== undefined) updateData.isPreSale = dto.isPreSale;
 
     // Handle images if provided
     if (dto.images !== undefined) {
