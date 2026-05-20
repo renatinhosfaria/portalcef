@@ -51,8 +51,8 @@ Testes obrigatórios:
 | --- | --- | --- |
 | API | `services/api/src/modules/shop/shop-regressions.spec.ts` | Cross-tenant por `productId`, `variantId`, `inventoryId`, `orderId`, `requestId` e `unitId` retorna 404. |
 | API | `services/api/src/modules/shop/shop-regressions.spec.ts` | Dashboard com role de unidade sem `unitId` retorna 404 e não amplia para escola inteira. |
-| API | `services/api/src/modules/shop/shop-regressions.spec.ts` | Metadata de roles não inclui `auxiliar_administrativo` em mutações de catálogo, variantes, estoque, configurações e upload. |
-| loja-admin | `apps/loja-admin/__tests__/permissions.test.ts` | Ações mutáveis ficam indisponíveis para `auxiliar_administrativo` e `gerente_financeiro` quando aplicável. |
+| API | `services/api/src/modules/shop/shop-regressions.spec.ts` | Metadata de roles mantém `auxiliar_administrativo` com a mesma superfície de `gerente_unidade` nas rotas administrativas e no upload. |
+| loja-admin | `apps/loja-admin/__tests__/permissions.test.ts` | Permissões visuais mantêm `auxiliar_administrativo` com as mesmas ações de `gerente_unidade`. |
 
 Comando mínimo:
 
@@ -126,7 +126,7 @@ Invariantes obrigatórias:
 | Falha intermediária não deixa parcial | Erro em imagem não deixa produto criado ou imagens removidas parcialmente. |
 | Upload aceita somente conteúdo seguro | Imagens de produto aceitam apenas PNG, JPEG, GIF ou WebP detectados por assinatura real. |
 | Conteúdo ativo nunca é servido inline | HTML, SVG, XML e scripts são rejeitados ou forçados como attachment fora do fluxo de imagem. |
-| Upload exige role de gestão | Apenas `master`, `diretora_geral` e `gerente_unidade` podem usar upload da loja. |
+| Upload exige role de gestão | Apenas `master`, `diretora_geral`, `gerente_unidade` e `auxiliar_administrativo` podem usar upload da loja. |
 
 Testes obrigatórios:
 
@@ -167,7 +167,7 @@ Testes obrigatórios:
 | API | `services/api/src/modules/shop/shop-inventory.service.spec.ts` | `withInventoryLocks` usa token e libera via script compare-and-delete. |
 | API | `services/api/src/modules/shop/shop-regressions.spec.ts` | Lock expirado não permite apagar lock de outro processo. |
 | API | `services/api/src/modules/shop/shop-orders.service.spec.ts` | `confirmPayment` adquire locks de inventário dos itens antes de converter reserva. |
-| API | `services/api/src/modules/shop/shop-regressions.spec.ts` | Pré-venda rejeita variante que voltou a ter estoque com `PRE_SALE_STOCK_AVAILABLE`. |
+| API | `services/api/src/modules/shop/shop-regressions.spec.ts` | Pré-venda rejeita produto não marcado como pré-venda com `PRODUCT_NOT_PRE_SALE`. |
 | API | `services/api/src/modules/shop/shop-regressions.spec.ts` | Fluxos de `PRE_VENDA` não alteram `quantity`, `reservedQuantity` ou ledger. |
 | API | `services/api/src/modules/shop/shop-inventory.service.spec.ts` | Saída manual grava `movementType: "AJUSTE"` e motivo em `notes`. |
 
@@ -191,7 +191,7 @@ Invariantes obrigatórias:
 | Venda presencial é atômica | Baixa de estoque, pedido, itens, ledger e pagamentos entram ou saem juntos. |
 | Pré-venda usa origem e status próprios | Voucher de pré-venda nasce com `orderSource = PRE_VENDA` e `status = AGUARDANDO_PAGAMENTO`. |
 | Pré-venda preserva estoque em todo ciclo | Criação, confirmação de pagamento, retirada, cancelamento e exclusão de `PRE_VENDA` não mexem em `quantity` nem `reservedQuantity`. |
-| Pré-venda bloqueia estoque recuperado | Variante que voltou a ter estoque é recusada na criação com `PRE_SALE_STOCK_AVAILABLE` para o carrinho migrar para pronta entrega. |
+| Pré-venda exige flag manual | Apenas produtos com `isPreSale = true` aceitam pedido de pré-venda; produtos sem o flag são recusados com `PRODUCT_NOT_PRE_SALE`. |
 | Resumo de pré-venda vem de pedidos | Relatório usa `orders/pre-venda/summary` e agrega quantidades reservadas, pagas e retiradas por produto/tamanho. |
 | Status dirige métricas | Retirada pendente usa `PAGO`; vendas usam `paidAt` com status `PAGO` ou `RETIRADO`. |
 
