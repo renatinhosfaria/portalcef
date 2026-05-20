@@ -111,7 +111,8 @@ A sessao e renovada quando o TTL restante fica abaixo de `SESSION_RENEWAL_THRESH
 | Endpoint            | Limite           | Janela |
 | ------------------- | ---------------- | ------ |
 | `/stats/dashboard`  | 5 requests/IP    | 15s    |
-| `/shop/orders`      | 5 requests/IP    | 1h     |
+| `/shop/orders`      | 50 requests/IP   | 1h     |
+| `/shop/orders/pre-venda` | 50 requests/IP | 1h     |
 
 ---
 
@@ -714,13 +715,25 @@ Upload multipart (requer autenticacao). Endpoint so fica ativo se `MINIO_*` esti
 
 #### GET `/shop/catalog/:schoolId/:unitId`
 
-Query: `category`, `size`, `inStock`.
+Query: `category`, `size`, `inStock`, `modoVenda`.
+
+`modoVenda` aceita `PRONTA_ENTREGA` ou `PRE_VENDA`. O catálogo classifica cada variante por disponibilidade: `availableStock > 0` retorna `modoVenda = "PRONTA_ENTREGA"`; `availableStock = 0` retorna `modoVenda = "PRE_VENDA"`.
 
 #### GET `/shop/products/:id`
 
+Query obrigatoria: `schoolId`, `unitId`.
+
+Retorna detalhe publico do produto com variantes da unidade consultada. Cada variante deve expor, no minimo:
+
+- `availableStock`: estoque disponivel calculado para a unidade.
+- `isAvailable`: `true` quando `availableStock > 0`.
+- `modoVenda`: `PRONTA_ENTREGA` quando `availableStock > 0`; `PRE_VENDA` quando `availableStock = 0`.
+
 #### POST `/shop/orders`
 
-Rate limit: 5 pedidos/hora por IP.
+Rate limit: 50 pedidos/hora por IP.
+
+Cria voucher de pronta entrega com `orderSource = ONLINE`, status inicial `AGUARDANDO_PAGAMENTO` e reserva de estoque em `reservedQuantity`.
 
 **Resposta (voucher ativo):**
 
@@ -732,6 +745,53 @@ Rate limit: 5 pedidos/hora por IP.
     "orderNumber": "123456",
     "totalAmount": 17000,
     "expiresAt": "2026-01-09T15:30:00Z"
+  }
+}
+```
+
+#### POST `/shop/orders/pre-venda`
+
+Endpoint público da API para voucher de pré-venda. No app `loja`, o proxy público é `POST /api/shop/orders/pre-venda/:schoolId`; ele injeta `schoolId` no body e repassa para `POST /api/shop/orders/pre-venda`.
+
+Rate limit: 50 pedidos/hora por IP.
+
+Usa o mesmo body de criação de pedido público. Cria pedido com `orderSource = PRE_VENDA`, status inicial `AGUARDANDO_PAGAMENTO` e `expiresAt = null`.
+
+Body mínimo:
+
+```json
+{
+  "schoolId": "uuid",
+  "unitId": "uuid",
+  "customerName": "Maria Silva",
+  "customerPhone": "11987654321",
+  "items": [
+    {
+      "variantId": "uuid",
+      "quantity": 1,
+      "studentName": "João Silva"
+    }
+  ]
+}
+```
+
+Contrato de estoque:
+
+- Não altera `quantity`, `reservedQuantity` nem ledger de estoque na criação.
+- Revalida as variantes sob lock de inventário.
+- Rejeita variante que voltou a ter estoque com erro `PRE_SALE_STOCK_AVAILABLE`.
+- Rejeita limite por aluno acima do permitido com erro `QUANTITY_LIMIT_EXCEEDED`.
+
+**Resposta (voucher de pré-venda):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "orderId": "uuid",
+    "orderNumber": "123456",
+    "totalAmount": 17000,
+    "expiresAt": null
   }
 }
 ```
@@ -805,19 +865,34 @@ Retorna 204 (sem body).
 
 Query: `status`, `orderSource`, `search`, `page`, `limit`.
 
+Use `orderSource=PRE_VENDA` para listar somente reservas de pré-venda.
+
+#### GET `/shop/admin/orders/pre-venda/summary`
+
+Resume a demanda de pré-venda por produto e tamanho, considerando pedidos `PRE_VENDA` nos status `AGUARDANDO_PAGAMENTO`, `PAGO` e `RETIRADO`.
+
+Retorna totais de quantidade reservada, paga e retirada, além dos responsáveis vinculados a cada variante.
+
 #### GET `/shop/admin/orders/:id`
 
 #### POST `/shop/admin/orders/presencial`
 
 #### PATCH `/shop/admin/orders/:id/cancel`
 
+Para `orderSource = PRE_VENDA`, cancela sem alterar `quantity`, `reservedQuantity` ou ledger de estoque.
+
 #### PATCH `/shop/admin/orders/:id/confirm-payment`
 
+Para `orderSource = PRE_VENDA`, muda `AGUARDANDO_PAGAMENTO -> PAGO` e registra pagamentos, sem baixar `quantity`, converter reserva ou alterar `reservedQuantity`.
+
 #### PATCH `/shop/admin/orders/:id/pickup`
+
+Para `orderSource = PRE_VENDA`, muda `PAGO -> RETIRADO` sem alterar `quantity`, `reservedQuantity` ou ledger de estoque.
 
 #### DELETE `/shop/admin/orders/:id`
 
 Exclui permanentemente um pedido. Apenas pedidos `AGUARDANDO_PAGAMENTO`, `CANCELADO` ou `EXPIRADO`.
+Para `orderSource = PRE_VENDA`, exclui sem liberar reserva e sem alterar `quantity`, `reservedQuantity` ou ledger de estoque.
 Retorna 204 (sem body).
 
 #### GET `/shop/admin/interest`

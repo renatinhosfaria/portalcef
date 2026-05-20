@@ -17,6 +17,7 @@ interface Product {
   imageUrl?: string;
   category: string;
   availableStock: number;
+  modoVenda: 'PRONTA_ENTREGA' | 'PRE_VENDA';
 }
 
 // API response types
@@ -30,6 +31,7 @@ interface ApiVariant {
   availableStock?: number;
   price?: number;
   priceOverride?: number | null;
+  modoVenda?: 'PRONTA_ENTREGA' | 'PRE_VENDA';
 }
 
 interface ApiProduct {
@@ -50,6 +52,7 @@ export default function CatalogPage({
   const { schoolId, unitId } = resolvedParams;
 
   const [products, setProducts] = useState<Product[]>([]);
+  const [preSaleProducts, setPreSaleProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -69,23 +72,33 @@ export default function CatalogPage({
         setError(null);
       }
 
-      const params = new URLSearchParams();
-      if (categoryFilter) params.append('category', categoryFilter);
-      if (sizeFilter) params.append('size', sizeFilter);
-      params.append('inStock', 'true');
+      const buildCatalogUrl = (modoVenda: 'PRONTA_ENTREGA' | 'PRE_VENDA') => {
+        const params = new URLSearchParams();
+        if (categoryFilter) params.append('category', categoryFilter);
+        if (sizeFilter) params.append('size', sizeFilter);
+        params.append('modoVenda', modoVenda);
+        return `/api/shop/catalog/${schoolId}/${unitId}?${params.toString()}`;
+      };
 
-      const queryString = params.toString() ? `?${params.toString()}` : '';
-      const response = await fetch(`/api/shop/catalog/${schoolId}/${unitId}${queryString}`);
+      const [readyResponse, preSaleResponse] = await Promise.all([
+        fetch(buildCatalogUrl('PRONTA_ENTREGA')),
+        fetch(buildCatalogUrl('PRE_VENDA')),
+      ]);
 
-      if (!response.ok) {
+      if (!readyResponse.ok || !preSaleResponse.ok) {
         throw new Error('Falha ao carregar produtos');
       }
 
-      const result = await response.json();
+      const [readyResult, preSaleResult] = await Promise.all([
+        readyResponse.json(),
+        preSaleResponse.json(),
+      ]);
 
-      if (result.success && result.data) {
-        // Transform products to flat format for ProductCard
-        const transformedProducts: Product[] = result.data.map((product: ApiProduct) => {
+      const transformProducts = (
+        data: ApiProduct[] | undefined,
+        modoVenda: 'PRONTA_ENTREGA' | 'PRE_VENDA',
+      ): Product[] => {
+        return (data || []).map((product: ApiProduct) => {
           // Calculate total available stock across all variants
           const totalStock = product.variants?.reduce((sum: number, variant: ApiVariant) => {
             // Backend returns pre-calculated availableStock per variant
@@ -106,13 +119,13 @@ export default function CatalogPage({
             imageUrl: product.imageUrl || undefined,
             category: product.category,
             availableStock: totalStock,
+            modoVenda,
           };
         });
+      };
 
-        setProducts(transformedProducts);
-      } else {
-        setProducts([]);
-      }
+      setProducts(readyResult.success ? transformProducts(readyResult.data, 'PRONTA_ENTREGA') : []);
+      setPreSaleProducts(preSaleResult.success ? transformProducts(preSaleResult.data, 'PRE_VENDA') : []);
     } catch (err: unknown) {
       console.error('Error fetching products:', err);
       const message = err instanceof Error ? err.message : 'Erro ao carregar produtos';
@@ -126,6 +139,8 @@ export default function CatalogPage({
   useEffect(() => {
     fetchProducts(false);
   }, [fetchProducts]);
+
+  const totalProducts = products.length + preSaleProducts.length;
 
   // Polling for stock updates (every 30s)
   useEffect(() => {
@@ -219,12 +234,12 @@ export default function CatalogPage({
               <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white border-2 border-stone-200">
                 <span className="text-sm text-stone-500 font-medium">Total:</span>
                 <span className="text-lg font-display font-bold text-[#A3D154] tabular-nums">
-                  {products.length}
+                  {totalProducts}
                 </span>
               </div>
             </div>
 
-            {products.length === 0 ? (
+            {totalProducts === 0 ? (
               <div className="bg-white rounded-2xl p-16 text-center border-2 border-dashed border-stone-300 animate-fade-in">
                 <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-stone-100 to-stone-200 flex items-center justify-center mx-auto mb-6">
                   <svg className="w-10 h-10 text-stone-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -246,20 +261,72 @@ export default function CatalogPage({
                 </button>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-                {products.map((product, index) => (
-                  <div
-                    key={product.id}
-                    className="animate-fade-in-up"
-                    style={{ animationDelay: `${Math.min(index * 75, 500)}ms` }}
-                  >
-                    <ProductCard
-                      schoolId={schoolId}
-                      unitId={unitId}
-                      {...product}
-                    />
-                  </div>
-                ))}
+              <div className="space-y-12">
+                {products.length > 0 && (
+                  <section className="space-y-5">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="font-display text-2xl font-bold tracking-tight text-stone-800">
+                          Pronta entrega
+                        </h3>
+                        <p className="text-sm text-stone-500 mt-1">
+                          Produtos disponíveis para pagamento e retirada conforme o estoque da unidade.
+                        </p>
+                      </div>
+                      <span className="text-sm font-semibold text-[#5a7a1f] bg-[#F0FDF4] border border-[#A3D154]/30 rounded-lg px-3 py-1">
+                        {products.length} produto(s)
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+                      {products.map((product, index) => (
+                        <div
+                          key={`pronta-entrega-${product.id}`}
+                          className="animate-fade-in-up"
+                          style={{ animationDelay: `${Math.min(index * 75, 500)}ms` }}
+                        >
+                          <ProductCard
+                            schoolId={schoolId}
+                            unitId={unitId}
+                            {...product}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                )}
+
+                {preSaleProducts.length > 0 && (
+                  <section className="space-y-5">
+                    <div className="flex items-center justify-between border-t border-stone-200 pt-8">
+                      <div>
+                        <h3 className="font-display text-2xl font-bold tracking-tight text-stone-800">
+                          Pré-venda
+                        </h3>
+                        <p className="text-sm text-stone-500 mt-1">
+                          Tamanhos sem estoque agora podem ser reservados para pagamento na retirada.
+                        </p>
+                      </div>
+                      <span className="text-sm font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-1">
+                        {preSaleProducts.length} produto(s)
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+                      {preSaleProducts.map((product, index) => (
+                        <div
+                          key={`pre-venda-${product.id}`}
+                          className="animate-fade-in-up"
+                          style={{ animationDelay: `${Math.min(index * 75, 500)}ms` }}
+                        >
+                          <ProductCard
+                            schoolId={schoolId}
+                            unitId={unitId}
+                            {...product}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                )}
               </div>
             )}
           </div>

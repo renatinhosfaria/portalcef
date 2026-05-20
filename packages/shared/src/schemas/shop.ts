@@ -18,7 +18,7 @@ export const orderStatusSchema = z.enum([
   "EXPIRADO",
 ]);
 
-export const orderSourceSchema = z.enum(["ONLINE", "PRESENCIAL"]);
+export const orderSourceSchema = z.enum(["ONLINE", "PRESENCIAL", "PRE_VENDA"]);
 
 export const paymentMethodSchema = z.enum([
   "PIX",

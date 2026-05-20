@@ -11,6 +11,7 @@ interface OrderItemCardProps {
   subtotal: number;
   studentName?: string;
   imageUrl?: string;
+  modoVenda?: 'PRONTA_ENTREGA' | 'PRE_VENDA';
 }
 
 export function OrderItemCard({
@@ -21,6 +22,7 @@ export function OrderItemCard({
   subtotal,
   studentName,
   imageUrl,
+  modoVenda = 'PRONTA_ENTREGA',
 }: OrderItemCardProps) {
   const formatCurrency = (value: number) => {
     return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -63,6 +65,9 @@ export function OrderItemCard({
             Qtd: <span className="font-medium text-slate-700 tabular-nums">{quantity}</span>
           </span>
           <span className="tabular-nums">{formatCurrency(unitPrice)}</span>
+          {modoVenda === 'PRE_VENDA' && (
+            <span className="font-semibold text-amber-600">Pré-venda</span>
+          )}
         </div>
       </div>
 

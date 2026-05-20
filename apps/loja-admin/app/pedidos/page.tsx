@@ -1,6 +1,7 @@
 'use client';
 
 import { formatarDataHora } from '@essencia/shared/formatar-data';
+import type { OrderSource } from '@essencia/shared/types';
 import { Search, Eye, Check, ChevronDown, ChevronRight, Globe, Store, CreditCard, X, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { Fragment, useCallback, useEffect, useState } from 'react';
@@ -29,7 +30,7 @@ interface Order {
     customerPhone: string;
     totalAmount: number;
     status: string;
-    orderSource: string;
+    orderSource: OrderSource;
     paymentMethod?: PaymentMethod;
     createdAt: string;
     items: OrderItem[];
@@ -42,6 +43,7 @@ export default function PedidosPage() {
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState('');
+    const [orderSourceFilter, setOrderSourceFilter] = useState<OrderSource | ''>('');
     const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
 
     // Estado para paginação
@@ -72,6 +74,7 @@ export default function PedidosPage() {
             const params = new URLSearchParams();
             if (search) params.set('search', search);
             if (statusFilter) params.set('status', statusFilter);
+            if (orderSourceFilter) params.set('orderSource', orderSourceFilter);
             params.set('page', page.toString());
             params.set('limit', '30');
 
@@ -97,7 +100,7 @@ export default function PedidosPage() {
         } finally {
             setLoading(false);
         }
-    }, [search, statusFilter]);
+    }, [search, statusFilter, orderSourceFilter]);
 
     const goToPage = useCallback((page: number) => {
         if (page >= 1 && page <= totalPages && page !== currentPage) {
@@ -151,6 +154,38 @@ export default function PedidosPage() {
             MULTIPLO: 'Múltiplo'
         };
         return labels[method] || method;
+    };
+
+    const getOrderSourceBadge = (order: Order) => {
+        if (order.orderSource === 'PRE_VENDA') {
+            return (
+                <span className="badge badge-warning">
+                    <Store className="w-3 h-3" /> Pré-venda
+                </span>
+            );
+        }
+
+        if (order.orderSource === 'ONLINE') {
+            return (
+                <span className="badge badge-info">
+                    <Globe className="w-3 h-3" /> Online
+                </span>
+            );
+        }
+
+        if (order.orderSource === 'PRESENCIAL') {
+            return (
+                <span className="badge badge-neutral">
+                    <Store className="w-3 h-3" /> Presencial
+                </span>
+            );
+        }
+
+        return (
+            <span className="badge badge-neutral">
+                <Store className="w-3 h-3" /> Origem desconhecida
+            </span>
+        );
     };
 
     const handleMarkPickedUp = async (orderId: string) => {
@@ -353,6 +388,16 @@ export default function PedidosPage() {
                     <option value="CANCELADO">Cancelado</option>
                     <option value="EXPIRADO">Expirado</option>
                 </select>
+                <select
+                    value={orderSourceFilter}
+                    onChange={(e) => setOrderSourceFilter(e.target.value as OrderSource | '')}
+                    className="form-select w-auto min-w-[180px]"
+                >
+                    <option value="">Todas as origens</option>
+                    <option value="ONLINE">Online</option>
+                    <option value="PRESENCIAL">Presencial</option>
+                    <option value="PRE_VENDA">Pré-venda</option>
+                </select>
             </div>
 
             {/* Orders Table */}
@@ -410,15 +455,7 @@ export default function PedidosPage() {
                                             <td className="font-medium text-slate-800">{order.customerName}</td>
                                             <td className="font-mono text-sm text-slate-600">{formatPhone(order.customerPhone)}</td>
                                             <td className="font-semibold text-slate-800">{formatCurrency(order.totalAmount)}</td>
-                                            <td>
-                                                <span className={`badge ${order.orderSource === 'ONLINE' ? 'badge-info' : 'badge-neutral'}`}>
-                                                    {order.orderSource === 'ONLINE' ? (
-                                                        <><Globe className="w-3 h-3" /> Online</>
-                                                    ) : (
-                                                        <><Store className="w-3 h-3" /> Presencial</>
-                                                    )}
-                                                </span>
-                                            </td>
+                                            <td>{getOrderSourceBadge(order)}</td>
                                             <td>{getStatusBadge(order.status)}</td>
                                             <td className="text-sm text-slate-500">{formatDate(order.createdAt)}</td>
                                             <td>

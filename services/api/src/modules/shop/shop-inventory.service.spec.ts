@@ -121,6 +121,42 @@ describe("ShopInventoryService", () => {
       expect(ledgerEntry.movementType).toBe("RESERVA");
       expect(ledgerEntry.quantityChange).toBeLessThan(0);
     });
+
+    it("retorna variantId e estoque disponível quando a reserva não tem estoque suficiente", async () => {
+      const db = {
+        query: {
+          shopInventory: {
+            findFirst: jest.fn().mockResolvedValue({
+              id: "inv-1",
+              variantId: "variant-sem-estoque",
+              unitId: "unit-1",
+              quantity: 1,
+              reservedQuantity: 1,
+            }),
+          },
+        },
+        update: jest.fn(),
+        insert: jest.fn(),
+      } as never;
+
+      await expect(
+        service.reserveStockInTransaction(
+          "variant-sem-estoque",
+          "unit-1",
+          1,
+          "order-1",
+          db,
+        ),
+      ).rejects.toMatchObject({
+        response: {
+          code: "INSUFFICIENT_STOCK",
+          details: {
+            variantId: "variant-sem-estoque",
+            availableStock: 0,
+          },
+        },
+      });
+    });
   });
 
   describe("releaseReservation", () => {

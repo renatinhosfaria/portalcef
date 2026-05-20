@@ -17,10 +17,12 @@ import {
   type ShopOrderItem,
   shopProductVariants,
   type ShopProductVariant,
+  shopInventory,
   units,
   eq,
   and,
   or,
+  inArray,
   sql,
   desc,
   type ShopProduct,
@@ -74,6 +76,45 @@ type OrderWithItems = ShopOrder & {
   payments?: ShopOrderPayment[];
   updatedAt?: Date | null;
 };
+
+const PRE_SALE_SUMMARY_STATUSES = [
+  "AGUARDANDO_PAGAMENTO",
+  "PAGO",
+  "RETIRADO",
+] as const;
+
+type PreSaleSummaryOrder = Pick<
+  ShopOrder,
+  "customerName" | "customerPhone"
+> & {
+  status: (typeof PRE_SALE_SUMMARY_STATUSES)[number];
+  items: Array<
+    Pick<ShopOrderItem, "quantity"> & {
+      variant: Pick<ShopProductVariant, "id" | "size" | "sku"> & {
+        product: Pick<ShopProduct, "id" | "name">;
+      };
+    }
+  >;
+};
+
+type PreSaleSummaryItem = {
+  productId: string;
+  variantId: string;
+  productName: string;
+  variantSize: string;
+  variantSku: string | null;
+  reservedQuantity: number;
+  paidQuantity: number;
+  pickedUpQuantity: number;
+  totalQuantity: number;
+  customers: Array<{ name: string; phone: string }>;
+};
+
+type PreSaleSummaryAccumulator = PreSaleSummaryItem & {
+  customersByKey: Map<string, { name: string; phone: string }>;
+};
+
+const LIMITE_PRE_VENDA_POR_PRODUTO_ALUNO = 2;
 
 /**
  * ShopOrdersService
@@ -195,6 +236,22 @@ export class ShopOrdersService {
     return variant;
   }
 
+  private async getAvailableStock(variantId: string, unitId: string) {
+    const db = getDb();
+    const inventory = await db.query.shopInventory.findFirst({
+      where: and(
+        eq(shopInventory.variantId, variantId),
+        eq(shopInventory.unitId, unitId),
+      ),
+    });
+
+    if (!inventory) {
+      return 0;
+    }
+
+    return inventory.quantity - inventory.reservedQuantity;
+  }
+
   private async createPendingOnlineOrder(
     dto: CreateOrderDto,
     expiresAt: Date,
@@ -303,6 +360,153 @@ export class ShopOrdersService {
       orderNumber: order.orderNumber,
       totalAmount: order.totalAmount,
       expiresAt: order.expiresAt,
+    };
+  }
+
+  /**
+   * POST /shop/orders/pre-venda
+   *
+   * Cria voucher de pré-venda sem reservar nem baixar estoque.
+   * A escola confirma pagamento e retirada manualmente quando o produto chegar.
+   */
+  async createPreSaleOrder(dto: CreateOrderDto) {
+    const db = getDb();
+    await this.assertUnitBelongsToSchool(dto.schoolId, dto.unitId);
+    await this.assertShopEnabled(dto.unitId);
+
+    const orderNumber = await this.generateOrderNumber();
+    const lockTargets = dto.items.map((item) => ({
+      variantId: item.variantId,
+      unitId: dto.unitId,
+    }));
+
+    const order = await this.inventoryService.withInventoryLocks(
+      lockTargets,
+      async () => {
+        let totalAmount = 0;
+        const itemsWithPrice: OrderItemWithPrice[] = [];
+        const variantsById = new Map<
+          string,
+          Awaited<ReturnType<typeof this.getActiveVariantForOrder>>
+        >();
+
+        for (const item of dto.items) {
+          variantsById.set(
+            item.variantId,
+            await this.getActiveVariantForOrder(item.variantId, dto.schoolId),
+          );
+        }
+
+        const quantitiesByProductAndStudent = new Map<
+          string,
+          {
+            productId: string;
+            studentName: string;
+            quantity: number;
+          }
+        >();
+
+        for (const item of dto.items) {
+          const variant = variantsById.get(item.variantId)!;
+          const normalizedStudentName = item.studentName
+            .trim()
+            .toLocaleLowerCase("pt-BR");
+          const key = `${variant.product.id}:${normalizedStudentName}`;
+          const current = quantitiesByProductAndStudent.get(key) ?? {
+            productId: variant.product.id,
+            studentName: item.studentName,
+            quantity: 0,
+          };
+
+          current.quantity += item.quantity;
+          quantitiesByProductAndStudent.set(key, current);
+
+          if (current.quantity > LIMITE_PRE_VENDA_POR_PRODUTO_ALUNO) {
+            throw new BadRequestException({
+              code: "QUANTITY_LIMIT_EXCEEDED",
+              message:
+                "Limite de 2 unidades por produto por aluno atingido na pré-venda.",
+              details: {
+                limit: LIMITE_PRE_VENDA_POR_PRODUTO_ALUNO,
+                productId: current.productId,
+                studentName: current.studentName,
+                requestedQuantity: current.quantity,
+              },
+            });
+          }
+        }
+
+        for (const item of dto.items) {
+          const variant = variantsById.get(item.variantId)!;
+          const available = await this.getAvailableStock(
+            item.variantId,
+            dto.unitId,
+          );
+
+          if (available > 0) {
+            throw new BadRequestException({
+              code: "PRE_SALE_STOCK_AVAILABLE",
+              message:
+                "Este tamanho já está disponível para pronta entrega. Atualize o carrinho antes de finalizar.",
+              details: {
+                variantId: item.variantId,
+                availableStock: available,
+              },
+            });
+          }
+
+          const itemPrice = variant.priceOverride ?? variant.product.basePrice;
+          const itemTotal = itemPrice * item.quantity;
+          totalAmount += itemTotal;
+
+          itemsWithPrice.push({
+            variantId: item.variantId,
+            studentName: item.studentName,
+            quantity: item.quantity,
+            unitPrice: itemPrice,
+            subtotal: itemTotal,
+            productName: variant.product.name,
+            variantSize: variant.size,
+          });
+        }
+
+        return db.transaction(async (tx: DbTransaction) => {
+          const [createdOrder] = await tx
+            .insert(shopOrders)
+            .values({
+              orderNumber,
+              schoolId: dto.schoolId,
+              unitId: dto.unitId,
+              orderSource: "PRE_VENDA",
+              status: "AGUARDANDO_PAGAMENTO",
+              totalAmount,
+              customerName: dto.customerName,
+              customerPhone: dto.customerPhone,
+              customerEmail: dto.customerEmail || null,
+              expiresAt: null,
+            })
+            .returning();
+
+          const orderItemsValues = itemsWithPrice.map((item) => ({
+            orderId: createdOrder.id,
+            variantId: item.variantId,
+            studentName: item.studentName,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+          }));
+
+          await tx.insert(shopOrderItems).values(orderItemsValues);
+
+          return createdOrder;
+        });
+      },
+    );
+
+    return {
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      totalAmount: order.totalAmount,
+      expiresAt: order.expiresAt ?? null,
     };
   }
 
@@ -558,6 +762,121 @@ export class ShopOrdersService {
     };
   }
 
+  async getPreSaleSummary(
+    scope?: ShopTenantScope,
+  ): Promise<PreSaleSummaryItem[]> {
+    const db = getDb();
+    const conditions = [
+      eq(shopOrders.orderSource, "PRE_VENDA"),
+      inArray(shopOrders.status, [...PRE_SALE_SUMMARY_STATUSES]),
+    ];
+
+    if (!isMasterShopScope(scope)) {
+      assertShopTenantScope(scope);
+      const scopedTenant = scope!;
+      conditions.push(eq(shopOrders.schoolId, scopedTenant.schoolId!));
+      if (scopedTenant.unitId) {
+        conditions.push(eq(shopOrders.unitId, scopedTenant.unitId));
+      }
+    }
+
+    const orders = (await db.query.shopOrders.findMany({
+      columns: {
+        status: true,
+        customerName: true,
+        customerPhone: true,
+      },
+      where: and(...conditions),
+      with: {
+        items: {
+          columns: {
+            quantity: true,
+          },
+          with: {
+            variant: {
+              columns: {
+                id: true,
+                size: true,
+                sku: true,
+              },
+              with: {
+                product: {
+                  columns: {
+                    id: true,
+                    name: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    })) as PreSaleSummaryOrder[];
+
+    const summaryByVariant = new Map<string, PreSaleSummaryAccumulator>();
+
+    for (const order of orders) {
+      for (const item of order.items) {
+        const { variant } = item;
+        const { product } = variant;
+        const summaryKey = variant.id;
+        const current =
+          summaryByVariant.get(summaryKey) ??
+          {
+            productId: product.id,
+            variantId: variant.id,
+            productName: product.name,
+            variantSize: variant.size,
+            variantSku: variant.sku,
+            reservedQuantity: 0,
+            paidQuantity: 0,
+            pickedUpQuantity: 0,
+            totalQuantity: 0,
+            customers: [],
+            customersByKey: new Map<string, { name: string; phone: string }>(),
+          };
+
+        if (order.status === "AGUARDANDO_PAGAMENTO") {
+          current.reservedQuantity += item.quantity;
+        } else if (order.status === "PAGO") {
+          current.paidQuantity += item.quantity;
+        } else if (order.status === "RETIRADO") {
+          current.pickedUpQuantity += item.quantity;
+        }
+
+        current.totalQuantity += item.quantity;
+
+        const customerKey = `${order.customerPhone}:${order.customerName}`;
+        if (!current.customersByKey.has(customerKey)) {
+          current.customersByKey.set(customerKey, {
+            name: order.customerName,
+            phone: order.customerPhone,
+          });
+        }
+
+        summaryByVariant.set(summaryKey, current);
+      }
+    }
+
+    return Array.from(summaryByVariant.values())
+      .map(({ customersByKey, ...item }) => ({
+        ...item,
+        customers: Array.from(customersByKey.values()),
+      }))
+      .sort((a, b) => {
+        const productComparison = a.productName.localeCompare(
+          b.productName,
+          "pt-BR",
+          { numeric: true },
+        );
+        if (productComparison !== 0) return productComparison;
+
+        return a.variantSize.localeCompare(b.variantSize, "pt-BR", {
+          numeric: true,
+        });
+      });
+  }
+
   /**
    * POST /shop/admin/orders/presential
    *
@@ -729,6 +1048,23 @@ export class ShopOrdersService {
           });
         }
 
+        const cancelOrderInTransaction = async (tx: DbTransaction) => {
+          await tx
+            .update(shopOrders)
+            .set({
+              status: "CANCELADO",
+              cancelledAt: new Date(),
+              cancelledBy: userId,
+              cancellationReason: reason,
+            })
+            .where(this.orderWhere(orderId, scope));
+        };
+
+        if (order.orderSource === "PRE_VENDA") {
+          await db.transaction(cancelOrderInTransaction);
+          return order;
+        }
+
         const lockTargets = order.items.map((item: ShopOrderItem) => ({
           variantId: item.variantId,
           unitId: order.unitId,
@@ -758,15 +1094,7 @@ export class ShopOrdersService {
               }
             }
 
-            await tx
-              .update(shopOrders)
-              .set({
-                status: "CANCELADO",
-                cancelledAt: new Date(),
-                cancelledBy: userId,
-                cancellationReason: reason,
-              })
-              .where(this.orderWhere(orderId, scope));
+            await cancelOrderInTransaction(tx);
           }),
         );
 
@@ -1108,7 +1436,11 @@ export class ShopOrdersService {
         });
       }
 
-      if (order.expiresAt && new Date() > order.expiresAt) {
+      if (
+        order.orderSource !== "PRE_VENDA" &&
+        order.expiresAt &&
+        new Date() > order.expiresAt
+      ) {
         throw new BadRequestException({
           code: "ORDER_EXPIRED",
           message: `Pedido expirado em ${order.expiresAt.toLocaleString("pt-BR")}. Por favor, crie um novo pedido.`,
@@ -1127,44 +1459,43 @@ export class ShopOrdersService {
         throw new BadRequestException(`Valor pago (${totalPaid}) diverge do total do pedido (${order.totalAmount})`);
       }
 
-      const lockTargets = order.items.map((item: ShopOrderItem) => ({
-        variantId: item.variantId,
-        unitId: order.unitId,
-      }));
+      const confirmPaymentInTransaction = async (tx: DbTransaction) => {
+        const currentOrder = await tx.query.shopOrders.findFirst({
+          where: this.orderWhere(orderId, scope),
+          with: { items: true },
+        });
 
-      return this.inventoryService.withInventoryLocks(lockTargets, async () =>
-        db.transaction(async (tx: DbTransaction) => {
-          const currentOrder = await tx.query.shopOrders.findFirst({
-            where: this.orderWhere(orderId, scope),
-            with: { items: true },
+        if (!currentOrder) {
+          throw new NotFoundException({
+            code: "RESOURCE_NOT_FOUND",
+            message: `Pedido ${orderId} não encontrado`,
           });
+        }
 
-          if (!currentOrder) {
-            throw new NotFoundException({
-              code: "RESOURCE_NOT_FOUND",
-              message: `Pedido ${orderId} não encontrado`,
-            });
-          }
+        if (currentOrder.status !== "AGUARDANDO_PAGAMENTO") {
+          throw new BadRequestException({
+            code: "INVALID_STATUS",
+            message: `Apenas pedidos aguardando pagamento podem ter pagamento confirmado. Status atual: ${currentOrder.status}`,
+          });
+        }
 
-          if (currentOrder.status !== "AGUARDANDO_PAGAMENTO") {
-            throw new BadRequestException({
-              code: "INVALID_STATUS",
-              message: `Apenas pedidos aguardando pagamento podem ter pagamento confirmado. Status atual: ${currentOrder.status}`,
-            });
-          }
+        if (
+          currentOrder.orderSource !== "PRE_VENDA" &&
+          currentOrder.expiresAt &&
+          new Date() > currentOrder.expiresAt
+        ) {
+          throw new BadRequestException({
+            code: "ORDER_EXPIRED",
+            message: `Pedido expirado em ${currentOrder.expiresAt.toLocaleString("pt-BR")}. Por favor, crie um novo pedido.`,
+          });
+        }
 
-          if (currentOrder.expiresAt && new Date() > currentOrder.expiresAt) {
-            throw new BadRequestException({
-              code: "ORDER_EXPIRED",
-              message: `Pedido expirado em ${currentOrder.expiresAt.toLocaleString("pt-BR")}. Por favor, crie um novo pedido.`,
-            });
-          }
+        const currentTotalPaid = payments.reduce((acc, p) => acc + p.amount, 0);
+        if (currentTotalPaid !== currentOrder.totalAmount) {
+          throw new BadRequestException(`Valor pago (${currentTotalPaid}) diverge do total do pedido (${currentOrder.totalAmount})`);
+        }
 
-          const currentTotalPaid = payments.reduce((acc, p) => acc + p.amount, 0);
-          if (currentTotalPaid !== currentOrder.totalAmount) {
-            throw new BadRequestException(`Valor pago (${currentTotalPaid}) diverge do total do pedido (${currentOrder.totalAmount})`);
-          }
-
+        if (currentOrder.orderSource !== "PRE_VENDA") {
           for (const item of currentOrder.items) {
             await this.inventoryService.confirmSaleInTransaction(
               item.variantId,
@@ -1174,35 +1505,48 @@ export class ShopOrdersService {
               tx,
             );
           }
+        }
 
-          const primaryPaymentMethod = payments.length === 1 ? payments[0].method : "MULTIPLO";
+        const primaryPaymentMethod = payments.length === 1 ? payments[0].method : "MULTIPLO";
 
-          await tx
-            .update(shopOrders)
-            .set({
-              status: "PAGO",
-              paymentMethod: primaryPaymentMethod,
-              paidAt: new Date(),
-            })
-            .where(this.orderWhere(orderId, scope));
-
-          if (payments.length > 0) {
-            const paymentValues = payments.map(p => ({
-              orderId: currentOrder.id,
-              paymentMethod: p.method,
-              amount: p.amount,
-            }));
-
-            await tx.insert(shopOrderPayments).values(paymentValues);
-          }
-
-          return {
-            success: true,
-            message: "Pagamento confirmado com sucesso",
-            orderNumber: currentOrder.orderNumber,
+        await tx
+          .update(shopOrders)
+          .set({
+            status: "PAGO",
             paymentMethod: primaryPaymentMethod,
-          };
-        }),
+            paidAt: new Date(),
+          })
+          .where(this.orderWhere(orderId, scope));
+
+        if (payments.length > 0) {
+          const paymentValues = payments.map(p => ({
+            orderId: currentOrder.id,
+            paymentMethod: p.method,
+            amount: p.amount,
+          }));
+
+          await tx.insert(shopOrderPayments).values(paymentValues);
+        }
+
+        return {
+          success: true,
+          message: "Pagamento confirmado com sucesso",
+          orderNumber: currentOrder.orderNumber,
+          paymentMethod: primaryPaymentMethod,
+        };
+      };
+
+      if (order.orderSource === "PRE_VENDA") {
+        return db.transaction(confirmPaymentInTransaction);
+      }
+
+      const lockTargets = order.items.map((item: ShopOrderItem) => ({
+        variantId: item.variantId,
+        unitId: order.unitId,
+      }));
+
+      return this.inventoryService.withInventoryLocks(lockTargets, async () =>
+        db.transaction(confirmPaymentInTransaction),
       );
     });
   }
@@ -1235,6 +1579,13 @@ export class ShopOrdersService {
           message:
             "Pedidos pagos ou retirados não podem ser excluídos definitivamente",
         });
+      }
+
+      if (order.orderSource === "PRE_VENDA") {
+        await db.transaction(async (tx: DbTransaction) => {
+          await tx.delete(shopOrders).where(this.orderWhere(orderId, scope));
+        });
+        return;
       }
 
       const lockTargets = order.items.map((item: ShopOrderItem) => ({

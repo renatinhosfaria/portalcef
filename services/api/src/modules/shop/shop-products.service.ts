@@ -44,6 +44,7 @@ type ProductWithVariants = typeof shopProducts.$inferSelect & {
   variants: ProductVariantWithInventory[];
   images: (typeof shopProductImages.$inferSelect)[];
 };
+type ModoVenda = "PRONTA_ENTREGA" | "PRE_VENDA";
 type Db = ReturnType<typeof getDb>;
 type DbTransaction = Parameters<Db["transaction"]>[0] extends (
   tx: infer T,
@@ -121,6 +122,10 @@ export class ShopProductsService {
     }
   }
 
+  private getModoVenda(available: number): ModoVenda {
+    return available > 0 ? "PRONTA_ENTREGA" : "PRE_VENDA";
+  }
+
   /**
    * GET /shop/catalog/:schoolId/:unitId
    *
@@ -170,17 +175,22 @@ export class ShopProductsService {
       .map((product: ProductWithVariants) => {
         const variants = product.variants
           .filter((variant: ProductVariantWithInventory) => {
+            const inv = variant.inventory?.[0];
+            const available = inv ? inv.quantity - inv.reservedQuantity : 0;
+            const modoVenda = this.getModoVenda(available);
+
             // Filter by size if requested
             if (filters.size && variant.size !== filters.size) {
               return false;
             }
 
             // Filter by stock if requested
-            if (filters.inStock) {
-              const inv = variant.inventory?.[0];
-              if (!inv) return false;
-              const available = inv.quantity - inv.reservedQuantity;
-              return available > 0;
+            if (filters.inStock && available <= 0) {
+              return false;
+            }
+
+            if (filters.modoVenda && filters.modoVenda !== modoVenda) {
+              return false;
             }
 
             return true;
@@ -188,6 +198,7 @@ export class ShopProductsService {
           .map((variant: ProductVariantWithInventory) => {
             const inv = variant.inventory?.[0];
             const available = inv ? inv.quantity - inv.reservedQuantity : 0;
+            const modoVenda = this.getModoVenda(available);
 
             return {
               id: variant.id,
@@ -196,6 +207,7 @@ export class ShopProductsService {
               price: variant.priceOverride || product.basePrice,
               availableStock: Math.max(0, available),
               isAvailable: available > 0,
+              modoVenda,
             };
           });
 
@@ -338,6 +350,7 @@ export class ShopProductsService {
           price: variant.priceOverride || product.basePrice,
           availableStock: Math.max(0, available),
           isAvailable: available > 0,
+          modoVenda: this.getModoVenda(available),
         };
       });
 

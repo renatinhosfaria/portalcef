@@ -28,18 +28,22 @@ vi.mock('../components/OrderItemCard', () => ({
   OrderItemCard: ({
     productName,
     subtotal,
+    modoVenda,
   }: {
     productName: string;
     subtotal: number;
+    modoVenda?: 'PRONTA_ENTREGA' | 'PRE_VENDA';
   }) => (
     <div>
       <span>{productName}</span>
       <span>{subtotal.toFixed(2)}</span>
+      {modoVenda === 'PRE_VENDA' && <span>Item de pré-venda</span>}
     </div>
   ),
 }));
 
 vi.mock('../lib/useCart', () => ({
+  MAX_QUANTITY_PER_STUDENT: 2,
   useCart: () => ({
     items: [
       {
@@ -50,21 +54,63 @@ vi.mock('../lib/useCart', () => ({
         unitPrice: 62.5,
         studentName: 'João',
         availableStock: 10,
+        modoVenda: 'PRONTA_ENTREGA',
+      },
+      {
+        variantId: 'variant-2',
+        productName: 'Moletom',
+        variantSize: '10',
+        quantity: 1,
+        unitPrice: 170,
+        studentName: 'João',
+        availableStock: 0,
+        modoVenda: 'PRE_VENDA',
       },
     ],
     removeItem: vi.fn(),
     updateQuantity: vi.fn(),
-    getTotalAmount: () => 125,
+    getProntaEntregaItems: () => [
+      {
+        variantId: 'variant-1',
+        productName: 'Camiseta',
+        variantSize: '8',
+        quantity: 2,
+        unitPrice: 62.5,
+        studentName: 'João',
+        availableStock: 10,
+        modoVenda: 'PRONTA_ENTREGA',
+      },
+    ],
+    getPreVendaItems: () => [
+      {
+        variantId: 'variant-2',
+        productName: 'Moletom',
+        variantSize: '10',
+        quantity: 1,
+        unitPrice: 170,
+        studentName: 'João',
+        availableStock: 0,
+        modoVenda: 'PRE_VENDA',
+      },
+    ],
+    getTotalAmount: (modoVenda?: 'PRONTA_ENTREGA' | 'PRE_VENDA') => {
+      if (modoVenda === 'PRONTA_ENTREGA') return 125;
+      if (modoVenda === 'PRE_VENDA') return 170;
+      return 295;
+    },
     clearCart: vi.fn(),
     isLoaded: true,
   }),
 }));
 
 describe('CarrinhoPage', () => {
-  it('renderiza total em reais sem dividir novamente por 100', () => {
+  it('separa pronta entrega e pré-venda no carrinho', () => {
     render(<CarrinhoPage />);
 
-    expect(screen.getByText('R$ 125.00')).toBeTruthy();
+    expect(screen.getByText('Pronta entrega')).toBeTruthy();
+    expect(screen.getByText('Pré-venda')).toBeTruthy();
+    expect(screen.getByText('Item de pré-venda')).toBeTruthy();
+    expect(screen.getByText('R$ 295.00')).toBeTruthy();
     expect(screen.queryByText('R$ 1.25')).toBeNull();
   });
 });

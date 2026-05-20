@@ -193,10 +193,11 @@ interface OrderItem {
 
 interface Order {
     orderNumber: string;
+    orderSource?: 'ONLINE' | 'PRESENCIAL' | 'PRE_VENDA';
     status: 'AGUARDANDO_PAGAMENTO' | 'PAGO' | 'RETIRADO' | 'EXPIRADO' | 'CANCELADO';
     totalAmount: number;
     createdAt: string;
-    expiresAt: string;
+    expiresAt: string | null;
     items: OrderItem[];
     pickupInstructions: string;
     customerName: string;
@@ -214,7 +215,8 @@ const formatCurrency = (value: number) => {
     }).format(value / 100);
 };
 
-const formatDate = (dateString: string) => {
+const formatDate = (dateString: string | null) => {
+    if (!dateString) return 'Sem validade definida';
     return formatarData(dateString);
 };
 
@@ -233,7 +235,11 @@ const getStatusColor = (status: Order['status']) => {
     }
 };
 
-const getStatusLabel = (status: Order['status']) => {
+const getStatusLabel = (status: Order['status'], orderSource?: Order['orderSource']) => {
+    if (orderSource === 'PRE_VENDA' && status === 'AGUARDANDO_PAGAMENTO') {
+        return 'Reservado em pré-venda';
+    }
+
     switch (status) {
         case 'AGUARDANDO_PAGAMENTO':
             return 'Aguardando Pagamento';
@@ -281,7 +287,7 @@ export const VoucherPDF = ({ order }: VoucherPDFProps) => {
                                 ]}
                             >
                                 <Text style={{ fontSize: 10, fontWeight: 700, color: statusStyle.text }}>
-                                    {getStatusLabel(order.status)}
+                                    {getStatusLabel(order.status, order.orderSource)}
                                 </Text>
                             </View>
                         </View>

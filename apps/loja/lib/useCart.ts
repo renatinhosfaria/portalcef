@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react';
 
+export type ModoVenda = 'PRONTA_ENTREGA' | 'PRE_VENDA';
+
 export interface CartItem {
   schoolId: string;
   unitId: string;
@@ -14,11 +16,26 @@ export interface CartItem {
   studentName: string;
   imageUrl?: string;
   availableStock: number;
+  modoVenda?: ModoVenda;
+}
+
+export interface CartItemKey {
+  variantId: string;
+  studentName: string;
+  modoVenda?: ModoVenda;
 }
 
 export const MAX_QUANTITY_PER_STUDENT = 2;
 
 const CART_STORAGE_KEY = 'cef_shop_cart';
+const MODO_VENDA_PADRAO: ModoVenda = 'PRONTA_ENTREGA';
+
+function normalizarItem(item: CartItem): CartItem {
+  return {
+    ...item,
+    modoVenda: item.modoVenda ?? MODO_VENDA_PADRAO,
+  };
+}
 
 export function useCart() {
   const [items, setItems] = useState<CartItem[]>([]);
@@ -29,7 +46,7 @@ export function useCart() {
     try {
       const stored = localStorage.getItem(CART_STORAGE_KEY);
       if (stored) {
-        setItems(JSON.parse(stored));
+        setItems(JSON.parse(stored).map(normalizarItem));
       }
     } catch (error) {
       console.error('Error loading cart:', error);
@@ -57,11 +74,12 @@ export function useCart() {
   };
 
   const addItem = (item: CartItem): { success: boolean; message?: string } => {
+    const normalizedItem = normalizarItem(item);
     const currentContext = getCartContext();
     if (
       currentContext &&
-      (currentContext.schoolId !== item.schoolId ||
-        currentContext.unitId !== item.unitId)
+      (currentContext.schoolId !== normalizedItem.schoolId ||
+        currentContext.unitId !== normalizedItem.unitId)
     ) {
       return {
         success: false,
@@ -70,13 +88,14 @@ export function useCart() {
       };
     }
 
-    const currentQty = getQuantityForProductStudent(item.productId, item.studentName);
-    const newTotal = currentQty + item.quantity;
+    const currentQty = getQuantityForProductStudent(normalizedItem.productId, normalizedItem.studentName);
+    const newTotal = currentQty + normalizedItem.quantity;
     const existingVariantQty = items
       .filter(
         (cartItem) =>
-          cartItem.variantId === item.variantId &&
-          cartItem.studentName.toLowerCase() === item.studentName.toLowerCase(),
+          cartItem.variantId === normalizedItem.variantId &&
+          cartItem.studentName.toLowerCase() === normalizedItem.studentName.toLowerCase() &&
+          (cartItem.modoVenda ?? MODO_VENDA_PADRAO) === normalizedItem.modoVenda,
       )
       .reduce((sum, cartItem) => sum + cartItem.quantity, 0);
 
@@ -87,44 +106,78 @@ export function useCart() {
       };
     }
 
-    if (existingVariantQty + item.quantity > item.availableStock) {
+    if (
+      normalizedItem.modoVenda !== 'PRE_VENDA' &&
+      existingVariantQty + normalizedItem.quantity > normalizedItem.availableStock
+    ) {
       return {
         success: false,
-        message: `Estoque disponível insuficiente para ${item.productName}`,
+        message: `Estoque disponível insuficiente para ${normalizedItem.productName}`,
       };
     }
 
     setItems((current) => {
       // Check if item already exists (same variant + student)
       const existingIndex = current.findIndex(
-        (i) => i.variantId === item.variantId && i.studentName.toLowerCase() === item.studentName.toLowerCase()
+        (i) =>
+          i.variantId === normalizedItem.variantId &&
+          i.studentName.toLowerCase() === normalizedItem.studentName.toLowerCase() &&
+          (i.modoVenda ?? MODO_VENDA_PADRAO) === normalizedItem.modoVenda
       );
 
       if (existingIndex >= 0) {
         // Update quantity
         const updated = [...current];
-        updated[existingIndex].quantity += item.quantity;
+        updated[existingIndex].quantity += normalizedItem.quantity;
         return updated;
       }
 
       // Add new item
-      return [...current, item];
+      return [...current, normalizedItem];
     });
 
     return { success: true };
   };
 
-  const removeItem = (variantId: string, studentName: string) => {
-    setItems((current) =>
-      current.filter(
-        (item) => !(item.variantId === variantId && item.studentName === studentName)
+  const itemMatchesKey = (item: CartItem, key: CartItemKey) => {
+    return (
+      item.variantId === key.variantId &&
+      item.studentName.toLowerCase() === key.studentName.toLowerCase() &&
+      (
+        key.modoVenda === undefined ||
+        (item.modoVenda ?? MODO_VENDA_PADRAO) === key.modoVenda
       )
     );
   };
 
-  const updateQuantity = (variantId: string, studentName: string, quantity: number) => {
+  const removeItem = (
+    variantId: string,
+    studentName: string,
+    modoVenda?: ModoVenda,
+  ) => {
+    setItems((current) =>
+      current.filter(
+        (item) => !itemMatchesKey(item, { variantId, studentName, modoVenda })
+      )
+    );
+  };
+
+  const removeItems = (keys: CartItemKey[]) => {
+    setItems((current) =>
+      current.filter(
+        (item) => !keys.some((key) => itemMatchesKey(item, key)),
+      ),
+    );
+  };
+
+  const updateQuantity = (
+    variantId: string,
+    studentName: string,
+    quantity: number,
+    modoVenda?: ModoVenda,
+  ) => {
     if (quantity <= 0) {
-      removeItem(variantId, studentName);
+      removeItem(variantId, studentName, modoVenda);
       return;
     }
 
@@ -132,24 +185,35 @@ export function useCart() {
       current.map((item) => {
         if (
           item.variantId !== variantId ||
-          item.studentName.toLowerCase() !== studentName.toLowerCase()
+          item.studentName.toLowerCase() !== studentName.toLowerCase() ||
+          (
+            modoVenda !== undefined &&
+            (item.modoVenda ?? MODO_VENDA_PADRAO) !== modoVenda
+          )
         ) {
           return item;
         }
 
+        const itemModoVenda = item.modoVenda ?? MODO_VENDA_PADRAO;
         const quantityFromOtherVariants = current
           .filter(
             (cartItem) =>
               cartItem.productId === item.productId &&
-              cartItem.variantId !== variantId &&
-              cartItem.studentName.toLowerCase() === studentName.toLowerCase(),
+              cartItem.studentName.toLowerCase() === studentName.toLowerCase() &&
+              !(
+                cartItem.variantId === variantId &&
+                (cartItem.modoVenda ?? MODO_VENDA_PADRAO) === itemModoVenda
+              ),
           )
           .reduce((sum, cartItem) => sum + cartItem.quantity, 0);
         const maxByStudent = Math.max(
           1,
           MAX_QUANTITY_PER_STUDENT - quantityFromOtherVariants,
         );
-        const maxAllowed = Math.min(item.availableStock, maxByStudent);
+        const maxAllowed =
+          itemModoVenda === 'PRE_VENDA'
+            ? maxByStudent
+            : Math.min(item.availableStock, maxByStudent);
 
         return {
           ...item,
@@ -164,12 +228,24 @@ export function useCart() {
     localStorage.removeItem(CART_STORAGE_KEY);
   };
 
-  const getTotalAmount = () => {
-    return items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
+  const getItemsByModoVenda = (modoVenda: ModoVenda) => {
+    return items.filter(
+      (item) => (item.modoVenda ?? MODO_VENDA_PADRAO) === modoVenda,
+    );
   };
 
-  const getTotalItems = () => {
-    return items.reduce((sum, item) => sum + item.quantity, 0);
+  const getProntaEntregaItems = () => getItemsByModoVenda('PRONTA_ENTREGA');
+
+  const getPreVendaItems = () => getItemsByModoVenda('PRE_VENDA');
+
+  const getTotalAmount = (modoVenda?: ModoVenda) => {
+    const sourceItems = modoVenda ? getItemsByModoVenda(modoVenda) : items;
+    return sourceItems.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
+  };
+
+  const getTotalItems = (modoVenda?: ModoVenda) => {
+    const sourceItems = modoVenda ? getItemsByModoVenda(modoVenda) : items;
+    return sourceItems.reduce((sum, item) => sum + item.quantity, 0);
   };
 
   const getCartContext = () => {
@@ -188,10 +264,14 @@ export function useCart() {
     items,
     addItem,
     removeItem,
+    removeItems,
     updateQuantity,
     clearCart,
     getTotalAmount,
     getTotalItems,
+    getItemsByModoVenda,
+    getProntaEntregaItems,
+    getPreVendaItems,
     getCartContext,
     getQuantityForProductStudent,
     isLoaded,

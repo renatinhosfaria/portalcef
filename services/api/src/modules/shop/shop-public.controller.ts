@@ -143,6 +143,24 @@ export class ShopPublicController {
   }
 
   /**
+   * POST /shop/orders/pre-venda
+   *
+   * Cria um voucher de pré-venda sem reservar estoque.
+   * Usado quando o tamanho escolhido ainda não chegou na escola.
+   */
+  @Post("orders/pre-venda")
+  @Throttle({ strict: { limit: 50, ttl: 3600000 } }) // 50 pedidos por hora
+  @HttpCode(HttpStatus.CREATED)
+  async createPreSaleOrder(@Body() dto: CreateOrderDto) {
+    const result = await this.ordersService.createPreSaleOrder(dto);
+
+    return {
+      success: true,
+      data: result,
+    };
+  }
+
+  /**
    * GET /shop/orders/:orderNumber
    *
    * Consulta pedido existente

@@ -75,6 +75,10 @@ export default function VoucherPage({
   }, [orderNumber, phone]);
 
   const getStatusBadge = (status: Order['status']) => {
+    if (order?.orderSource === 'PRE_VENDA' && status === 'AGUARDANDO_PAGAMENTO') {
+      return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-sm font-medium bg-amber-50 text-amber-700 border border-amber-200">Reservado em pré-venda</span>;
+    }
+
     switch (status) {
       case 'AGUARDANDO_PAGAMENTO':
         return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-sm font-medium bg-amber-50 text-amber-700 border border-amber-200">Aguardando Pagamento Presencial</span>;
@@ -128,6 +132,10 @@ export default function VoucherPage({
           `• ${item.quantity}x ${item.productName} (${item.variantSize}) - ${item.studentName}`
         ).join('\n');
 
+        const validadeTexto = order.expiresAt
+          ? `_Válido até ${formatarData(order.expiresAt)}_`
+          : '_Sem validade definida. A escola avisará quando o produto estiver disponível._';
+
         const message = `🛒 *VOUCHER DE RETIRADA*
 
 📋 *Pedido #${order.orderNumber}*
@@ -146,7 +154,7 @@ ${itemsList}
 
 🔗 *Link online:* ${link}
 
-_Válido até ${formatarData(order.expiresAt)}_`;
+${validadeTexto}`;
 
         const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
 
@@ -211,7 +219,8 @@ _Válido até ${formatarData(order.expiresAt)}_`;
 
   const totalReais = order.totalAmount / 100;
   const createdDate = formatarData(order.createdAt);
-  const expiresDate = formatarData(order.expiresAt);
+  const isPreVenda = order.orderSource === 'PRE_VENDA';
+  const expiresDate = order.expiresAt ? formatarData(order.expiresAt) : 'Sem validade definida';
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -251,10 +260,13 @@ _Válido até ${formatarData(order.expiresAt)}_`;
               <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
                 <div className="flex items-start gap-3">
                   <div>
-                    <p className="font-semibold text-amber-800 mb-1">Pagamento Pendente</p>
+                    <p className="font-semibold text-amber-800 mb-1">
+                      {isPreVenda ? 'Reservado em pré-venda' : 'Pagamento Pendente'}
+                    </p>
                     <p className="text-sm text-amber-700">
-                      Dirija-se à secretaria da escola para efetuar o pagamento presencial.
-                      Após o pagamento, seus produtos estarão disponíveis para retirada.
+                      {isPreVenda
+                        ? 'A escola registrou sua reserva. O pagamento será feito na retirada, quando o produto estiver disponível.'
+                        : 'Dirija-se à secretaria da escola para efetuar o pagamento presencial. Após o pagamento, seus produtos estarão disponíveis para retirada.'}
                     </p>
                     <p className="text-xs text-amber-600 mt-2">
                       Formas de pagamento aceitas: Dinheiro, PIX, Cartão de Crédito ou Débito
@@ -324,7 +336,11 @@ _Válido até ${formatarData(order.expiresAt)}_`;
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 text-sm text-slate-600 no-print">
           <p className="font-semibold text-slate-800 mb-2">Importante:</p>
           <ul className="list-disc list-inside space-y-1">
-            <li>Este voucher é válido por 7 dias a partir da data do pedido</li>
+            {isPreVenda ? (
+              <li>Este voucher registra a pré-venda e não baixa estoque da escola</li>
+            ) : (
+              <li>Este voucher é válido por 7 dias a partir da data do pedido</li>
+            )}
             <li>Traga um documento de identificação com foto</li>
             <li>A retirada pode ser feita por qualquer responsável cadastrado</li>
             <li>Em caso de dúvidas, entre em contato com a secretaria da unidade</li>

@@ -41,7 +41,7 @@ export type OrderStatus = (typeof orderStatusEnum)[number];
 // ============================================
 // Order Source Enum
 // ============================================
-export const orderSourceEnum = ["ONLINE", "PRESENCIAL"] as const;
+export const orderSourceEnum = ["ONLINE", "PRESENCIAL", "PRE_VENDA"] as const;
 export type OrderSource = (typeof orderSourceEnum)[number];
 
 // ============================================
