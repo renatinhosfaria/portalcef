@@ -225,6 +225,13 @@
       "when": 1778932800000,
       "tag": "0031_eventos_sorteios_auditoria_brinde",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1779278400000,
+      "tag": "0032_shop_products_is_pre_sale",
+      "breakpoints": true
     }
   ]
 }

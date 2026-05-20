@@ -86,6 +86,7 @@ export const shopProducts = pgTable(
     basePrice: integer("base_price").notNull(), // em centavos
     category: text("category", { enum: productCategoryEnum }).notNull(),
     isActive: boolean("is_active").default(true).notNull(),
+    isPreSale: boolean("is_pre_sale").default(false).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -97,6 +98,7 @@ export const shopProducts = pgTable(
     schoolIdIdx: index("shop_products_school_id_idx").on(table.schoolId),
     categoryIdx: index("shop_products_category_idx").on(table.category),
     isActiveIdx: index("shop_products_is_active_idx").on(table.isActive),
+    isPreSaleIdx: index("shop_products_is_pre_sale_idx").on(table.isPreSale),
   }),
 );
 

@@ -154,6 +154,7 @@ jest.mock("@essencia/db", () => ({
     id: "id",
     imageUrl: "image_url",
     isActive: "is_active",
+    isPreSale: "is_pre_sale",
     name: "name",
   },
   shopProductVariants: {
@@ -3044,6 +3045,51 @@ describe("Ambiente de produção da loja", () => {
 });
 
 describe("Validação de DTOs da loja", () => {
+  it("contrato de produto possui flag manual de pre-venda", () => {
+    const schemaSource = readFileSync(
+      join(process.cwd(), "../../packages/db/src/schema/shop.ts"),
+      "utf8",
+    );
+    const dtoSource = readFileSync(
+      join(process.cwd(), "src/modules/shop/dto/product.dto.ts"),
+      "utf8",
+    );
+
+    expect(schemaSource).toContain(
+      'isPreSale: boolean("is_pre_sale").default(false).notNull()',
+    );
+    expect(schemaSource).toContain(
+      'isPreSaleIdx: index("shop_products_is_pre_sale_idx").on(table.isPreSale)',
+    );
+    expect(dtoSource).toContain("isPreSale?: boolean");
+  });
+
+  it("valida isPreSale como booleano no cadastro de produto", async () => {
+    const validDto = Object.assign(new CreateProductDto(), {
+      schoolId: "11111111-1111-4111-8111-111111111111",
+      name: "Produto de pre-venda",
+      category: "UNIFORME_UNISSEX",
+      basePrice: 1000,
+      isPreSale: true,
+    });
+
+    await expect(validate(validDto)).resolves.toHaveLength(0);
+
+    const invalidDto = Object.assign(new CreateProductDto(), {
+      schoolId: "11111111-1111-4111-8111-111111111111",
+      name: "Produto invalido",
+      category: "UNIFORME_UNISSEX",
+      basePrice: 1000,
+      isPreSale: "sim",
+    });
+
+    await expect(validate(invalidDto)).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ property: "isPreSale" }),
+      ]),
+    );
+  });
+
   it.each(["PRONTA_ENTREGA", "PRE_VENDA"] as const)(
     "valida modoVenda %s no filtro de catálogo",
     async (modoVenda) => {
