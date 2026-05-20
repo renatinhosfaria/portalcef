@@ -1,11 +1,17 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { use, useEffect, useState } from 'react';
 
 import { LoadingSpinner } from '@/components/Loading';
 import { ProductDetailCarousel } from '@/components/ProductDetailCarousel';
 import { Toast, useToast } from '@/components/Toast';
+import {
+  resolveStorefrontParams,
+  type ResolvedStorefrontParams,
+  type StorefrontSchoolLocation,
+} from '@/lib/storefront-url';
 import { useCart, MAX_QUANTITY_PER_STUDENT, type ModoVenda } from '@/lib/useCart';
 
 interface ProductVariant {
@@ -35,10 +41,12 @@ export default function ProductDetailPage({
 }) {
   const resolvedParams = use(params);
   const { schoolId, unitId, id } = resolvedParams;
+  const router = useRouter();
   const { addItem, getTotalItems, getQuantityForProductStudent } = useCart();
   const { toast, showToast } = useToast();
   const cartItemCount = getTotalItems();
 
+  const [resolvedStorefront, setResolvedStorefront] = useState<ResolvedStorefrontParams | null>(null);
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -48,12 +56,69 @@ export default function ProductDetailPage({
   const [adding, setAdding] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
+
+    async function resolveStorefront() {
+      try {
+        setLoading(true);
+        setError(null);
+        setProduct(null);
+        setResolvedStorefront(null);
+
+        const response = await fetch('/api/shop/locations', { cache: 'no-store' });
+        const result = await response.json();
+
+        if (!response.ok || !result?.success) {
+          throw new Error(result?.error?.message || 'Erro ao carregar loja');
+        }
+
+        const resolvedStorefront = resolveStorefrontParams(
+          result.data as StorefrontSchoolLocation[],
+          schoolId,
+          unitId,
+        );
+
+        if (!resolvedStorefront) {
+          throw new Error('Loja não encontrada');
+        }
+
+        if (cancelled) return;
+
+        setResolvedStorefront(resolvedStorefront);
+
+        if (!resolvedStorefront.isCanonical) {
+          router.replace(`${resolvedStorefront.canonicalPath}/produto/${id}`);
+        }
+      } catch (err: unknown) {
+        if (cancelled) return;
+        const message = err instanceof Error ? err.message : 'Erro ao carregar loja';
+        setError(message);
+        setLoading(false);
+      }
+    }
+
+    resolveStorefront();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [schoolId, unitId, id, router]);
+
+  useEffect(() => {
+    const storefront = resolvedStorefront;
+    if (!storefront) return;
+    const currentStorefront: ResolvedStorefrontParams = storefront;
+
+    let cancelled = false;
+
     async function loadProduct() {
+      const resolvedStorefront = currentStorefront;
+
       try {
         setLoading(true);
         setError(null);
 
-        const params = new URLSearchParams({ schoolId, unitId });
+        const params = new URLSearchParams({ schoolId: resolvedStorefront.schoolId, unitId: resolvedStorefront.unitId });
         const response = await fetch(`/api/shop/products/${id}?${params.toString()}`);
 
         if (!response.ok) {
@@ -94,19 +159,30 @@ export default function ProductDetailPage({
             })),
         };
 
+        if (cancelled) return;
         setProduct(mappedProduct);
       } catch (err) {
+        if (cancelled) return;
         console.warn('Erro ao carregar produto:', err);
         setError('Erro ao carregar detalhes do produto.');
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     }
 
     loadProduct();
-  }, [id, schoolId, unitId]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [id, resolvedStorefront]);
 
   const handleAddToCart = async () => {
+    if (!resolvedStorefront) {
+      showToast({ message: 'Loja não carregada', type: 'error' });
+      return;
+    }
+
     if (!selectedVariant || !studentName.trim()) {
       showToast({ message: 'Selecione o tamanho e informe o nome do aluno', type: 'error' });
       return;
@@ -132,8 +208,8 @@ export default function ProductDetailPage({
       await new Promise((resolve) => setTimeout(resolve, 300));
 
       const result = addItem({
-        schoolId,
-        unitId,
+        schoolId: resolvedStorefront.schoolId,
+        unitId: resolvedStorefront.unitId,
         variantId: variant.id,
         productId: product!.id,
         productName: product!.name,
@@ -177,14 +253,24 @@ export default function ProductDetailPage({
   }
 
   if (error || !product) {
+    const catalogPath = resolvedStorefront?.canonicalPath ?? '/';
+
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
         <div className="card max-w-md w-full text-center">
           <p className="text-slate-700 mb-4">{error || 'Produto não encontrado'}</p>
-          <Link href={`/${schoolId}/${unitId}`} className="btn-primary">
+          <Link href={catalogPath} className="btn-primary">
             Voltar ao Catálogo
           </Link>
         </div>
+      </div>
+    );
+  }
+
+  if (!resolvedStorefront) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <LoadingSpinner size="lg" />
       </div>
     );
   }
@@ -211,7 +297,7 @@ export default function ProductDetailPage({
       <header className="bg-white border-b border-slate-200 sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between gap-4">
           <div className="flex items-center gap-4">
-            <Link href={`/${schoolId}/${unitId}`} className="text-slate-600 hover:text-slate-800 font-medium transition-colors duration-150">
+            <Link href={resolvedStorefront.canonicalPath} className="text-slate-600 hover:text-slate-800 font-medium transition-colors duration-150">
               ← Continuar Comprando
             </Link>
             <h1 className="text-xl font-semibold text-slate-800">Detalhes do Produto</h1>

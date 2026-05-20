@@ -4,15 +4,19 @@ import { ShoppingBag, Building2, MapPin, ChevronRight, Loader2, AlertCircle, Hel
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 
+import { buildStorefrontPath } from '@/lib/storefront-url';
+
 interface School {
   id: string;
   name: string;
+  code?: string;
   units: Unit[];
 }
 
 interface Unit {
   id: string;
   name: string;
+  code?: string;
 }
 
 export default function HomePage() {
@@ -80,7 +84,7 @@ export default function HomePage() {
     const unit = school.units[0];
 
     if (typeof window !== 'undefined') {
-      window.location.href = `/${school.id}/${unit.id}`;
+      window.location.href = buildStorefrontPath(school, unit);
     }
 
     return (
@@ -131,7 +135,7 @@ export default function HomePage() {
                 {school.units.map((unit) => (
                   <Link
                     key={unit.id}
-                    href={`/${school.id}/${unit.id}`}
+                    href={buildStorefrontPath(school, unit)}
                     className="group flex items-center justify-between px-6 py-4 hover:bg-gradient-to-r hover:from-[#A3D154]/5 hover:to-[#F59E0B]/5 transition-all duration-200"
                   >
                     <div className="flex items-center gap-4">

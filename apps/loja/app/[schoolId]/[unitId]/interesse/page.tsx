@@ -5,6 +5,11 @@ import { use, useEffect, useState } from 'react';
 
 import { LoadingSkeleton, LoadingSpinner } from '@/components/Loading';
 import { Toast, useToast } from '@/components/Toast';
+import {
+  resolveStorefrontParams,
+  type ResolvedStorefrontParams,
+  type StorefrontSchoolLocation,
+} from '@/lib/storefront-url';
 
 interface ProductOption {
   id: string;
@@ -41,6 +46,8 @@ export default function InterestFormPage({
   const [submitting, setSubmitting] = useState(false);
 
   // Data fetching state
+  const [resolvedStorefront, setResolvedStorefront] = useState<ResolvedStorefrontParams | null>(null);
+  const [routeError, setRouteError] = useState<string | null>(null);
   const [products, setProducts] = useState<ProductOption[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
 
@@ -59,13 +66,69 @@ export default function InterestFormPage({
   // Step 4: Notes
   const [notes, setNotes] = useState('');
 
+  useEffect(() => {
+    let cancelled = false;
+
+    async function resolveStorefront() {
+      try {
+        setLoadingProducts(true);
+        setRouteError(null);
+        setResolvedStorefront(null);
+
+        const response = await fetch('/api/shop/locations', { cache: 'no-store' });
+        const result = await response.json();
+
+        if (!response.ok || !result?.success) {
+          throw new Error(result?.error?.message || 'Erro ao carregar loja');
+        }
+
+        const resolvedStorefront = resolveStorefrontParams(
+          result.data as StorefrontSchoolLocation[],
+          schoolId,
+          unitId,
+        );
+
+        if (!resolvedStorefront) {
+          throw new Error('Loja não encontrada');
+        }
+
+        if (cancelled) return;
+
+        setResolvedStorefront(resolvedStorefront);
+
+        if (!resolvedStorefront.isCanonical) {
+          router.replace(`${resolvedStorefront.canonicalPath}/interesse${window.location.search}`);
+        }
+      } catch (err: unknown) {
+        if (cancelled) return;
+        const message = err instanceof Error ? err.message : 'Erro ao carregar loja';
+        setRouteError(message);
+        setLoadingProducts(false);
+      }
+    }
+
+    resolveStorefront();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [schoolId, unitId, router]);
+
   // Fetch products on mount
   useEffect(() => {
+    const storefront = resolvedStorefront;
+    if (!storefront) return;
+    const currentStorefront: ResolvedStorefrontParams = storefront;
+
+    let cancelled = false;
+
     async function fetchProducts() {
+      const resolvedStorefront = currentStorefront;
+
       try {
         setLoadingProducts(true);
         // Fetch ALL products (no inStock filter) so user can show interest in anything
-        const res = await fetch(`/api/shop/catalog/${schoolId}/${unitId}`);
+        const res = await fetch(`/api/shop/catalog/${resolvedStorefront.schoolId}/${resolvedStorefront.unitId}`);
 
         if (!res.ok) throw new Error('Falha ao carregar produtos');
 
@@ -79,6 +142,7 @@ export default function InterestFormPage({
             sizes: p.variants?.map(v => v.size).sort(sortSizes) || [],
             variants: p.variants || []
           }));
+          if (cancelled) return;
           setProducts(mappedProducts);
 
           // If there is a preselected product in URL (e.g. came from product page), select it
@@ -90,15 +154,20 @@ export default function InterestFormPage({
           }
         }
       } catch (err) {
+        if (cancelled) return;
         console.error(err);
         showToast({ message: 'Erro ao carregar lista de produtos', type: 'error' });
       } finally {
-        setLoadingProducts(false);
+        if (!cancelled) setLoadingProducts(false);
       }
     }
 
     fetchProducts();
-  }, [schoolId, unitId, preselectedProductId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    return () => {
+      cancelled = true;
+    };
+  }, [resolvedStorefront, preselectedProductId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Helper to sort sizes logically
   const sortSizes = (a: string, b: string) => {
@@ -182,6 +251,11 @@ export default function InterestFormPage({
   };
 
   const handleSubmit = async () => {
+    if (!resolvedStorefront) {
+      showToast({ message: 'Loja não carregada', type: 'error' });
+      return;
+    }
+
     if (!validateStep(3)) return;
 
     setSubmitting(true);
@@ -210,8 +284,8 @@ export default function InterestFormPage({
       });
 
       const payload = {
-        schoolId,
-        unitId, // IMPORTANT: Backend expects camelCase in DTO validation usually? 
+        schoolId: resolvedStorefront.schoolId,
+        unitId: resolvedStorefront.unitId, // IMPORTANT: Backend expects camelCase in DTO validation usually?
         // shop-interest.service.dto expects snake_case or camelCase? 
         // let's check standard DTOs. Usually NestJS DTOs match frontend JSON. 
         // Our DTOs in code seem to use camelCase properties (e.g. customerName).
@@ -224,7 +298,7 @@ export default function InterestFormPage({
         items: itemsPayload
       };
 
-      const response = await fetch(`/api/shop/interest/${schoolId}`, {
+      const response = await fetch(`/api/shop/interest/${resolvedStorefront.schoolId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -239,7 +313,7 @@ export default function InterestFormPage({
 
       // Delay for UX
       setTimeout(() => {
-        router.push(`/${schoolId}/${unitId}`);
+        router.push(resolvedStorefront.canonicalPath);
       }, 2000);
 
     } catch (err: unknown) {
@@ -249,6 +323,19 @@ export default function InterestFormPage({
       setSubmitting(false);
     }
   };
+
+  if (routeError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
+        <div className="card max-w-md w-full text-center">
+          <p className="text-slate-700 mb-4">{routeError}</p>
+          <button onClick={() => window.location.reload()} className="btn-primary">
+            Tentar novamente
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50">

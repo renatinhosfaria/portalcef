@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { use, useCallback, useEffect, useState } from 'react';
 
 import { FilterSidebar } from '@/components/FilterSidebar';
@@ -9,6 +10,11 @@ import { ProductCard } from '@/components/ProductCard';
 import { ShopHeader } from '@/components/ShopHeader';
 import { ShopHero } from '@/components/ShopHero';
 import { getCatalogCardPrice } from '@/lib/catalog';
+import {
+  resolveStorefrontParams,
+  type ResolvedStorefrontParams,
+  type StorefrontSchoolLocation,
+} from '@/lib/storefront-url';
 
 interface Product {
   id: string;
@@ -50,7 +56,9 @@ export default function CatalogPage({
 }) {
   const resolvedParams = use(params);
   const { schoolId, unitId } = resolvedParams;
+  const router = useRouter();
 
+  const [resolvedStorefront, setResolvedStorefront] = useState<ResolvedStorefrontParams | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [preSaleProducts, setPreSaleProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -61,11 +69,58 @@ export default function CatalogPage({
   const [sizeFilter, setSizeFilter] = useState<string>('');
 
   useEffect(() => {
-    localStorage.setItem('cef_shop_school_id', schoolId);
-    localStorage.setItem('cef_shop_unit_id', unitId);
-  }, [schoolId, unitId]);
+    let cancelled = false;
+
+    async function resolveStorefront() {
+      try {
+        setLoading(true);
+        setError(null);
+        setResolvedStorefront(null);
+
+        const response = await fetch('/api/shop/locations', { cache: 'no-store' });
+        const result = await response.json();
+
+        if (!response.ok || !result?.success) {
+          throw new Error(result?.error?.message || 'Erro ao carregar loja');
+        }
+
+        const resolvedStorefront = resolveStorefrontParams(
+          result.data as StorefrontSchoolLocation[],
+          schoolId,
+          unitId,
+        );
+
+        if (!resolvedStorefront) {
+          throw new Error('Loja não encontrada');
+        }
+
+        if (cancelled) return;
+
+        setResolvedStorefront(resolvedStorefront);
+        localStorage.setItem('cef_shop_school_id', resolvedStorefront.schoolId);
+        localStorage.setItem('cef_shop_unit_id', resolvedStorefront.unitId);
+
+        if (!resolvedStorefront.isCanonical) {
+          router.replace(resolvedStorefront.canonicalPath);
+        }
+      } catch (err: unknown) {
+        if (cancelled) return;
+        const message = err instanceof Error ? err.message : 'Erro ao carregar loja';
+        setError(message);
+        setLoading(false);
+      }
+    }
+
+    resolveStorefront();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [schoolId, unitId, router]);
 
   const fetchProducts = useCallback(async (isBackground = false) => {
+    if (!resolvedStorefront) return;
+
     try {
       if (!isBackground) {
         setLoading(true);
@@ -79,7 +134,7 @@ export default function CatalogPage({
         }
         if (sizeFilter) params.append('size', sizeFilter);
         params.append('modoVenda', modoVenda);
-        return `/api/shop/catalog/${schoolId}/${unitId}?${params.toString()}`;
+        return `/api/shop/catalog/${resolvedStorefront.schoolId}/${resolvedStorefront.unitId}?${params.toString()}`;
       };
 
       const [readyResponse, preSaleResponse] = await Promise.all([
@@ -135,12 +190,14 @@ export default function CatalogPage({
     } finally {
       if (!isBackground) setLoading(false);
     }
-  }, [schoolId, unitId, categoryFilter, sizeFilter]);
+  }, [resolvedStorefront, categoryFilter, sizeFilter]);
 
   // Initial load
   useEffect(() => {
-    fetchProducts(false);
-  }, [fetchProducts]);
+    if (resolvedStorefront) {
+      fetchProducts(false);
+    }
+  }, [fetchProducts, resolvedStorefront]);
 
   const visibleProducts = categoryFilter === 'PRE_VENDA' ? [] : products;
   const visiblePreSaleProducts = preSaleProducts;
@@ -151,11 +208,13 @@ export default function CatalogPage({
 
   // Polling for stock updates (every 30s)
   useEffect(() => {
+    if (!resolvedStorefront) return;
+
     const interval = setInterval(() => {
       fetchProducts(true);
     }, 30000);
     return () => clearInterval(interval);
-  }, [fetchProducts]);
+  }, [fetchProducts, resolvedStorefront]);
 
   if (loading) {
     return (
@@ -185,6 +244,17 @@ export default function CatalogPage({
           >
             Tentar Novamente
           </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!resolvedStorefront) {
+    return (
+      <div className="min-h-screen bg-slate-50">
+        <ShopHeader />
+        <div className="pt-24 max-w-7xl mx-auto px-4 py-8">
+          <LoadingSkeleton />
         </div>
       </div>
     );
@@ -292,8 +362,8 @@ export default function CatalogPage({
                           style={{ animationDelay: `${Math.min(index * 75, 500)}ms` }}
                         >
                           <ProductCard
-                            schoolId={schoolId}
-                            unitId={unitId}
+                            schoolId={resolvedStorefront.schoolSlug}
+                            unitId={resolvedStorefront.unitSlug}
                             {...product}
                           />
                         </div>
@@ -325,8 +395,8 @@ export default function CatalogPage({
                           style={{ animationDelay: `${Math.min(index * 75, 500)}ms` }}
                         >
                           <ProductCard
-                            schoolId={schoolId}
-                            unitId={unitId}
+                            schoolId={resolvedStorefront.schoolSlug}
+                            unitId={resolvedStorefront.unitSlug}
                             {...product}
                           />
                         </div>

@@ -379,6 +379,49 @@ describe('Pré-venda pública', () => {
     });
 });
 
+describe('URLs amigáveis da loja', () => {
+    it('página inicial direciona para o caminho com nomes da escola e unidade', () => {
+        const source = readFileSync(join(process.cwd(), 'app/page.tsx'), 'utf8');
+
+        expect(source).toContain('buildStorefrontPath(school, unit)');
+        expect(source).not.toContain('window.location.href = `/${school.id}/${unit.id}`');
+        expect(source).not.toContain('href={`/${school.id}/${unit.id}`}');
+    });
+
+    it('catálogo resolve a rota amigável antes de buscar produtos', () => {
+        const source = readFileSync(join(process.cwd(), 'app/[schoolId]/[unitId]/page.tsx'), 'utf8');
+
+        expect(source).toContain('resolveStorefrontParams');
+        expect(source).toContain('router.replace(resolvedStorefront.canonicalPath)');
+        expect(source).toContain('/api/shop/catalog/${resolvedStorefront.schoolId}/${resolvedStorefront.unitId}');
+        expect(source).toContain('schoolId={resolvedStorefront.schoolSlug}');
+        expect(source).toContain('unitId={resolvedStorefront.unitSlug}');
+    });
+
+    it('detalhe usa slugs na navegação e IDs internos nas chamadas da API', () => {
+        const source = readFileSync(join(process.cwd(), 'app/[schoolId]/[unitId]/produto/[id]/page.tsx'), 'utf8');
+
+        expect(source).toContain('resolveStorefrontParams');
+        expect(source).toContain('router.replace(`${resolvedStorefront.canonicalPath}/produto/${id}`)');
+        expect(source).toContain('new URLSearchParams({ schoolId: resolvedStorefront.schoolId, unitId: resolvedStorefront.unitId })');
+        expect(source).toContain('schoolId: resolvedStorefront.schoolId');
+        expect(source).toContain('unitId: resolvedStorefront.unitId');
+        expect(source).toContain('href={resolvedStorefront.canonicalPath}');
+    });
+
+    it('formulário de interesse aceita URL amigável e envia IDs internos', () => {
+        const source = readFileSync(join(process.cwd(), 'app/[schoolId]/[unitId]/interesse/page.tsx'), 'utf8');
+
+        expect(source).toContain('resolveStorefrontParams');
+        expect(source).toContain('router.replace(`${resolvedStorefront.canonicalPath}/interesse${window.location.search}`)');
+        expect(source).toContain('/api/shop/catalog/${resolvedStorefront.schoolId}/${resolvedStorefront.unitId}');
+        expect(source).toContain('schoolId: resolvedStorefront.schoolId');
+        expect(source).toContain('unitId: resolvedStorefront.unitId');
+        expect(source).toContain('/api/shop/interest/${resolvedStorefront.schoolId}');
+        expect(source).toContain('router.push(resolvedStorefront.canonicalPath)');
+    });
+});
+
 describe('Voucher Page', () => {
     describe('Order Number Display', () => {
         it('should display 6-digit order number', () => {
