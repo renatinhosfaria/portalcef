@@ -342,11 +342,13 @@ describe('Pré-venda pública', () => {
 
         expect(source).toContain("fetch(buildCatalogUrl('PRONTA_ENTREGA'))");
         expect(source).toContain("fetch(buildCatalogUrl('PRE_VENDA'))");
+        expect(source).toContain("categoryFilter !== 'PRE_VENDA'");
+        expect(source).toContain("categoryFilter === 'PRE_VENDA' ? [] : products");
         expect(source).toContain('setPreSaleProducts');
         expect(source).toContain('Pronta entrega');
         expect(source).toContain('Pré-venda');
-        expect(source).toContain('{products.length} produto(s)');
-        expect(source).toContain('{preSaleProducts.length} produto(s)');
+        expect(source).toContain('{visibleProducts.length} produto(s)');
+        expect(source).toContain('{visiblePreSaleProducts.length} produto(s)');
     });
 
     it('detalhe permite selecionar tamanho sem estoque como pré-venda', () => {

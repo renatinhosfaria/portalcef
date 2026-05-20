@@ -1,6 +1,6 @@
 'use client';
 
-import { Grid3X3, Shirt, Backpack, X } from 'lucide-react';
+import { Grid3X3, Shirt, Backpack, X, Clock3 } from 'lucide-react';
 
 type FilterSidebarProps = {
   activeCategory: string;
@@ -11,6 +11,7 @@ type FilterSidebarProps = {
 
 const CATEGORIES = [
   { id: '', label: 'Ver Todos', icon: Grid3X3 },
+  { id: 'PRE_VENDA', label: 'Pré-venda', icon: Clock3 },
   { id: 'UNIFORME_FEMININO', label: 'Uniforme Feminino', icon: Shirt },
   { id: 'UNIFORME_MASCULINO', label: 'Uniforme Masculino', icon: Shirt },
   { id: 'UNIFORME_UNISSEX', label: 'Uniforme Unissex', icon: Shirt },

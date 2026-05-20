@@ -74,7 +74,9 @@ export default function CatalogPage({
 
       const buildCatalogUrl = (modoVenda: 'PRONTA_ENTREGA' | 'PRE_VENDA') => {
         const params = new URLSearchParams();
-        if (categoryFilter) params.append('category', categoryFilter);
+        if (categoryFilter && categoryFilter !== 'PRE_VENDA') {
+          params.append('category', categoryFilter);
+        }
         if (sizeFilter) params.append('size', sizeFilter);
         params.append('modoVenda', modoVenda);
         return `/api/shop/catalog/${schoolId}/${unitId}?${params.toString()}`;
@@ -140,7 +142,12 @@ export default function CatalogPage({
     fetchProducts(false);
   }, [fetchProducts]);
 
-  const totalProducts = products.length + preSaleProducts.length;
+  const visibleProducts = categoryFilter === 'PRE_VENDA' ? [] : products;
+  const visiblePreSaleProducts = preSaleProducts;
+  const totalProducts = visibleProducts.length + visiblePreSaleProducts.length;
+  const activeCategoryLabel = categoryFilter === 'PRE_VENDA'
+    ? 'Pré-venda'
+    : categoryFilter.replace(/_/g, ' ');
 
   // Polling for stock updates (every 30s)
   useEffect(() => {
@@ -222,7 +229,7 @@ export default function CatalogPage({
                 {categoryFilter ? (
                   <span className="flex items-center gap-2">
                     <span className="text-stone-600">Resultados para</span>
-                    <span className="text-gradient-brand">{categoryFilter.replace(/_/g, ' ')}</span>
+                    <span className="text-gradient-brand">{activeCategoryLabel}</span>
                   </span>
                 ) : (
                   <>
@@ -262,7 +269,7 @@ export default function CatalogPage({
               </div>
             ) : (
               <div className="space-y-12">
-                {products.length > 0 && (
+                {visibleProducts.length > 0 && (
                   <section className="space-y-5">
                     <div className="flex items-center justify-between">
                       <div>
@@ -274,11 +281,11 @@ export default function CatalogPage({
                         </p>
                       </div>
                       <span className="text-sm font-semibold text-[#5a7a1f] bg-[#F0FDF4] border border-[#A3D154]/30 rounded-lg px-3 py-1">
-                        {products.length} produto(s)
+                        {visibleProducts.length} produto(s)
                       </span>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-                      {products.map((product, index) => (
+                      {visibleProducts.map((product, index) => (
                         <div
                           key={`pronta-entrega-${product.id}`}
                           className="animate-fade-in-up"
@@ -295,7 +302,7 @@ export default function CatalogPage({
                   </section>
                 )}
 
-                {preSaleProducts.length > 0 && (
+                {visiblePreSaleProducts.length > 0 && (
                   <section className="space-y-5">
                     <div className="flex items-center justify-between border-t border-stone-200 pt-8">
                       <div>
@@ -307,11 +314,11 @@ export default function CatalogPage({
                         </p>
                       </div>
                       <span className="text-sm font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-1">
-                        {preSaleProducts.length} produto(s)
+                        {visiblePreSaleProducts.length} produto(s)
                       </span>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-                      {preSaleProducts.map((product, index) => (
+                      {visiblePreSaleProducts.map((product, index) => (
                         <div
                           key={`pre-venda-${product.id}`}
                           className="animate-fade-in-up"
