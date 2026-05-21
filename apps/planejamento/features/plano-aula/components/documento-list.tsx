@@ -46,6 +46,10 @@ import {
   obterMensagemErro,
   obterMensagemErroDaRespostaHttp,
 } from "../../../lib/mensagens-erro";
+import {
+  enviarEventosPendentes,
+  registrarEventoObservabilidade,
+} from "../../../lib/observabilidade";
 import type { PlanoDocumento } from "../types";
 
 import { DocumentoEditorModal } from "./documento-editor";
@@ -197,6 +201,28 @@ function getDocumentName(documento: PlanoDocumento): string {
   return documento.fileName || "Documento sem nome";
 }
 
+function criarMetadadosArquivo(
+  documento: PlanoDocumento,
+  modulo: "plano-aula" | "prova",
+) {
+  return {
+    planoId: modulo === "plano-aula" ? documento.planoId : undefined,
+    provaId: modulo === "prova" ? documento.planoId : undefined,
+    documentoId: documento.id,
+    nome: documento.fileName || null,
+    tipo: documento.mimeType || null,
+    tamanhoBytes: documento.fileSize || null,
+  };
+}
+
+function obterMensagemObservabilidade(error: unknown): string {
+  return error instanceof Error ? error.message : "Erro desconhecido";
+}
+
+function enviarObservabilidadeBestEffort() {
+  void enviarEventosPendentes().catch(() => undefined);
+}
+
 export function DocumentoList({
   documentos,
   onDelete,
@@ -216,6 +242,31 @@ export function DocumentoList({
   const [sincronizandoId, setSincronizandoId] = useState<string | null>(null);
   const [showConfirmarImpressao, setShowConfirmarImpressao] = useState(false);
   const [documentoParaImprimir, setDocumentoParaImprimir] = useState<string | null>(null);
+
+  const registrarEventoDocumento = (
+    documento: PlanoDocumento,
+    evento: Parameters<typeof registrarEventoObservabilidade>[0],
+  ) => {
+    registrarEventoObservabilidade({
+      ...evento,
+      arquivo: criarMetadadosArquivo(documento, modulo),
+      detalhes: {
+        modulo,
+        ...(evento.detalhes ?? {}),
+      },
+    });
+    enviarObservabilidadeBestEffort();
+  };
+
+  const registrarVisualizacaoDocumento = (documento: PlanoDocumento) => {
+    registrarEventoDocumento(documento, {
+      evento: "arquivo_acao",
+      nivel: "info",
+      detalhes: {
+        acao: "visualizar",
+      },
+    });
+  };
 
   const prepararEdicaoWord = async (documento: PlanoDocumento) => {
     const res = await fetch(
@@ -276,11 +327,36 @@ export function DocumentoList({
   const handleConfirmarImpressao = async () => {
     if (!onImprimir || !documentoParaImprimir) return;
 
+    const documento = documentos.find((doc) => doc.id === documentoParaImprimir);
+
     try {
       setImprimindoId(documentoParaImprimir);
       await onImprimir(documentoParaImprimir);
+      if (documento) {
+        registrarEventoDocumento(documento, {
+          evento: "arquivo_acao",
+          nivel: "info",
+          detalhes: {
+            acao: "imprimir",
+            status: "sucesso",
+          },
+        });
+      }
     } catch (error) {
       console.error("Erro ao registrar impressao do documento:", error);
+      if (documento) {
+        registrarEventoDocumento(documento, {
+          evento: "arquivo_acao",
+          nivel: "error",
+          erro: {
+            mensagem: obterMensagemObservabilidade(error),
+          },
+          detalhes: {
+            acao: "imprimir",
+            status: "erro",
+          },
+        });
+      }
     } finally {
       setImprimindoId(null);
       setDocumentoParaImprimir(null);
@@ -366,6 +442,7 @@ export function DocumentoList({
                       href={url}
                       target="_blank"
                       rel="noopener noreferrer"
+                      onClick={() => registrarVisualizacaoDocumento(documento)}
                       className="font-medium text-sm truncate hover:underline hover:text-primary flex items-center gap-1"
                       title={name}
                     >
@@ -447,7 +524,10 @@ export function DocumentoList({
                       variant="ghost"
                       size="icon"
                       className="h-8 w-8"
-                      onClick={() => setEditorDocId(documento.id)}
+                      onClick={() => {
+                        registrarVisualizacaoDocumento(documento);
+                        setEditorDocId(documento.id);
+                      }}
                       title="Visualizar documento"
                       aria-label="Visualizar documento"
                     >
@@ -458,7 +538,10 @@ export function DocumentoList({
                       variant="ghost"
                       size="icon"
                       className="h-8 w-8"
-                      onClick={() => window.open(url, "_blank")}
+                      onClick={() => {
+                        registrarVisualizacaoDocumento(documento);
+                        window.open(url, "_blank");
+                      }}
                       title="Visualizar documento"
                       aria-label="Visualizar documento"
                     >
@@ -473,7 +556,23 @@ export function DocumentoList({
                       className="h-8 w-8 text-blue-600 hover:bg-blue-50 hover:text-blue-700"
                       onClick={async () => {
                         try {
+                          registrarEventoDocumento(documento, {
+                            evento: "sharepoint_word",
+                            nivel: "info",
+                            detalhes: {
+                              acao: "editar",
+                              status: "inicio",
+                            },
+                          });
                           const data = await prepararEdicaoWord(documento);
+                          registrarEventoDocumento(documento, {
+                            evento: "sharepoint_word",
+                            nivel: "info",
+                            detalhes: {
+                              acao: "editar",
+                              status: "sucesso",
+                            },
+                          });
                           window.location.href = data.url;
                           // Recarregar após breve delay para exibir o botão Sincronizar
                           // (o protocolo ms-word:// abre o Word sem navegar o browser)
@@ -482,6 +581,17 @@ export function DocumentoList({
                             "O documento foi aberto no Word. Após editar e salvar, volte ao portal e clique em Sincronizar.",
                           );
                         } catch (error) {
+                          registrarEventoDocumento(documento, {
+                            evento: "sharepoint_word",
+                            nivel: "error",
+                            erro: {
+                              mensagem: obterMensagemObservabilidade(error),
+                            },
+                            detalhes: {
+                              acao: "editar",
+                              status: "erro",
+                            },
+                          });
                           toast.error(
                             obterMensagemErro(
                               error,
@@ -505,6 +615,14 @@ export function DocumentoList({
                       onClick={async () => {
                         try {
                           setSincronizandoId(documento.id);
+                          registrarEventoDocumento(documento, {
+                            evento: "sharepoint_word",
+                            nivel: "info",
+                            detalhes: {
+                              acao: "sincronizar",
+                              status: "inicio",
+                            },
+                          });
                           const res = await fetch(
                             `/api/${modulo}/${documento.planoId}/documentos/${documento.id}/sincronizar-word`,
                             { method: "POST", credentials: "include" },
@@ -516,9 +634,28 @@ export function DocumentoList({
                             );
                             throw new Error(mensagem);
                           }
+                          registrarEventoDocumento(documento, {
+                            evento: "sharepoint_word",
+                            nivel: "info",
+                            detalhes: {
+                              acao: "sincronizar",
+                              status: "sucesso",
+                            },
+                          });
                           toast.success("Documento sincronizado com sucesso!");
                           window.location.reload();
                         } catch (error) {
+                          registrarEventoDocumento(documento, {
+                            evento: "sharepoint_word",
+                            nivel: "error",
+                            erro: {
+                              mensagem: obterMensagemObservabilidade(error),
+                            },
+                            detalhes: {
+                              acao: "sincronizar",
+                              status: "erro",
+                            },
+                          });
                           toast.error(
                             obterMensagemErro(
                               error,

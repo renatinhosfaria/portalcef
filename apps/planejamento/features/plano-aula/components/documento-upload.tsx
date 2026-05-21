@@ -22,6 +22,10 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { obterMensagemErro } from "../../../lib/mensagens-erro";
+import {
+  enviarEventosPendentes,
+  registrarEventoObservabilidade,
+} from "../../../lib/observabilidade";
 import type { PlanoDocumento } from "../types";
 
 type FileUploadStatus = "pendente" | "enviando" | "sucesso" | "erro";
@@ -76,6 +80,30 @@ function validateFile(file: File): string | null {
   return null;
 }
 
+function criarMetadadosArquivo(file: File) {
+  return {
+    nome: file.name || null,
+    tipo: file.type || null,
+    tamanhoBytes: file.size || null,
+  };
+}
+
+function criarMetadadosLinkYouTube() {
+  return {
+    nome: "link_youtube",
+    tipo: "youtube",
+    tamanhoBytes: null,
+  };
+}
+
+function obterMensagemObservabilidade(error: unknown): string {
+  return error instanceof Error ? error.message : "Erro desconhecido";
+}
+
+function enviarObservabilidadeBestEffort() {
+  void enviarEventosPendentes().catch(() => undefined);
+}
+
 /** Truncar nome do arquivo para exibição */
 function truncarNome(nome: string, maxLength = 30): string {
   if (nome.length <= maxLength) return nome;
@@ -121,6 +149,19 @@ export function DocumentoUpload({
       const validationError = validateFile(file);
       if (validationError) {
         errosValidacao.push(`${file.name}: ${validationError}`);
+        registrarEventoObservabilidade({
+          evento: "upload_resultado",
+          nivel: "warn",
+          arquivo: criarMetadadosArquivo(file),
+          erro: {
+            mensagem: validationError,
+          },
+          detalhes: {
+            status: "erro_validacao",
+            tipo: "arquivo",
+          },
+        });
+        enviarObservabilidadeBestEffort();
       } else {
         novosItens.push({
           id: gerarId(),
@@ -142,6 +183,9 @@ export function DocumentoUpload({
 
   const processarUpload = useCallback(
     async (item: FileUploadItem) => {
+      const inicio = typeof performance !== "undefined" ? performance.now() : 0;
+      const tentativaAtual = item.tentativas + 1;
+
       // Marcar como enviando
       setUploadQueue((prev) =>
         prev.map((i) =>
@@ -151,6 +195,21 @@ export function DocumentoUpload({
 
       try {
         await onUpload(item.file);
+        registrarEventoObservabilidade({
+          evento: "upload_resultado",
+          nivel: "info",
+          arquivo: criarMetadadosArquivo(item.file),
+          detalhes: {
+            duracaoMs:
+              typeof performance !== "undefined"
+                ? Math.round(performance.now() - inicio)
+                : undefined,
+            status: "sucesso",
+            tentativa: tentativaAtual,
+            tipo: "arquivo",
+          },
+        });
+        enviarObservabilidadeBestEffort();
 
         // Marcar como sucesso
         setUploadQueue((prev) =>
@@ -164,7 +223,7 @@ export function DocumentoUpload({
           setUploadQueue((prev) => prev.filter((i) => i.id !== item.id));
         }, TEMPO_REMOVER_SUCESSO);
       } catch (err) {
-        const novaTentativa = item.tentativas + 1;
+        const novaTentativa = tentativaAtual;
 
         if (novaTentativa < MAX_TENTATIVAS) {
           // Recolocar como pendente para nova tentativa
@@ -180,6 +239,24 @@ export function DocumentoUpload({
             ),
           );
         } else {
+          registrarEventoObservabilidade({
+            evento: "upload_resultado",
+            nivel: "error",
+            arquivo: criarMetadadosArquivo(item.file),
+            erro: {
+              mensagem: obterMensagemObservabilidade(err),
+            },
+            detalhes: {
+              duracaoMs:
+                typeof performance !== "undefined"
+                  ? Math.round(performance.now() - inicio)
+                  : undefined,
+              status: "erro",
+              tentativa: novaTentativa,
+              tipo: "arquivo",
+            },
+          });
+          enviarObservabilidadeBestEffort();
           // Marcar como erro definitivo
           setUploadQueue((prev) =>
             prev.map((i) =>
@@ -282,11 +359,37 @@ export function DocumentoUpload({
   const handleAddLink = async () => {
     if (!linkUrl.trim()) {
       setError("Insira uma URL do YouTube.");
+      registrarEventoObservabilidade({
+        evento: "upload_resultado",
+        nivel: "warn",
+        arquivo: criarMetadadosLinkYouTube(),
+        erro: {
+          mensagem: "Insira uma URL do YouTube.",
+        },
+        detalhes: {
+          status: "erro_validacao",
+          tipo: "link_youtube",
+        },
+      });
+      enviarObservabilidadeBestEffort();
       return;
     }
 
     if (!validateYouTubeUrl(linkUrl)) {
       setError("Cole um link válido do YouTube.");
+      registrarEventoObservabilidade({
+        evento: "upload_resultado",
+        nivel: "warn",
+        arquivo: criarMetadadosLinkYouTube(),
+        erro: {
+          mensagem: "Cole um link válido do YouTube.",
+        },
+        detalhes: {
+          status: "erro_validacao",
+          tipo: "link_youtube",
+        },
+      });
+      enviarObservabilidadeBestEffort();
       return;
     }
 
@@ -295,10 +398,33 @@ export function DocumentoUpload({
 
     try {
       await onAddLink(linkUrl.trim());
+      registrarEventoObservabilidade({
+        evento: "upload_resultado",
+        nivel: "info",
+        arquivo: criarMetadadosLinkYouTube(),
+        detalhes: {
+          status: "sucesso",
+          tipo: "link_youtube",
+        },
+      });
+      enviarObservabilidadeBestEffort();
       setLinkUrl("");
       setShowLinkInput(false);
     } catch (err) {
       console.error("Erro ao adicionar link:", err);
+      registrarEventoObservabilidade({
+        evento: "upload_resultado",
+        nivel: "error",
+        arquivo: criarMetadadosLinkYouTube(),
+        erro: {
+          mensagem: "Nao foi possivel adicionar link do YouTube",
+        },
+        detalhes: {
+          status: "erro",
+          tipo: "link_youtube",
+        },
+      });
+      enviarObservabilidadeBestEffort();
       setError(
         obterMensagemErro(
           err,

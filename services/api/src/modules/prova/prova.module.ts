@@ -3,6 +3,7 @@ import { Module } from "@nestjs/common";
 import { SharePointModule } from "../../common/sharepoint/sharepoint.module";
 import { StorageModule } from "../../common/storage/storage.module";
 import { AuthModule } from "../auth/auth.module";
+import { PlanejamentoObservabilidadeProvidersModule } from "../planejamento-observabilidade/planejamento-observabilidade.module";
 import { ProvaController } from "./prova.controller";
 import { ProvaHistoricoService } from "./prova-historico.service";
 import { ProvaService } from "./prova.service";
@@ -17,7 +18,12 @@ import { ProvaService } from "./prova.service";
  * - Gestão visualiza dashboard
  */
 @Module({
-  imports: [AuthModule, StorageModule.forRoot(), SharePointModule],
+  imports: [
+    AuthModule,
+    StorageModule.forRoot(),
+    SharePointModule,
+    PlanejamentoObservabilidadeProvidersModule,
+  ],
   controllers: [ProvaController],
   providers: [ProvaService, ProvaHistoricoService],
   exports: [ProvaService],

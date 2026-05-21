@@ -1,8 +1,19 @@
+import { toast } from "@essencia/ui/toaster";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import {
+  enviarEventosPendentes,
+  registrarEventoObservabilidade,
+} from "../../../lib/observabilidade";
+
 import { DocumentoList } from "./documento-list";
+
+vi.mock("../../../lib/observabilidade", () => ({
+  enviarEventosPendentes: vi.fn().mockResolvedValue(undefined),
+  registrarEventoObservabilidade: vi.fn(),
+}));
 
 vi.mock("@essencia/ui/toaster", () => ({
   toast: {
@@ -11,8 +22,6 @@ vi.mock("@essencia/ui/toaster", () => ({
     success: vi.fn(),
   },
 }));
-
-import { toast } from "@essencia/ui/toaster";
 
 describe("DocumentoList", () => {
   const fetchMock = vi.fn();
@@ -56,6 +65,9 @@ describe("DocumentoList", () => {
     vi.mocked(toast.error).mockReset();
     vi.mocked(toast.info).mockReset();
     vi.mocked(toast.success).mockReset();
+    vi.mocked(registrarEventoObservabilidade).mockReset();
+    vi.mocked(enviarEventosPendentes).mockClear();
+    vi.mocked(enviarEventosPendentes).mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -71,6 +83,33 @@ describe("DocumentoList", () => {
     );
 
     expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("registra acao ao clicar em Visualizar para documento Word", async () => {
+    const user = userEvent.setup();
+    render(<DocumentoList documentos={[mockDocumentoWord]} />);
+
+    await user.click(
+      screen.getByRole("button", { name: /visualizar documento/i }),
+    );
+
+    expect(registrarEventoObservabilidade).toHaveBeenCalledWith(
+      expect.objectContaining({
+        evento: "arquivo_acao",
+        nivel: "info",
+        arquivo: expect.objectContaining({
+          planoId: "plano-1",
+          documentoId: "doc-1",
+          nome: "teste.docx",
+          tipo: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        }),
+        detalhes: expect.objectContaining({
+          acao: "visualizar",
+          modulo: "plano-aula",
+        }),
+      }),
+    );
+    expect(enviarEventosPendentes).toHaveBeenCalled();
   });
 
   it("fecha modal ao clicar no botão Fechar", async () => {
@@ -99,6 +138,71 @@ describe("DocumentoList", () => {
       name: /visualizar documento/i,
     });
     expect(botao).not.toBeDisabled();
+  });
+
+  it("registra acao ao clicar em Visualizar para documento PDF", async () => {
+    const user = userEvent.setup();
+    const abrirJanela = vi.spyOn(window, "open").mockImplementation(() => null);
+
+    render(<DocumentoList documentos={[mockDocumentoPdf]} />);
+
+    await user.click(
+      screen.getByRole("button", { name: /visualizar documento/i }),
+    );
+
+    expect(abrirJanela).toHaveBeenCalledWith(
+      "https://cdn/teste.pdf",
+      "_blank",
+    );
+    expect(registrarEventoObservabilidade).toHaveBeenCalledWith(
+      expect.objectContaining({
+        evento: "arquivo_acao",
+        nivel: "info",
+        arquivo: expect.objectContaining({
+          planoId: "plano-1",
+          documentoId: "doc-pdf",
+          nome: "teste.pdf",
+          tipo: "application/pdf",
+        }),
+        detalhes: expect.objectContaining({
+          acao: "visualizar",
+          modulo: "plano-aula",
+        }),
+      }),
+    );
+    expect(enviarEventosPendentes).toHaveBeenCalled();
+
+    abrirJanela.mockRestore();
+  });
+
+  it("registra acao ao clicar no nome do documento com link direto", async () => {
+    const user = userEvent.setup();
+
+    render(<DocumentoList documentos={[mockDocumentoPdf]} />);
+
+    const linkDocumento = screen.getByRole("link", { name: /teste\.pdf/i });
+    expect(linkDocumento).toHaveAttribute("href", "https://cdn/teste.pdf");
+    expect(linkDocumento).toHaveAttribute("target", "_blank");
+
+    await user.click(linkDocumento);
+
+    expect(registrarEventoObservabilidade).toHaveBeenCalledWith(
+      expect.objectContaining({
+        evento: "arquivo_acao",
+        nivel: "info",
+        arquivo: expect.objectContaining({
+          planoId: "plano-1",
+          documentoId: "doc-pdf",
+          nome: "teste.pdf",
+          tipo: "application/pdf",
+        }),
+        detalhes: expect.objectContaining({
+          acao: "visualizar",
+          modulo: "plano-aula",
+        }),
+      }),
+    );
+    expect(enviarEventosPendentes).toHaveBeenCalled();
   });
 
   it("exibe botão Imprimir para documentos aprovados com URL imprimível (PDF nativo ou DOCX com pdfUrl), mas não para Word sem PDF derivado, não aprovado, ou YouTube", () => {
@@ -283,5 +387,151 @@ describe("DocumentoList", () => {
     expect(toast.error).not.toHaveBeenCalledWith(
       expect.stringContaining("resource"),
     );
+  });
+
+  it("registra inicio e sucesso ao clicar em Editar no Word", async () => {
+    const user = userEvent.setup();
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        data: { url: "ms-word:ofe|u|https://sharepoint/edit" },
+      }),
+    });
+
+    render(
+      <DocumentoList
+        documentos={[mockDocumentoWord]}
+        canEdit={true}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /^editar no word$/i }));
+
+    await waitFor(() => {
+      expect(registrarEventoObservabilidade).toHaveBeenCalledWith(
+        expect.objectContaining({
+          evento: "sharepoint_word",
+          nivel: "info",
+          detalhes: expect.objectContaining({
+            acao: "editar",
+            status: "inicio",
+          }),
+        }),
+      );
+      expect(registrarEventoObservabilidade).toHaveBeenCalledWith(
+        expect.objectContaining({
+          evento: "sharepoint_word",
+          nivel: "info",
+          detalhes: expect.objectContaining({
+            acao: "editar",
+            status: "sucesso",
+          }),
+        }),
+      );
+    });
+  });
+
+  it("registra falha ao clicar em Editar no Word quando API retorna erro", async () => {
+    const user = userEvent.setup();
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 500,
+      json: async () => ({
+        success: false,
+        error: { message: "Falha controlada" },
+      }),
+    });
+
+    render(
+      <DocumentoList
+        documentos={[mockDocumentoWord]}
+        canEdit={true}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /^editar no word$/i }));
+
+    await waitFor(() => {
+      expect(registrarEventoObservabilidade).toHaveBeenCalledWith(
+        expect.objectContaining({
+          evento: "sharepoint_word",
+          nivel: "error",
+          detalhes: expect.objectContaining({
+            acao: "editar",
+            status: "erro",
+          }),
+          erro: expect.objectContaining({
+            mensagem: expect.any(String),
+          }),
+        }),
+      );
+    });
+  });
+
+  it("registra sincronizacao Word", async () => {
+    const user = userEvent.setup();
+    fetchMock.mockResolvedValue({ ok: true });
+
+    render(
+      <DocumentoList
+        documentos={[
+          {
+            ...mockDocumentoWord,
+            sharepointItemId: "item-1",
+            sharepointEditUrl: "https://sharepoint/edit",
+          },
+        ]}
+        canEdit={true}
+      />,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: /sincronizar alterações do word/i }),
+    );
+
+    await waitFor(() => {
+      expect(registrarEventoObservabilidade).toHaveBeenCalledWith(
+        expect.objectContaining({
+          evento: "sharepoint_word",
+          nivel: "info",
+          detalhes: expect.objectContaining({
+            acao: "sincronizar",
+            status: "sucesso",
+          }),
+        }),
+      );
+    });
+  });
+
+  it("registra acao de imprimir ao confirmar impressao", async () => {
+    const user = userEvent.setup();
+    const onImprimir = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <DocumentoList
+        documentos={[mockDocumentoPdfAprovado]}
+        onImprimir={onImprimir}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /imprimir/i }));
+    await user.click(screen.getByRole("button", { name: /sim, foi impresso/i }));
+
+    await waitFor(() => {
+      expect(registrarEventoObservabilidade).toHaveBeenCalledWith(
+        expect.objectContaining({
+          evento: "arquivo_acao",
+          nivel: "info",
+          arquivo: expect.objectContaining({
+            planoId: "plano-1",
+            documentoId: "doc-pdf-aprovado",
+          }),
+          detalhes: expect.objectContaining({
+            acao: "imprimir",
+            status: "sucesso",
+          }),
+        }),
+      );
+    });
   });
 });

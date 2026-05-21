@@ -11,6 +11,10 @@ import {
   obterMensagemErro,
   obterMensagemErroDaRespostaHttp,
 } from "../../../lib/mensagens-erro";
+import {
+  enviarEventosPendentes,
+  registrarEventoObservabilidade,
+} from "../../../lib/observabilidade";
 
 interface DocumentoViewerProps {
   planoId: string;
@@ -18,6 +22,26 @@ interface DocumentoViewerProps {
   modulo?: "plano-aula" | "prova";
   open: boolean;
   onOpenChange: (open: boolean) => void;
+}
+
+function criarMetadadosArquivo(
+  modulo: "plano-aula" | "prova",
+  planoId: string,
+  documentoId: string,
+) {
+  return {
+    planoId: modulo === "plano-aula" ? planoId : undefined,
+    provaId: modulo === "prova" ? planoId : undefined,
+    documentoId,
+  };
+}
+
+function obterMensagemObservabilidade(error: unknown): string {
+  return error instanceof Error ? error.message : "Erro desconhecido";
+}
+
+function enviarObservabilidadeBestEffort() {
+  void enviarEventosPendentes().catch(() => undefined);
 }
 
 async function carregarViaSharePoint(
@@ -120,11 +144,23 @@ export function DocumentoEditorModal({
     }
 
     const renderizar = async () => {
+      const arquivo = criarMetadadosArquivo(modulo, planoId, documentoId);
       try {
         setCarregando(true);
         setError(null);
 
         // 1. Tentar Office para Web via SharePoint (fidelidade total)
+        registrarEventoObservabilidade({
+          evento: "sharepoint_word",
+          nivel: "info",
+          arquivo,
+          detalhes: {
+            acao: "visualizar",
+            modulo,
+            status: "inicio",
+          },
+        });
+        enviarObservabilidadeBestEffort();
         const embedUrl = await carregarViaSharePoint(
           modulo,
           planoId,
@@ -132,6 +168,17 @@ export function DocumentoEditorModal({
         ).catch(() => null);
 
         if (embedUrl && iframeRef.current) {
+          registrarEventoObservabilidade({
+            evento: "sharepoint_word",
+            nivel: "info",
+            arquivo,
+            detalhes: {
+              acao: "visualizar",
+              modulo,
+              status: "sucesso",
+            },
+          });
+          enviarObservabilidadeBestEffort();
           iframeRef.current.setAttribute(
             "sandbox",
             "allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox",
@@ -141,6 +188,18 @@ export function DocumentoEditorModal({
         }
 
         // 2. Fallback: docx-preview (SharePoint não configurado ou indisponível)
+        registrarEventoObservabilidade({
+          evento: "arquivo_acao",
+          nivel: "info",
+          arquivo,
+          detalhes: {
+            acao: "download_preview",
+            fallback: "docx-preview",
+            modulo,
+            status: "inicio",
+          },
+        });
+        enviarObservabilidadeBestEffort();
         const iframeHtml = await renderizarViaDocxPreview(
           modulo,
           planoId,
@@ -150,7 +209,34 @@ export function DocumentoEditorModal({
           iframeRef.current.setAttribute("sandbox", "allow-same-origin");
           iframeRef.current.srcdoc = iframeHtml;
         }
+        registrarEventoObservabilidade({
+          evento: "arquivo_acao",
+          nivel: "info",
+          arquivo,
+          detalhes: {
+            acao: "download_preview",
+            fallback: "docx-preview",
+            modulo,
+            status: "sucesso",
+          },
+        });
+        enviarObservabilidadeBestEffort();
       } catch (err) {
+        registrarEventoObservabilidade({
+          evento: "erro_navegador",
+          nivel: "error",
+          arquivo,
+          erro: {
+            mensagem: obterMensagemObservabilidade(err),
+          },
+          detalhes: {
+            acao: "download_preview",
+            fallback: "docx-preview",
+            modulo,
+            status: "erro",
+          },
+        });
+        enviarObservabilidadeBestEffort();
         setError(
           obterMensagemErro(
             err,
