@@ -232,6 +232,13 @@
       "when": 1779278400000,
       "tag": "0032_shop_products_is_pre_sale",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1779366733143,
+      "tag": "0033_restringe_exclusao_planejamento",
+      "breakpoints": true
     }
   ]
 }

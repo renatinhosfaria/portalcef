@@ -59,7 +59,7 @@ export const planoAula = pgTable(
       .references(() => units.id, { onDelete: "cascade" }),
     planoAulaPeriodoId: uuid("plano_aula_periodo_id").references(
       () => planoAulaPeriodo.id,
-      { onDelete: "cascade" },
+      { onDelete: "restrict" },
     ),
 
     // Identificador da quinzena

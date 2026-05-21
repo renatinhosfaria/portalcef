@@ -53,7 +53,7 @@ export const prova = pgTable(
       .references(() => units.id, { onDelete: "cascade" }),
     provaCicloId: uuid("prova_ciclo_id")
       .notNull()
-      .references(() => provaCiclo.id, { onDelete: "cascade" }),
+      .references(() => provaCiclo.id, { onDelete: "restrict" }),
 
     // Status e fluxo
     status: text("status", { enum: provaStatusEnum })
