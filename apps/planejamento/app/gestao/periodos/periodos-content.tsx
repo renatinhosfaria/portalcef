@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { Button } from "@essencia/ui/components/button";
 import {
   Tabs,
@@ -8,11 +7,13 @@ import {
   TabsList,
   TabsTrigger,
 } from "@essencia/ui/components/tabs";
-import { Plus, Loader2 } from "lucide-react";
 import { toast } from "@essencia/ui/toaster";
-import { usePeriodos } from "../../../features/periodos/hooks/use-periodos";
-import { PeriodosList } from "../../../features/periodos/components/periodos-list";
+import { Loader2, Plus } from "lucide-react";
+import { useState } from "react";
+
 import { PeriodoModal } from "../../../features/periodos/components/periodo-modal";
+import { PeriodosList } from "../../../features/periodos/components/periodos-list";
+import { usePeriodos } from "../../../features/periodos/hooks/use-periodos";
 import type { Periodo } from "../../../features/periodos/hooks/use-periodos";
 
 const ETAPAS = [
@@ -94,7 +95,7 @@ export function PeriodosContent() {
       toast.success("Sucesso", {
         description: "Plano de aula excluído com sucesso",
       });
-    } catch (error) {
+    } catch {
       toast.error("Erro", {
         description: "Não foi possível excluir o plano de aula",
       });

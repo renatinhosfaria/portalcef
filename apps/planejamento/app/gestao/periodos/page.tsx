@@ -1,4 +1,5 @@
-import { Metadata } from "next";
+import type { Metadata } from "next";
+
 import { PeriodosContent } from "./periodos-content";
 
 export const metadata: Metadata = {
