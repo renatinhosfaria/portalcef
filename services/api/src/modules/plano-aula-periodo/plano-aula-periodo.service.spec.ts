@@ -45,8 +45,39 @@ jest.mock("@essencia/db/schema", () => ({
 
 import { PlanoAulaPeriodoService } from "./plano-aula-periodo.service";
 
+type PeriodoParaTeste = {
+  id?: string;
+  numero?: number;
+  dataInicio: Date | string;
+  dataFim?: Date | string;
+};
+
+type PlanoAulaPeriodoServiceInterno = {
+  verificarSobreposicao: (
+    unidadeId: string,
+    etapa: string,
+    dataInicio: Date,
+    dataFim: Date,
+    excluirId?: string,
+  ) => Promise<PeriodoParaTeste[]>;
+  buscarPeriodosPorEtapa: (
+    unidadeId: string,
+    etapa: string,
+  ) => Promise<PeriodoParaTeste[]>;
+  calcularProximoNumero: (
+    unidadeId: string,
+    etapa: string,
+    dataInicio: Date,
+  ) => Promise<number>;
+  renumerarPeriodosSeNecessario: (
+    unidadeId: string,
+    etapa: string,
+  ) => Promise<void>;
+};
+
 describe("PlanoAulaPeriodoService", () => {
   let service: PlanoAulaPeriodoService;
+  let serviceInterno: PlanoAulaPeriodoServiceInterno;
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -59,6 +90,7 @@ describe("PlanoAulaPeriodoService", () => {
     }).compile();
 
     service = module.get<PlanoAulaPeriodoService>(PlanoAulaPeriodoService);
+    serviceInterno = service as unknown as PlanoAulaPeriodoServiceInterno;
   });
 
   const configurarCriacaoValida = (
@@ -69,10 +101,10 @@ describe("PlanoAulaPeriodoService", () => {
       dataMaximaEntrega: string;
     },
   ) => {
-    jest.spyOn(service as any, "verificarSobreposicao").mockResolvedValue([]);
-    jest.spyOn(service as any, "calcularProximoNumero").mockResolvedValue(1);
+    jest.spyOn(serviceInterno, "verificarSobreposicao").mockResolvedValue([]);
+    jest.spyOn(serviceInterno, "calcularProximoNumero").mockResolvedValue(1);
     jest
-      .spyOn(service as any, "renumerarPeriodosSeNecessario")
+      .spyOn(serviceInterno, "renumerarPeriodosSeNecessario")
       .mockResolvedValue(undefined);
 
     mockReturning.mockResolvedValue([
@@ -177,8 +209,7 @@ describe("PlanoAulaPeriodoService", () => {
   describe("verificarSobreposicao", () => {
     it("deve retornar períodos sobrepostos quando houver conflito", async () => {
       // Mock: assumir que já existe período de 01/03 a 15/03
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      jest.spyOn(service as any, "buscarPeriodosPorEtapa").mockResolvedValue([
+      jest.spyOn(serviceInterno, "buscarPeriodosPorEtapa").mockResolvedValue([
         {
           id: "periodo-1",
           dataInicio: new Date("2026-03-01"),
@@ -197,8 +228,7 @@ describe("PlanoAulaPeriodoService", () => {
     });
 
     it("deve retornar vazio quando não houver sobreposição", async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      jest.spyOn(service as any, "buscarPeriodosPorEtapa").mockResolvedValue([
+      jest.spyOn(serviceInterno, "buscarPeriodosPorEtapa").mockResolvedValue([
         {
           id: "periodo-1",
           dataInicio: new Date("2026-03-01"),
@@ -219,9 +249,8 @@ describe("PlanoAulaPeriodoService", () => {
 
   describe("calcularProximoNumero", () => {
     it("deve retornar 1 quando não há períodos", async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       jest
-        .spyOn(service as any, "buscarPeriodosPorEtapa")
+        .spyOn(serviceInterno, "buscarPeriodosPorEtapa")
         .mockResolvedValue([]);
       const numero = await service["calcularProximoNumero"](
         "unidade-id",
@@ -232,8 +261,7 @@ describe("PlanoAulaPeriodoService", () => {
     });
 
     it("deve retornar próximo número em ordem cronológica", async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      jest.spyOn(service as any, "buscarPeriodosPorEtapa").mockResolvedValue([
+      jest.spyOn(serviceInterno, "buscarPeriodosPorEtapa").mockResolvedValue([
         { numero: 1, dataInicio: new Date("2026-03-01") },
         { numero: 2, dataInicio: new Date("2026-03-15") },
       ]);
@@ -246,8 +274,7 @@ describe("PlanoAulaPeriodoService", () => {
     });
 
     it("deve inserir no meio quando data está entre períodos existentes", async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      jest.spyOn(service as any, "buscarPeriodosPorEtapa").mockResolvedValue([
+      jest.spyOn(serviceInterno, "buscarPeriodosPorEtapa").mockResolvedValue([
         { numero: 1, dataInicio: new Date("2026-03-01") },
         { numero: 2, dataInicio: new Date("2026-03-20") },
       ]);
