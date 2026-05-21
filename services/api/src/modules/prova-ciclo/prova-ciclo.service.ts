@@ -1,6 +1,7 @@
 import { Injectable, BadRequestException } from "@nestjs/common";
-import { eq, and, asc, getDb } from "@essencia/db";
+import { eq, and, asc, getDb, sql } from "@essencia/db";
 import {
+  prova,
   provaCiclo,
   type ProvaCiclo,
   turmas,
@@ -15,11 +16,18 @@ export class ProvaCicloService {
   }
 
   async listarPorUnidade(unidadeId: string) {
-    return this.db
+    const ciclos: ProvaCiclo[] = await this.db
       .select()
       .from(provaCiclo)
       .where(eq(provaCiclo.unidadeId, unidadeId))
       .orderBy(asc(provaCiclo.etapa), asc(provaCiclo.numero));
+
+    return Promise.all(
+      ciclos.map(async (ciclo) => ({
+        ...ciclo,
+        provasVinculadas: await this.contarProvasVinculadas(ciclo.id),
+      })),
+    );
   }
 
   async buscarPorId(id: string, unitId: string) {
@@ -135,16 +143,8 @@ export class ProvaCicloService {
     return ciclo;
   }
 
-  async editarCiclo(id: string, dto: EditarCicloDto) {
-    // Buscar ciclo existente
-    const [cicloExistente] = await this.db
-      .select()
-      .from(provaCiclo)
-      .where(eq(provaCiclo.id, id));
-
-    if (!cicloExistente) {
-      throw new BadRequestException("Ciclo de prova nao encontrado");
-    }
+  async editarCiclo(id: string, unitId: string, dto: EditarCicloDto) {
+    const cicloExistente = await this.buscarPorId(id, unitId);
 
     // Validar datas se foram fornecidas
     if (dto.dataInicio || dto.dataFim) {
@@ -210,7 +210,9 @@ export class ProvaCicloService {
         ...dto,
         atualizadoEm: new Date(),
       })
-      .where(eq(provaCiclo.id, id))
+      .where(
+        and(eq(provaCiclo.id, id), eq(provaCiclo.unidadeId, unitId)),
+      )
       .returning();
 
     // Se as datas mudaram, renumerar
@@ -224,24 +226,34 @@ export class ProvaCicloService {
     return cicloAtualizado;
   }
 
-  async excluirCiclo(id: string) {
-    // Buscar ciclo
-    const [ciclo] = await this.db
-      .select()
-      .from(provaCiclo)
-      .where(eq(provaCiclo.id, id));
+  async excluirCiclo(id: string, unitId: string) {
+    const ciclo = await this.buscarPorId(id, unitId);
 
-    if (!ciclo) {
-      throw new BadRequestException("Ciclo de prova nao encontrado");
+    const provasVinculadas = await this.contarProvasVinculadas(id);
+    if (provasVinculadas > 0) {
+      throw new BadRequestException(
+        `Não é possível excluir. ${provasVinculadas} professoras já iniciaram este ciclo.`,
+      );
     }
 
     // Excluir ciclo
-    await this.db.delete(provaCiclo).where(eq(provaCiclo.id, id));
+    await this.db
+      .delete(provaCiclo)
+      .where(and(eq(provaCiclo.id, id), eq(provaCiclo.unidadeId, unitId)));
 
     // Renumerar ciclos restantes
     await this.renumerarCiclosSeNecessario(ciclo.unidadeId, ciclo.etapa);
 
     return { success: true, message: "Ciclo de prova excluido com sucesso" };
+  }
+
+  private async contarProvasVinculadas(cicloId: string): Promise<number> {
+    const [resultado] = await this.db
+      .select({ total: sql<number>`count(*)::int` })
+      .from(prova)
+      .where(eq(prova.provaCicloId, cicloId));
+
+    return Number(resultado?.total ?? 0);
   }
 
   private async verificarSobreposicao(

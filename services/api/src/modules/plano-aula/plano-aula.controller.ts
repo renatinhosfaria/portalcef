@@ -28,8 +28,6 @@ import {
   dashboardQuerySchema,
   type DevolverPlanoDto,
   devolverPlanoSchema,
-  type SetDeadlineDto,
-  setDeadlineSchema,
   type ListarPlanosGestaoDto,
   listarPlanosGestaoSchema,
   GESTAO_ROLES,
@@ -1002,47 +1000,6 @@ export class PlanoAulaController {
     return {
       success: true,
       data: result,
-    };
-  }
-
-  /**
-   * POST /plano-aula/config/deadline
-   * Define deadline para quinzena
-   */
-  @Post("config/deadline")
-  @Roles(...GESTAO_ACCESS)
-  async setDeadline(
-    @Req() req: { user: UserContext },
-    @Body() body: SetDeadlineDto,
-  ) {
-    // Validar DTO
-    const parsed = setDeadlineSchema.safeParse(body);
-    if (!parsed.success) {
-      throw new BadRequestException({
-        code: "VALIDATION_ERROR",
-        message: "Dados inválidos",
-        errors: parsed.error.errors,
-      });
-    }
-
-    await this.planoAulaService.setDeadline(req.user, parsed.data);
-    return {
-      success: true,
-      message: "Deadline configurado com sucesso",
-    };
-  }
-
-  /**
-   * GET /plano-aula/config/deadlines
-   * Lista deadlines configurados
-   */
-  @Get("config/deadlines")
-  @Roles(...GESTAO_ACCESS)
-  async getDeadlines(@Req() req: { user: UserContext }) {
-    const deadlines = await this.planoAulaService.getDeadlines(req.user);
-    return {
-      success: true,
-      data: deadlines,
     };
   }
 

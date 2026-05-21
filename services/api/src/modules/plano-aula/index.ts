@@ -5,19 +5,16 @@ export {
   type UserContext,
   type PlanoComDocumentos,
   type DashboardItem,
-  type QuinzenaDeadline,
 } from "./plano-aula.service";
 export {
   // DTOs
   type CreatePlanoDto,
   type DevolverPlanoDto,
-  type SetDeadlineDto,
   type ListPlanosQueryDto,
   type DashboardQueryDto,
   // Schemas (Zod)
   createPlanoSchema,
   devolverPlanoSchema,
-  setDeadlineSchema,
   listPlanosQuerySchema,
   dashboardQuerySchema,
   // Role Constants

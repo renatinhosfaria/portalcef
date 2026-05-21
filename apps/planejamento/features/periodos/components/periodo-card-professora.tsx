@@ -12,7 +12,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@essencia/ui/components/card";
-import { formatarData } from "@essencia/shared/formatar-data";
+import { criarDataCivil, formatarData } from "@essencia/shared/formatar-data";
 import { Button } from "@essencia/ui/components/button";
 import { Badge } from "@essencia/ui/components/badge";
 import { isPast, differenceInDays } from "date-fns";
@@ -39,7 +39,7 @@ export function PeriodoCardProfessora({
   planoExistente,
 }: PeriodoCardProfessoraProps) {
   const router = useRouter();
-  const dataMaxima = new Date(periodo.dataMaximaEntrega);
+  const dataMaxima = criarDataCivil(periodo.dataMaximaEntrega);
   const prazoExpirado = isPast(dataMaxima);
   const diasRestantes = differenceInDays(dataMaxima, new Date());
   const prazoProximo = diasRestantes <= 3 && diasRestantes > 0;

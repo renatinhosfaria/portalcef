@@ -55,7 +55,7 @@ export function PeriodosList({
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>
               {periodo.numero}º Plano de Aula
-              {periodo.planosVinculados && periodo.planosVinculados > 0 && (
+              {(periodo.planosVinculados ?? 0) > 0 && (
                 <Badge variant="secondary" className="ml-2">
                   {periodo.planosVinculados} professoras
                 </Badge>
@@ -75,9 +75,7 @@ export function PeriodosList({
                 size="sm"
                 aria-label={`Excluir ${periodo.numero}o Plano de Aula`}
                 onClick={() => onDelete(periodo.id)}
-                disabled={
-                  !!(periodo.planosVinculados && periodo.planosVinculados > 0)
-                }
+                disabled={(periodo.planosVinculados ?? 0) > 0}
               >
                 <Trash2 className="h-4 w-4" />
               </Button>

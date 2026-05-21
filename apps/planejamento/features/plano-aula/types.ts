@@ -129,19 +129,6 @@ export interface DevolverPlanoDto {
 }
 
 /**
- * Configuração de prazo por quinzena
- */
-export interface QuinzenaConfig {
-  id: string;
-  unitId: string;
-  quinzenaId: string;
-  deadline: string;
-  createdBy: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-/**
  * Labels de status para exibição na UI
  */
 export const STATUS_LABELS: Record<PlanoAulaStatus, string> = {

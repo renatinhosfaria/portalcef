@@ -43,23 +43,27 @@ export function CiclosList({
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>
               {ciclo.numero}a Prova
-              {ciclo.provasVinculadas && ciclo.provasVinculadas > 0 && (
+              {(ciclo.provasVinculadas ?? 0) > 0 && (
                 <Badge variant="secondary" className="ml-2">
                   {ciclo.provasVinculadas} professoras
                 </Badge>
               )}
             </CardTitle>
             <div className="flex gap-2">
-              <Button variant="ghost" size="sm" onClick={() => onEdit(ciclo)}>
+              <Button
+                variant="ghost"
+                size="sm"
+                aria-label={`Editar ${ciclo.numero}a Prova`}
+                onClick={() => onEdit(ciclo)}
+              >
                 <Pencil className="h-4 w-4" />
               </Button>
               <Button
                 variant="ghost"
                 size="sm"
+                aria-label={`Excluir ${ciclo.numero}a Prova`}
                 onClick={() => onDelete(ciclo.id)}
-                disabled={
-                  !!(ciclo.provasVinculadas && ciclo.provasVinculadas > 0)
-                }
+                disabled={(ciclo.provasVinculadas ?? 0) > 0}
               >
                 <Trash2 className="h-4 w-4" />
               </Button>

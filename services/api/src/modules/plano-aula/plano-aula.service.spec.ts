@@ -1,4 +1,4 @@
-import { BadRequestException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
 
 import { PdfGeneratorService } from "../../common/sharepoint/pdf-generator.service";
@@ -32,9 +32,18 @@ const mockDb = {
       findFirst: jest.fn(),
     },
     planoAula: {
+      findFirst: jest.fn(),
       findMany: jest.fn(),
     },
+    planoAulaPeriodo: {
+      findFirst: jest.fn(),
+    },
+    turmas: {
+      findFirst: jest.fn(),
+    },
   },
+  insert: jest.fn().mockReturnThis(),
+  values: jest.fn().mockReturnThis(),
   update: jest.fn().mockReturnThis(),
   set: jest.fn().mockReturnThis(),
   where: jest.fn().mockReturnThis(),
@@ -54,6 +63,7 @@ jest.mock("@essencia/db", () => ({
   isNotNull: jest.fn(),
   ne: jest.fn(),
   planoAula: {},
+  planoAulaPeriodo: {},
   planoAulaHistorico: {},
   planoDocumento: {},
   documentoComentario: {},
@@ -100,6 +110,66 @@ describe("PlanoAulaService", () => {
 
     service = module.get<PlanoAulaService>(PlanoAulaService);
     jest.clearAllMocks();
+  });
+
+  describe("criarPlano", () => {
+    const usuarioProfessoraUnit1 = {
+      userId: "professora-1",
+      role: "professora",
+      schoolId: "school-1",
+      unitId: "unit-1",
+      stageId: null,
+    };
+
+    beforeEach(() => {
+      mockDb.query.planoAula.findFirst.mockResolvedValue(null);
+      mockDb.returning.mockResolvedValue([
+        {
+          id: "plano-1",
+          turmaId: "turma-1",
+          unitId: "unit-1",
+          quinzenaId: "periodo-1",
+          planoAulaPeriodoId: "periodo-1",
+          status: "RASCUNHO",
+        },
+      ]);
+    });
+
+    it("bloqueia período de outra unidade ao criar plano", async () => {
+      mockDb.query.turmas.findFirst.mockResolvedValue({
+        id: "turma-1",
+        unitId: "unit-1",
+        stage: { code: "INFANTIL" },
+      });
+      mockDb.query.planoAulaPeriodo.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.criarPlano(usuarioProfessoraUnit1, {
+          turmaId: "turma-1",
+          quinzenaId: "periodo-outra-unidade",
+        }),
+      ).rejects.toThrow("Período de plano de aula não encontrado");
+    });
+
+    it("bloqueia período de etapa diferente da turma", async () => {
+      mockDb.query.turmas.findFirst.mockResolvedValue({
+        id: "turma-1",
+        unitId: "unit-1",
+        stage: { code: "INFANTIL" },
+      });
+      mockDb.query.planoAulaPeriodo.findFirst.mockResolvedValue({
+        id: "periodo-1",
+        unidadeId: "unit-1",
+        etapa: "FUNDAMENTAL_I",
+      });
+
+      await expect(
+        service.criarPlano(usuarioProfessoraUnit1, {
+          turmaId: "turma-1",
+          quinzenaId: "periodo-1",
+        }),
+      ).rejects.toThrow("Período não pertence à etapa da turma");
+    });
   });
 
   describe("registrarImpressaoDocumento", () => {
@@ -184,6 +254,25 @@ describe("PlanoAulaService", () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (service as any).registrarImpressaoDocumento(usuarioLogado, "doc-2"),
       ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe("getDashboard", () => {
+    it("bloqueia gerente_unidade consultando dashboard de outra unidade", async () => {
+      const user = {
+        userId: "user-1",
+        role: "gerente_unidade",
+        schoolId: "school-1",
+        unitId: "unit-1",
+        stageId: null,
+      };
+      mockDb.query.planoAula.findMany.mockResolvedValue([]);
+
+      await expect(service.getDashboard(user, "unit-2")).rejects.toThrow(
+        ForbiddenException,
+      );
+
+      expect(mockDb.query.planoAula.findMany).not.toHaveBeenCalled();
     });
   });
 

@@ -568,7 +568,7 @@ export function useProvaDashboard(): UseProvaDashboardReturn {
       try {
         const params = new URLSearchParams();
         if (provaCicloId) {
-          params.append("provaCicloId", provaCicloId);
+          params.append("cicloId", provaCicloId);
         }
         const queryString = params.toString() ? `?${params.toString()}` : "";
 
@@ -638,7 +638,7 @@ export function useGestaoProvas(): UseGestaoProvasReturn {
           params.append("status", filtros.status);
         }
         if (filtros.provaCicloId) {
-          params.append("provaCicloId", filtros.provaCicloId);
+          params.append("cicloId", filtros.provaCicloId);
         }
         if (filtros.segmentoId) {
           params.append("segmentoId", filtros.segmentoId);

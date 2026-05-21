@@ -21,24 +21,40 @@ import { TenantGuard } from "../../common/guards/tenant.guard";
 import { Roles } from "../../common/decorators/roles.decorator";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 
+const VISUALIZAR_PERIODOS_ROLES = [
+  "master",
+  "diretora_geral",
+  "gerente_unidade",
+  "gerente_financeiro",
+  "coordenadora_geral",
+  "coordenadora_infantil",
+  "coordenadora_fundamental_i",
+  "coordenadora_fundamental_ii",
+  "coordenadora_bercario",
+  "coordenadora_medio",
+  "analista_pedagogico",
+  "professora",
+] as const;
+
+const GERENCIAR_PERIODOS_ROLES = [
+  "master",
+  "diretora_geral",
+  "gerente_unidade",
+  "coordenadora_geral",
+  "coordenadora_infantil",
+  "coordenadora_fundamental_i",
+  "coordenadora_fundamental_ii",
+  "coordenadora_bercario",
+  "coordenadora_medio",
+] as const;
+
 @Controller("plano-aula-periodo")
 @UseGuards(AuthGuard, RolesGuard, TenantGuard)
 export class PlanoAulaPeriodoController {
   constructor(private readonly service: PlanoAulaPeriodoService) {}
 
   @Get()
-  @Roles(
-    "diretora_geral",
-    "gerente_unidade",
-    "coordenadora_geral",
-    "coordenadora_infantil",
-    "coordenadora_fundamental_i",
-    "coordenadora_fundamental_ii",
-    "coordenadora_bercario",
-    "coordenadora_medio",
-    "analista_pedagogico",
-    "professora",
-  )
+  @Roles(...VISUALIZAR_PERIODOS_ROLES)
   async listarPeriodos(
     @CurrentUser()
     session: {
@@ -57,7 +73,7 @@ export class PlanoAulaPeriodoController {
   }
 
   @Get("turma/:turmaId")
-  @Roles("professora", "coordenadora_geral", "coordenadora_infantil")
+  @Roles(...VISUALIZAR_PERIODOS_ROLES)
   async buscarPeriodosDaTurma(
     @CurrentUser()
     session: {
@@ -77,13 +93,7 @@ export class PlanoAulaPeriodoController {
   }
 
   @Get(":id")
-  @Roles(
-    "diretora_geral",
-    "gerente_unidade",
-    "coordenadora_geral",
-    "coordenadora_infantil",
-    "professora",
-  )
+  @Roles(...VISUALIZAR_PERIODOS_ROLES)
   async buscarPeriodo(
     @CurrentUser()
     session: {
@@ -103,16 +113,7 @@ export class PlanoAulaPeriodoController {
   }
 
   @Post()
-  @Roles(
-    "diretora_geral",
-    "gerente_unidade",
-    "coordenadora_geral",
-    "coordenadora_infantil",
-    "coordenadora_fundamental_i",
-    "coordenadora_fundamental_ii",
-    "coordenadora_bercario",
-    "coordenadora_medio",
-  )
+  @Roles(...GERENCIAR_PERIODOS_ROLES)
   async criarPeriodo(
     @CurrentUser()
     session: {
@@ -144,16 +145,7 @@ export class PlanoAulaPeriodoController {
   }
 
   @Put(":id")
-  @Roles(
-    "diretora_geral",
-    "gerente_unidade",
-    "coordenadora_geral",
-    "coordenadora_infantil",
-    "coordenadora_fundamental_i",
-    "coordenadora_fundamental_ii",
-    "coordenadora_bercario",
-    "coordenadora_medio",
-  )
+  @Roles(...GERENCIAR_PERIODOS_ROLES)
   async editarPeriodo(
     @CurrentUser()
     session: {
@@ -180,21 +172,12 @@ export class PlanoAulaPeriodoController {
       );
     }
 
-    const data = await this.service.editarPeriodo(id, dto);
+    const data = await this.service.editarPeriodo(id, session.unitId, dto);
     return { success: true, data };
   }
 
   @Delete(":id")
-  @Roles(
-    "diretora_geral",
-    "gerente_unidade",
-    "coordenadora_geral",
-    "coordenadora_infantil",
-    "coordenadora_fundamental_i",
-    "coordenadora_fundamental_ii",
-    "coordenadora_bercario",
-    "coordenadora_medio",
-  )
+  @Roles(...GERENCIAR_PERIODOS_ROLES)
   async excluirPeriodo(
     @CurrentUser()
     session: {
@@ -220,7 +203,7 @@ export class PlanoAulaPeriodoController {
       );
     }
 
-    const result = await this.service.excluirPeriodo(id);
+    const result = await this.service.excluirPeriodo(id, session.unitId);
     return { success: true, data: result };
   }
 
@@ -235,7 +218,12 @@ export class PlanoAulaPeriodoController {
 
     // Roles globais podem editar qualquer etapa
     if (
-      ["diretora_geral", "gerente_unidade", "coordenadora_geral"].includes(role)
+      [
+        "master",
+        "diretora_geral",
+        "gerente_unidade",
+        "coordenadora_geral",
+      ].includes(role)
     ) {
       return true;
     }

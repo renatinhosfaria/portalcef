@@ -249,13 +249,13 @@ pnpm --filter @essencia/api test -- test/health.controller.spec.ts --runInBand
 
 | Classe             | Área                    | Invariante obrigatória                                                                               | Teste bloqueante                                                                                              |
 | ------------------ | ----------------------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `API-PLANNINGS-01` | Draft, submit e revisão | Rascunho, submissão, aprovação e devolução obedecem transições de status e papel do usuário.         | `services/api/src/modules/plannings/plannings.service.spec.ts`                                                |
-| `API-PLANNINGS-02` | Dashboard e escopo      | Dashboard, feedback, revisões e consultas por segmento respeitam turma, quinzena e tenant da sessão. | `services/api/src/modules/plannings/plannings.service.spec.ts` e `services/api/test/plannings.module.spec.js` |
+| `API-PLANNINGS-01` | Superfície legada       | O controller legado expõe somente `GET /plannings/turmas`; fluxos de rascunho, envio, revisão, dashboard e quinzenas ficam nos módulos novos. | `services/api/src/modules/plannings/plannings.service.spec.ts` |
+| `API-PLANNINGS-02` | Escopo de turmas        | A consulta de turmas usa `unitId`, `stageId`, professora e status ativo a partir da sessão. | `services/api/src/modules/plannings/plannings.service.spec.ts` |
 
 Comando mínimo:
 
 ```bash
-pnpm --filter @essencia/api test -- src/modules/plannings/plannings.service.spec.ts test/plannings.module.spec.js --runInBand
+pnpm --filter @essencia/api test -- src/modules/plannings/plannings.service.spec.ts --runInBand
 ```
 
 ### `plano-aula`

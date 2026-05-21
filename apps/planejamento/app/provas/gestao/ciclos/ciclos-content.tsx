@@ -1,5 +1,6 @@
 "use client";
 
+import { useTenant } from "@essencia/shared/providers/tenant";
 import { Button } from "@essencia/ui/components/button";
 import {
   Tabs,
@@ -9,7 +10,7 @@ import {
 } from "@essencia/ui/components/tabs";
 import { toast } from "@essencia/ui/toaster";
 import { Plus, Loader2 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { useCiclos } from "../../../../features/prova";
 import type { ProvaCiclo } from "../../../../features/prova";
@@ -47,6 +48,7 @@ function getEtapasPermitidas(role?: string): Etapa[] {
   if (
     role === "master" ||
     role === "diretora_geral" ||
+    role === "gerente_unidade" ||
     role === "coordenadora_geral"
   ) {
     return [...ETAPAS];
@@ -66,6 +68,7 @@ function getEtapasPermitidas(role?: string): Etapa[] {
 }
 
 export function CiclosContent() {
+  const { role, isLoaded } = useTenant();
   const {
     ciclos,
     isLoading,
@@ -79,10 +82,16 @@ export function CiclosContent() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingCiclo, setEditingCiclo] = useState<ProvaCiclo | null>(null);
 
-  // TODO: Pegar role do contexto de autenticacao
-  // Por enquanto, assumindo coordenadora_geral para desenvolvimento
-  const userRole = "coordenadora_geral";
-  const etapasPermitidas = getEtapasPermitidas(userRole);
+  const etapasPermitidas = useMemo(() => getEtapasPermitidas(role), [role]);
+  const selectedEtapaValida = etapasPermitidas.includes(selectedEtapa)
+    ? selectedEtapa
+    : etapasPermitidas[0];
+
+  useEffect(() => {
+    if (selectedEtapaValida && selectedEtapaValida !== selectedEtapa) {
+      setSelectedEtapa(selectedEtapaValida);
+    }
+  }, [selectedEtapa, selectedEtapaValida]);
 
   const handleEdit = (ciclo: ProvaCiclo) => {
     setEditingCiclo(ciclo);
@@ -137,7 +146,17 @@ export function CiclosContent() {
     }
   };
 
-  if (etapasPermitidas.length === 0) {
+  if (!isLoaded) {
+    return (
+      <div className="container mx-auto py-6">
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      </div>
+    );
+  }
+
+  if (etapasPermitidas.length === 0 || !selectedEtapaValida) {
     return (
       <div className="container mx-auto py-6">
         <div className="text-center py-12">
@@ -188,8 +207,8 @@ export function CiclosContent() {
         </div>
       ) : (
         <Tabs
-          defaultValue="BERCARIO"
-          value={selectedEtapa}
+          defaultValue={selectedEtapaValida}
+          value={selectedEtapaValida}
           onValueChange={(value) => setSelectedEtapa(value as Etapa)}
         >
           <TabsList className="grid w-full grid-cols-5">
@@ -227,7 +246,7 @@ export function CiclosContent() {
         }}
         ciclo={editingCiclo}
         etapas={etapasPermitidas}
-        defaultEtapa={selectedEtapa}
+        defaultEtapa={selectedEtapaValida}
         onSubmit={handleSubmit}
       />
     </div>

@@ -20,7 +20,7 @@ import {
   planoAulaHistorico,
   planoDocumento,
   documentoComentario,
-  quinzenaConfig,
+  planoAulaPeriodo,
   turmas,
   users,
   type PlanoAula,
@@ -36,7 +36,6 @@ import { PlanoAulaHistoricoService } from "./plano-aula-historico.service";
 import {
   type CreatePlanoDto,
   type DevolverPlanoDto,
-  type SetDeadlineDto,
   type ListarPlanosGestaoDto,
   STATUS_URL_MAP,
   isAnalista,
@@ -96,15 +95,6 @@ export interface DashboardItem {
   segmento?: string;
 }
 
-/**
- * Deadline de quinzena
- */
-export interface QuinzenaDeadline {
-  quinzenaId: string;
-  deadline: Date;
-  unitId: string;
-}
-
 // ============================================
 // Service
 // ============================================
@@ -144,12 +134,31 @@ export class PlanoAulaService {
     // Verificar se turma existe e pertence à unidade do usuário
     const turma = await db.query.turmas.findFirst({
       where: and(eq(turmas.id, dto.turmaId), eq(turmas.unitId, user.unitId)),
+      with: { stage: true },
     });
 
     if (!turma) {
       throw new NotFoundException(
         "Turma não encontrada ou não pertence à sua unidade",
       );
+    }
+
+    const periodo = await db.query.planoAulaPeriodo.findFirst({
+      where: and(
+        eq(planoAulaPeriodo.id, dto.quinzenaId),
+        eq(planoAulaPeriodo.unidadeId, user.unitId),
+      ),
+    });
+
+    if (!periodo) {
+      throw new NotFoundException(
+        "Período de plano de aula não encontrado ou não pertence à sua unidade",
+      );
+    }
+
+    const turmaStageCode = turma.stage?.code;
+    if (turmaStageCode && periodo.etapa !== turmaStageCode) {
+      throw new BadRequestException("Período não pertence à etapa da turma");
     }
 
     // Verificar se já existe plano para esta turma/quinzena
@@ -822,18 +831,7 @@ export class PlanoAulaService {
   }> {
     const db = getDb();
 
-    // Determinar unitId a usar (do param ou da sessão)
-    const targetUnitId = unitId || user.unitId;
-    if (!targetUnitId) {
-      throw new BadRequestException("Unidade não especificada");
-    }
-
-    // Verificar permissão de acesso à unidade
-    if (!isGestao(user.role) && user.unitId !== targetUnitId) {
-      throw new ForbiddenException(
-        "Você não tem permissão para acessar dados desta unidade",
-      );
-    }
+    const targetUnitId = this.resolverUnitIdEscopo(user, unitId);
 
     // Construir filtro
     const filters = [eq(planoAula.unitId, targetUnitId)];
@@ -889,6 +887,28 @@ export class PlanoAulaService {
     }
 
     return { totais, porSegmento };
+  }
+
+  private resolverUnitIdEscopo(user: UserContext, unitId?: string): string {
+    if (!user.unitId && user.role !== "master") {
+      throw new BadRequestException("Unidade não especificada");
+    }
+
+    if (user.role === "master") {
+      const targetUnitId = unitId ?? user.unitId;
+      if (!targetUnitId) {
+        throw new BadRequestException("Unidade não especificada");
+      }
+      return targetUnitId;
+    }
+
+    if (unitId && unitId !== user.unitId) {
+      throw new ForbiddenException(
+        "Você não tem permissão para acessar dados desta unidade",
+      );
+    }
+
+    return user.unitId as string;
   }
 
   /**
@@ -1071,57 +1091,6 @@ export class PlanoAulaService {
     };
 
     return `${formatarData(dataInicio)} a ${formatarData(dataFim)}`;
-  }
-
-  /**
-   * Define deadline para quinzena em uma unidade
-   */
-  async setDeadline(user: UserContext, dto: SetDeadlineDto): Promise<void> {
-    const db = getDb();
-
-    if (!user.unitId) {
-      throw new BadRequestException("Usuário não possui unidade associada");
-    }
-
-    // UPSERT: atualiza se existe, cria se não
-    await db
-      .insert(quinzenaConfig)
-      .values({
-        unitId: user.unitId,
-        quinzenaId: dto.quinzenaId,
-        deadline: new Date(dto.deadline),
-        createdBy: user.userId,
-      })
-      .onConflictDoUpdate({
-        target: [quinzenaConfig.unitId, quinzenaConfig.quinzenaId],
-        set: {
-          deadline: new Date(dto.deadline),
-          updatedAt: new Date(),
-        },
-      });
-  }
-
-  /**
-   * Lista deadlines configurados para a unidade
-   */
-  async getDeadlines(user: UserContext): Promise<QuinzenaDeadline[]> {
-    const db = getDb();
-
-    if (!user.unitId) {
-      throw new BadRequestException("Usuário não possui unidade associada");
-    }
-
-    const configs = await db.query.quinzenaConfig.findMany({
-      where: eq(quinzenaConfig.unitId, user.unitId),
-      orderBy: [desc(quinzenaConfig.quinzenaId)],
-    });
-
-    type QuinzenaConfigRow = (typeof configs)[number];
-    return configs.map((c: QuinzenaConfigRow) => ({
-      quinzenaId: c.quinzenaId,
-      deadline: c.deadline,
-      unitId: c.unitId,
-    }));
   }
 
   /**

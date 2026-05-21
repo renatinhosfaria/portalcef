@@ -18,24 +18,40 @@ import { TenantGuard } from "../../common/guards/tenant.guard";
 import { Roles } from "../../common/decorators/roles.decorator";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 
+const VISUALIZAR_CICLOS_ROLES = [
+  "master",
+  "diretora_geral",
+  "gerente_unidade",
+  "gerente_financeiro",
+  "coordenadora_geral",
+  "coordenadora_infantil",
+  "coordenadora_fundamental_i",
+  "coordenadora_fundamental_ii",
+  "coordenadora_bercario",
+  "coordenadora_medio",
+  "analista_pedagogico",
+  "professora",
+] as const;
+
+const GERENCIAR_CICLOS_ROLES = [
+  "master",
+  "diretora_geral",
+  "gerente_unidade",
+  "coordenadora_geral",
+  "coordenadora_infantil",
+  "coordenadora_fundamental_i",
+  "coordenadora_fundamental_ii",
+  "coordenadora_bercario",
+  "coordenadora_medio",
+] as const;
+
 @Controller("prova-ciclo")
 @UseGuards(AuthGuard, RolesGuard, TenantGuard)
 export class ProvaCicloController {
   constructor(private readonly service: ProvaCicloService) {}
 
   @Get()
-  @Roles(
-    "diretora_geral",
-    "gerente_unidade",
-    "coordenadora_geral",
-    "coordenadora_infantil",
-    "coordenadora_fundamental_i",
-    "coordenadora_fundamental_ii",
-    "coordenadora_bercario",
-    "coordenadora_medio",
-    "analista_pedagogico",
-    "professora",
-  )
+  @Roles(...VISUALIZAR_CICLOS_ROLES)
   async listarCiclos(
     @CurrentUser()
     session: {
@@ -54,18 +70,7 @@ export class ProvaCicloController {
   }
 
   @Get("turma/:turmaId")
-  @Roles(
-    "diretora_geral",
-    "gerente_unidade",
-    "coordenadora_geral",
-    "coordenadora_infantil",
-    "coordenadora_fundamental_i",
-    "coordenadora_fundamental_ii",
-    "coordenadora_bercario",
-    "coordenadora_medio",
-    "analista_pedagogico",
-    "professora",
-  )
+  @Roles(...VISUALIZAR_CICLOS_ROLES)
   async buscarCiclosDaTurma(
     @CurrentUser()
     session: {
@@ -85,18 +90,7 @@ export class ProvaCicloController {
   }
 
   @Get(":id")
-  @Roles(
-    "diretora_geral",
-    "gerente_unidade",
-    "coordenadora_geral",
-    "coordenadora_infantil",
-    "coordenadora_fundamental_i",
-    "coordenadora_fundamental_ii",
-    "coordenadora_bercario",
-    "coordenadora_medio",
-    "analista_pedagogico",
-    "professora",
-  )
+  @Roles(...VISUALIZAR_CICLOS_ROLES)
   async buscarCiclo(
     @CurrentUser()
     session: {
@@ -116,16 +110,7 @@ export class ProvaCicloController {
   }
 
   @Post()
-  @Roles(
-    "diretora_geral",
-    "gerente_unidade",
-    "coordenadora_geral",
-    "coordenadora_infantil",
-    "coordenadora_fundamental_i",
-    "coordenadora_fundamental_ii",
-    "coordenadora_bercario",
-    "coordenadora_medio",
-  )
+  @Roles(...GERENCIAR_CICLOS_ROLES)
   async criarCiclo(
     @CurrentUser()
     session: {
@@ -157,16 +142,7 @@ export class ProvaCicloController {
   }
 
   @Put(":id")
-  @Roles(
-    "diretora_geral",
-    "gerente_unidade",
-    "coordenadora_geral",
-    "coordenadora_infantil",
-    "coordenadora_fundamental_i",
-    "coordenadora_fundamental_ii",
-    "coordenadora_bercario",
-    "coordenadora_medio",
-  )
+  @Roles(...GERENCIAR_CICLOS_ROLES)
   async editarCiclo(
     @CurrentUser()
     session: {
@@ -193,21 +169,12 @@ export class ProvaCicloController {
       );
     }
 
-    const data = await this.service.editarCiclo(id, dto);
+    const data = await this.service.editarCiclo(id, session.unitId, dto);
     return { success: true, data };
   }
 
   @Delete(":id")
-  @Roles(
-    "diretora_geral",
-    "gerente_unidade",
-    "coordenadora_geral",
-    "coordenadora_infantil",
-    "coordenadora_fundamental_i",
-    "coordenadora_fundamental_ii",
-    "coordenadora_bercario",
-    "coordenadora_medio",
-  )
+  @Roles(...GERENCIAR_CICLOS_ROLES)
   async excluirCiclo(
     @CurrentUser()
     session: {
@@ -233,7 +200,7 @@ export class ProvaCicloController {
       );
     }
 
-    const result = await this.service.excluirCiclo(id);
+    const result = await this.service.excluirCiclo(id, session.unitId);
     return { success: true, data: result };
   }
 
@@ -248,7 +215,12 @@ export class ProvaCicloController {
 
     // Roles globais podem editar qualquer etapa
     if (
-      ["diretora_geral", "gerente_unidade", "coordenadora_geral"].includes(role)
+      [
+        "master",
+        "diretora_geral",
+        "gerente_unidade",
+        "coordenadora_geral",
+      ].includes(role)
     ) {
       return true;
     }

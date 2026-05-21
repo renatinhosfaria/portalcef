@@ -1,6 +1,7 @@
 import { Injectable, BadRequestException } from "@nestjs/common";
-import { eq, and, asc, getDb } from "@essencia/db";
+import { eq, and, asc, getDb, sql } from "@essencia/db";
 import {
+  planoAula,
   planoAulaPeriodo,
   type PlanoAulaPeriodo,
   turmas,
@@ -18,11 +19,18 @@ export class PlanoAulaPeriodoService {
   }
 
   async listarPorUnidade(unidadeId: string) {
-    return this.db
+    const periodos: PlanoAulaPeriodo[] = await this.db
       .select()
       .from(planoAulaPeriodo)
       .where(eq(planoAulaPeriodo.unidadeId, unidadeId))
       .orderBy(asc(planoAulaPeriodo.etapa), asc(planoAulaPeriodo.numero));
+
+    return Promise.all(
+      periodos.map(async (periodo) => ({
+        ...periodo,
+        planosVinculados: await this.contarPlanosVinculados(periodo.id),
+      })),
+    );
   }
 
   async buscarPorId(id: string, unitId: string) {
@@ -55,33 +63,9 @@ export class PlanoAulaPeriodoService {
       .innerJoin(educationStages, eq(turmas.stageId, educationStages.id))
       .where(and(eq(turmas.id, turmaId), eq(turmas.unitId, unitId)));
 
-    // Debug logging
     if (!turma) {
-      console.error(
-        `buscarPorTurma failed: Turma not found. turmaId=${turmaId}, unitId=${unitId}`,
-      );
-      // Also check if turma exists without unit constraint/stage join to narrow down issue
-      const simpleCheck = await this.db
-        .select({ id: turmas.id, unitId: turmas.unitId })
-        .from(turmas)
-        .where(eq(turmas.id, turmaId))
-        .limit(1);
-
-      if (simpleCheck.length > 0) {
-        console.error(
-          `Turma exists but mismatch or join failure. Found:`,
-          simpleCheck[0],
-        );
-      } else {
-        console.error(`Turma ID does not exist in DB.`);
-      }
-
       throw new BadRequestException("Turma não encontrada");
     }
-
-    console.log(
-      `buscarPorTurma: Found turma ${turmaId}, stage ${turma.etapaCode}`,
-    );
 
     // 2. Buscar períodos da etapa da turma
     return this.db
@@ -165,16 +149,8 @@ export class PlanoAulaPeriodoService {
     return periodo;
   }
 
-  async editarPeriodo(id: string, dto: EditarPeriodoDto) {
-    // Buscar período existente
-    const [periodoExistente] = await this.db
-      .select()
-      .from(planoAulaPeriodo)
-      .where(eq(planoAulaPeriodo.id, id));
-
-    if (!periodoExistente) {
-      throw new BadRequestException("Período não encontrado");
-    }
+  async editarPeriodo(id: string, unitId: string, dto: EditarPeriodoDto) {
+    const periodoExistente = await this.buscarPorId(id, unitId);
 
     // Validar datas se foram fornecidas
     if (dto.dataInicio || dto.dataFim) {
@@ -240,7 +216,12 @@ export class PlanoAulaPeriodoService {
         ...dto,
         atualizadoEm: new Date(),
       })
-      .where(eq(planoAulaPeriodo.id, id))
+      .where(
+        and(
+          eq(planoAulaPeriodo.id, id),
+          eq(planoAulaPeriodo.unidadeId, unitId),
+        ),
+      )
       .returning();
 
     // Se as datas mudaram, renumerar
@@ -254,27 +235,39 @@ export class PlanoAulaPeriodoService {
     return periodoAtualizado;
   }
 
-  async excluirPeriodo(id: string) {
-    // Buscar período
-    const [periodo] = await this.db
-      .select()
-      .from(planoAulaPeriodo)
-      .where(eq(planoAulaPeriodo.id, id));
+  async excluirPeriodo(id: string, unitId: string) {
+    const periodo = await this.buscarPorId(id, unitId);
 
-    if (!periodo) {
-      throw new BadRequestException("Período não encontrado");
+    const planosVinculados = await this.contarPlanosVinculados(id);
+    if (planosVinculados > 0) {
+      throw new BadRequestException(
+        `Não é possível excluir. ${planosVinculados} professoras já iniciaram este período.`,
+      );
     }
 
-    // TODO: Verificar se há planos de aula vinculados
-    // Quando o schema plano_aula for atualizado com periodoId
-
     // Excluir período
-    await this.db.delete(planoAulaPeriodo).where(eq(planoAulaPeriodo.id, id));
+    await this.db
+      .delete(planoAulaPeriodo)
+      .where(
+        and(
+          eq(planoAulaPeriodo.id, id),
+          eq(planoAulaPeriodo.unidadeId, unitId),
+        ),
+      );
 
     // Renumerar períodos restantes
     await this.renumerarPeriodosSeNecessario(periodo.unidadeId, periodo.etapa);
 
     return { success: true, message: "Período excluído com sucesso" };
+  }
+
+  private async contarPlanosVinculados(periodoId: string): Promise<number> {
+    const [resultado] = await this.db
+      .select({ total: sql<number>`count(*)::int` })
+      .from(planoAula)
+      .where(eq(planoAula.planoAulaPeriodoId, periodoId));
+
+    return Number(resultado?.total ?? 0);
   }
 
   private async verificarSobreposicao(

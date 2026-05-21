@@ -39,17 +39,6 @@ export const devolverPlanoSchema = z.object({
 export type DevolverPlanoDto = z.infer<typeof devolverPlanoSchema>;
 
 /**
- * Schema para definir deadline de quinzena
- * Gestão define deadline para entrega de planos
- */
-export const setDeadlineSchema = z.object({
-  quinzenaId: z.string().uuid("quinzenaId deve ser um UUID válido"),
-  deadline: z.string().datetime("deadline deve ser uma data/hora ISO válida"),
-});
-
-export type SetDeadlineDto = z.infer<typeof setDeadlineSchema>;
-
-/**
  * Schema para listagem de planos pendentes (query params)
  */
 export const listPlanosQuerySchema = z.object({
@@ -108,6 +97,7 @@ export const GESTAO_ROLES = [
   "master",
   "diretora_geral",
   "gerente_unidade",
+  "gerente_financeiro",
   "coordenadora_geral",
 ] as const;
 
