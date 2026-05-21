@@ -1,17 +1,96 @@
 import { Test, TestingModule } from "@nestjs/testing";
-import { PlanoAulaPeriodoService } from "./plano-aula-periodo.service";
 import { BadRequestException } from "@nestjs/common";
+
+const mockReturning = jest.fn();
+const mockValues = jest.fn(() => ({ returning: mockReturning }));
+const mockInsert = jest.fn(() => ({ values: mockValues }));
+
+const mockDb = {
+  insert: mockInsert,
+  select: jest.fn().mockReturnThis(),
+  from: jest.fn().mockReturnThis(),
+  where: jest.fn().mockResolvedValue([]),
+  update: jest.fn().mockReturnThis(),
+  set: jest.fn().mockReturnThis(),
+  orderBy: jest.fn().mockResolvedValue([]),
+};
+
+jest.mock("@essencia/db", () => ({
+  getDb: jest.fn(() => mockDb),
+  eq: jest.fn(),
+  and: jest.fn(),
+  asc: jest.fn(),
+}));
+
+jest.mock("@essencia/db/schema", () => ({
+  planoAulaPeriodo: {
+    id: "id",
+    unidadeId: "unidadeId",
+    etapa: "etapa",
+    numero: "numero",
+    dataInicio: "dataInicio",
+    dataFim: "dataFim",
+    atualizadoEm: "atualizadoEm",
+  },
+  turmas: {
+    id: "turmas.id",
+    unitId: "turmas.unitId",
+    stageId: "turmas.stageId",
+  },
+  educationStages: {
+    id: "educationStages.id",
+    code: "educationStages.code",
+  },
+}));
+
+import { PlanoAulaPeriodoService } from "./plano-aula-periodo.service";
 
 describe("PlanoAulaPeriodoService", () => {
   let service: PlanoAulaPeriodoService;
 
   beforeEach(async () => {
+    jest.clearAllMocks();
+    mockReturning.mockReset();
+    mockValues.mockClear();
+    mockInsert.mockClear();
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [PlanoAulaPeriodoService],
     }).compile();
 
     service = module.get<PlanoAulaPeriodoService>(PlanoAulaPeriodoService);
   });
+
+  const configurarCriacaoValida = (
+    dto: {
+      etapa: string;
+      dataInicio: string;
+      dataFim: string;
+      dataMaximaEntrega: string;
+    },
+  ) => {
+    jest.spyOn(service as any, "verificarSobreposicao").mockResolvedValue([]);
+    jest.spyOn(service as any, "calcularProximoNumero").mockResolvedValue(1);
+    jest
+      .spyOn(service as any, "renumerarPeriodosSeNecessario")
+      .mockResolvedValue(undefined);
+
+    mockReturning.mockResolvedValue([
+      {
+        id: "periodo-id",
+        unidadeId: "unidade-id",
+        etapa: dto.etapa,
+        numero: 1,
+        descricao: null,
+        dataInicio: dto.dataInicio,
+        dataFim: dto.dataFim,
+        dataMaximaEntrega: dto.dataMaximaEntrega,
+        criadoPor: "user-id",
+        criadoEm: new Date("2026-01-01T00:00:00.000Z"),
+        atualizadoEm: new Date("2026-01-01T00:00:00.000Z"),
+      },
+    ]);
+  };
 
   describe("criarPeriodo", () => {
     it("deve lançar erro se dataInicio >= dataFim", async () => {
@@ -35,8 +114,10 @@ describe("PlanoAulaPeriodoService", () => {
         dataMaximaEntrega: "2026-03-08", // ✅ ANTES do início
       };
 
+      configurarCriacaoValida(dto);
+
       const result = await service.criarPeriodo("unidade-id", "user-id", dto);
-      expect(result).toBe(null); // TODO para Task 8
+      expect(result).toEqual(expect.objectContaining({ id: "periodo-id" }));
     });
 
     it("deve lançar erro se datas forem inválidas", async () => {
@@ -86,10 +167,10 @@ describe("PlanoAulaPeriodoService", () => {
         dataMaximaEntrega: "2026-03-05", // ✅ Antes do início (válido)
       };
 
-      const result = await service.criarPeriodo("unidade-id", "user-id", dto);
+      configurarCriacaoValida(dto);
 
-      // Por enquanto retorna null (TODO para Task 8)
-      expect(result).toBe(null);
+      const result = await service.criarPeriodo("unidade-id", "user-id", dto);
+      expect(result).toEqual(expect.objectContaining({ id: "periodo-id" }));
     });
   });
 
