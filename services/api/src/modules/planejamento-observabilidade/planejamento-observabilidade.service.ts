@@ -175,6 +175,26 @@ export class PlanejamentoObservabilidadeService {
     return this.slowMs;
   }
 
+  criarUsuarioDoRequest(
+    usuario?: {
+      userId?: string;
+      role?: string;
+      schoolId?: string | null;
+      unitId?: string | null;
+    } | null,
+  ): PlanejamentoObservabilidadeUsuario | undefined {
+    if (!usuario?.userId || !usuario.role) {
+      return undefined;
+    }
+
+    return {
+      id: usuario.userId,
+      role: usuario.role,
+      schoolId: usuario.schoolId,
+      unitId: usuario.unitId,
+    };
+  }
+
   private normalizarUsuario(
     usuario: PlanejamentoObservabilidadeEventoEntrada["usuario"],
   ): PlanejamentoObservabilidadeUsuario | undefined {

@@ -16,8 +16,6 @@ function obterSlowMsConfigurado(): number | undefined {
 }
 
 @Module({
-  imports: [AuthModule],
-  controllers: [PlanejamentoObservabilidadeController],
   providers: [
     {
       provide: PLANEJAMENTO_OBSERVABILIDADE_CONFIG,
@@ -26,11 +24,20 @@ function obterSlowMsConfigurado(): number | undefined {
       }),
     },
     PlanejamentoObservabilidadeService,
+  ],
+  exports: [PlanejamentoObservabilidadeService],
+})
+export class PlanejamentoObservabilidadeProvidersModule {}
+
+@Module({
+  imports: [AuthModule, PlanejamentoObservabilidadeProvidersModule],
+  controllers: [PlanejamentoObservabilidadeController],
+  providers: [
     {
       provide: APP_INTERCEPTOR,
       useClass: PlanejamentoObservabilidadeInterceptor,
     },
   ],
-  exports: [PlanejamentoObservabilidadeService],
+  exports: [PlanejamentoObservabilidadeProvidersModule],
 })
 export class PlanejamentoObservabilidadeModule {}

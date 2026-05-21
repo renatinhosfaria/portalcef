@@ -21,6 +21,8 @@ import { AuthGuard } from "../../common/guards/auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
 import { SharePointService } from "../../common/sharepoint/sharepoint.service";
 import { StorageService } from "../../common/storage/storage.service";
+import { PlanejamentoObservabilidadeService } from "../planejamento-observabilidade/planejamento-observabilidade.service";
+import type { PlanejamentoObservabilidadeEventoEntrada } from "../planejamento-observabilidade/planejamento-observabilidade.types";
 import {
   type CreateProvaDto,
   createProvaSchema,
@@ -44,7 +46,20 @@ interface FastifyMultipartRequest extends FastifyRequest {
   isMultipart: () => boolean;
   file: () => Promise<MultipartFile>;
   user: UserContext;
+  correlationId?: string;
 }
+
+type RequestComUsuario = {
+  user: UserContext;
+  correlationId?: string;
+};
+
+type DocumentoObservabilidade = {
+  id: string;
+  fileName?: string | null;
+  mimeType?: string | null;
+  fileSize?: number | null;
+};
 
 // ============================================
 // Role Arrays para Guards
@@ -92,7 +107,78 @@ export class ProvaController {
     private readonly storageService: StorageService,
     private readonly historicoService: ProvaHistoricoService,
     private readonly sharePointService: SharePointService,
+    private readonly observabilidadeService: PlanejamentoObservabilidadeService,
   ) {}
+
+  private registrarObservabilidade(
+    evento: PlanejamentoObservabilidadeEventoEntrada,
+  ): void {
+    try {
+      void this.observabilidadeService.registrarEvento(evento).catch(() => undefined);
+    } catch {
+      return;
+    }
+  }
+
+  private criarArquivoObservabilidade(
+    provaId: string,
+    documento: DocumentoObservabilidade,
+  ) {
+    return {
+      provaId,
+      documentoId: documento.id,
+      nome: documento.fileName,
+      tipo: documento.mimeType,
+      tamanhoBytes: documento.fileSize,
+    };
+  }
+
+  private registrarSharePointWord(params: {
+    req: RequestComUsuario;
+    provaId: string;
+    documento: DocumentoObservabilidade;
+    etapa: string;
+    duracaoMs: number;
+    detalhes?: Record<string, unknown>;
+  }): void {
+    this.registrarObservabilidade({
+      origem: "sharepoint",
+      evento: "sharepoint_word",
+      nivel: "info",
+      correlationId: params.req.correlationId,
+      usuario: this.observabilidadeService.criarUsuarioDoRequest(params.req.user),
+      arquivo: this.criarArquivoObservabilidade(params.provaId, params.documento),
+      detalhes: {
+        etapa: params.etapa,
+        duracaoMs: params.duracaoMs,
+        ...params.detalhes,
+      },
+    });
+  }
+
+  private registrarAcaoArquivo(params: {
+    req?: RequestComUsuario;
+    provaId: string;
+    documento: DocumentoObservabilidade;
+    acao: string;
+    status: number;
+    duracaoMs: number;
+    nivel?: "info" | "error";
+  }): void {
+    this.registrarObservabilidade({
+      origem: "storage",
+      evento: "arquivo_acao",
+      nivel: params.nivel ?? "info",
+      correlationId: params.req?.correlationId,
+      usuario: this.observabilidadeService.criarUsuarioDoRequest(params.req?.user),
+      arquivo: this.criarArquivoObservabilidade(params.provaId, params.documento),
+      detalhes: {
+        acao: params.acao,
+        status: params.status,
+        duracaoMs: params.duracaoMs,
+      },
+    });
+  }
 
   // ============================================
   // Endpoints da Professora
@@ -261,6 +347,7 @@ export class ProvaController {
     @Param("id") provaId: string,
     @Req() req: FastifyMultipartRequest,
   ) {
+    const inicio = Date.now();
     if (!req.isMultipart()) {
       throw new BadRequestException({
         code: "INVALID_REQUEST",
@@ -345,6 +432,15 @@ export class ProvaController {
         },
       );
 
+      this.registrarAcaoArquivo({
+        req,
+        provaId,
+        documento,
+        acao: "upload",
+        status: 201,
+        duracaoMs: Date.now() - inicio,
+      });
+
       return {
         success: true,
         data: documento,
@@ -368,10 +464,11 @@ export class ProvaController {
   @Get(":id/documentos/:docId/editar-word")
   @Roles(...ANALISTA_ACCESS)
   async editarWord(
-    @Req() req: { user: UserContext },
+    @Req() req: RequestComUsuario,
     @Param("id") provaId: string,
     @Param("docId") docId: string,
   ) {
+    const inicio = Date.now();
     if (!this.sharePointService.isConfigurado()) {
       throw new BadRequestException({
         code: "SHAREPOINT_NOT_CONFIGURED",
@@ -409,6 +506,15 @@ export class ProvaController {
           const msWordUrl = this.sharePointService.construirMsWordUrl(
             documento.sharepointEditUrl,
           );
+          this.registrarSharePointWord({
+            req,
+            provaId,
+            documento,
+            etapa: "editar_word",
+            duracaoMs: Date.now() - inicio,
+            detalhes: { reutilizouItemExistente: true },
+          });
+
           return {
             success: true,
             data: { url: msWordUrl },
@@ -447,6 +553,14 @@ export class ProvaController {
     // Gerar URL ms-word: usando URL direta do arquivo no SharePoint
     const msWordUrl = this.sharePointService.construirMsWordUrl(directUrl);
 
+    this.registrarSharePointWord({
+      req,
+      provaId,
+      documento,
+      etapa: "editar_word",
+      duracaoMs: Date.now() - inicio,
+    });
+
     return {
       success: true,
       data: { url: msWordUrl },
@@ -461,10 +575,11 @@ export class ProvaController {
   @Get(":id/documentos/:docId/visualizar-sharepoint")
   @Roles(...VISUALIZAR_ACCESS)
   async visualizarSharePoint(
-    @Req() req: { user: UserContext },
+    @Req() req: RequestComUsuario,
     @Param("id") provaId: string,
     @Param("docId") docId: string,
   ) {
+    const inicio = Date.now();
     if (!this.sharePointService.isConfigurado()) {
       return { success: true, data: { disponivel: false } };
     }
@@ -486,6 +601,7 @@ export class ProvaController {
     // Reusar item existente se não expirou
     let itemId: string | null = null;
     let reutilizouItemExistente = false;
+    let reenviado = false;
     if (documento.sharepointItemId && documento.editandoDesde) {
       const expirado = this.sharePointService.calcularLimiteEdicao();
       if (documento.editandoDesde > expirado) {
@@ -500,6 +616,7 @@ export class ProvaController {
         documento.fileName || "documento.docx",
         docId,
       );
+      reenviado = true;
 
       // Persistir itemId para permitir reuso e garantir cleanup
       await this.provaService.atualizarDocumento(docId, {
@@ -535,6 +652,7 @@ export class ProvaController {
         documento.fileName || "documento.docx",
         docId,
       );
+      reenviado = true;
 
       await this.provaService.atualizarDocumento(docId, {
         sharepointItemId: itemId,
@@ -544,6 +662,15 @@ export class ProvaController {
 
       ({ embedUrl } = await this.sharePointService.criarLinkVisualizacao(itemId));
     }
+
+    this.registrarSharePointWord({
+      req,
+      provaId,
+      documento,
+      etapa: "visualizar_sharepoint",
+      duracaoMs: Date.now() - inicio,
+      detalhes: { reenviado },
+    });
 
     return {
       success: true,
@@ -558,10 +685,11 @@ export class ProvaController {
   @Post(":id/documentos/:docId/sincronizar-word")
   @Roles(...ANALISTA_ACCESS)
   async sincronizarWord(
-    @Req() req: { user: UserContext },
+    @Req() req: RequestComUsuario,
     @Param("id") provaId: string,
     @Param("docId") docId: string,
   ) {
+    const inicio = Date.now();
     const user = req.user;
     await this.provaService.getProvaById(user, provaId);
 
@@ -614,6 +742,15 @@ export class ProvaController {
       updatedAt: new Date(),
     });
 
+    this.registrarSharePointWord({
+      req,
+      provaId,
+      documento,
+      etapa: "sincronizar_word",
+      duracaoMs: Date.now() - inicio,
+      detalhes: { sincronizado: foiModificado },
+    });
+
     return {
       success: true,
       data: { sincronizado: foiModificado },
@@ -631,6 +768,7 @@ export class ProvaController {
     @Param("docId") docId: string,
     @Req() req: FastifyMultipartRequest,
   ) {
+    const inicio = Date.now();
     if (!req.isMultipart()) {
       throw new BadRequestException({
         code: "INVALID_REQUEST",
@@ -699,6 +837,20 @@ export class ProvaController {
         updatedAt: new Date(),
       });
 
+      this.registrarAcaoArquivo({
+        req,
+        provaId,
+        documento: {
+          ...documento,
+          fileName: data.filename || documento.fileName,
+          mimeType: data.mimetype,
+          fileSize: buffer.length,
+        },
+        acao: "atualizar",
+        status: 200,
+        duracaoMs: Date.now() - inicio,
+      });
+
       return {
         success: true,
         message: "Documento atualizado com sucesso",
@@ -724,9 +876,20 @@ export class ProvaController {
     @Res() reply: FastifyReply,
     @Param("id") provaId: string,
     @Param("docId") docId: string,
+    @Req() req?: RequestComUsuario,
   ) {
+    const inicio = Date.now();
     const documento = await this.provaService.getDocumentoById(provaId, docId);
     if (!documento.storageKey) {
+      this.registrarAcaoArquivo({
+        req,
+        provaId,
+        documento,
+        acao: "download",
+        status: 404,
+        duracaoMs: Date.now() - inicio,
+        nivel: "error",
+      });
       return reply.status(404).send({ error: "Arquivo não encontrado" });
     }
 
@@ -743,9 +906,28 @@ export class ProvaController {
         reply.header("Content-Length", s3Response.ContentLength);
       }
 
-      return reply.send(s3Response.Body);
+      const resposta = reply.send(s3Response.Body);
+      this.registrarAcaoArquivo({
+        req,
+        provaId,
+        documento,
+        acao: "download",
+        status: 200,
+        duracaoMs: Date.now() - inicio,
+      });
+
+      return resposta;
     } catch (error) {
       this.logger.error(`Erro ao baixar documento ${docId}: ${error}`);
+      this.registrarAcaoArquivo({
+        req,
+        provaId,
+        documento,
+        acao: "download",
+        status: 500,
+        duracaoMs: Date.now() - inicio,
+        nivel: "error",
+      });
       return reply.status(500).send({ error: "Erro ao baixar arquivo" });
     }
   }

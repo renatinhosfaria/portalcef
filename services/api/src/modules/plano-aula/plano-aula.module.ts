@@ -3,6 +3,7 @@ import { Module } from "@nestjs/common";
 import { SharePointModule } from "../../common/sharepoint/sharepoint.module";
 import { StorageModule } from "../../common/storage/storage.module";
 import { AuthModule } from "../auth/auth.module";
+import { PlanejamentoObservabilidadeProvidersModule } from "../planejamento-observabilidade/planejamento-observabilidade.module";
 import { PlanoAulaController } from "./plano-aula.controller";
 import { PlanoAulaHistoricoService } from "./plano-aula-historico.service";
 import { PlanoAulaService } from "./plano-aula.service";
@@ -17,7 +18,12 @@ import { PlanoAulaService } from "./plano-aula.service";
  * - Gestão visualiza dashboard e define deadlines
  */
 @Module({
-  imports: [AuthModule, StorageModule.forRoot(), SharePointModule],
+  imports: [
+    AuthModule,
+    StorageModule.forRoot(),
+    SharePointModule,
+    PlanejamentoObservabilidadeProvidersModule,
+  ],
   controllers: [PlanoAulaController],
   providers: [PlanoAulaService, PlanoAulaHistoricoService],
   exports: [PlanoAulaService],
