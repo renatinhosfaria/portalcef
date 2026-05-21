@@ -1,4 +1,4 @@
-import { BadRequestException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
 
 import { PdfGeneratorService } from "../../common/sharepoint/pdf-generator.service";
@@ -184,6 +184,25 @@ describe("PlanoAulaService", () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (service as any).registrarImpressaoDocumento(usuarioLogado, "doc-2"),
       ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe("getDashboard", () => {
+    it("bloqueia gerente_unidade consultando dashboard de outra unidade", async () => {
+      const user = {
+        userId: "user-1",
+        role: "gerente_unidade",
+        schoolId: "school-1",
+        unitId: "unit-1",
+        stageId: null,
+      };
+      mockDb.query.planoAula.findMany.mockResolvedValue([]);
+
+      await expect(service.getDashboard(user, "unit-2")).rejects.toThrow(
+        ForbiddenException,
+      );
+
+      expect(mockDb.query.planoAula.findMany).not.toHaveBeenCalled();
     });
   });
 

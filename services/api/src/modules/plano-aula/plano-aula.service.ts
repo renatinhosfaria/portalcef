@@ -822,18 +822,7 @@ export class PlanoAulaService {
   }> {
     const db = getDb();
 
-    // Determinar unitId a usar (do param ou da sessão)
-    const targetUnitId = unitId || user.unitId;
-    if (!targetUnitId) {
-      throw new BadRequestException("Unidade não especificada");
-    }
-
-    // Verificar permissão de acesso à unidade
-    if (!isGestao(user.role) && user.unitId !== targetUnitId) {
-      throw new ForbiddenException(
-        "Você não tem permissão para acessar dados desta unidade",
-      );
-    }
+    const targetUnitId = this.resolverUnitIdEscopo(user, unitId);
 
     // Construir filtro
     const filters = [eq(planoAula.unitId, targetUnitId)];
@@ -889,6 +878,28 @@ export class PlanoAulaService {
     }
 
     return { totais, porSegmento };
+  }
+
+  private resolverUnitIdEscopo(user: UserContext, unitId?: string): string {
+    if (!user.unitId && user.role !== "master") {
+      throw new BadRequestException("Unidade não especificada");
+    }
+
+    if (user.role === "master") {
+      const targetUnitId = unitId ?? user.unitId;
+      if (!targetUnitId) {
+        throw new BadRequestException("Unidade não especificada");
+      }
+      return targetUnitId;
+    }
+
+    if (unitId && unitId !== user.unitId) {
+      throw new ForbiddenException(
+        "Você não tem permissão para acessar dados desta unidade",
+      );
+    }
+
+    return user.unitId as string;
   }
 
   /**
