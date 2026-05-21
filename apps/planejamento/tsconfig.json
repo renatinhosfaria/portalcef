@@ -1,6 +1,7 @@
 {
   "extends": "@essencia/config/typescript/next",
   "compilerOptions": {
+    "types": ["vitest/globals", "@testing-library/jest-dom"],
     "plugins": [
       {
         "name": "next"
