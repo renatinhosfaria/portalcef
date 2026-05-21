@@ -1,4 +1,6 @@
 import type {
+  ChaveDetalhesObservabilidade,
+  DetalhesObservabilidade,
   EventoObservabilidadeCliente,
   EventoObservabilidadeEnvio,
 } from "./types";
@@ -40,6 +42,27 @@ const CAMPOS_ERRO_PERMITIDOS = [
   "mensagem",
   "stackResumo",
 ] as const;
+const CAMPOS_DETALHES_PERMITIDOS = new Set<ChaveDetalhesObservabilidade>([
+  "acao",
+  "duracaoMs",
+  "duracaoTotalMs",
+  "etapa",
+  "fallback",
+  "limiteMs",
+  "lento",
+  "modulo",
+  "navegador",
+  "online",
+  "origemAcao",
+  "quantidade",
+  "resultado",
+  "sistema",
+  "status",
+  "tamanhoBytes",
+  "tentativa",
+  "tipo",
+  "visibilidade",
+]);
 
 let sessaoObservabilidadeId: string | null = null;
 const filaEventos: EventoObservabilidadeCliente[] = [];
@@ -114,6 +137,45 @@ function limparObjetoPermitido<TChave extends string>(
     },
     {},
   );
+
+  return Object.keys(resultado).length > 0 ? resultado : undefined;
+}
+
+function limparDetalhes(valor: unknown): unknown {
+  const valorSemCamposProibidos = removerCamposProibidos(valor);
+
+  if (Array.isArray(valorSemCamposProibidos)) {
+    return valorSemCamposProibidos
+      .map((item) => limparDetalhes(item))
+      .filter((item) => item !== undefined);
+  }
+
+  if (
+    valorSemCamposProibidos === null ||
+    typeof valorSemCamposProibidos !== "object"
+  ) {
+    return valorSemCamposProibidos;
+  }
+
+  const resultado = Object.entries(valorSemCamposProibidos).reduce<
+    Record<string, unknown>
+  >((acumulado, [chave, valorAtual]) => {
+    if (
+      !CAMPOS_DETALHES_PERMITIDOS.has(
+        chave as ChaveDetalhesObservabilidade,
+      )
+    ) {
+      return acumulado;
+    }
+
+    const valorSanitizado = limparDetalhes(valorAtual);
+
+    if (valorSanitizado !== undefined) {
+      acumulado[chave] = valorSanitizado;
+    }
+
+    return acumulado;
+  }, {});
 
   return Object.keys(resultado).length > 0 ? resultado : undefined;
 }
@@ -193,12 +255,18 @@ function prepararEventoParaEnvio(
     payload.erro = erro as EventoObservabilidadeEnvio["erro"];
   }
 
-  if (
-    eventoSanitizado.detalhes === null ||
-    (typeof eventoSanitizado.detalhes === "object" &&
-      !Array.isArray(eventoSanitizado.detalhes))
-  ) {
-    payload.detalhes = eventoSanitizado.detalhes as EventoObservabilidadeEnvio["detalhes"];
+  if (eventoSanitizado.detalhes === null) {
+    payload.detalhes = null;
+  } else {
+    const detalhes = limparDetalhes(eventoSanitizado.detalhes);
+
+    if (
+      detalhes &&
+      typeof detalhes === "object" &&
+      !Array.isArray(detalhes)
+    ) {
+      payload.detalhes = detalhes as DetalhesObservabilidade;
+    }
   }
 
   return payload;

@@ -17,6 +17,40 @@ export type EventoObservabilidadeTipo =
   | "sharepoint_word";
 
 export type NivelObservabilidade = "info" | "warn" | "error";
+export type ChaveDetalhesObservabilidade =
+  | "acao"
+  | "duracaoMs"
+  | "duracaoTotalMs"
+  | "etapa"
+  | "fallback"
+  | "limiteMs"
+  | "lento"
+  | "modulo"
+  | "navegador"
+  | "online"
+  | "origemAcao"
+  | "quantidade"
+  | "resultado"
+  | "sistema"
+  | "status"
+  | "tamanhoBytes"
+  | "tentativa"
+  | "tipo"
+  | "visibilidade";
+
+export type ValorDetalhesObservabilidade =
+  | string
+  | number
+  | boolean
+  | null
+  | undefined
+  | ValorDetalhesObservabilidade[]
+  | DetalhesObservabilidade;
+
+export interface DetalhesObservabilidade
+  extends Partial<
+    Record<ChaveDetalhesObservabilidade, ValorDetalhesObservabilidade>
+  > {}
 
 export interface HttpObservabilidade {
   metodo?: string;
@@ -56,7 +90,7 @@ export interface EventoObservabilidadeCliente {
   pagina?: PaginaObservabilidade;
   arquivo?: ArquivoObservabilidade;
   erro?: ErroObservabilidade;
-  detalhes?: Record<string, ValorObservabilidade> | null;
+  detalhes?: DetalhesObservabilidade | null;
 }
 
 export interface EventoObservabilidadeEnvio

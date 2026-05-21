@@ -155,9 +155,6 @@ describe("cliente de observabilidade", () => {
           modulo: "planejamento",
           acao: "salvar",
           status: "erro",
-          nivel: {
-            lista: [{ resultado: "ok" }],
-          },
         },
       }),
     );
@@ -166,6 +163,71 @@ describe("cliente de observabilidade", () => {
     expect(corpoSerializado).not.toContain("authorization");
     expect(corpoSerializado).not.toContain("privado");
     expect(corpoSerializado).not.toContain("bruto");
+    expect(corpoSerializado).not.toContain("lista");
+  });
+
+  it("remove chaves fora da allowlist de detalhes em qualquer profundidade", async () => {
+    const { registrarEventoObservabilidade, enviarEventosPendentes } =
+      await import("./cliente");
+
+    const eventoComDetalhesInvalidos = {
+      evento: "arquivo_acao",
+      detalhes: {
+        modulo: "planejamento",
+        acao: "baixar",
+        contexto: "fora-da-allowlist",
+        aninhado: {
+          resultado: "ok",
+          segredoInterno: "nao_deve_ir",
+        },
+        itens: [
+          {
+            tipo: "documento",
+            valorLivre: "nao_deve_ir",
+          },
+        ],
+        resultado: [
+          {
+            tipo: "pdf",
+            sistema: "sharepoint",
+            chaveLivre: "nao_deve_ir",
+          },
+        ],
+      },
+    } as unknown as Parameters<typeof registrarEventoObservabilidade>[0];
+
+    registrarEventoObservabilidade(eventoComDetalhesInvalidos);
+
+    await enviarEventosPendentes();
+
+    const chamadaFetch = vi.mocked(fetch).mock.calls[0];
+    expect(chamadaFetch).toBeDefined();
+    const [, opcoes] = chamadaFetch!;
+    const corpoSerializado = String(opcoes?.body);
+    const corpo = JSON.parse(corpoSerializado);
+
+    expect(corpo.eventos[0]).toEqual(
+      expect.objectContaining({
+        evento: "arquivo_acao",
+        origem: "browser",
+        detalhes: {
+          modulo: "planejamento",
+          acao: "baixar",
+          resultado: [
+            {
+              tipo: "pdf",
+              sistema: "sharepoint",
+            },
+          ],
+        },
+      }),
+    );
+    expect(corpoSerializado).not.toContain("fora-da-allowlist");
+    expect(corpoSerializado).not.toContain("aninhado");
+    expect(corpoSerializado).not.toContain("segredoInterno");
+    expect(corpoSerializado).not.toContain("itens");
+    expect(corpoSerializado).not.toContain("valorLivre");
+    expect(corpoSerializado).not.toContain("chaveLivre");
   });
 
   it("remove campos extras fora do contrato mesmo quando a entrada vem de JS", async () => {
