@@ -403,6 +403,92 @@ describe("cliente de observabilidade", () => {
     expect(corpoSerializado).not.toContain("null");
   });
 
+  it("descarta eventos fora do enum sem derrubar eventos válidos do lote", async () => {
+    const { registrarEventoObservabilidade, enviarEventosPendentes } =
+      await import("./cliente");
+
+    registrarEventoObservabilidade({
+      evento: "evento_invalido",
+      detalhes: {
+        modulo: "planejamento",
+      },
+    } as unknown as Parameters<typeof registrarEventoObservabilidade>[0]);
+    registrarEventoObservabilidade({
+      evento: "pagina_aberta",
+      timestamp: "2026-01-01T00:00:00.000Z",
+      detalhes: {
+        modulo: "planejamento",
+        acao: "abrir_pagina",
+      },
+    });
+
+    await enviarEventosPendentes();
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    const chamadaFetch = vi.mocked(fetch).mock.calls[0];
+    expect(chamadaFetch).toBeDefined();
+    const [, opcoes] = chamadaFetch!;
+    const corpoSerializado = String(opcoes?.body);
+    const corpo = JSON.parse(corpoSerializado);
+
+    expect(corpo.eventos).toHaveLength(1);
+    expect(corpo.eventos[0]).toEqual(
+      expect.objectContaining({
+        evento: "pagina_aberta",
+        origem: "browser",
+        timestamp: "2026-01-01T00:00:00.000Z",
+      }),
+    );
+    expect(corpoSerializado).not.toContain("evento_invalido");
+  });
+
+  it("remove timestamps aceitos por Date.parse mas rejeitados pelo DTO", async () => {
+    const { registrarEventoObservabilidade, enviarEventosPendentes } =
+      await import("./cliente");
+
+    const timestampsInvalidos = [
+      "2026-01-01",
+      "2026-01-01T00:00:00",
+      "Thu, 01 Jan 2026 00:00:00 GMT",
+    ];
+
+    timestampsInvalidos.forEach((timestamp) => {
+      registrarEventoObservabilidade({
+        evento: "api_chamada",
+        timestamp,
+        detalhes: {
+          modulo: "planejamento",
+        },
+      });
+    });
+    registrarEventoObservabilidade({
+      evento: "api_chamada",
+      timestamp: "2026-01-01T00:00:00-03:00",
+      detalhes: {
+        modulo: "planejamento",
+      },
+    });
+
+    await enviarEventosPendentes();
+
+    const chamadaFetch = vi.mocked(fetch).mock.calls[0];
+    expect(chamadaFetch).toBeDefined();
+    const [, opcoes] = chamadaFetch!;
+    const corpoSerializado = String(opcoes?.body);
+    const corpo = JSON.parse(corpoSerializado);
+
+    expect(corpo.eventos).toHaveLength(4);
+    expect(corpo.eventos[0]).not.toHaveProperty("timestamp");
+    expect(corpo.eventos[1]).not.toHaveProperty("timestamp");
+    expect(corpo.eventos[2]).not.toHaveProperty("timestamp");
+    expect(corpo.eventos[3]).toEqual(
+      expect.objectContaining({
+        timestamp: "2026-01-01T00:00:00-03:00",
+      }),
+    );
+    expect(corpoSerializado).not.toContain("Thu, 01 Jan");
+  });
+
   it("não rejeita quando AbortController não está disponível", async () => {
     vi.stubGlobal("AbortController", undefined);
     const { registrarEventoObservabilidade, enviarEventosPendentes } =

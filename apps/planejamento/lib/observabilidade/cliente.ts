@@ -3,6 +3,7 @@ import type {
   DetalhesObservabilidade,
   EventoObservabilidadeCliente,
   EventoObservabilidadeEnvio,
+  EventoObservabilidadeTipo,
 } from "./types";
 
 const ENDPOINT_OBSERVABILIDADE =
@@ -20,6 +21,8 @@ const TAMANHO_DETALHES_TEXTO = 500;
 const LIMITE_DETALHES_PROFUNDIDADE = 3;
 const LIMITE_DETALHES_ARRAY = 20;
 const LIMITE_DETALHES_CHAVES = 20;
+const DATA_HORA_ISO_COM_TIMEZONE =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
 const CAMPOS_PROIBIDOS = new Set([
   "cookie",
   "authorization",
@@ -79,6 +82,15 @@ const CAMPOS_DETALHES_NUMERICOS_NAO_NEGATIVOS = new Set([
   "duracaoTotalMs",
   "limiteMs",
   "tamanhoBytes",
+]);
+const EVENTOS_PERMITIDOS = new Set<EventoObservabilidadeTipo>([
+  "pagina_aberta",
+  "api_chamada",
+  "api_lenta",
+  "arquivo_acao",
+  "erro_navegador",
+  "upload_resultado",
+  "sharepoint_word",
 ]);
 
 let sessaoObservabilidadeId: string | null = null;
@@ -174,11 +186,25 @@ function normalizarStatusHttp(valor: unknown): number | undefined {
 }
 
 function normalizarDataHora(valor: unknown): string | undefined {
-  if (typeof valor !== "string" || Number.isNaN(Date.parse(valor))) {
+  if (
+    typeof valor !== "string" ||
+    !DATA_HORA_ISO_COM_TIMEZONE.test(valor) ||
+    Number.isNaN(Date.parse(valor))
+  ) {
     return undefined;
   }
 
   return valor;
+}
+
+function normalizarEvento(valor: unknown): EventoObservabilidadeTipo | undefined {
+  if (typeof valor !== "string") {
+    return undefined;
+  }
+
+  return EVENTOS_PERMITIDOS.has(valor as EventoObservabilidadeTipo)
+    ? (valor as EventoObservabilidadeTipo)
+    : undefined;
 }
 
 function limparHttp(valor: unknown): EventoObservabilidadeEnvio["http"] {
@@ -337,13 +363,19 @@ function limparDetalhes(
 
 function prepararEventoParaEnvio(
   evento: EventoObservabilidadeCliente,
-): EventoObservabilidadeEnvio {
+): EventoObservabilidadeEnvio | null {
   const eventoSanitizado = removerCamposProibidos(evento) as Record<
     string,
     unknown
   >;
+  const eventoNormalizado = normalizarEvento(eventoSanitizado.evento);
+
+  if (!eventoNormalizado) {
+    return null;
+  }
+
   const payload: EventoObservabilidadeEnvio = {
-    evento: eventoSanitizado.evento as EventoObservabilidadeEnvio["evento"],
+    evento: eventoNormalizado,
     origem: "browser",
     sessaoObservabilidadeId: obterSessaoObservabilidadeId(),
   };
@@ -450,6 +482,14 @@ export async function enviarEventosPendentes(): Promise<void> {
   let temporizador: number | undefined;
 
   try {
+    const eventos = lote
+      .map(prepararEventoParaEnvio)
+      .filter((evento): evento is EventoObservabilidadeEnvio => evento !== null);
+
+    if (eventos.length === 0) {
+      return;
+    }
+
     const controlador =
       typeof AbortController !== "undefined"
         ? new AbortController()
@@ -469,7 +509,7 @@ export async function enviarEventosPendentes(): Promise<void> {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        eventos: lote.map(prepararEventoParaEnvio),
+        eventos,
       }),
       signal: controlador?.signal,
     });
