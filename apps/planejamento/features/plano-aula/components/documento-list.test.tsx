@@ -140,6 +140,71 @@ describe("DocumentoList", () => {
     expect(botao).not.toBeDisabled();
   });
 
+  it("registra acao ao clicar em Visualizar para documento PDF", async () => {
+    const user = userEvent.setup();
+    const abrirJanela = vi.spyOn(window, "open").mockImplementation(() => null);
+
+    render(<DocumentoList documentos={[mockDocumentoPdf]} />);
+
+    await user.click(
+      screen.getByRole("button", { name: /visualizar documento/i }),
+    );
+
+    expect(abrirJanela).toHaveBeenCalledWith(
+      "https://cdn/teste.pdf",
+      "_blank",
+    );
+    expect(registrarEventoObservabilidade).toHaveBeenCalledWith(
+      expect.objectContaining({
+        evento: "arquivo_acao",
+        nivel: "info",
+        arquivo: expect.objectContaining({
+          planoId: "plano-1",
+          documentoId: "doc-pdf",
+          nome: "teste.pdf",
+          tipo: "application/pdf",
+        }),
+        detalhes: expect.objectContaining({
+          acao: "visualizar",
+          modulo: "plano-aula",
+        }),
+      }),
+    );
+    expect(enviarEventosPendentes).toHaveBeenCalled();
+
+    abrirJanela.mockRestore();
+  });
+
+  it("registra acao ao clicar no nome do documento com link direto", async () => {
+    const user = userEvent.setup();
+
+    render(<DocumentoList documentos={[mockDocumentoPdf]} />);
+
+    const linkDocumento = screen.getByRole("link", { name: /teste\.pdf/i });
+    expect(linkDocumento).toHaveAttribute("href", "https://cdn/teste.pdf");
+    expect(linkDocumento).toHaveAttribute("target", "_blank");
+
+    await user.click(linkDocumento);
+
+    expect(registrarEventoObservabilidade).toHaveBeenCalledWith(
+      expect.objectContaining({
+        evento: "arquivo_acao",
+        nivel: "info",
+        arquivo: expect.objectContaining({
+          planoId: "plano-1",
+          documentoId: "doc-pdf",
+          nome: "teste.pdf",
+          tipo: "application/pdf",
+        }),
+        detalhes: expect.objectContaining({
+          acao: "visualizar",
+          modulo: "plano-aula",
+        }),
+      }),
+    );
+    expect(enviarEventosPendentes).toHaveBeenCalled();
+  });
+
   it("exibe botão Imprimir para documentos aprovados com URL imprimível (PDF nativo ou DOCX com pdfUrl), mas não para Word sem PDF derivado, não aprovado, ou YouTube", () => {
     const onImprimir = vi.fn().mockResolvedValue(undefined);
 

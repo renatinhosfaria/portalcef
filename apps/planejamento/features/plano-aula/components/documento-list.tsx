@@ -258,6 +258,16 @@ export function DocumentoList({
     enviarObservabilidadeBestEffort();
   };
 
+  const registrarVisualizacaoDocumento = (documento: PlanoDocumento) => {
+    registrarEventoDocumento(documento, {
+      evento: "arquivo_acao",
+      nivel: "info",
+      detalhes: {
+        acao: "visualizar",
+      },
+    });
+  };
+
   const prepararEdicaoWord = async (documento: PlanoDocumento) => {
     const res = await fetch(
       `/api/${modulo}/${documento.planoId}/documentos/${documento.id}/editar-word`,
@@ -432,6 +442,7 @@ export function DocumentoList({
                       href={url}
                       target="_blank"
                       rel="noopener noreferrer"
+                      onClick={() => registrarVisualizacaoDocumento(documento)}
                       className="font-medium text-sm truncate hover:underline hover:text-primary flex items-center gap-1"
                       title={name}
                     >
@@ -514,13 +525,7 @@ export function DocumentoList({
                       size="icon"
                       className="h-8 w-8"
                       onClick={() => {
-                        registrarEventoDocumento(documento, {
-                          evento: "arquivo_acao",
-                          nivel: "info",
-                          detalhes: {
-                            acao: "visualizar",
-                          },
-                        });
+                        registrarVisualizacaoDocumento(documento);
                         setEditorDocId(documento.id);
                       }}
                       title="Visualizar documento"
@@ -533,7 +538,10 @@ export function DocumentoList({
                       variant="ghost"
                       size="icon"
                       className="h-8 w-8"
-                      onClick={() => window.open(url, "_blank")}
+                      onClick={() => {
+                        registrarVisualizacaoDocumento(documento);
+                        window.open(url, "_blank");
+                      }}
                       title="Visualizar documento"
                       aria-label="Visualizar documento"
                     >
