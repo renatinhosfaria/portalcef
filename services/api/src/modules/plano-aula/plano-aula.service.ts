@@ -21,7 +21,6 @@ import {
   planoDocumento,
   documentoComentario,
   planoAulaPeriodo,
-  quinzenaConfig,
   turmas,
   users,
   type PlanoAula,
@@ -37,7 +36,6 @@ import { PlanoAulaHistoricoService } from "./plano-aula-historico.service";
 import {
   type CreatePlanoDto,
   type DevolverPlanoDto,
-  type SetDeadlineDto,
   type ListarPlanosGestaoDto,
   STATUS_URL_MAP,
   isAnalista,
@@ -95,15 +93,6 @@ export interface DashboardItem {
   status: PlanoAulaStatus;
   count: number;
   segmento?: string;
-}
-
-/**
- * Deadline de quinzena
- */
-export interface QuinzenaDeadline {
-  quinzenaId: string;
-  deadline: Date;
-  unitId: string;
 }
 
 // ============================================
@@ -1102,57 +1091,6 @@ export class PlanoAulaService {
     };
 
     return `${formatarData(dataInicio)} a ${formatarData(dataFim)}`;
-  }
-
-  /**
-   * Define deadline para quinzena em uma unidade
-   */
-  async setDeadline(user: UserContext, dto: SetDeadlineDto): Promise<void> {
-    const db = getDb();
-
-    if (!user.unitId) {
-      throw new BadRequestException("Usuário não possui unidade associada");
-    }
-
-    // UPSERT: atualiza se existe, cria se não
-    await db
-      .insert(quinzenaConfig)
-      .values({
-        unitId: user.unitId,
-        quinzenaId: dto.quinzenaId,
-        deadline: new Date(dto.deadline),
-        createdBy: user.userId,
-      })
-      .onConflictDoUpdate({
-        target: [quinzenaConfig.unitId, quinzenaConfig.quinzenaId],
-        set: {
-          deadline: new Date(dto.deadline),
-          updatedAt: new Date(),
-        },
-      });
-  }
-
-  /**
-   * Lista deadlines configurados para a unidade
-   */
-  async getDeadlines(user: UserContext): Promise<QuinzenaDeadline[]> {
-    const db = getDb();
-
-    if (!user.unitId) {
-      throw new BadRequestException("Usuário não possui unidade associada");
-    }
-
-    const configs = await db.query.quinzenaConfig.findMany({
-      where: eq(quinzenaConfig.unitId, user.unitId),
-      orderBy: [desc(quinzenaConfig.quinzenaId)],
-    });
-
-    type QuinzenaConfigRow = (typeof configs)[number];
-    return configs.map((c: QuinzenaConfigRow) => ({
-      quinzenaId: c.quinzenaId,
-      deadline: c.deadline,
-      unitId: c.unitId,
-    }));
   }
 
   /**

@@ -63,33 +63,9 @@ export class PlanoAulaPeriodoService {
       .innerJoin(educationStages, eq(turmas.stageId, educationStages.id))
       .where(and(eq(turmas.id, turmaId), eq(turmas.unitId, unitId)));
 
-    // Debug logging
     if (!turma) {
-      console.error(
-        `buscarPorTurma failed: Turma not found. turmaId=${turmaId}, unitId=${unitId}`,
-      );
-      // Also check if turma exists without unit constraint/stage join to narrow down issue
-      const simpleCheck = await this.db
-        .select({ id: turmas.id, unitId: turmas.unitId })
-        .from(turmas)
-        .where(eq(turmas.id, turmaId))
-        .limit(1);
-
-      if (simpleCheck.length > 0) {
-        console.error(
-          `Turma exists but mismatch or join failure. Found:`,
-          simpleCheck[0],
-        );
-      } else {
-        console.error(`Turma ID does not exist in DB.`);
-      }
-
       throw new BadRequestException("Turma não encontrada");
     }
-
-    console.log(
-      `buscarPorTurma: Found turma ${turmaId}, stage ${turma.etapaCode}`,
-    );
 
     // 2. Buscar períodos da etapa da turma
     return this.db
