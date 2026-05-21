@@ -32,13 +32,29 @@ describe("cliente de observabilidade", () => {
       await import("./cliente");
 
     registrarEventoObservabilidade({
-      nome: "planejamento.visualizado",
-      origem: "dashboard",
+      evento: "pagina_aberta",
+      pagina: {
+        url: "/planejamento",
+        titulo: "Planejamento",
+      },
+      detalhes: {
+        modulo: "planejamento",
+        acao: "abrir_pagina",
+      },
     });
     registrarEventoObservabilidade({
-      nome: "planejamento.filtro_aplicado",
-      origem: "dashboard",
-      metadados: { filtro: "pendentes" },
+      evento: "api_chamada",
+      http: {
+        metodo: "GET",
+        rota: "/api/planejamentos",
+        status: 200,
+        duracaoMs: 120,
+      },
+      detalhes: {
+        modulo: "planejamento",
+        acao: "listar",
+        status: "sucesso",
+      },
     });
 
     await enviarEventosPendentes();
@@ -59,18 +75,39 @@ describe("cliente de observabilidade", () => {
     expect(corpo.eventos).toHaveLength(2);
     expect(corpo.eventos[0]).toEqual(
       expect.objectContaining({
-        nome: "planejamento.visualizado",
-        origem: "dashboard",
+        evento: "pagina_aberta",
+        origem: "browser",
         sessaoObservabilidadeId: expect.any(String),
+        pagina: {
+          url: "/planejamento",
+          titulo: "Planejamento",
+        },
+        detalhes: {
+          modulo: "planejamento",
+          acao: "abrir_pagina",
+        },
       }),
     );
     expect(corpo.eventos[1]).toEqual(
       expect.objectContaining({
-        nome: "planejamento.filtro_aplicado",
-        origem: "dashboard",
+        evento: "api_chamada",
+        origem: "browser",
         sessaoObservabilidadeId: corpo.eventos[0].sessaoObservabilidadeId,
+        http: {
+          metodo: "GET",
+          rota: "/api/planejamentos",
+          status: 200,
+          duracaoMs: 120,
+        },
+        detalhes: {
+          modulo: "planejamento",
+          acao: "listar",
+          status: "sucesso",
+        },
       }),
     );
+    expect(corpo.eventos[0]).not.toHaveProperty("nome");
+    expect(corpo.eventos[1]).not.toHaveProperty("nome");
   });
 
   it("remove campos proibidos antes do envio em qualquer profundidade", async () => {
@@ -78,19 +115,21 @@ describe("cliente de observabilidade", () => {
       await import("./cliente");
 
     registrarEventoObservabilidade({
-      nome: "planejamento.erro",
-      origem: "editor",
+      evento: "erro_navegador",
+      origem: "dashboard",
       usuario: { id: "usuario-nao-confiavel" },
-      metadados: {
+      detalhes: {
         token: "segredo",
-        dadosPermitidos: "valor",
+        modulo: "planejamento",
+        acao: "salvar",
+        status: "erro",
         nivel: {
           senha: "123",
           headers: { authorization: "Bearer segredo" },
           lista: [
             {
               conteudo: "<p>privado</p>",
-              detalhePermitido: "ok",
+              resultado: "ok",
             },
           ],
         },
@@ -108,12 +147,14 @@ describe("cliente de observabilidade", () => {
 
     expect(corpo.eventos[0]).toEqual(
       expect.objectContaining({
-        nome: "planejamento.erro",
-        origem: "editor",
-        metadados: {
-          dadosPermitidos: "valor",
+        evento: "erro_navegador",
+        origem: "browser",
+        detalhes: {
+          modulo: "planejamento",
+          acao: "salvar",
+          status: "erro",
           nivel: {
-            lista: [{ detalhePermitido: "ok" }],
+            lista: [{ resultado: "ok" }],
           },
         },
       }),
@@ -130,8 +171,14 @@ describe("cliente de observabilidade", () => {
       await import("./cliente");
 
     registrarEventoObservabilidade({
-      nome: "planejamento.salvo",
-      origem: "editor",
+      evento: "arquivo_acao",
+      arquivo: {
+        planoId: "plano-1",
+      },
+      detalhes: {
+        modulo: "planejamento",
+        acao: "salvar",
+      },
     });
 
     await enviarEventosPendentes();
@@ -154,8 +201,11 @@ describe("cliente de observabilidade", () => {
       await import("./cliente");
 
     registrarEventoObservabilidade({
-      nome: "planejamento.salvo",
-      origem: "editor",
+      evento: "api_chamada",
+      detalhes: {
+        modulo: "planejamento",
+        acao: "salvar",
+      },
     });
 
     await expect(enviarEventosPendentes()).resolves.toBeUndefined();
@@ -183,8 +233,11 @@ describe("cliente de observabilidade", () => {
 
     obterSessaoObservabilidadeId();
     registrarEventoObservabilidade({
-      nome: "planejamento.visualizado",
-      origem: "dashboard",
+      evento: "pagina_aberta",
+      detalhes: {
+        modulo: "planejamento",
+        acao: "abrir_pagina",
+      },
     });
     await enviarEventosPendentes();
 

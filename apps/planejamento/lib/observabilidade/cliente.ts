@@ -1,7 +1,6 @@
 import type {
   EventoObservabilidadeCliente,
   EventoObservabilidadeEnvio,
-  ValorObservabilidade,
 } from "./types";
 
 const ENDPOINT_OBSERVABILIDADE =
@@ -40,8 +39,8 @@ function gerarIdentificadorSessao(): string {
 }
 
 function removerCamposProibidos(
-  valor: ValorObservabilidade,
-): ValorObservabilidade {
+  valor: unknown,
+): unknown {
   if (Array.isArray(valor)) {
     return valor
       .map((item) => removerCamposProibidos(item))
@@ -52,7 +51,7 @@ function removerCamposProibidos(
     return valor;
   }
 
-  return Object.entries(valor).reduce<Record<string, ValorObservabilidade>>(
+  return Object.entries(valor).reduce<Record<string, unknown>>(
     (resultado, [chave, valorAtual]) => {
       if (CAMPOS_PROIBIDOS.has(chave.toLowerCase())) {
         return resultado;
@@ -75,6 +74,7 @@ function prepararEventoParaEnvio(
 ): EventoObservabilidadeEnvio {
   return {
     ...(removerCamposProibidos(evento) as EventoObservabilidadeCliente),
+    origem: "browser",
     sessaoObservabilidadeId: obterSessaoObservabilidadeId(),
   };
 }
@@ -142,26 +142,35 @@ export async function medirObservabilidade<T>(
     const resultado = await acao();
     registrarEventoObservabilidade({
       ...eventoBase,
-      sucesso: true,
-      duracaoMs:
-        typeof performance !== "undefined"
-          ? Math.round(performance.now() - inicio)
-          : undefined,
+      detalhes: {
+        ...(eventoBase.detalhes ?? {}),
+        status: "sucesso",
+        duracaoMs:
+          typeof performance !== "undefined"
+            ? Math.round(performance.now() - inicio)
+            : undefined,
+      },
     });
 
     return resultado;
   } catch (erro) {
     registrarEventoObservabilidade({
       ...eventoBase,
-      sucesso: false,
-      erro:
-        erro instanceof Error
-          ? erro.name
-          : "ErroDesconhecido",
-      duracaoMs:
-        typeof performance !== "undefined"
-          ? Math.round(performance.now() - inicio)
-          : undefined,
+      detalhes: {
+        ...(eventoBase.detalhes ?? {}),
+        status: "erro",
+        duracaoMs:
+          typeof performance !== "undefined"
+            ? Math.round(performance.now() - inicio)
+            : undefined,
+      },
+      erro: {
+        ...eventoBase.erro,
+        codigo:
+          erro instanceof Error
+            ? erro.name
+            : "ErroDesconhecido",
+      },
     });
 
     throw erro;
