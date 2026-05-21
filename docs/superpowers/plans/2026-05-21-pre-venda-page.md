@@ -1,3 +1,102 @@
+# Página de Pré-venda (loja-admin) Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Substituir o conteúdo da rota `/interesse` por um painel operacional completo de pré-vendas com KPIs, demanda por produto e lista de pedidos com ações.
+
+**Architecture:** A página `app/interesse/page.tsx` é completamente reescrita — sem nova rota, sem mudança de URL. O sidebar recebe apenas o label atualizado. Nenhuma alteração de backend é necessária: todos os endpoints já existem.
+
+**Tech Stack:** Next.js 15 App Router, React 19, TypeScript, Tailwind CSS, Vitest (source-reading tests)
+
+---
+
+## Mapa de Arquivos
+
+| Arquivo | Operação | Responsabilidade |
+|---|---|---|
+| `__tests__/interesse.test.ts` | Substituir | Invariantes da nova página de pré-venda + sidebar |
+| `app/interesse/page.tsx` | Substituir completamente | Página de pré-venda (KPIs, demanda, pedidos, modais) |
+| `components/AdminSidebar.tsx` | Modificar 1 linha | Label "Interesse" → "Pré-venda" |
+| `lib/interesse.ts` | Deletar | Não mais utilizada após a substituição |
+
+---
+
+## Task 1: Escrever testes que definem os invariantes da nova página (RED)
+
+**Files:**
+- Modify: `__tests__/interesse.test.ts` (substituir completamente)
+
+- [ ] **Step 1.1: Substituir o arquivo de testes**
+
+Substitua o conteúdo de `__tests__/interesse.test.ts` por:
+
+```typescript
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+describe('página de pré-venda (/interesse)', () => {
+    const source = readFileSync(join(process.cwd(), 'app/interesse/page.tsx'), 'utf8');
+
+    it('usa sempre orderSource PRE_VENDA sem expor filtro de origem ao usuário', () => {
+        expect(source).toContain("params.set('orderSource', 'PRE_VENDA')");
+        expect(source).not.toContain('orderSourceFilter');
+    });
+
+    it('busca demanda pelo endpoint dedicado de summary', () => {
+        expect(source).toContain("apiFetch('/api/shop/admin/orders/pre-venda/summary')");
+    });
+
+    it('calcula KPIs somando todos os campos do summary por variante', () => {
+        expect(source).toContain('reservedQuantity');
+        expect(source).toContain('paidQuantity');
+        expect(source).toContain('pickedUpQuantity');
+        expect(source).toContain('totalQuantity');
+    });
+
+    it('nunca oferece exclusão para pedidos PAGO ou RETIRADO', () => {
+        expect(source).toContain("['AGUARDANDO_PAGAMENTO', 'CANCELADO', 'EXPIRADO'].includes(order.status)");
+    });
+
+    it('não permite BRINDE parcial na confirmação de pagamento', () => {
+        expect(source).toContain('finalTotalPaid !== confirmPaymentModal.totalAmount');
+    });
+
+    it('exibe título Pré-venda', () => {
+        expect(source).toContain('>Pré-venda<');
+    });
+});
+
+describe('sidebar de navegação', () => {
+    const source = readFileSync(join(process.cwd(), 'components/AdminSidebar.tsx'), 'utf8');
+
+    it('mostra Pré-venda no menu e não mais Interesse', () => {
+        expect(source).toContain("label: 'Pré-venda'");
+        expect(source).not.toContain("label: 'Interesse'");
+    });
+});
+```
+
+- [ ] **Step 1.2: Confirmar que os testes falham (RED)**
+
+```bash
+cd apps/loja-admin && pnpm test -- --reporter=verbose 2>&1 | grep -E "FAIL|PASS|interesse"
+```
+
+Esperado: todos os `it()` em `interesse.test.ts` falham — a página atual é a de Interesse, não Pré-venda.
+
+---
+
+## Task 2: Implementar a nova página de pré-venda
+
+**Files:**
+- Modify: `app/interesse/page.tsx` (substituir completamente)
+
+- [ ] **Step 2.1: Reescrever `app/interesse/page.tsx`**
+
+Substitua todo o conteúdo do arquivo por:
+
+```tsx
 'use client';
 
 import { formatarDataHora } from '@essencia/shared/formatar-data';
@@ -761,3 +860,140 @@ export default function PreVendaPage() {
         </div>
     );
 }
+```
+
+- [ ] **Step 2.2: Confirmar que os testes de página passam (GREEN para Task 2)**
+
+```bash
+cd apps/loja-admin && pnpm test -- --reporter=verbose 2>&1 | grep -E "✓|✗|FAIL|PASS|interesse"
+```
+
+Esperado: os 6 testes do describe `página de pré-venda (/interesse)` passam. O teste de sidebar ainda falha.
+
+---
+
+## Task 3: Atualizar label e ícone na sidebar
+
+**Files:**
+- Modify: `components/AdminSidebar.tsx`
+
+- [ ] **Step 3.1: Alterar o item de menu**
+
+Em `components/AdminSidebar.tsx`, localize a linha:
+
+```typescript
+    { href: '/interesse', label: 'Interesse', icon: '💡' },
+```
+
+Substitua por:
+
+```typescript
+    { href: '/interesse', label: 'Pré-venda', icon: '🛍️' },
+```
+
+- [ ] **Step 3.2: Confirmar que todos os testes passam (GREEN completo)**
+
+```bash
+cd apps/loja-admin && pnpm test -- --reporter=verbose
+```
+
+Esperado: todos os testes passam, incluindo o teste de sidebar `mostra Pré-venda no menu e não mais Interesse`.
+
+---
+
+## Task 4: Remover lib/interesse.ts (não mais utilizada)
+
+**Files:**
+- Delete: `lib/interesse.ts`
+
+- [ ] **Step 4.1: Verificar que nenhum arquivo importa lib/interesse.ts**
+
+```bash
+grep -r "from.*lib/interesse\|require.*lib/interesse" apps/loja-admin --include="*.ts" --include="*.tsx"
+```
+
+Esperado: nenhuma saída (zero importações).
+
+- [ ] **Step 4.2: Deletar o arquivo**
+
+```bash
+rm apps/loja-admin/lib/interesse.ts
+```
+
+- [ ] **Step 4.3: Confirmar que os testes continuam passando**
+
+```bash
+cd apps/loja-admin && pnpm test -- --reporter=verbose
+```
+
+Esperado: todos passam. (O arquivo de testes substituído não importa mais `lib/interesse`.)
+
+---
+
+## Task 5: Pipeline de qualidade e commit
+
+- [ ] **Step 5.1: Lint e typecheck**
+
+```bash
+cd /var/www/essencia && pnpm turbo lint typecheck --filter=loja-admin
+```
+
+Esperado: zero erros. Se houver erro de lint de `@typescript-eslint/no-unused-vars` ou similar, corrija antes de prosseguir.
+
+- [ ] **Step 5.2: Suite completa de testes do loja-admin**
+
+```bash
+cd apps/loja-admin && pnpm test
+```
+
+Esperado: todos os testes passam.
+
+- [ ] **Step 5.3: Commit**
+
+```bash
+git add apps/loja-admin/app/interesse/page.tsx \
+        apps/loja-admin/components/AdminSidebar.tsx \
+        apps/loja-admin/__tests__/interesse.test.ts \
+        apps/loja-admin/lib/interesse.ts \
+        docs/superpowers/specs/2026-05-21-pre-venda-page-design.md \
+        docs/superpowers/plans/2026-05-21-pre-venda-page.md
+
+git commit -m "$(cat <<'EOF'
+feat(loja-admin): substitui página Interesse por painel de Pré-venda
+
+Página /interesse agora exibe KPIs de pré-venda, demanda agrupada por
+produto/tamanho e lista operacional de pedidos PRE_VENDA com confirmação
+de pagamento (multi-forma), retirada e exclusão. Sidebar atualizado.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"
+```
+
+---
+
+## Auto-revisão do Plano
+
+**Cobertura do spec:**
+- ✅ Header com título e botão refresh → Task 2 (JSX do header)
+- ✅ 4 cards KPI calculados do summary → Task 2 (kpis reducer + JSX)
+- ✅ Tabela de demanda por produto → Task 2 (summaryItems table)
+- ✅ Busca com debounce 300ms → Task 2 (useEffect com setTimeout)
+- ✅ Filtro de status (sem filtro de origem) → Task 2 (statusFilter select)
+- ✅ orderSource=PRE_VENDA fixo → Task 2 + Task 1 (teste invariante)
+- ✅ Expand de linha com itens → Task 2 (Fragment + expandedOrder)
+- ✅ Confirmar pagamento (modal multi-forma) → Task 2 (modal completo)
+- ✅ Registrar retirada → Task 2 (handleMarkPickedUp)
+- ✅ Excluir pedido (modal) → Task 2 (modal de exclusão)
+- ✅ Paginação → Task 2 (goToPage + rodapé)
+- ✅ Sidebar label → Task 3
+- ✅ Remoção de lib não utilizada → Task 4
+
+**Invariantes testados:**
+- `orderSource=PRE_VENDA` fixo, sem `orderSourceFilter`
+- endpoint `/pre-venda/summary` usado
+- campos `reservedQuantity`, `paidQuantity`, `pickedUpQuantity`, `totalQuantity` presentes
+- exclusão apenas para `AGUARDANDO_PAGAMENTO`, `CANCELADO`, `EXPIRADO`
+- validação `finalTotalPaid !== confirmPaymentModal.totalAmount`
+- título `Pré-venda` no JSX
+- sidebar sem `label: 'Interesse'`, com `label: 'Pré-venda'`

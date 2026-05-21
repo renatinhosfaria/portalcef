@@ -9,7 +9,7 @@ const navItems = [
     { href: '/venda-presencial', label: 'Venda Presencial', icon: '🛒' },
     { href: '/produtos', label: 'Produtos', icon: '📦' },
     { href: '/estoque', label: 'Estoque', icon: '📈' },
-    { href: '/interesse', label: 'Interesse', icon: '💡' },
+    { href: '/interesse', label: 'Pré-venda', icon: '🛍️' },
     { href: '/configuracoes', label: 'Configurações', icon: '⚙️' },
     { href: '/relatorios', label: 'Relatórios', icon: '📉' },
 ];
