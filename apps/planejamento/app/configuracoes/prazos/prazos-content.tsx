@@ -3,9 +3,7 @@
 /**
  * PrazosContent Component
  * Client component para configuracao de prazos de entrega
- * Task 4.7: Permite que a Coordenadora Geral defina prazos para cada quinzena
- *
- * TODO: Refatorar para usar períodos dinâmicos da API /plano-aula-periodo
+ * Task 4.7: Permite que a Coordenadora Geral defina prazos para cada período
  */
 
 import { formatarData, formatarDataCurta } from "@essencia/shared/formatar-data";
@@ -28,9 +26,9 @@ import {
   AlertCircle,
   CalendarClock,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
-import { useDeadlines } from "../../../features/plano-aula";
+import { usePeriodos } from "../../../features/periodos/hooks/use-periodos";
 import { obterMensagemErro } from "../../../lib/mensagens-erro";
 
 /**
@@ -46,15 +44,10 @@ interface PrazoEditState {
 
 
 /**
- * Formata datetime ISO para input datetime-local
+ * Formata data ISO para input date
  */
 function formatarParaInput(dataIso: string): string {
-  // Se ja tem hora, retornar como esta
-  if (dataIso.includes("T")) {
-    return dataIso.slice(0, 16); // YYYY-MM-DDTHH:mm
-  }
-  // Caso contrario, adicionar hora 23:59
-  return `${dataIso}T23:59`;
+  return extrairDataIso(dataIso);
 }
 
 /**
@@ -66,12 +59,12 @@ function extrairDataIso(datetimeLocal: string): string {
 
 export function PrazosContent() {
   const {
-    deadlines,
-    loading: isLoadingDeadlines,
-    error: deadlinesError,
-    fetchDeadlines,
-    setDeadline,
-  } = useDeadlines();
+    periodos,
+    isLoading: isLoadingPeriodos,
+    error: periodosError,
+    editarPeriodo,
+    refetch,
+  } = usePeriodos();
   const [selectedSemester, setSelectedSemester] = useState<1 | 2>(() => {
     const currentMonth = new Date().getMonth() + 1;
     return currentMonth >= 7 ? 2 : 1;
@@ -82,41 +75,38 @@ export function PrazosContent() {
     {},
   );
 
-  // Carregar prazos ao montar
-  useEffect(() => {
-    fetchDeadlines();
-  }, [fetchDeadlines]);
-
-  // Mapa de deadlines configurados por quinzenaId
-  const deadlinesMap = useMemo(() => {
-    const map: Record<string, string> = {};
-    for (const d of deadlines) {
-      map[d.quinzenaId] = d.deadline;
-    }
-    return map;
-  }, [deadlines]);
-
-  // TODO: Buscar períodos via API /plano-aula-periodo filtrados por semestre
-  interface QuinzenaFiltrada {
+  interface PeriodoFiltrado {
     id: string;
     label: string;
     startDate: string;
     endDate: string;
     deadline: string;
   }
-  const quinzenasFiltradas = useMemo<QuinzenaFiltrada[]>(() => {
-    return []; // Vazio até implementar novo sistema
-  }, [selectedSemester]);
+  const periodosFiltrados = useMemo<PeriodoFiltrado[]>(() => {
+    return periodos
+      .filter((periodo) => {
+        const dataInicio = extrairDataIso(periodo.dataInicio);
+        const mes = new Date(`${dataInicio}T00:00:00`).getMonth() + 1;
+        return selectedSemester === 1 ? mes <= 6 : mes >= 7;
+      })
+      .map((periodo) => ({
+        id: periodo.id,
+        label: `${periodo.numero}o Plano de Aula - ${periodo.etapa}`,
+        startDate: periodo.dataInicio,
+        endDate: periodo.dataFim,
+        deadline: periodo.dataMaximaEntrega,
+      }));
+  }, [periodos, selectedSemester]);
 
   /**
    * Inicia edicao de um prazo
    */
   const iniciarEdicao = useCallback(
-    (quinzenaId: string, deadlineAtual: string) => {
+    (periodoId: string, deadlineAtual: string) => {
       setEditStates((prev) => ({
         ...prev,
-        [quinzenaId]: {
-          quinzenaId,
+        [periodoId]: {
+          quinzenaId: periodoId,
           deadline: formatarParaInput(deadlineAtual),
           isSaving: false,
           success: false,
@@ -131,11 +121,11 @@ export function PrazosContent() {
    * Atualiza valor do prazo em edicao
    */
   const atualizarEdicao = useCallback(
-    (quinzenaId: string, novoValor: string) => {
+    (periodoId: string, novoValor: string) => {
       setEditStates((prev) => ({
         ...prev,
-        [quinzenaId]: {
-          ...prev[quinzenaId]!,
+        [periodoId]: {
+          ...prev[periodoId]!,
           deadline: novoValor,
           success: false,
           error: null,
@@ -148,10 +138,10 @@ export function PrazosContent() {
   /**
    * Cancela edicao de um prazo
    */
-  const cancelarEdicao = useCallback((quinzenaId: string) => {
+  const cancelarEdicao = useCallback((periodoId: string) => {
     setEditStates((prev) => {
       const newState = { ...prev };
-      delete newState[quinzenaId];
+      delete newState[periodoId];
       return newState;
     });
   }, []);
@@ -160,24 +150,25 @@ export function PrazosContent() {
    * Salva o prazo editado
    */
   const salvarPrazo = useCallback(
-    async (quinzenaId: string) => {
-      const editState = editStates[quinzenaId];
+    async (periodoId: string) => {
+      const editState = editStates[periodoId];
       if (!editState) return;
 
       setEditStates((prev) => ({
         ...prev,
-        [quinzenaId]: { ...prev[quinzenaId]!, isSaving: true, error: null },
+        [periodoId]: { ...prev[periodoId]!, isSaving: true, error: null },
       }));
 
       try {
-        // Converter datetime-local para ISO string
-        const deadlineIso = new Date(editState.deadline).toISOString();
-        await setDeadline(quinzenaId, deadlineIso);
+        await editarPeriodo(periodoId, {
+          dataMaximaEntrega: extrairDataIso(editState.deadline),
+        });
+        await refetch();
 
         setEditStates((prev) => ({
           ...prev,
-          [quinzenaId]: {
-            ...prev[quinzenaId]!,
+          [periodoId]: {
+            ...prev[periodoId]!,
             isSaving: false,
             success: true,
           },
@@ -185,7 +176,7 @@ export function PrazosContent() {
 
         // Remover estado de edicao apos 2 segundos
         setTimeout(() => {
-          cancelarEdicao(quinzenaId);
+          cancelarEdicao(periodoId);
         }, 2000);
       } catch (err) {
         const mensagem = obterMensagemErro(
@@ -194,35 +185,15 @@ export function PrazosContent() {
         );
         setEditStates((prev) => ({
           ...prev,
-          [quinzenaId]: {
-            ...prev[quinzenaId]!,
+          [periodoId]: {
+            ...prev[periodoId]!,
             isSaving: false,
             error: mensagem,
           },
         }));
       }
     },
-    [editStates, setDeadline, cancelarEdicao],
-  );
-
-  /**
-   * Obtem o prazo atual para uma quinzena (configurado ou padrao)
-   */
-  const obterPrazoAtual = useCallback(
-    (quinzenaId: string, deadlinePadrao: string): string => {
-      return deadlinesMap[quinzenaId] || deadlinePadrao;
-    },
-    [deadlinesMap],
-  );
-
-  /**
-   * Verifica se um prazo foi personalizado
-   */
-  const isPrazoPersonalizado = useCallback(
-    (quinzenaId: string): boolean => {
-      return !!deadlinesMap[quinzenaId];
-    },
-    [deadlinesMap],
+    [editStates, editarPeriodo, refetch, cancelarEdicao],
   );
 
   return (
@@ -238,7 +209,7 @@ export function PrazosContent() {
               Configuracao de Prazos
             </h1>
             <p className="text-muted-foreground">
-              Defina os prazos de entrega para cada quinzena
+              Defina os prazos de entrega para cada periodo
             </p>
           </div>
         </div>
@@ -272,13 +243,13 @@ export function PrazosContent() {
         </div>
         <p className="mt-2 text-sm text-muted-foreground">
           {selectedSemester === 1
-            ? "Fevereiro a Junho - 11 quinzenas"
-            : "Agosto a Dezembro - 10 quinzenas"}
+            ? "Fevereiro a Junho"
+            : "Agosto a Dezembro"}
         </p>
       </div>
 
       {/* Erro ao carregar prazos */}
-      {deadlinesError && (
+      {periodosError && (
         <Card className="border-destructive mb-6">
           <CardContent className="pt-6">
             <div className="flex items-center gap-3 text-destructive">
@@ -287,7 +258,7 @@ export function PrazosContent() {
                 <p className="font-medium">
                   Erro ao carregar prazos configurados
                 </p>
-                <p className="text-sm">{deadlinesError}</p>
+                <p className="text-sm">{periodosError.message}</p>
               </div>
             </div>
           </CardContent>
@@ -295,7 +266,7 @@ export function PrazosContent() {
       )}
 
       {/* Loading State */}
-      {isLoadingDeadlines && (
+      {isLoadingPeriodos && (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {Array.from({ length: 6 }).map((_, i) => (
             <Card key={i}>
@@ -311,41 +282,35 @@ export function PrazosContent() {
         </div>
       )}
 
-      {/* Lista de Quinzenas */}
-      {!isLoadingDeadlines && quinzenasFiltradas.length === 0 && (
+      {/* Lista de períodos */}
+      {!isLoadingPeriodos && periodosFiltrados.length === 0 && (
         <Card className="border-yellow-400 bg-yellow-50">
           <CardContent className="pt-6">
             <div className="flex items-center gap-3 text-yellow-800">
               <AlertCircle className="h-5 w-5" />
               <div>
-                <p className="font-medium">Sistema de períodos em migração</p>
+                <p className="font-medium">Nenhum periodo configurado</p>
                 <p className="text-sm">
-                  A configuração de prazos será implementada com o novo sistema
-                  de períodos dinâmicos.
+                  Cadastre periodos em Gestao de Planos de Aula para editar os
+                  prazos.
                 </p>
               </div>
             </div>
           </CardContent>
         </Card>
       )}
-      {!isLoadingDeadlines && quinzenasFiltradas.length > 0 && (
+      {!isLoadingPeriodos && periodosFiltrados.length > 0 && (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {quinzenasFiltradas.map((quinzena) => {
-            const prazoAtual = obterPrazoAtual(quinzena.id, quinzena.deadline);
-            const isPersonalizado = isPrazoPersonalizado(quinzena.id);
-            const editState = editStates[quinzena.id];
+          {periodosFiltrados.map((periodo) => {
+            const prazoAtual = periodo.deadline;
+            const editState = editStates[periodo.id];
             const isEditing = !!editState;
 
             return (
-              <Card key={quinzena.id} className="relative">
+              <Card key={periodo.id} className="relative">
                 <CardHeader className="pb-3">
                   <CardTitle className="text-lg flex items-center justify-between">
-                    <span>{quinzena.label}</span>
-                    {isPersonalizado && !isEditing && (
-                      <span className="text-xs font-normal text-primary bg-primary/10 px-2 py-1 rounded">
-                        Personalizado
-                      </span>
-                    )}
+                    <span>{periodo.label}</span>
                     {editState?.success && (
                       <span className="text-xs font-normal text-green-600 bg-green-50 px-2 py-1 rounded flex items-center gap-1">
                         <Check className="h-3 w-3" />
@@ -355,12 +320,12 @@ export function PrazosContent() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {/* Periodo da Quinzena */}
+                  {/* Periodo */}
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Calendar className="h-4 w-4" />
                     <span>
-                      {formatarDataCurta(quinzena.startDate)} a{" "}
-                      {formatarDataCurta(quinzena.endDate)}
+                      {formatarDataCurta(periodo.startDate)} a{" "}
+                      {formatarDataCurta(periodo.endDate)}
                     </span>
                   </div>
 
@@ -380,7 +345,7 @@ export function PrazosContent() {
                         variant="outline"
                         size="sm"
                         className="w-full"
-                        onClick={() => iniciarEdicao(quinzena.id, prazoAtual)}
+                        onClick={() => iniciarEdicao(periodo.id, prazoAtual)}
                       >
                         Editar Prazo
                       </Button>
@@ -388,14 +353,18 @@ export function PrazosContent() {
                   ) : (
                     <div className="space-y-3">
                       <div>
-                        <label className="text-sm font-medium text-muted-foreground">
+                        <label
+                          htmlFor={`prazo-${periodo.id}`}
+                          className="text-sm font-medium text-muted-foreground"
+                        >
                           Novo prazo de entrega:
                         </label>
                         <Input
-                          type="datetime-local"
+                          id={`prazo-${periodo.id}`}
+                          type="date"
                           value={editState.deadline}
                           onChange={(e) =>
-                            atualizarEdicao(quinzena.id, e.target.value)
+                            atualizarEdicao(periodo.id, e.target.value)
                           }
                           disabled={editState.isSaving}
                           className="mt-1"
@@ -416,7 +385,7 @@ export function PrazosContent() {
                           variant="outline"
                           size="sm"
                           className="flex-1"
-                          onClick={() => cancelarEdicao(quinzena.id)}
+                          onClick={() => cancelarEdicao(periodo.id)}
                           disabled={editState.isSaving}
                         >
                           Cancelar
@@ -424,7 +393,7 @@ export function PrazosContent() {
                         <Button
                           size="sm"
                           className="flex-1"
-                          onClick={() => salvarPrazo(quinzena.id)}
+                          onClick={() => salvarPrazo(periodo.id)}
                           disabled={editState.isSaving || !editState.deadline}
                         >
                           {editState.isSaving ? (
@@ -459,9 +428,8 @@ export function PrazosContent() {
             <div>
               <h3 className="font-medium mb-1">Sobre os prazos padrao</h3>
               <p className="text-sm text-muted-foreground">
-                Por padrao, o prazo de entrega de cada quinzena e 5 dias uteis
-                antes do inicio do periodo. Voce pode personalizar esse prazo
-                para cada quinzena individualmente.
+                Por padrao, o prazo de entrega e definido no cadastro de cada
+                periodo. Voce pode personalizar esse prazo individualmente.
               </p>
             </div>
           </div>
