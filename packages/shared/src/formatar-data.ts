@@ -11,7 +11,15 @@ const LOCALE = "pt-BR";
 type DataInput = string | Date;
 
 function toDate(data: DataInput): Date {
-  return typeof data === "string" ? new Date(data) : data;
+  if (typeof data !== "string") {
+    return data;
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(data)) {
+    return new Date(`${data}T00:00:00`);
+  }
+
+  return new Date(data);
 }
 
 /** dd/MM/yyyy (ex: "15/03/2026") */

@@ -41,5 +41,11 @@ describe("PeriodosList", () => {
     );
     expect(screen.getByText("1º Plano de Aula")).toBeInTheDocument();
     expect(screen.getByText("Tema: Meio Ambiente")).toBeInTheDocument();
+    expect(screen.getByText(/Período:/).parentElement).toHaveTextContent(
+      "01/03/2026 até 15/03/2026",
+    );
+    expect(
+      screen.getByText(/Prazo de Entrega:/).parentElement,
+    ).toHaveTextContent("25/02/2026");
   });
 });
