@@ -1,5 +1,6 @@
 "use client";
 
+import { useTenant } from "@essencia/shared/providers/tenant";
 import { Button } from "@essencia/ui/components/button";
 import {
   Tabs,
@@ -9,7 +10,7 @@ import {
 } from "@essencia/ui/components/tabs";
 import { toast } from "@essencia/ui/toaster";
 import { Loader2, Plus } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { PeriodoModal } from "../../../features/periodos/components/periodo-modal";
 import { PeriodosList } from "../../../features/periodos/components/periodos-list";
@@ -43,6 +44,7 @@ function getEtapasPermitidas(role?: string): Etapa[] {
   if (
     role === "master" ||
     role === "diretora_geral" ||
+    role === "gerente_unidade" ||
     role === "coordenadora_geral"
   ) {
     return [...ETAPAS];
@@ -62,6 +64,7 @@ function getEtapasPermitidas(role?: string): Etapa[] {
 }
 
 export function PeriodosContent() {
+  const { role, isLoaded } = useTenant();
   const {
     periodos,
     isLoading,
@@ -75,10 +78,16 @@ export function PeriodosContent() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingPeriodo, setEditingPeriodo] = useState<Periodo | null>(null);
 
-  // TODO: Pegar role do contexto de autenticação
-  // Por enquanto, assumindo coordenadora_geral para desenvolvimento
-  const userRole = "coordenadora_geral";
-  const etapasPermitidas = getEtapasPermitidas(userRole);
+  const etapasPermitidas = useMemo(() => getEtapasPermitidas(role), [role]);
+  const selectedEtapaValida = etapasPermitidas.includes(selectedEtapa)
+    ? selectedEtapa
+    : etapasPermitidas[0];
+
+  useEffect(() => {
+    if (selectedEtapaValida && selectedEtapaValida !== selectedEtapa) {
+      setSelectedEtapa(selectedEtapaValida);
+    }
+  }, [selectedEtapa, selectedEtapaValida]);
 
   const handleEdit = (periodo: Periodo) => {
     setEditingPeriodo(periodo);
@@ -133,7 +142,17 @@ export function PeriodosContent() {
     }
   };
 
-  if (etapasPermitidas.length === 0) {
+  if (!isLoaded) {
+    return (
+      <div className="container mx-auto py-6">
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      </div>
+    );
+  }
+
+  if (etapasPermitidas.length === 0 || !selectedEtapaValida) {
     return (
       <div className="container mx-auto py-6">
         <div className="text-center py-12">
@@ -184,8 +203,8 @@ export function PeriodosContent() {
         </div>
       ) : (
         <Tabs
-          defaultValue="BERCARIO"
-          value={selectedEtapa}
+          defaultValue={selectedEtapaValida}
+          value={selectedEtapaValida}
           onValueChange={(value) => setSelectedEtapa(value as Etapa)}
         >
           <TabsList className="grid w-full grid-cols-5">
@@ -223,7 +242,7 @@ export function PeriodosContent() {
         }}
         periodo={editingPeriodo}
         etapas={etapasPermitidas}
-        defaultEtapa={selectedEtapa}
+        defaultEtapa={selectedEtapaValida}
         onSubmit={handleSubmit}
       />
     </div>
