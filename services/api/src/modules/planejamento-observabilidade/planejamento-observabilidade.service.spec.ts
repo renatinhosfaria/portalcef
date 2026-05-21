@@ -2,6 +2,8 @@ import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { Test } from "@nestjs/testing";
+
 import { PlanejamentoObservabilidadeService } from "./planejamento-observabilidade.service";
 
 describe("PlanejamentoObservabilidadeService", () => {
@@ -21,6 +23,17 @@ describe("PlanejamentoObservabilidadeService", () => {
 
   afterEach(async () => {
     await rm(dir, { recursive: true, force: true });
+  });
+
+  it("pode ser registrado diretamente como provider do Nest", async () => {
+    const moduleRef = await Test.createTestingModule({
+      providers: [PlanejamentoObservabilidadeService],
+    }).compile();
+
+    expect(moduleRef.get(PlanejamentoObservabilidadeService)).toBeInstanceOf(
+      PlanejamentoObservabilidadeService,
+    );
+    await moduleRef.close();
   });
 
   it("remove dados sensiveis, trunca erros, normaliza rotas e preserva campos permitidos", () => {

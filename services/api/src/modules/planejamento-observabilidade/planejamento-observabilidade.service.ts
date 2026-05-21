@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Inject, Injectable, Optional } from "@nestjs/common";
 import { appendFile, mkdir, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -34,6 +34,10 @@ const CHAVES_PROIBIDAS = new Set([
   "headers",
 ]);
 
+export const PLANEJAMENTO_OBSERVABILIDADE_CONFIG = Symbol(
+  "PLANEJAMENTO_OBSERVABILIDADE_CONFIG",
+);
+
 @Injectable()
 export class PlanejamentoObservabilidadeService {
   private readonly diretorio: string;
@@ -41,7 +45,11 @@ export class PlanejamentoObservabilidadeService {
   private readonly retencaoDias: number;
   private readonly agora: () => Date;
 
-  constructor(config: PlanejamentoObservabilidadeServiceConfig = {}) {
+  constructor(
+    @Optional()
+    @Inject(PLANEJAMENTO_OBSERVABILIDADE_CONFIG)
+    config: PlanejamentoObservabilidadeServiceConfig = {},
+  ) {
     this.diretorio = config.diretorio ?? DIRETORIO_PADRAO;
     this.ambiente = config.ambiente ?? AMBIENTE_PADRAO;
     this.retencaoDias = config.retencaoDias ?? RETENCAO_DIAS_PADRAO;
