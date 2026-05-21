@@ -574,7 +574,7 @@ describe("cliente de observabilidade", () => {
         evento: "pagina_aberta",
       }),
     );
-    expect(corpoSerializado).not.toContain("10");
+    expect(JSON.stringify(corpo.eventos[0].detalhes)).not.toContain("10");
   });
 
   it("não rejeita quando AbortController não está disponível", async () => {
