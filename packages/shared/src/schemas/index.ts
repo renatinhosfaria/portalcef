@@ -243,40 +243,8 @@ export { createTurmaSchema, updateTurmaSchema } from "./turmas";
 export type { CreateTurmaInput, UpdateTurmaInput } from "./turmas";
 
 // Plannings schemas
-export {
-  planningStatusSchema,
-  reviewStatusSchema,
-  saveDraftSchema,
-  submitPlanningSchema,
-  approvePlanningSchema,
-  requestChangesSchema,
-  dashboardQuerySchema,
-  planningSchema,
-  planningContentSchema,
-  planningReviewSchema,
-  planningWithContentSchema,
-  planningWithReviewsSchema,
-  planningFullSchema,
-  turmaSchema,
-  quinzenaSchema,
-} from "./plannings";
-export type {
-  PlanningStatus,
-  ReviewStatus,
-  SaveDraftInput,
-  SubmitPlanningInput,
-  ApprovePlanningInput,
-  RequestChangesInput,
-  DashboardQueryInput,
-  Planning,
-  PlanningContent,
-  PlanningReview,
-  PlanningWithContent,
-  PlanningWithReviews,
-  PlanningFull,
-  Turma,
-  Quinzena,
-} from "./plannings";
+export { turmaSchema } from "./plannings";
+export type { Turma } from "./plannings";
 
 // Shop schemas (CEF Shop module)
 export {

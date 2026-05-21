@@ -24,7 +24,7 @@ async function proxyRequest(
 ): Promise<NextResponse> {
   // Extrai o caminho relativo (remove /api/ inicial)
   // Ex: /api/auth/me -> /auth/me
-  // Ex: /api/plannings?status=draft -> /plannings?status=draft
+  // Ex: /api/plano-aula?status=RASCUNHO -> /plano-aula?status=RASCUNHO
   const path = request.nextUrl.pathname.replace(/^\/api/, "");
   const url = `${API_URL}${path}${request.nextUrl.search}`;
 
@@ -84,7 +84,18 @@ async function proxyRequest(
     // Executar request ao backend
     const response = await fetch(url, fetchOptions);
 
-    // Ler resposta
+    const responseContentType = response.headers.get("content-type") || "";
+    const isJsonResponse = responseContentType.includes("application/json");
+
+    if (!isJsonResponse) {
+      return new NextResponse(response.body, {
+        status: response.status,
+        statusText: response.statusText,
+        headers: response.headers,
+      });
+    }
+
+    // Ler resposta JSON
     const data = await response.json().catch(() => ({}));
 
     // Criar resposta Next

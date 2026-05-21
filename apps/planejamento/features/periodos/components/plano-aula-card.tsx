@@ -1,7 +1,7 @@
 /**
  * PlanoAulaCard Component
  * Card de exibição de Plano de Aula para professoras
- * Baseado no design do QuinzenaCard
+ * Baseado no fluxo dinâmico de períodos
  */
 
 "use client";

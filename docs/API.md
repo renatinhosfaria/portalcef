@@ -334,41 +334,9 @@ Query: `unitId`, `year` (default 2026).
 
 ### Plannings
 
-#### POST `/plannings/draft`
-
-#### POST `/plannings/submit`
-
-#### GET `/plannings/dashboard`
-
-Query: `stage` ou `segment`.
-
-#### GET `/plannings/segment/:segment`
+Controller legado mantido apenas para a consulta de turmas usada pelas telas atuais de planejamento e provas. Os fluxos de plano, revisão, dashboard e períodos usam os módulos `plano-aula`, `plano-aula-periodo`, `prova` e `prova-ciclo`.
 
 #### GET `/plannings/turmas`
-
-#### GET `/plannings/quinzenas`
-
-#### GET `/plannings/me`
-
-Query: `quinzena` (opcional).
-
-#### GET `/plannings/me/current`
-
-#### GET `/plannings/me/feedback`
-
-#### GET `/plannings/:id`
-
-#### GET `/plannings/:id/reviews`
-
-#### POST `/plannings/:id/approve`
-
-#### POST `/plannings/:id/request-changes`
-
-Body:
-
-```json
-{ "comment": "Solicitar ajustes" }
-```
 
 ---
 

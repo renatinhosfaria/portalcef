@@ -377,35 +377,7 @@ apps/planejamento/
 
 ### Wizard de Planejamento (Legacy)
 
-**NOTA:** Sistema legado (plannings). O novo sistema usa plano_aula com workflow de analista + coordenadora (ver secao abaixo).
-
-```
-1. Criacao
-   └─▶ Preenche etapa 1 (Dados: turma, quinzena)
-       └─▶ Auto-save localStorage (debounce 2s)
-           └─▶ Avanca para etapa 2 (Objetivos)
-               └─▶ ...
-
-2. Auto-save servidor
-   └─▶ POST /plannings/draft (a cada 30s)
-       └─▶ Upsert rascunho (RASCUNHO)
-
-3. Submissao
-   └─▶ Valida checklist obrigatorio
-       └─▶ POST /plannings/submit
-           └─▶ Status = PENDENTE
-               └─▶ submittedAt = now()
-
-4. Revisao (Coordenacao)
-   └─▶ Aprovar: POST /plannings/:id/approve
-       └─▶ Status = APROVADO, approvedAt = now()
-       └─▶ firstPassYield = (reviewCycles == 0)
-
-   └─▶ Solicitar ajustes: POST /plannings/:id/request-changes
-       └─▶ Status = EM_AJUSTE
-       └─▶ reviewCycles++
-       └─▶ Cria planning_review com comentario
-```
+**NOTA:** O sistema legado `plannings` foi desativado para fluxos de rascunho, envio, revisão, dashboard e quinzenas. Ele permanece apenas com `GET /plannings/turmas`, usado pelas telas atuais para carregar turmas da sessão.
 
 ### Fluxo do Plano de Aula (Novo Sistema)
 
