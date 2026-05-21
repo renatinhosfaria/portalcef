@@ -3,7 +3,10 @@
 import { usePathname } from "next/navigation";
 import { type ReactNode, useEffect } from "react";
 
-import { registrarEventoObservabilidade } from "./cliente";
+import {
+  enviarEventosPendentes,
+  registrarEventoObservabilidade,
+} from "./cliente";
 import type { EventoObservabilidadeCliente } from "./types";
 
 const MODULO_OBSERVABILIDADE = "planejamento";
@@ -113,8 +116,13 @@ function criarHeadersComCorrelationId(
   return { headers, correlationId };
 }
 
+function registrarEEnviarEvento(evento: EventoObservabilidadeCliente): void {
+  registrarEventoObservabilidade(evento);
+  void enviarEventosPendentes().catch(() => undefined);
+}
+
 function registrarErroGlobal(acao: string, erro: unknown): void {
-  registrarEventoObservabilidade({
+  registrarEEnviarEvento({
     evento: "erro_navegador",
     nivel: "error",
     erro: {
@@ -180,7 +188,7 @@ export function ObservabilidadeProvider({
   const pathname = usePathname();
 
   useEffect(() => {
-    registrarEventoObservabilidade({
+    registrarEEnviarEvento({
       evento: "pagina_aberta",
       pagina: {
         url: pathname ?? window.location.pathname,
@@ -235,7 +243,7 @@ export function ObservabilidadeProvider({
         const duracaoMs = Math.round(performance.now() - inicio);
         const nivel = resposta.ok ? "info" : "error";
 
-        registrarEventoObservabilidade(
+        registrarEEnviarEvento(
           montarEventoApi(
             "api_chamada",
             nivel,
@@ -248,7 +256,7 @@ export function ObservabilidadeProvider({
         );
 
         if (duracaoMs > LIMITE_API_LENTA_MS) {
-          registrarEventoObservabilidade(
+          registrarEEnviarEvento(
             montarEventoApi(
               "api_lenta",
               "warn",
@@ -265,7 +273,7 @@ export function ObservabilidadeProvider({
       } catch (erro) {
         const duracaoMs = Math.round(performance.now() - inicio);
 
-        registrarEventoObservabilidade(
+        registrarEEnviarEvento(
           montarEventoApi(
             "api_chamada",
             "error",

@@ -3,7 +3,10 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { registrarEventoObservabilidade } from "./cliente";
+import {
+  enviarEventosPendentes,
+  registrarEventoObservabilidade,
+} from "./cliente";
 import { ObservabilidadeProvider } from "./observabilidade-provider";
 
 vi.mock("next/navigation", () => ({
@@ -11,6 +14,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 vi.mock("./cliente", () => ({
+  enviarEventosPendentes: vi.fn(),
   registrarEventoObservabilidade: vi.fn(),
 }));
 
@@ -28,6 +32,7 @@ describe("ObservabilidadeProvider", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(enviarEventosPendentes).mockResolvedValue(undefined);
     vi.mocked(usePathname).mockReturnValue("/planejamento");
     document.title = "Planejamento | Essência";
     agora = 100;
@@ -62,11 +67,13 @@ describe("ObservabilidadeProvider", () => {
         }),
       );
     });
+    expect(enviarEventosPendentes).toHaveBeenCalledTimes(1);
   });
 
-  it("registra erro_navegador em window.error", async () => {
+  it("registra erro_navegador em window.error e envia a fila", async () => {
     renderizarProvider();
     vi.mocked(registrarEventoObservabilidade).mockClear();
+    vi.mocked(enviarEventosPendentes).mockClear();
 
     const erro = new Error("Falha na tela");
     window.dispatchEvent(
@@ -93,11 +100,13 @@ describe("ObservabilidadeProvider", () => {
         }),
       );
     });
+    expect(enviarEventosPendentes).toHaveBeenCalledTimes(1);
   });
 
-  it("registra erro_navegador em unhandledrejection", async () => {
+  it("registra erro_navegador em unhandledrejection e envia a fila", async () => {
     renderizarProvider();
     vi.mocked(registrarEventoObservabilidade).mockClear();
+    vi.mocked(enviarEventosPendentes).mockClear();
 
     const erro = new Error("Promessa rejeitada");
     window.dispatchEvent(
@@ -124,13 +133,15 @@ describe("ObservabilidadeProvider", () => {
         }),
       );
     });
+    expect(enviarEventosPendentes).toHaveBeenCalledTimes(1);
   });
 
-  it("intercepta fetch para /api/plano-aula/meus, adiciona x-correlation-id, mede duração e registra api_chamada", async () => {
+  it("intercepta fetch para /api/plano-aula/meus, adiciona x-correlation-id, mede duração, registra api_chamada e envia a fila", async () => {
     const fetchMock = mockFetchSucesso(201);
     window.fetch = fetchMock as unknown as typeof window.fetch;
     renderizarProvider();
     vi.mocked(registrarEventoObservabilidade).mockClear();
+    vi.mocked(enviarEventosPendentes).mockClear();
 
     const requisicao = window.fetch("/api/plano-aula/meus?turmaId=turma-1", {
       method: "POST",
@@ -164,12 +175,14 @@ describe("ObservabilidadeProvider", () => {
         },
       }),
     );
+    expect(enviarEventosPendentes).toHaveBeenCalledTimes(1);
   });
 
-  it("registra api_lenta quando duração ultrapassa 2000 ms", async () => {
+  it("registra api_lenta e envia a fila quando duração ultrapassa 2000 ms", async () => {
     window.fetch = mockFetchSucesso(200) as unknown as typeof window.fetch;
     renderizarProvider();
     vi.mocked(registrarEventoObservabilidade).mockClear();
+    vi.mocked(enviarEventosPendentes).mockClear();
 
     const requisicao = window.fetch("/api/plano-aula/meus");
     agora = 2201;
@@ -190,6 +203,26 @@ describe("ObservabilidadeProvider", () => {
         }),
       }),
     );
+    expect(enviarEventosPendentes).toHaveBeenCalledTimes(2);
+  });
+
+  it("mantém o fetch original quando o envio da fila falha", async () => {
+    const fetchMock = mockFetchSucesso(200);
+    vi.mocked(enviarEventosPendentes).mockRejectedValue(
+      new Error("Falha no envio"),
+    );
+    window.fetch = fetchMock as unknown as typeof window.fetch;
+    renderizarProvider();
+    vi.mocked(registrarEventoObservabilidade).mockClear();
+    vi.mocked(enviarEventosPendentes).mockClear();
+
+    await expect(window.fetch("/api/plano-aula/meus")).resolves.toEqual(
+      expect.objectContaining({
+        status: 200,
+      }),
+    );
+
+    expect(enviarEventosPendentes).toHaveBeenCalledTimes(1);
   });
 
   it("não intercepta /api/planejamento-observabilidade/eventos", async () => {
