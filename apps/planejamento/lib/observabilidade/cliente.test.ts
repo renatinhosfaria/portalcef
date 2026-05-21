@@ -114,7 +114,7 @@ describe("cliente de observabilidade", () => {
     const { registrarEventoObservabilidade, enviarEventosPendentes } =
       await import("./cliente");
 
-    registrarEventoObservabilidade({
+    const eventoComCamposProibidos = {
       evento: "erro_navegador",
       origem: "dashboard",
       usuario: { id: "usuario-nao-confiavel" },
@@ -135,7 +135,9 @@ describe("cliente de observabilidade", () => {
         },
       },
       payload: { bruto: true },
-    });
+    } as unknown as Parameters<typeof registrarEventoObservabilidade>[0];
+
+    registrarEventoObservabilidade(eventoComCamposProibidos);
 
     await enviarEventosPendentes();
 
@@ -164,6 +166,67 @@ describe("cliente de observabilidade", () => {
     expect(corpoSerializado).not.toContain("authorization");
     expect(corpoSerializado).not.toContain("privado");
     expect(corpoSerializado).not.toContain("bruto");
+  });
+
+  it("remove campos extras fora do contrato mesmo quando a entrada vem de JS", async () => {
+    const { registrarEventoObservabilidade, enviarEventosPendentes } =
+      await import("./cliente");
+
+    const eventoComCamposExtras = {
+      evento: "api_lenta",
+      nome: "planejamento.legado",
+      metadados: {
+        modulo: "nao_deve_ir",
+      },
+      campoExtra: "fora-do-dto",
+      http: {
+        metodo: "POST",
+        rota: "/api/planejamentos",
+        status: 200,
+        duracaoMs: 900,
+        headers: {
+          authorization: "Bearer segredo",
+        },
+        campoHttpExtra: "fora-do-dto",
+      },
+      detalhes: {
+        modulo: "planejamento",
+        acao: "salvar",
+        duracaoMs: 900,
+        token: "segredo",
+      },
+    } as unknown as Parameters<typeof registrarEventoObservabilidade>[0];
+
+    registrarEventoObservabilidade(eventoComCamposExtras);
+
+    await enviarEventosPendentes();
+
+    const chamadaFetch = vi.mocked(fetch).mock.calls[0];
+    expect(chamadaFetch).toBeDefined();
+    const [, opcoes] = chamadaFetch!;
+    const corpoSerializado = String(opcoes?.body);
+    const corpo = JSON.parse(corpoSerializado);
+
+    expect(corpo.eventos[0]).toEqual({
+      evento: "api_lenta",
+      origem: "browser",
+      sessaoObservabilidadeId: expect.any(String),
+      http: {
+        metodo: "POST",
+        rota: "/api/planejamentos",
+        status: 200,
+        duracaoMs: 900,
+      },
+      detalhes: {
+        modulo: "planejamento",
+        acao: "salvar",
+        duracaoMs: 900,
+      },
+    });
+    expect(corpoSerializado).not.toContain("planejamento.legado");
+    expect(corpoSerializado).not.toContain("metadados");
+    expect(corpoSerializado).not.toContain("fora-do-dto");
+    expect(corpoSerializado).not.toContain("segredo");
   });
 
   it("usa fetch com POST, JSON e credenciais include", async () => {

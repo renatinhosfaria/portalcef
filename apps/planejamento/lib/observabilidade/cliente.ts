@@ -20,6 +20,26 @@ const CAMPOS_PROIBIDOS = new Set([
   "headers",
   "usuario",
 ]);
+const CAMPOS_HTTP_PERMITIDOS = [
+  "metodo",
+  "rota",
+  "status",
+  "duracaoMs",
+] as const;
+const CAMPOS_PAGINA_PERMITIDOS = ["url", "titulo"] as const;
+const CAMPOS_ARQUIVO_PERMITIDOS = [
+  "planoId",
+  "provaId",
+  "documentoId",
+  "nome",
+  "tipo",
+  "tamanhoBytes",
+] as const;
+const CAMPOS_ERRO_PERMITIDOS = [
+  "codigo",
+  "mensagem",
+  "stackResumo",
+] as const;
 
 let sessaoObservabilidadeId: string | null = null;
 const filaEventos: EventoObservabilidadeCliente[] = [];
@@ -69,14 +89,119 @@ function removerCamposProibidos(
   );
 }
 
+function limparObjetoPermitido<TChave extends string>(
+  objeto: unknown,
+  camposPermitidos: readonly TChave[],
+): Partial<Record<TChave, unknown>> | undefined {
+  if (objeto === null || typeof objeto !== "object" || Array.isArray(objeto)) {
+    return undefined;
+  }
+
+  const origem = objeto as Record<string, unknown>;
+  const resultado = camposPermitidos.reduce<Partial<Record<TChave, unknown>>>(
+    (acumulado, campo) => {
+      if (!Object.prototype.hasOwnProperty.call(origem, campo)) {
+        return acumulado;
+      }
+
+      const valorSanitizado = removerCamposProibidos(origem[campo]);
+
+      if (valorSanitizado !== undefined) {
+        acumulado[campo] = valorSanitizado;
+      }
+
+      return acumulado;
+    },
+    {},
+  );
+
+  return Object.keys(resultado).length > 0 ? resultado : undefined;
+}
+
 function prepararEventoParaEnvio(
   evento: EventoObservabilidadeCliente,
 ): EventoObservabilidadeEnvio {
-  return {
-    ...(removerCamposProibidos(evento) as EventoObservabilidadeCliente),
+  const eventoSanitizado = removerCamposProibidos(evento) as Record<
+    string,
+    unknown
+  >;
+  const payload: EventoObservabilidadeEnvio = {
+    evento: eventoSanitizado.evento as EventoObservabilidadeEnvio["evento"],
     origem: "browser",
     sessaoObservabilidadeId: obterSessaoObservabilidadeId(),
   };
+
+  if (typeof eventoSanitizado.timestamp === "string") {
+    payload.timestamp = eventoSanitizado.timestamp;
+  }
+
+  if (typeof eventoSanitizado.ambiente === "string") {
+    payload.ambiente = eventoSanitizado.ambiente;
+  }
+
+  if (
+    eventoSanitizado.nivel === "info" ||
+    eventoSanitizado.nivel === "warn" ||
+    eventoSanitizado.nivel === "error"
+  ) {
+    payload.nivel = eventoSanitizado.nivel;
+  }
+
+  if (
+    typeof eventoSanitizado.correlationId === "string" ||
+    eventoSanitizado.correlationId === null
+  ) {
+    payload.correlationId = eventoSanitizado.correlationId;
+  }
+
+  if (
+    typeof eventoSanitizado.requestId === "string" ||
+    eventoSanitizado.requestId === null
+  ) {
+    payload.requestId = eventoSanitizado.requestId;
+  }
+
+  const http = limparObjetoPermitido(
+    eventoSanitizado.http,
+    CAMPOS_HTTP_PERMITIDOS,
+  );
+  if (http) {
+    payload.http = http as EventoObservabilidadeEnvio["http"];
+  }
+
+  const pagina = limparObjetoPermitido(
+    eventoSanitizado.pagina,
+    CAMPOS_PAGINA_PERMITIDOS,
+  );
+  if (pagina) {
+    payload.pagina = pagina as EventoObservabilidadeEnvio["pagina"];
+  }
+
+  const arquivo = limparObjetoPermitido(
+    eventoSanitizado.arquivo,
+    CAMPOS_ARQUIVO_PERMITIDOS,
+  );
+  if (arquivo) {
+    payload.arquivo = arquivo as EventoObservabilidadeEnvio["arquivo"];
+  }
+
+  const erro = limparObjetoPermitido(
+    eventoSanitizado.erro,
+    CAMPOS_ERRO_PERMITIDOS,
+  );
+  if (erro) {
+    payload.erro = erro as EventoObservabilidadeEnvio["erro"];
+  }
+
+  if (
+    eventoSanitizado.detalhes === null ||
+    (typeof eventoSanitizado.detalhes === "object" &&
+      !Array.isArray(eventoSanitizado.detalhes))
+  ) {
+    payload.detalhes = eventoSanitizado.detalhes as EventoObservabilidadeEnvio["detalhes"];
+  }
+
+  return payload;
 }
 
 export function obterSessaoObservabilidadeId(): string {

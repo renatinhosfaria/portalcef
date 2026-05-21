@@ -57,7 +57,6 @@ export interface EventoObservabilidadeCliente {
   arquivo?: ArquivoObservabilidade;
   erro?: ErroObservabilidade;
   detalhes?: Record<string, ValorObservabilidade> | null;
-  [chave: string]: unknown;
 }
 
 export interface EventoObservabilidadeEnvio
