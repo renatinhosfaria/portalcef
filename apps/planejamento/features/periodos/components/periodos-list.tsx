@@ -62,12 +62,18 @@ export function PeriodosList({
               )}
             </CardTitle>
             <div className="flex gap-2">
-              <Button variant="ghost" size="sm" onClick={() => onEdit(periodo)}>
+              <Button
+                variant="ghost"
+                size="sm"
+                aria-label={`Editar ${periodo.numero}o Plano de Aula`}
+                onClick={() => onEdit(periodo)}
+              >
                 <Pencil className="h-4 w-4" />
               </Button>
               <Button
                 variant="ghost"
                 size="sm"
+                aria-label={`Excluir ${periodo.numero}o Plano de Aula`}
                 onClick={() => onDelete(periodo.id)}
                 disabled={
                   !!(periodo.planosVinculados && periodo.planosVinculados > 0)
