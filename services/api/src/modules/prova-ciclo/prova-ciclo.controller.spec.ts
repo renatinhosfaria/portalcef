@@ -145,4 +145,49 @@ describe("ProvaCicloController", () => {
       );
     });
   });
+
+  describe("PUT /prova-ciclo/:id", () => {
+    it("deve repassar unitId da sessão ao editar ciclo", async () => {
+      const session = {
+        role: "coordenadora_geral",
+        unitId: "unidade-id",
+        userId: "user-id",
+        schoolId: "school-id",
+        stageId: null,
+      };
+      const dto = { descricao: "Nova descrição" };
+      jest
+        .spyOn(service, "buscarPorId")
+        .mockResolvedValue({ id: "ciclo-id", etapa: "INFANTIL" } as any);
+      const editarSpy = jest
+        .spyOn(service, "editarCiclo")
+        .mockResolvedValue({ id: "ciclo-id" } as any);
+
+      await controller.editarCiclo(session, "ciclo-id", dto);
+
+      expect(editarSpy).toHaveBeenCalledWith("ciclo-id", "unidade-id", dto);
+    });
+  });
+
+  describe("DELETE /prova-ciclo/:id", () => {
+    it("deve repassar unitId da sessão ao excluir ciclo", async () => {
+      const session = {
+        role: "coordenadora_geral",
+        unitId: "unidade-id",
+        userId: "user-id",
+        schoolId: "school-id",
+        stageId: null,
+      };
+      jest
+        .spyOn(service, "buscarPorId")
+        .mockResolvedValue({ id: "ciclo-id", etapa: "INFANTIL" } as any);
+      const excluirSpy = jest
+        .spyOn(service, "excluirCiclo")
+        .mockResolvedValue({ success: true } as any);
+
+      await controller.excluirCiclo(session, "ciclo-id");
+
+      expect(excluirSpy).toHaveBeenCalledWith("ciclo-id", "unidade-id");
+    });
+  });
 });

@@ -169,7 +169,7 @@ export class ProvaCicloController {
       );
     }
 
-    const data = await this.service.editarCiclo(id, dto);
+    const data = await this.service.editarCiclo(id, session.unitId, dto);
     return { success: true, data };
   }
 
@@ -200,7 +200,7 @@ export class ProvaCicloController {
       );
     }
 
-    const result = await this.service.excluirCiclo(id);
+    const result = await this.service.excluirCiclo(id, session.unitId);
     return { success: true, data: result };
   }
 

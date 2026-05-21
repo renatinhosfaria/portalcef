@@ -329,33 +329,43 @@ describe("PlanoAulaPeriodoService", () => {
 
   describe("excluirPeriodo", () => {
     it("deve bloquear exclusão quando há planos vinculados ao período", async () => {
-      mockDb.where.mockResolvedValueOnce([{ total: 2 }]);
-      jest
-        .spyOn(serviceInterno, "renumerarPeriodosSeNecessario")
-        .mockResolvedValue(undefined);
-
-      await expect(service.excluirPeriodo("periodo-id")).rejects.toThrow(
-        "Não é possível excluir",
-      );
-
-      expect(mockDelete).not.toHaveBeenCalled();
-    });
-
-    it("deve excluir período sem planos vinculados e renumerar a etapa", async () => {
       mockDb.where
-        .mockResolvedValueOnce([{ total: 0 }])
         .mockResolvedValueOnce([
           {
             id: "periodo-id",
             unidadeId: "unidade-id",
             etapa: "INFANTIL",
           },
-        ]);
+        ])
+        .mockResolvedValueOnce([{ total: 2 }]);
       jest
         .spyOn(serviceInterno, "renumerarPeriodosSeNecessario")
         .mockResolvedValue(undefined);
 
-      await expect(service.excluirPeriodo("periodo-id")).resolves.toEqual({
+      await expect(
+        (service as any).excluirPeriodo("periodo-id", "unidade-id"),
+      ).rejects.toThrow("Não é possível excluir");
+
+      expect(mockDelete).not.toHaveBeenCalled();
+    });
+
+    it("deve excluir período sem planos vinculados e renumerar a etapa", async () => {
+      mockDb.where
+        .mockResolvedValueOnce([
+          {
+            id: "periodo-id",
+            unidadeId: "unidade-id",
+            etapa: "INFANTIL",
+          },
+        ])
+        .mockResolvedValueOnce([{ total: 0 }]);
+      jest
+        .spyOn(serviceInterno, "renumerarPeriodosSeNecessario")
+        .mockResolvedValue(undefined);
+
+      await expect(
+        (service as any).excluirPeriodo("periodo-id", "unidade-id"),
+      ).resolves.toEqual({
         success: true,
         message: "Período excluído com sucesso",
       });
@@ -364,6 +374,58 @@ describe("PlanoAulaPeriodoService", () => {
       expect(
         serviceInterno.renumerarPeriodosSeNecessario,
       ).toHaveBeenCalledWith("unidade-id", "INFANTIL");
+    });
+
+    it("deve bloquear exclusão quando o período não pertence à unidade informada", async () => {
+      jest
+        .spyOn(service, "buscarPorId")
+        .mockRejectedValue(new BadRequestException("Período não encontrado"));
+      mockDb.where
+        .mockResolvedValueOnce([{ total: 0 }])
+        .mockResolvedValueOnce([
+          {
+            id: "periodo-id",
+            unidadeId: "unidade-1",
+            etapa: "INFANTIL",
+          },
+        ]);
+      jest
+        .spyOn(serviceInterno, "renumerarPeriodosSeNecessario")
+        .mockResolvedValue(undefined);
+
+      await expect(
+        (service as any).excluirPeriodo("periodo-id", "unidade-2"),
+      ).rejects.toThrow("Período não encontrado");
+
+      expect(mockDelete).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("editarPeriodo", () => {
+    it("deve bloquear edição quando o período não pertence à unidade informada", async () => {
+      jest
+        .spyOn(service, "buscarPorId")
+        .mockRejectedValue(new BadRequestException("Período não encontrado"));
+      mockDb.where
+        .mockResolvedValueOnce([
+          {
+            id: "periodo-id",
+            unidadeId: "unidade-1",
+            etapa: "INFANTIL",
+            dataInicio: "2026-03-01",
+            dataFim: "2026-03-15",
+          },
+        ])
+        .mockReturnValueOnce({ returning: mockReturning });
+      mockReturning.mockResolvedValueOnce([{ id: "periodo-id" }]);
+
+      await expect(
+        (service as any).editarPeriodo("periodo-id", "unidade-2", {
+          descricao: "Nova descrição",
+        }),
+      ).rejects.toThrow("Período não encontrado");
+
+      expect(mockDb.update).not.toHaveBeenCalled();
     });
   });
 });

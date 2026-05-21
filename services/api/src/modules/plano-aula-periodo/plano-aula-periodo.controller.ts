@@ -172,7 +172,7 @@ export class PlanoAulaPeriodoController {
       );
     }
 
-    const data = await this.service.editarPeriodo(id, dto);
+    const data = await this.service.editarPeriodo(id, session.unitId, dto);
     return { success: true, data };
   }
 
@@ -203,7 +203,7 @@ export class PlanoAulaPeriodoController {
       );
     }
 
-    const result = await this.service.excluirPeriodo(id);
+    const result = await this.service.excluirPeriodo(id, session.unitId);
     return { success: true, data: result };
   }
 

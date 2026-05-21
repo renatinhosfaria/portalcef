@@ -137,33 +137,43 @@ describe("ProvaCicloService", () => {
 
   describe("excluirCiclo", () => {
     it("deve bloquear exclusão quando há provas vinculadas ao ciclo", async () => {
-      mockDb.where.mockResolvedValueOnce([{ total: 1 }]);
-      jest
-        .spyOn(serviceInterno, "renumerarCiclosSeNecessario")
-        .mockResolvedValue(undefined);
-
-      await expect(service.excluirCiclo("ciclo-id")).rejects.toThrow(
-        "Não é possível excluir",
-      );
-
-      expect(mockDelete).not.toHaveBeenCalled();
-    });
-
-    it("deve excluir ciclo sem provas vinculadas e renumerar a etapa", async () => {
       mockDb.where
-        .mockResolvedValueOnce([{ total: 0 }])
         .mockResolvedValueOnce([
           {
             id: "ciclo-id",
             unidadeId: "unidade-id",
             etapa: "INFANTIL",
           },
-        ]);
+        ])
+        .mockResolvedValueOnce([{ total: 1 }]);
       jest
         .spyOn(serviceInterno, "renumerarCiclosSeNecessario")
         .mockResolvedValue(undefined);
 
-      await expect(service.excluirCiclo("ciclo-id")).resolves.toEqual({
+      await expect(
+        (service as any).excluirCiclo("ciclo-id", "unidade-id"),
+      ).rejects.toThrow("Não é possível excluir");
+
+      expect(mockDelete).not.toHaveBeenCalled();
+    });
+
+    it("deve excluir ciclo sem provas vinculadas e renumerar a etapa", async () => {
+      mockDb.where
+        .mockResolvedValueOnce([
+          {
+            id: "ciclo-id",
+            unidadeId: "unidade-id",
+            etapa: "INFANTIL",
+          },
+        ])
+        .mockResolvedValueOnce([{ total: 0 }]);
+      jest
+        .spyOn(serviceInterno, "renumerarCiclosSeNecessario")
+        .mockResolvedValue(undefined);
+
+      await expect(
+        (service as any).excluirCiclo("ciclo-id", "unidade-id"),
+      ).resolves.toEqual({
         success: true,
         message: "Ciclo de prova excluido com sucesso",
       });
@@ -173,6 +183,62 @@ describe("ProvaCicloService", () => {
         "unidade-id",
         "INFANTIL",
       );
+    });
+
+    it("deve bloquear exclusão quando o ciclo não pertence à unidade informada", async () => {
+      jest
+        .spyOn(service, "buscarPorId")
+        .mockRejectedValue(
+          new BadRequestException("Ciclo de prova nao encontrado"),
+        );
+      mockDb.where
+        .mockResolvedValueOnce([{ total: 0 }])
+        .mockResolvedValueOnce([
+          {
+            id: "ciclo-id",
+            unidadeId: "unidade-1",
+            etapa: "INFANTIL",
+          },
+        ]);
+      jest
+        .spyOn(serviceInterno, "renumerarCiclosSeNecessario")
+        .mockResolvedValue(undefined);
+
+      await expect(
+        (service as any).excluirCiclo("ciclo-id", "unidade-2"),
+      ).rejects.toThrow("Ciclo de prova nao encontrado");
+
+      expect(mockDelete).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("editarCiclo", () => {
+    it("deve bloquear edição quando o ciclo não pertence à unidade informada", async () => {
+      jest
+        .spyOn(service, "buscarPorId")
+        .mockRejectedValue(
+          new BadRequestException("Ciclo de prova nao encontrado"),
+        );
+      mockDb.where
+        .mockResolvedValueOnce([
+          {
+            id: "ciclo-id",
+            unidadeId: "unidade-1",
+            etapa: "INFANTIL",
+            dataInicio: "2026-03-01",
+            dataFim: "2026-03-15",
+          },
+        ])
+        .mockReturnValueOnce({ returning: mockReturning });
+      mockReturning.mockResolvedValueOnce([{ id: "ciclo-id" }]);
+
+      await expect(
+        (service as any).editarCiclo("ciclo-id", "unidade-2", {
+          descricao: "Nova descrição",
+        }),
+      ).rejects.toThrow("Ciclo de prova nao encontrado");
+
+      expect(mockDb.update).not.toHaveBeenCalled();
     });
   });
 

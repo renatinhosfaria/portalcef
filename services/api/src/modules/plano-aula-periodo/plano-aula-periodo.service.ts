@@ -173,16 +173,8 @@ export class PlanoAulaPeriodoService {
     return periodo;
   }
 
-  async editarPeriodo(id: string, dto: EditarPeriodoDto) {
-    // Buscar período existente
-    const [periodoExistente] = await this.db
-      .select()
-      .from(planoAulaPeriodo)
-      .where(eq(planoAulaPeriodo.id, id));
-
-    if (!periodoExistente) {
-      throw new BadRequestException("Período não encontrado");
-    }
+  async editarPeriodo(id: string, unitId: string, dto: EditarPeriodoDto) {
+    const periodoExistente = await this.buscarPorId(id, unitId);
 
     // Validar datas se foram fornecidas
     if (dto.dataInicio || dto.dataFim) {
@@ -248,7 +240,12 @@ export class PlanoAulaPeriodoService {
         ...dto,
         atualizadoEm: new Date(),
       })
-      .where(eq(planoAulaPeriodo.id, id))
+      .where(
+        and(
+          eq(planoAulaPeriodo.id, id),
+          eq(planoAulaPeriodo.unidadeId, unitId),
+        ),
+      )
       .returning();
 
     // Se as datas mudaram, renumerar
@@ -262,7 +259,9 @@ export class PlanoAulaPeriodoService {
     return periodoAtualizado;
   }
 
-  async excluirPeriodo(id: string) {
+  async excluirPeriodo(id: string, unitId: string) {
+    const periodo = await this.buscarPorId(id, unitId);
+
     const planosVinculados = await this.contarPlanosVinculados(id);
     if (planosVinculados > 0) {
       throw new BadRequestException(
@@ -270,18 +269,15 @@ export class PlanoAulaPeriodoService {
       );
     }
 
-    // Buscar período
-    const [periodo] = await this.db
-      .select()
-      .from(planoAulaPeriodo)
-      .where(eq(planoAulaPeriodo.id, id));
-
-    if (!periodo) {
-      throw new BadRequestException("Período não encontrado");
-    }
-
     // Excluir período
-    await this.db.delete(planoAulaPeriodo).where(eq(planoAulaPeriodo.id, id));
+    await this.db
+      .delete(planoAulaPeriodo)
+      .where(
+        and(
+          eq(planoAulaPeriodo.id, id),
+          eq(planoAulaPeriodo.unidadeId, unitId),
+        ),
+      );
 
     // Renumerar períodos restantes
     await this.renumerarPeriodosSeNecessario(periodo.unidadeId, periodo.etapa);
