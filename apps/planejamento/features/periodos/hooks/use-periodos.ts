@@ -16,8 +16,8 @@ export interface Periodo {
   dataFim: string;
   dataMaximaEntrega: string;
   planosVinculados?: number;
-  criadoEm: Date;
-  atualizadoEm: Date;
+  criadoEm: string;
+  atualizadoEm: string;
 }
 
 interface UsePeriodosReturn {
