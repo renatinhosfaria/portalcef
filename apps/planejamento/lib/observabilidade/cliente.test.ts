@@ -450,6 +450,7 @@ describe("cliente de observabilidade", () => {
       "2026-01-01",
       "2026-01-01T00:00:00",
       "Thu, 01 Jan 2026 00:00:00 GMT",
+      "2026-01-01T00:00:00-03:00",
     ];
 
     timestampsInvalidos.forEach((timestamp) => {
@@ -463,7 +464,7 @@ describe("cliente de observabilidade", () => {
     });
     registrarEventoObservabilidade({
       evento: "api_chamada",
-      timestamp: "2026-01-01T00:00:00-03:00",
+      timestamp: "2026-01-01T00:00:00Z",
       detalhes: {
         modulo: "planejamento",
       },
@@ -477,16 +478,103 @@ describe("cliente de observabilidade", () => {
     const corpoSerializado = String(opcoes?.body);
     const corpo = JSON.parse(corpoSerializado);
 
-    expect(corpo.eventos).toHaveLength(4);
+    expect(corpo.eventos).toHaveLength(5);
     expect(corpo.eventos[0]).not.toHaveProperty("timestamp");
     expect(corpo.eventos[1]).not.toHaveProperty("timestamp");
     expect(corpo.eventos[2]).not.toHaveProperty("timestamp");
-    expect(corpo.eventos[3]).toEqual(
+    expect(corpo.eventos[3]).not.toHaveProperty("timestamp");
+    expect(corpo.eventos[4]).toEqual(
       expect.objectContaining({
-        timestamp: "2026-01-01T00:00:00-03:00",
+        timestamp: "2026-01-01T00:00:00Z",
       }),
     );
     expect(corpoSerializado).not.toContain("Thu, 01 Jan");
+    expect(corpoSerializado).not.toContain("-03:00");
+  });
+
+  it("ignora entradas não objeto e envia apenas eventos válidos", async () => {
+    const { registrarEventoObservabilidade, enviarEventosPendentes } =
+      await import("./cliente");
+
+    [
+      null,
+      undefined,
+      "evento",
+      123,
+    ].forEach((entrada) => {
+      registrarEventoObservabilidade(
+        entrada as unknown as Parameters<typeof registrarEventoObservabilidade>[0],
+      );
+    });
+    registrarEventoObservabilidade({
+      evento: "api_chamada",
+      detalhes: {
+        modulo: "planejamento",
+      },
+    });
+
+    await expect(enviarEventosPendentes()).resolves.toBeUndefined();
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    const chamadaFetch = vi.mocked(fetch).mock.calls[0];
+    expect(chamadaFetch).toBeDefined();
+    const [, opcoes] = chamadaFetch!;
+    const corpo = JSON.parse(String(opcoes?.body));
+
+    expect(corpo.eventos).toHaveLength(1);
+    expect(corpo.eventos[0]).toEqual(
+      expect.objectContaining({
+        evento: "api_chamada",
+        origem: "browser",
+      }),
+    );
+  });
+
+  it("descarta BigInt em detalhes sem impedir envio do lote", async () => {
+    const { registrarEventoObservabilidade, enviarEventosPendentes } =
+      await import("./cliente");
+
+    registrarEventoObservabilidade({
+      evento: "api_chamada",
+      detalhes: {
+        modulo: "planejamento",
+        quantidade: BigInt(10),
+        resultado: [
+          {
+            tipo: "ok",
+            quantidade: BigInt(2),
+          },
+        ],
+      },
+    } as unknown as Parameters<typeof registrarEventoObservabilidade>[0]);
+    registrarEventoObservabilidade({
+      evento: "pagina_aberta",
+      detalhes: {
+        modulo: "planejamento",
+        acao: "abrir_pagina",
+      },
+    });
+
+    await expect(enviarEventosPendentes()).resolves.toBeUndefined();
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    const chamadaFetch = vi.mocked(fetch).mock.calls[0];
+    expect(chamadaFetch).toBeDefined();
+    const [, opcoes] = chamadaFetch!;
+    const corpoSerializado = String(opcoes?.body);
+    const corpo = JSON.parse(corpoSerializado);
+
+    expect(corpo.eventos).toHaveLength(2);
+    expect(corpo.eventos[0].detalhes).toEqual({
+      modulo: "planejamento",
+      resultado: [{ tipo: "ok" }],
+    });
+    expect(corpo.eventos[1]).toEqual(
+      expect.objectContaining({
+        evento: "pagina_aberta",
+      }),
+    );
+    expect(corpoSerializado).not.toContain("10");
   });
 
   it("não rejeita quando AbortController não está disponível", async () => {

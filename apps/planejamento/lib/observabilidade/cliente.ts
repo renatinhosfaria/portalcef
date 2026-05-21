@@ -22,7 +22,7 @@ const LIMITE_DETALHES_PROFUNDIDADE = 3;
 const LIMITE_DETALHES_ARRAY = 20;
 const LIMITE_DETALHES_CHAVES = 20;
 const DATA_HORA_ISO_COM_TIMEZONE =
-  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/;
 const CAMPOS_PROIBIDOS = new Set([
   "cookie",
   "authorization",
@@ -327,6 +327,15 @@ function limparDetalhes(
         : undefined;
     }
 
+    if (
+      typeof valorSemCamposProibidos === "undefined" ||
+      typeof valorSemCamposProibidos === "bigint" ||
+      typeof valorSemCamposProibidos === "symbol" ||
+      typeof valorSemCamposProibidos === "function"
+    ) {
+      return undefined;
+    }
+
     return valorSemCamposProibidos;
   }
 
@@ -364,10 +373,12 @@ function limparDetalhes(
 function prepararEventoParaEnvio(
   evento: EventoObservabilidadeCliente,
 ): EventoObservabilidadeEnvio | null {
-  const eventoSanitizado = removerCamposProibidos(evento) as Record<
-    string,
-    unknown
-  >;
+  const eventoSanitizado = removerCamposProibidos(evento);
+
+  if (!ehObjetoSimples(eventoSanitizado)) {
+    return null;
+  }
+
   const eventoNormalizado = normalizarEvento(eventoSanitizado.evento);
 
   if (!eventoNormalizado) {
