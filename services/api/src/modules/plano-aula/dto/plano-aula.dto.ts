@@ -108,6 +108,7 @@ export const GESTAO_ROLES = [
   "master",
   "diretora_geral",
   "gerente_unidade",
+  "gerente_financeiro",
   "coordenadora_geral",
 ] as const;
 

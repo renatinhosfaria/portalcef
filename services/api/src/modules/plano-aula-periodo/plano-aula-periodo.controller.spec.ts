@@ -5,6 +5,7 @@ import { ForbiddenException } from "@nestjs/common";
 import { AuthGuard } from "../../common/guards/auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
 import { TenantGuard } from "../../common/guards/tenant.guard";
+import { ROLES_KEY } from "../../common/decorators/roles.decorator";
 
 // Mock do @essencia/db
 jest.mock("@essencia/db", () => ({
@@ -27,6 +28,11 @@ describe("PlanoAulaPeriodoController", () => {
           provide: PlanoAulaPeriodoService,
           useValue: {
             criarPeriodo: jest.fn(),
+            listarPorUnidade: jest.fn(),
+            buscarPorTurma: jest.fn(),
+            buscarPorId: jest.fn(),
+            editarPeriodo: jest.fn(),
+            excluirPeriodo: jest.fn(),
           },
         },
       ],
@@ -45,7 +51,98 @@ describe("PlanoAulaPeriodoController", () => {
     service = module.get<PlanoAulaPeriodoService>(PlanoAulaPeriodoService);
   });
 
+  const rolesDe = (
+    metodo: keyof Pick<
+      PlanoAulaPeriodoController,
+      | "listarPeriodos"
+      | "buscarPeriodosDaTurma"
+      | "buscarPeriodo"
+      | "criarPeriodo"
+      | "editarPeriodo"
+      | "excluirPeriodo"
+    >,
+  ): string[] =>
+    Reflect.getMetadata(
+      ROLES_KEY,
+      PlanoAulaPeriodoController.prototype[metodo],
+    ) ?? [];
+
+  describe("política de roles", () => {
+    it("permite gerente_financeiro visualizar períodos, mas não gerenciar", () => {
+      expect(rolesDe("listarPeriodos")).toContain("gerente_financeiro");
+      expect(rolesDe("buscarPeriodo")).toContain("gerente_financeiro");
+      expect(rolesDe("criarPeriodo")).not.toContain("gerente_financeiro");
+      expect(rolesDe("editarPeriodo")).not.toContain("gerente_financeiro");
+      expect(rolesDe("excluirPeriodo")).not.toContain("gerente_financeiro");
+    });
+
+    it("inclui master nas rotas de gestão de períodos", () => {
+      expect(rolesDe("listarPeriodos")).toContain("master");
+      expect(rolesDe("criarPeriodo")).toContain("master");
+      expect(rolesDe("editarPeriodo")).toContain("master");
+      expect(rolesDe("excluirPeriodo")).toContain("master");
+    });
+
+    it("permite coordenadora_fundamental_i buscar períodos por turma", () => {
+      expect(rolesDe("buscarPeriodosDaTurma")).toContain(
+        "coordenadora_fundamental_i",
+      );
+    });
+
+    it("permite analista_pedagogico visualizar períodos, mas não gerenciar", () => {
+      expect(rolesDe("listarPeriodos")).toContain("analista_pedagogico");
+      expect(rolesDe("buscarPeriodo")).toContain("analista_pedagogico");
+      expect(rolesDe("criarPeriodo")).not.toContain("analista_pedagogico");
+      expect(rolesDe("editarPeriodo")).not.toContain("analista_pedagogico");
+      expect(rolesDe("excluirPeriodo")).not.toContain("analista_pedagogico");
+    });
+  });
+
   describe("POST /plano-aula-periodo", () => {
+    it("deve permitir master criando período de qualquer etapa", async () => {
+      const session = {
+        role: "master",
+        unitId: "unidade-id",
+        userId: "user-id",
+        schoolId: "school-id",
+        stageId: null,
+      };
+      const dto = {
+        etapa: "MEDIO",
+        dataInicio: "2026-03-01",
+        dataFim: "2026-03-15",
+        dataMaximaEntrega: "2026-02-25",
+      };
+
+      jest
+        .spyOn(service, "criarPeriodo")
+        .mockResolvedValue({ id: "periodo-id" } as any);
+
+      await expect(
+        controller.criarPeriodo(session, dto),
+      ).resolves.toBeDefined();
+    });
+
+    it("deve bloquear gerente_financeiro criando período", async () => {
+      const session = {
+        role: "gerente_financeiro",
+        unitId: "unidade-id",
+        userId: "user-id",
+        schoolId: "school-id",
+        stageId: null,
+      };
+      const dto = {
+        etapa: "INFANTIL",
+        dataInicio: "2026-03-01",
+        dataFim: "2026-03-15",
+        dataMaximaEntrega: "2026-02-25",
+      };
+
+      await expect(controller.criarPeriodo(session, dto)).rejects.toThrow(
+        ForbiddenException,
+      );
+    });
+
     it("deve bloquear coordenadora_infantil criando período de FUNDAMENTAL_I", async () => {
       const session = {
         role: "coordenadora_infantil",
