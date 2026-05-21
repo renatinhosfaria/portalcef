@@ -8,6 +8,7 @@
  * @route /api/[...path]
  */
 
+import { randomUUID } from "node:crypto";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
@@ -27,6 +28,8 @@ async function proxyRequest(
   // Ex: /api/plano-aula?status=RASCUNHO -> /plano-aula?status=RASCUNHO
   const path = request.nextUrl.pathname.replace(/^\/api/, "");
   const url = `${API_URL}${path}${request.nextUrl.search}`;
+  const correlationId =
+    request.headers.get("x-correlation-id") || randomUUID();
 
   try {
     // Verificar se é upload de arquivo (multipart/form-data)
@@ -53,6 +56,7 @@ async function proxyRequest(
     if (requestId) {
       headers["x-request-id"] = requestId;
     }
+    headers["x-correlation-id"] = correlationId;
 
     // Configuração do fetch
     const fetchOptions: RequestInit = {
@@ -88,11 +92,14 @@ async function proxyRequest(
     const isJsonResponse = responseContentType.includes("application/json");
 
     if (!isJsonResponse) {
-      return new NextResponse(response.body, {
+      const nextResponse = new NextResponse(response.body, {
         status: response.status,
         statusText: response.statusText,
         headers: response.headers,
       });
+      nextResponse.headers.set("x-correlation-id", correlationId);
+
+      return nextResponse;
     }
 
     // Ler resposta JSON
@@ -102,6 +109,7 @@ async function proxyRequest(
     const nextResponse = NextResponse.json(data, {
       status: response.status,
     });
+    nextResponse.headers.set("x-correlation-id", correlationId);
 
     // Forwarding de cookies da resposta (ex: set-cookie do login)
     const setCookie = response.headers.get("set-cookie");
@@ -113,7 +121,7 @@ async function proxyRequest(
   } catch (error) {
     console.error(`[Proxy Error] ${method} ${url}:`, error);
 
-    return NextResponse.json(
+    const nextResponse = NextResponse.json(
       {
         success: false,
         error: {
@@ -124,6 +132,9 @@ async function proxyRequest(
       },
       { status: 502 }, // Bad Gateway
     );
+    nextResponse.headers.set("x-correlation-id", correlationId);
+
+    return nextResponse;
   }
 }
 
