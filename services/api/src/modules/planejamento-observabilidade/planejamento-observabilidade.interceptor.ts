@@ -24,7 +24,6 @@ const ROTAS_PLANEJAMENTO = [
 ];
 
 const ROTA_OBSERVABILIDADE = "/api/planejamento-observabilidade";
-const SLOW_MS_PADRAO = 2000;
 const UUID_REGEX =
   /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi;
 
@@ -65,6 +64,7 @@ export class PlanejamentoObservabilidadeInterceptor implements NestInterceptor {
     }
 
     const inicio = Date.now();
+    const slowMs = this.observabilidade.obterSlowMs();
 
     return next.handle().pipe(
       tap(() => {
@@ -81,7 +81,7 @@ export class PlanejamentoObservabilidadeInterceptor implements NestInterceptor {
 
         this.registrarSemPropagar(evento);
 
-        if (duracaoMs >= SLOW_MS_PADRAO) {
+        if (duracaoMs >= slowMs) {
           this.registrarSemPropagar({
             ...evento,
             evento: "api_lenta",
@@ -92,18 +92,25 @@ export class PlanejamentoObservabilidadeInterceptor implements NestInterceptor {
       catchError((erro: unknown) => {
         const duracaoMs = Date.now() - inicio;
         const erroHttp = erro as ErroHttp;
+        const evento = this.criarEvento({
+          req,
+          rota,
+          status: this.obterStatusErro(erroHttp),
+          duracaoMs,
+          nivel: "error",
+          evento: "api_chamada",
+          erro: erroHttp,
+        });
 
-        this.registrarSemPropagar(
-          this.criarEvento({
-            req,
-            rota,
-            status: this.obterStatusErro(erroHttp),
-            duracaoMs,
-            nivel: "error",
-            evento: "api_chamada",
-            erro: erroHttp,
-          }),
-        );
+        this.registrarSemPropagar(evento);
+
+        if (duracaoMs >= slowMs) {
+          this.registrarSemPropagar({
+            ...evento,
+            evento: "api_lenta",
+            nivel: "warn",
+          });
+        }
 
         return throwError(() => erro);
       }),
@@ -228,11 +235,22 @@ export class PlanejamentoObservabilidadeInterceptor implements NestInterceptor {
     const texto = this.texto(mensagem) ?? "Erro desconhecido";
 
     return texto
-      .replace(/token[=:]\s*["']?[\w.-]+["']?/gi, "token=***")
-      .replace(/password[=:]\s*["']?[^\s"']+["']?/gi, "password=***")
-      .replace(/senha[=:]\s*["']?[^\s"']+["']?/gi, "senha=***")
-      .replace(/email[=:]\s*["']?[^\s"']+["']?/gi, "email=***")
-      .replace(/authorization[=:]\s*["']?[^\s"']+["']?/gi, "authorization=***");
+      .replace(/(authorization\s*[:=]\s*Bearer\s+)[^\s"',}]+/gi, "$1***")
+      .replace(this.regexCampoSensivel("token"), "$1$2***$2")
+      .replace(this.regexCampoSensivel("password"), "$1$2***$2")
+      .replace(this.regexCampoSensivel("senha"), "$1$2***$2")
+      .replace(this.regexCampoSensivel("email"), "$1$2***$2")
+      .replace(
+        /(authorization\s*[:=]\s*)(?!Bearer\s+)(["']?)[^"',\s}]+(\2)/gi,
+        "$1$2***$2",
+      );
+  }
+
+  private regexCampoSensivel(campo: string): RegExp {
+    return new RegExp(
+      `(["']?${campo}["']?\\s*[:=]\\s*)(["']?)[^"',\\s}]+(\\2)`,
+      "gi",
+    );
   }
 
   private numero(valor: unknown): number | undefined {

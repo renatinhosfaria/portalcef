@@ -14,6 +14,7 @@ describe("PlanejamentoObservabilidadeInterceptor", () => {
   function criarInterceptor() {
     const service = {
       registrarEvento: jest.fn().mockResolvedValue(undefined),
+      obterSlowMs: jest.fn().mockReturnValue(2000),
     };
 
     const interceptor = new PlanejamentoObservabilidadeInterceptor(
@@ -157,6 +158,38 @@ describe("PlanejamentoObservabilidadeInterceptor", () => {
     );
   });
 
+  it("usa limite slowMs configurado pelo service para detectar chamada lenta", async () => {
+    mockTempo(1000, 2500);
+    const { interceptor, service } = criarInterceptor();
+    service.obterSlowMs.mockReturnValue(1500);
+
+    await lastValueFrom(
+      interceptor.intercept(
+        criarContexto({
+          method: "GET",
+          url: "/api/plannings",
+          correlationId: "correlation-slow-config",
+        }),
+        sucesso(),
+      ),
+    );
+
+    expect(service.registrarEvento).toHaveBeenCalledTimes(2);
+    expect(service.registrarEvento).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        evento: "api_lenta",
+        nivel: "warn",
+        http: {
+          metodo: "GET",
+          rota: "/api/plannings",
+          status: 200,
+          duracaoMs: 1500,
+        },
+      }),
+    );
+  });
+
   it("nao registra eventos da propria rota de observabilidade", async () => {
     mockTempo(1000, 4000);
     const { interceptor, service } = criarInterceptor();
@@ -174,6 +207,62 @@ describe("PlanejamentoObservabilidadeInterceptor", () => {
     );
 
     expect(service.registrarEvento).not.toHaveBeenCalled();
+  });
+
+  it("registra api_lenta junto com api_chamada quando erro demora alem do limite", async () => {
+    mockTempo(1000, 3001);
+    const { interceptor, service } = criarInterceptor();
+    const erro = new Error("Falha lenta") as Error & {
+      status: number;
+      code: string;
+    };
+    erro.status = 500;
+    erro.code = "ERRO_LENTO";
+
+    await expect(
+      lastValueFrom(
+        interceptor.intercept(
+          criarContexto({
+            method: "POST",
+            url: "/api/plano-aula-periodo",
+            correlationId: "correlation-erro-lento",
+          }),
+          falha(erro),
+        ),
+      ),
+    ).rejects.toBe(erro);
+
+    expect(service.registrarEvento).toHaveBeenCalledTimes(2);
+    expect(service.registrarEvento).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        evento: "api_chamada",
+        nivel: "error",
+        http: {
+          metodo: "POST",
+          rota: "/api/plano-aula-periodo",
+          status: 500,
+          duracaoMs: 2001,
+        },
+        erro: {
+          codigo: "ERRO_LENTO",
+          mensagem: "Falha lenta",
+        },
+      }),
+    );
+    expect(service.registrarEvento).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        evento: "api_lenta",
+        nivel: "warn",
+        http: {
+          metodo: "POST",
+          rota: "/api/plano-aula-periodo",
+          status: 500,
+          duracaoMs: 2001,
+        },
+      }),
+    );
   });
 
   it("registra erro 500 com nivel error e mensagem sanitizada", async () => {
@@ -228,5 +317,42 @@ describe("PlanejamentoObservabilidadeInterceptor", () => {
     expect(JSON.stringify(service.registrarEvento.mock.calls[0][0])).not.toContain(
       "maria@example.com",
     );
+  });
+
+  it("sanitiza segredos em JSON e Authorization Bearer na mensagem de erro", async () => {
+    mockTempo(2000, 2042);
+    const { interceptor, service } = criarInterceptor();
+    const erro = new Error(
+      'Falha {"password":"abc","token":"def"} Authorization: Bearer segredo.jwt',
+    ) as Error & { status: number; code: string };
+    erro.status = 500;
+    erro.code = "ERRO_SEGREDO";
+
+    await expect(
+      lastValueFrom(
+        interceptor.intercept(
+          criarContexto({
+            method: "GET",
+            url: "/api/prova",
+            correlationId: "correlation-segredo",
+          }),
+          falha(erro),
+        ),
+      ),
+    ).rejects.toBe(erro);
+
+    expect(service.registrarEvento).toHaveBeenCalledWith(
+      expect.objectContaining({
+        erro: {
+          codigo: "ERRO_SEGREDO",
+          mensagem:
+            'Falha {"password":"***","token":"***"} Authorization: Bearer ***',
+        },
+      }),
+    );
+    const evento = JSON.stringify(service.registrarEvento.mock.calls[0][0]);
+    expect(evento).not.toContain("abc");
+    expect(evento).not.toContain("def");
+    expect(evento).not.toContain("segredo.jwt");
   });
 });

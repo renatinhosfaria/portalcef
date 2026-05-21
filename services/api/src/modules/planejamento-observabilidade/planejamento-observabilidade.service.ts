@@ -15,6 +15,7 @@ import type {
 
 const DIRETORIO_PADRAO = "/var/log/essencia/planejamento";
 const AMBIENTE_PADRAO = process.env.NODE_ENV ?? "development";
+const SLOW_MS_PADRAO = 2000;
 const RETENCAO_DIAS_PADRAO = 30;
 const LIMITE_MENSAGEM_ERRO = 500;
 const LIMITE_STACK_ERRO = 1000;
@@ -42,6 +43,7 @@ export const PLANEJAMENTO_OBSERVABILIDADE_CONFIG = Symbol(
 export class PlanejamentoObservabilidadeService {
   private readonly diretorio: string;
   private readonly ambiente: string;
+  private readonly slowMs: number;
   private readonly retencaoDias: number;
   private readonly agora: () => Date;
 
@@ -52,6 +54,7 @@ export class PlanejamentoObservabilidadeService {
   ) {
     this.diretorio = config.diretorio ?? DIRETORIO_PADRAO;
     this.ambiente = config.ambiente ?? AMBIENTE_PADRAO;
+    this.slowMs = this.normalizarSlowMs(config.slowMs);
     this.retencaoDias = config.retencaoDias ?? RETENCAO_DIAS_PADRAO;
     this.agora = config.agora ?? (() => new Date());
   }
@@ -166,6 +169,10 @@ export class PlanejamentoObservabilidadeService {
       this.diretorio,
       `planejamento-${this.formatarDataArquivo(data)}.jsonl`,
     );
+  }
+
+  obterSlowMs(): number {
+    return this.slowMs;
   }
 
   private normalizarUsuario(
@@ -359,6 +366,12 @@ export class PlanejamentoObservabilidadeService {
     return typeof valor === "number" && Number.isFinite(valor)
       ? valor
       : undefined;
+  }
+
+  private normalizarSlowMs(valor: unknown): number {
+    const numero = this.numero(valor);
+
+    return numero && numero > 0 ? numero : SLOW_MS_PADRAO;
   }
 
   private numeroOuNull(valor: unknown): number | null | undefined {
