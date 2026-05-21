@@ -568,7 +568,7 @@ export function useProvaDashboard(): UseProvaDashboardReturn {
       try {
         const params = new URLSearchParams();
         if (provaCicloId) {
-          params.append("provaCicloId", provaCicloId);
+          params.append("cicloId", provaCicloId);
         }
         const queryString = params.toString() ? `?${params.toString()}` : "";
 
