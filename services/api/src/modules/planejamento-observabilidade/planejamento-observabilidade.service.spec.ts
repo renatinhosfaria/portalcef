@@ -120,6 +120,21 @@ describe("PlanejamentoObservabilidadeService", () => {
     expect(JSON.stringify(evento)).not.toContain("maria@example.com");
   });
 
+  it("remove query string e hash antes de registrar URL de pagina", () => {
+    const evento = service.normalizarEvento({
+      origem: "browser",
+      evento: "pagina_aberta",
+      pagina: {
+        url: "/planejamento/plano-aula/11111111-1111-1111-1111-111111111111?token=segredo&conteudo=x#ancora",
+      },
+    });
+
+    expect(evento.pagina?.url).toBe("/planejamento/plano-aula/:id");
+    expect(JSON.stringify(evento)).not.toContain("segredo");
+    expect(JSON.stringify(evento)).not.toContain("conteudo");
+    expect(JSON.stringify(evento)).not.toContain("ancora");
+  });
+
   it("registra evento em arquivo diario com uma linha JSON valida", async () => {
     await service.registrarEvento({
       origem: "api",
@@ -177,6 +192,39 @@ describe("PlanejamentoObservabilidadeService", () => {
         nivel: "info",
       }),
     ).resolves.toBeUndefined();
+  });
+
+  it("normaliza timestamp invalido ou futuro para o horario do servidor ao gravar", async () => {
+    await service.registrarEvento({
+      timestamp: "invalido",
+      origem: "api",
+      evento: "api_chamada",
+      nivel: "info",
+    });
+    await service.registrarEvento({
+      timestamp: "2026-05-22T12:00:00.000Z",
+      origem: "api",
+      evento: "api_chamada",
+      nivel: "info",
+    });
+
+    const conteudo = await readFile(
+      join(dir, "planejamento-2026-05-21.jsonl"),
+      "utf8",
+    );
+    const linhas = conteudo
+      .trim()
+      .split("\n")
+      .map((linha) => JSON.parse(linha));
+
+    expect(linhas).toHaveLength(2);
+    expect(linhas).toEqual([
+      expect.objectContaining({ timestamp: "2026-05-21T12:00:00.000Z" }),
+      expect.objectContaining({ timestamp: "2026-05-21T12:00:00.000Z" }),
+    ]);
+    await expect(
+      access(join(dir, "planejamento-2026-05-22.jsonl")),
+    ).rejects.toThrow();
   });
 
   it("remove arquivos com mais de 30 dias e preserva arquivos recentes", async () => {

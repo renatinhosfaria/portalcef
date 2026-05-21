@@ -54,9 +54,10 @@ export class PlanejamentoObservabilidadeService {
     const sanitizado = this.sanitizarValor(
       evento,
     ) as PlanejamentoObservabilidadeEventoEntrada;
+    const agora = this.agora();
 
     const normalizado: PlanejamentoObservabilidadeEventoNormalizado = {
-      timestamp: this.texto(sanitizado.timestamp) ?? this.agora().toISOString(),
+      timestamp: this.normalizarTimestamp(sanitizado.timestamp, agora),
       ambiente: this.texto(sanitizado.ambiente) ?? this.ambiente,
       app: "planejamento",
       origem: sanitizado.origem,
@@ -299,7 +300,28 @@ export class PlanejamentoObservabilidadeService {
   }
 
   private sanitizarRota(valor: string | undefined): string | undefined {
-    return valor?.replace(UUID_REGEX, ":id");
+    if (!valor) {
+      return undefined;
+    }
+
+    const semHash = valor.split("#", 1)[0];
+    const semQuery = semHash.split("?", 1)[0];
+
+    return semQuery.replace(UUID_REGEX, ":id");
+  }
+
+  private normalizarTimestamp(valor: unknown, agora: Date): string {
+    const texto = this.texto(valor);
+    if (!texto) {
+      return agora.toISOString();
+    }
+
+    const data = new Date(texto);
+    if (Number.isNaN(data.getTime()) || data.getTime() > agora.getTime()) {
+      return agora.toISOString();
+    }
+
+    return data.toISOString();
   }
 
   private truncar(
