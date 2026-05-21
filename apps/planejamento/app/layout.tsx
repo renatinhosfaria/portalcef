@@ -7,6 +7,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 
 import { MobileNav } from "../features/shell/components/mobile-nav";
+import { ObservabilidadeProvider } from "../lib/observabilidade";
 
 import "./globals.css";
 
@@ -30,14 +31,16 @@ export default function RootLayout({
     <html lang="pt-BR">
       <body className={inter.className}>
         <TenantProvider>
-          <Shell
-            sidebarProps={{
-              tarefasBadge: <TarefaBadgeContainer />,
-            }}
-          >
-            {children}
-            <MobileNav />
-          </Shell>
+          <ObservabilidadeProvider>
+            <Shell
+              sidebarProps={{
+                tarefasBadge: <TarefaBadgeContainer />,
+              }}
+            >
+              {children}
+              <MobileNav />
+            </Shell>
+          </ObservabilidadeProvider>
           <Toaster position="bottom-right" />
         </TenantProvider>
       </body>
