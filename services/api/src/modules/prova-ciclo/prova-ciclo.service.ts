@@ -1,6 +1,7 @@
 import { Injectable, BadRequestException } from "@nestjs/common";
-import { eq, and, asc, getDb } from "@essencia/db";
+import { eq, and, asc, getDb, sql } from "@essencia/db";
 import {
+  prova,
   provaCiclo,
   type ProvaCiclo,
   turmas,
@@ -15,11 +16,18 @@ export class ProvaCicloService {
   }
 
   async listarPorUnidade(unidadeId: string) {
-    return this.db
+    const ciclos: ProvaCiclo[] = await this.db
       .select()
       .from(provaCiclo)
       .where(eq(provaCiclo.unidadeId, unidadeId))
       .orderBy(asc(provaCiclo.etapa), asc(provaCiclo.numero));
+
+    return Promise.all(
+      ciclos.map(async (ciclo) => ({
+        ...ciclo,
+        provasVinculadas: await this.contarProvasVinculadas(ciclo.id),
+      })),
+    );
   }
 
   async buscarPorId(id: string, unitId: string) {
@@ -225,6 +233,13 @@ export class ProvaCicloService {
   }
 
   async excluirCiclo(id: string) {
+    const provasVinculadas = await this.contarProvasVinculadas(id);
+    if (provasVinculadas > 0) {
+      throw new BadRequestException(
+        `Não é possível excluir. ${provasVinculadas} professoras já iniciaram este ciclo.`,
+      );
+    }
+
     // Buscar ciclo
     const [ciclo] = await this.db
       .select()
@@ -242,6 +257,15 @@ export class ProvaCicloService {
     await this.renumerarCiclosSeNecessario(ciclo.unidadeId, ciclo.etapa);
 
     return { success: true, message: "Ciclo de prova excluido com sucesso" };
+  }
+
+  private async contarProvasVinculadas(cicloId: string): Promise<number> {
+    const [resultado] = await this.db
+      .select({ total: sql<number>`count(*)::int` })
+      .from(prova)
+      .where(eq(prova.provaCicloId, cicloId));
+
+    return Number(resultado?.total ?? 0);
   }
 
   private async verificarSobreposicao(
