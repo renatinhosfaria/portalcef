@@ -36,26 +36,6 @@ const CAMPOS_PROIBIDOS = new Set([
   "headers",
   "usuario",
 ]);
-const CAMPOS_HTTP_PERMITIDOS = [
-  "metodo",
-  "rota",
-  "status",
-  "duracaoMs",
-] as const;
-const CAMPOS_PAGINA_PERMITIDOS = ["url", "titulo"] as const;
-const CAMPOS_ARQUIVO_PERMITIDOS = [
-  "planoId",
-  "provaId",
-  "documentoId",
-  "nome",
-  "tipo",
-  "tamanhoBytes",
-] as const;
-const CAMPOS_ERRO_PERMITIDOS = [
-  "codigo",
-  "mensagem",
-  "stackResumo",
-] as const;
 const CAMPOS_DETALHES_PERMITIDOS = new Set<ChaveDetalhesObservabilidade>([
   "acao",
   "duracaoMs",

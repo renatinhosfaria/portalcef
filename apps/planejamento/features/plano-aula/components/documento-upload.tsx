@@ -88,6 +88,14 @@ function criarMetadadosArquivo(file: File) {
   };
 }
 
+function criarMetadadosLinkYouTube() {
+  return {
+    nome: "link_youtube",
+    tipo: "youtube",
+    tamanhoBytes: null,
+  };
+}
+
 function obterMensagemObservabilidade(error: unknown): string {
   return error instanceof Error ? error.message : "Erro desconhecido";
 }
@@ -351,11 +359,37 @@ export function DocumentoUpload({
   const handleAddLink = async () => {
     if (!linkUrl.trim()) {
       setError("Insira uma URL do YouTube.");
+      registrarEventoObservabilidade({
+        evento: "upload_resultado",
+        nivel: "warn",
+        arquivo: criarMetadadosLinkYouTube(),
+        erro: {
+          mensagem: "Insira uma URL do YouTube.",
+        },
+        detalhes: {
+          status: "erro_validacao",
+          tipo: "link_youtube",
+        },
+      });
+      enviarObservabilidadeBestEffort();
       return;
     }
 
     if (!validateYouTubeUrl(linkUrl)) {
       setError("Cole um link válido do YouTube.");
+      registrarEventoObservabilidade({
+        evento: "upload_resultado",
+        nivel: "warn",
+        arquivo: criarMetadadosLinkYouTube(),
+        erro: {
+          mensagem: "Cole um link válido do YouTube.",
+        },
+        detalhes: {
+          status: "erro_validacao",
+          tipo: "link_youtube",
+        },
+      });
+      enviarObservabilidadeBestEffort();
       return;
     }
 
@@ -364,10 +398,33 @@ export function DocumentoUpload({
 
     try {
       await onAddLink(linkUrl.trim());
+      registrarEventoObservabilidade({
+        evento: "upload_resultado",
+        nivel: "info",
+        arquivo: criarMetadadosLinkYouTube(),
+        detalhes: {
+          status: "sucesso",
+          tipo: "link_youtube",
+        },
+      });
+      enviarObservabilidadeBestEffort();
       setLinkUrl("");
       setShowLinkInput(false);
     } catch (err) {
       console.error("Erro ao adicionar link:", err);
+      registrarEventoObservabilidade({
+        evento: "upload_resultado",
+        nivel: "error",
+        arquivo: criarMetadadosLinkYouTube(),
+        erro: {
+          mensagem: "Nao foi possivel adicionar link do YouTube",
+        },
+        detalhes: {
+          status: "erro",
+          tipo: "link_youtube",
+        },
+      });
+      enviarObservabilidadeBestEffort();
       setError(
         obterMensagemErro(
           err,

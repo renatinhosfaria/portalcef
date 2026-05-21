@@ -345,6 +345,7 @@ services:
       API_BASE_URL: https://www.portalcef.com.br/api
       PLANEJAMENTO_OBSERVABILIDADE_DIR: /var/log/essencia/planejamento
       PLANEJAMENTO_OBSERVABILIDADE_SLOW_MS: ${PLANEJAMENTO_OBSERVABILIDADE_SLOW_MS:-2000}
+      PLANEJAMENTO_OBSERVABILIDADE_RETENCAO_DIAS: ${PLANEJAMENTO_OBSERVABILIDADE_RETENCAO_DIAS:-30}
     volumes:
       - ./logs/planejamento:/var/log/essencia/planejamento
     depends_on:

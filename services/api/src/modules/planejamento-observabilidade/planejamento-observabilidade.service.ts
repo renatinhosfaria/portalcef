@@ -1,4 +1,5 @@
-import { Inject, Injectable, Optional } from "@nestjs/common";
+import { Inject, Injectable, OnModuleInit, Optional } from "@nestjs/common";
+import { Cron } from "@nestjs/schedule";
 import { appendFile, mkdir, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -22,7 +23,7 @@ const LIMITE_STACK_ERRO = 1000;
 const UUID_REGEX =
   /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi;
 
-const CHAVES_PROIBIDAS = new Set([
+const FRAGMENTOS_CHAVES_PROIBIDAS = [
   "cookie",
   "authorization",
   "token",
@@ -33,14 +34,14 @@ const CHAVES_PROIBIDAS = new Set([
   "conteudo",
   "html",
   "headers",
-]);
+];
 
 export const PLANEJAMENTO_OBSERVABILIDADE_CONFIG = Symbol(
   "PLANEJAMENTO_OBSERVABILIDADE_CONFIG",
 );
 
 @Injectable()
-export class PlanejamentoObservabilidadeService {
+export class PlanejamentoObservabilidadeService implements OnModuleInit {
   private readonly diretorio: string;
   private readonly ambiente: string;
   private readonly slowMs: number;
@@ -57,6 +58,15 @@ export class PlanejamentoObservabilidadeService {
     this.slowMs = this.normalizarSlowMs(config.slowMs);
     this.retencaoDias = config.retencaoDias ?? RETENCAO_DIAS_PADRAO;
     this.agora = config.agora ?? (() => new Date());
+  }
+
+  async onModuleInit(): Promise<void> {
+    await this.limparAntigos();
+  }
+
+  @Cron("0 3 * * *")
+  async limparAntigosAgendado(): Promise<void> {
+    await this.limparAntigos();
   }
 
   normalizarEvento(
@@ -328,9 +338,17 @@ export class PlanejamentoObservabilidadeService {
 
     return Object.fromEntries(
       Object.entries(valor)
-        .filter(([chave]) => !CHAVES_PROIBIDAS.has(chave.toLowerCase()))
+        .filter(([chave]) => !this.ehChaveSensivel(chave))
         .map(([chave, item]) => [chave, this.sanitizarValor(item)])
         .filter(([, item]) => item !== undefined),
+    );
+  }
+
+  private ehChaveSensivel(chave: string): boolean {
+    const chaveNormalizada = chave.toLowerCase();
+
+    return FRAGMENTOS_CHAVES_PROIBIDAS.some((fragmento) =>
+      chaveNormalizada.includes(fragmento),
     );
   }
 

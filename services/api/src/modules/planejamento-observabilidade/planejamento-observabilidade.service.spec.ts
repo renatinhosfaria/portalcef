@@ -133,6 +133,38 @@ describe("PlanejamentoObservabilidadeService", () => {
     expect(JSON.stringify(evento)).not.toContain("maria@example.com");
   });
 
+  it("remove chaves sensiveis mesmo quando aparecem com prefixo ou sufixo", () => {
+    const evento = service.normalizarEvento({
+      origem: "browser",
+      evento: "erro_navegador",
+      detalhes: {
+        tentativa: 1,
+        accessToken: "segredo-token",
+        authorizationHeader: "Bearer segredo",
+        conteudoDigitado: "texto privado",
+        htmlGerado: "<p>privado</p>",
+        senhaTemporaria: "123",
+        passwordHash: "hash-privado",
+        aninhado: {
+          requestHeaders: { cookie: "sid=abc" },
+        },
+      },
+    });
+
+    const serializado = JSON.stringify(evento);
+
+    expect(evento.detalhes).toEqual({
+      tentativa: 1,
+      aninhado: {},
+    });
+    expect(serializado).not.toContain("segredo-token");
+    expect(serializado).not.toContain("Bearer segredo");
+    expect(serializado).not.toContain("texto privado");
+    expect(serializado).not.toContain("<p>privado</p>");
+    expect(serializado).not.toContain("hash-privado");
+    expect(serializado).not.toContain("sid=abc");
+  });
+
   it("remove query string e hash antes de registrar URL de pagina", () => {
     const evento = service.normalizarEvento({
       origem: "browser",

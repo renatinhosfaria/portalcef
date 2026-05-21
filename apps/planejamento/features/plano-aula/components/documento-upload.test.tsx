@@ -239,6 +239,142 @@ describe("DocumentoUpload - Upload Múltiplo", () => {
     });
   });
 
+  it("registra link do YouTube rejeitado por validação sem gravar a URL", async () => {
+    const user = userEvent.setup();
+    const onUpload = vi.fn();
+    const onAddLink = vi.fn();
+
+    render(
+      <DocumentoUpload onUpload={onUpload} onAddLink={onAddLink} />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /link do youtube/i }));
+    await user.type(
+      screen.getByPlaceholderText("https://www.youtube.com/watch?v=..."),
+      "https://example.com/video?token=segredo",
+    );
+    await user.click(screen.getByRole("button", { name: /adicionar/i }));
+
+    expect(onAddLink).not.toHaveBeenCalled();
+    expect(registrarEventoObservabilidade).toHaveBeenCalledWith(
+      expect.objectContaining({
+        evento: "upload_resultado",
+        nivel: "warn",
+        arquivo: expect.objectContaining({
+          nome: "link_youtube",
+          tipo: "youtube",
+          tamanhoBytes: null,
+        }),
+        detalhes: expect.objectContaining({
+          status: "erro_validacao",
+          tipo: "link_youtube",
+        }),
+      }),
+    );
+    expect(
+      JSON.stringify(vi.mocked(registrarEventoObservabilidade).mock.calls),
+    ).not.toContain("segredo");
+    expect(enviarEventosPendentes).toHaveBeenCalled();
+  });
+
+  it("registra link do YouTube adicionado com sucesso sem gravar a URL", async () => {
+    const user = userEvent.setup();
+    const onUpload = vi.fn();
+    const onAddLink = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <DocumentoUpload onUpload={onUpload} onAddLink={onAddLink} />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /link do youtube/i }));
+    await user.type(
+      screen.getByPlaceholderText("https://www.youtube.com/watch?v=..."),
+      "https://www.youtube.com/watch?v=abc123&token=segredo",
+    );
+    await user.click(screen.getByRole("button", { name: /adicionar/i }));
+
+    await waitFor(() => {
+      expect(onAddLink).toHaveBeenCalledWith(
+        "https://www.youtube.com/watch?v=abc123&token=segredo",
+      );
+    });
+    expect(registrarEventoObservabilidade).toHaveBeenCalledWith(
+      expect.objectContaining({
+        evento: "upload_resultado",
+        nivel: "info",
+        arquivo: expect.objectContaining({
+          nome: "link_youtube",
+          tipo: "youtube",
+          tamanhoBytes: null,
+        }),
+        detalhes: expect.objectContaining({
+          status: "sucesso",
+          tipo: "link_youtube",
+        }),
+      }),
+    );
+    expect(
+      JSON.stringify(vi.mocked(registrarEventoObservabilidade).mock.calls),
+    ).not.toContain("segredo");
+    expect(enviarEventosPendentes).toHaveBeenCalled();
+  });
+
+  it("registra erro ao adicionar link do YouTube sem gravar a URL nem mensagem externa sensivel", async () => {
+    const user = userEvent.setup();
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const onUpload = vi.fn();
+    const onAddLink = vi
+      .fn()
+      .mockRejectedValue(
+        new Error("Falha link https://youtu.be/abc123?token=segredo"),
+      );
+
+    try {
+      render(
+        <DocumentoUpload onUpload={onUpload} onAddLink={onAddLink} />,
+      );
+
+      await user.click(screen.getByRole("button", { name: /link do youtube/i }));
+      await user.type(
+        screen.getByPlaceholderText("https://www.youtube.com/watch?v=..."),
+        "https://youtu.be/abc123?token=segredo",
+      );
+      await user.click(screen.getByRole("button", { name: /adicionar/i }));
+
+      await waitFor(() => {
+        expect(registrarEventoObservabilidade).toHaveBeenCalledWith(
+          expect.objectContaining({
+            evento: "upload_resultado",
+            nivel: "error",
+            arquivo: expect.objectContaining({
+              nome: "link_youtube",
+              tipo: "youtube",
+              tamanhoBytes: null,
+            }),
+            erro: expect.objectContaining({
+              mensagem: "Nao foi possivel adicionar link do YouTube",
+            }),
+            detalhes: expect.objectContaining({
+              status: "erro",
+              tipo: "link_youtube",
+            }),
+          }),
+        );
+      });
+      expect(
+        JSON.stringify(vi.mocked(registrarEventoObservabilidade).mock.calls),
+      ).not.toContain("segredo");
+      expect(
+        JSON.stringify(vi.mocked(registrarEventoObservabilidade).mock.calls),
+      ).not.toContain("youtu.be");
+      expect(enviarEventosPendentes).toHaveBeenCalled();
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+
   it("exibe textos no plural na drop zone", () => {
     const onUpload = vi.fn();
     const onAddLink = vi.fn();

@@ -415,6 +415,13 @@ logging:
 
 Os logs estruturados do planejamento ficam no host em `./logs/planejamento` e são montados no container da API em `/var/log/essencia/planejamento`.
 
+Variáveis de produção:
+
+```env
+PLANEJAMENTO_OBSERVABILIDADE_SLOW_MS=2000
+PLANEJAMENTO_OBSERVABILIDADE_RETENCAO_DIAS=30
+```
+
 Antes do deploy, crie o diretório no host com permissão de escrita para o usuário `nestjs` da imagem da API, que usa UID/GID `1001:1001`:
 
 ```bash
@@ -441,7 +448,7 @@ grep -R '"evento":"<nome-do-evento>"' logs/planejamento
 grep -R '"documentoId":"<documento-id>"' logs/planejamento
 ```
 
-A retenção operacional é de 30 dias. Remova arquivos antigos periodicamente:
+A API remove arquivos antigos ao iniciar e diariamente às 03:00. A limpeza manual continua disponível se for necessário:
 
 ```bash
 find logs/planejamento -type f -mtime +30 -delete

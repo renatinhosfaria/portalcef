@@ -47,10 +47,11 @@ export type ValorDetalhesObservabilidade =
   | ValorDetalhesObservabilidade[]
   | DetalhesObservabilidade;
 
-export interface DetalhesObservabilidade
-  extends Partial<
-    Record<ChaveDetalhesObservabilidade, ValorDetalhesObservabilidade>
-  > {}
+export type DetalhesObservabilidade = Partial<
+  {
+    [chave in ChaveDetalhesObservabilidade]: ValorDetalhesObservabilidade;
+  }
+>;
 
 export interface HttpObservabilidade {
   metodo?: string;

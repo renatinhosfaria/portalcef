@@ -15,6 +15,12 @@ function obterSlowMsConfigurado(): number | undefined {
   return Number.isFinite(valor) && valor > 0 ? valor : undefined;
 }
 
+function obterRetencaoDiasConfigurada(): number | undefined {
+  const valor = Number(process.env.PLANEJAMENTO_OBSERVABILIDADE_RETENCAO_DIAS);
+
+  return Number.isInteger(valor) && valor > 0 ? valor : undefined;
+}
+
 function obterDiretorioConfigurado(): string | undefined {
   const diretorio = process.env.PLANEJAMENTO_OBSERVABILIDADE_DIR?.trim();
 
@@ -28,6 +34,7 @@ function obterDiretorioConfigurado(): string | undefined {
       useFactory: () => ({
         diretorio: obterDiretorioConfigurado(),
         slowMs: obterSlowMsConfigurado(),
+        retencaoDias: obterRetencaoDiasConfigurada(),
       }),
     },
     PlanejamentoObservabilidadeService,
