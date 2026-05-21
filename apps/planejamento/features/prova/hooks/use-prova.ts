@@ -638,7 +638,7 @@ export function useGestaoProvas(): UseGestaoProvasReturn {
           params.append("status", filtros.status);
         }
         if (filtros.provaCicloId) {
-          params.append("provaCicloId", filtros.provaCicloId);
+          params.append("cicloId", filtros.provaCicloId);
         }
         if (filtros.segmentoId) {
           params.append("segmentoId", filtros.segmentoId);
