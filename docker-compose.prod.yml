@@ -343,6 +343,10 @@ services:
       SHAREPOINT_DRIVE_ID: ${SHAREPOINT_DRIVE_ID}
       SHAREPOINT_EDIT_TTL_HOURS: ${SHAREPOINT_EDIT_TTL_HOURS:-8}
       API_BASE_URL: https://www.portalcef.com.br/api
+      PLANEJAMENTO_OBSERVABILIDADE_DIR: /var/log/essencia/planejamento
+      PLANEJAMENTO_OBSERVABILIDADE_SLOW_MS: ${PLANEJAMENTO_OBSERVABILIDADE_SLOW_MS:-2000}
+    volumes:
+      - ./logs/planejamento:/var/log/essencia/planejamento
     depends_on:
       postgres:
         condition: service_healthy

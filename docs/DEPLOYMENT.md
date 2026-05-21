@@ -411,6 +411,31 @@ logging:
     max-file: "3"      # API: 5
 ```
 
+### Logs de Observabilidade do Planejamento
+
+Os logs estruturados do planejamento ficam no host em `./logs/planejamento` e são montados no container da API em `/var/log/essencia/planejamento`.
+
+Para consultar eventos por usuário, evento ou documento:
+
+```bash
+# Por usuário
+grep -R '"usuarioId":"<usuario-id>"' logs/planejamento
+
+# Por evento
+grep -R '"evento":"<nome-do-evento>"' logs/planejamento
+
+# Por documento
+grep -R '"documentoId":"<documento-id>"' logs/planejamento
+```
+
+A retenção operacional é de 30 dias. Remova arquivos antigos periodicamente:
+
+```bash
+find logs/planejamento -type f -mtime +30 -delete
+```
+
+Esses arquivos podem conter dados pessoais e identificadores de documentos. Restrinja acesso ao diretório, não compartilhe os logs fora dos canais autorizados e nunca anexe trechos com dados sensíveis em chamados públicos.
+
 ### Métricas de Health
 
 **API Health Endpoint:**
