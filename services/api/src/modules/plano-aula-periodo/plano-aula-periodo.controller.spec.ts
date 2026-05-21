@@ -6,6 +6,7 @@ import { AuthGuard } from "../../common/guards/auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
 import { TenantGuard } from "../../common/guards/tenant.guard";
 import { ROLES_KEY } from "../../common/decorators/roles.decorator";
+import type { PlanoAulaPeriodo } from "@essencia/db/schema";
 
 // Mock do @essencia/db
 jest.mock("@essencia/db", () => ({
@@ -19,6 +20,23 @@ jest.mock("@essencia/db", () => ({
 describe("PlanoAulaPeriodoController", () => {
   let controller: PlanoAulaPeriodoController;
   let service: PlanoAulaPeriodoService;
+
+  const periodoFixture = (
+    sobrescritas: Partial<PlanoAulaPeriodo> = {},
+  ): PlanoAulaPeriodo => ({
+    id: "periodo-id",
+    unidadeId: "unidade-id",
+    etapa: "INFANTIL",
+    numero: 1,
+    descricao: null,
+    dataInicio: "2026-03-01",
+    dataFim: "2026-03-15",
+    dataMaximaEntrega: "2026-02-25",
+    criadoPor: "user-id",
+    criadoEm: new Date("2026-01-01T00:00:00.000Z"),
+    atualizadoEm: new Date("2026-01-01T00:00:00.000Z"),
+    ...sobrescritas,
+  });
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -114,9 +132,7 @@ describe("PlanoAulaPeriodoController", () => {
         dataMaximaEntrega: "2026-02-25",
       };
 
-      jest
-        .spyOn(service, "criarPeriodo")
-        .mockResolvedValue({ id: "periodo-id" } as any);
+      jest.spyOn(service, "criarPeriodo").mockResolvedValue(periodoFixture());
 
       await expect(
         controller.criarPeriodo(session, dto),
@@ -178,9 +194,7 @@ describe("PlanoAulaPeriodoController", () => {
         dataMaximaEntrega: "2026-02-25",
       };
 
-      jest
-        .spyOn(service, "criarPeriodo")
-        .mockResolvedValue({ id: "periodo-id" } as any);
+      jest.spyOn(service, "criarPeriodo").mockResolvedValue(periodoFixture());
 
       await expect(
         controller.criarPeriodo(session, dto),
@@ -222,9 +236,7 @@ describe("PlanoAulaPeriodoController", () => {
         dataMaximaEntrega: "2026-02-25",
       };
 
-      jest
-        .spyOn(service, "criarPeriodo")
-        .mockResolvedValue({ id: "periodo-id" } as any);
+      jest.spyOn(service, "criarPeriodo").mockResolvedValue(periodoFixture());
 
       await expect(
         controller.criarPeriodo(session, dto),
@@ -246,9 +258,7 @@ describe("PlanoAulaPeriodoController", () => {
         dataMaximaEntrega: "2026-02-25",
       };
 
-      jest
-        .spyOn(service, "criarPeriodo")
-        .mockResolvedValue({ id: "periodo-id" } as any);
+      jest.spyOn(service, "criarPeriodo").mockResolvedValue(periodoFixture());
 
       await expect(
         controller.criarPeriodo(session, dto),
@@ -270,9 +280,7 @@ describe("PlanoAulaPeriodoController", () => {
         dataMaximaEntrega: "2026-02-25",
       };
 
-      jest
-        .spyOn(service, "criarPeriodo")
-        .mockResolvedValue({ id: "periodo-id" } as any);
+      jest.spyOn(service, "criarPeriodo").mockResolvedValue(periodoFixture());
 
       await expect(
         controller.criarPeriodo(session, dto),
@@ -294,9 +302,7 @@ describe("PlanoAulaPeriodoController", () => {
         dataMaximaEntrega: "2026-02-25",
       };
 
-      jest
-        .spyOn(service, "criarPeriodo")
-        .mockResolvedValue({ id: "periodo-id" } as any);
+      jest.spyOn(service, "criarPeriodo").mockResolvedValue(periodoFixture());
 
       await expect(
         controller.criarPeriodo(session, dto),
@@ -318,9 +324,7 @@ describe("PlanoAulaPeriodoController", () => {
         dataMaximaEntrega: "2026-02-25",
       };
 
-      jest
-        .spyOn(service, "criarPeriodo")
-        .mockResolvedValue({ id: "periodo-id" } as any);
+      jest.spyOn(service, "criarPeriodo").mockResolvedValue(periodoFixture());
 
       await expect(
         controller.criarPeriodo(session, dto),
@@ -344,7 +348,7 @@ describe("PlanoAulaPeriodoController", () => {
 
       const serviceSpy = jest
         .spyOn(service, "criarPeriodo")
-        .mockResolvedValue({ id: "periodo-id" } as any);
+        .mockResolvedValue(periodoFixture());
 
       await controller.criarPeriodo(session, dto);
 
@@ -368,10 +372,10 @@ describe("PlanoAulaPeriodoController", () => {
       const dto = { descricao: "Nova descrição" };
       jest
         .spyOn(service, "buscarPorId")
-        .mockResolvedValue({ id: "periodo-id", etapa: "INFANTIL" } as any);
+        .mockResolvedValue(periodoFixture({ etapa: "INFANTIL" }));
       const editarSpy = jest
         .spyOn(service, "editarPeriodo")
-        .mockResolvedValue({ id: "periodo-id" } as any);
+        .mockResolvedValue(periodoFixture());
 
       await controller.editarPeriodo(session, "periodo-id", dto);
 
@@ -394,10 +398,13 @@ describe("PlanoAulaPeriodoController", () => {
       };
       jest
         .spyOn(service, "buscarPorId")
-        .mockResolvedValue({ id: "periodo-id", etapa: "INFANTIL" } as any);
+        .mockResolvedValue(periodoFixture({ etapa: "INFANTIL" }));
       const excluirSpy = jest
         .spyOn(service, "excluirPeriodo")
-        .mockResolvedValue({ success: true } as any);
+        .mockResolvedValue({
+          success: true,
+          message: "Período excluído com sucesso",
+        });
 
       await controller.excluirPeriodo(session, "periodo-id");
 

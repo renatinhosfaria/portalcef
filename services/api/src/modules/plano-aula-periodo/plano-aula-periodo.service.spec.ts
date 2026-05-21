@@ -343,7 +343,7 @@ describe("PlanoAulaPeriodoService", () => {
         .mockResolvedValue(undefined);
 
       await expect(
-        (service as any).excluirPeriodo("periodo-id", "unidade-id"),
+        service.excluirPeriodo("periodo-id", "unidade-id"),
       ).rejects.toThrow("Não é possível excluir");
 
       expect(mockDelete).not.toHaveBeenCalled();
@@ -364,7 +364,7 @@ describe("PlanoAulaPeriodoService", () => {
         .mockResolvedValue(undefined);
 
       await expect(
-        (service as any).excluirPeriodo("periodo-id", "unidade-id"),
+        service.excluirPeriodo("periodo-id", "unidade-id"),
       ).resolves.toEqual({
         success: true,
         message: "Período excluído com sucesso",
@@ -394,7 +394,7 @@ describe("PlanoAulaPeriodoService", () => {
         .mockResolvedValue(undefined);
 
       await expect(
-        (service as any).excluirPeriodo("periodo-id", "unidade-2"),
+        service.excluirPeriodo("periodo-id", "unidade-2"),
       ).rejects.toThrow("Período não encontrado");
 
       expect(mockDelete).not.toHaveBeenCalled();
@@ -420,7 +420,7 @@ describe("PlanoAulaPeriodoService", () => {
       mockReturning.mockResolvedValueOnce([{ id: "periodo-id" }]);
 
       await expect(
-        (service as any).editarPeriodo("periodo-id", "unidade-2", {
+        service.editarPeriodo("periodo-id", "unidade-2", {
           descricao: "Nova descrição",
         }),
       ).rejects.toThrow("Período não encontrado");

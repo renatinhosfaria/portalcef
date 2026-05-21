@@ -7,6 +7,7 @@ import { TenantGuard } from "../../common/guards/tenant.guard";
 import { ROLES_KEY } from "../../common/decorators/roles.decorator";
 import { ProvaCicloController } from "./prova-ciclo.controller";
 import { ProvaCicloService } from "./prova-ciclo.service";
+import type { ProvaCiclo } from "@essencia/db/schema";
 
 jest.mock("@essencia/db", () => ({
   provaCiclo: {},
@@ -27,6 +28,23 @@ jest.mock("@essencia/db/schema", () => ({
 describe("ProvaCicloController", () => {
   let controller: ProvaCicloController;
   let service: ProvaCicloService;
+
+  const cicloFixture = (
+    sobrescritas: Partial<ProvaCiclo> = {},
+  ): ProvaCiclo => ({
+    id: "ciclo-id",
+    unidadeId: "unidade-id",
+    etapa: "INFANTIL",
+    numero: 1,
+    descricao: null,
+    dataInicio: "2026-03-01",
+    dataFim: "2026-03-15",
+    dataMaximaEntrega: "2026-02-25",
+    criadoPor: "user-id",
+    criadoEm: new Date("2026-01-01T00:00:00.000Z"),
+    atualizadoEm: new Date("2026-01-01T00:00:00.000Z"),
+    ...sobrescritas,
+  });
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -118,9 +136,7 @@ describe("ProvaCicloController", () => {
         dataMaximaEntrega: "2026-02-25",
       };
 
-      jest
-        .spyOn(service, "criarCiclo")
-        .mockResolvedValue({ id: "ciclo-id" } as any);
+      jest.spyOn(service, "criarCiclo").mockResolvedValue(cicloFixture());
 
       await expect(controller.criarCiclo(session, dto)).resolves.toBeDefined();
     });
@@ -158,10 +174,10 @@ describe("ProvaCicloController", () => {
       const dto = { descricao: "Nova descrição" };
       jest
         .spyOn(service, "buscarPorId")
-        .mockResolvedValue({ id: "ciclo-id", etapa: "INFANTIL" } as any);
+        .mockResolvedValue(cicloFixture({ etapa: "INFANTIL" }));
       const editarSpy = jest
         .spyOn(service, "editarCiclo")
-        .mockResolvedValue({ id: "ciclo-id" } as any);
+        .mockResolvedValue(cicloFixture());
 
       await controller.editarCiclo(session, "ciclo-id", dto);
 
@@ -180,10 +196,13 @@ describe("ProvaCicloController", () => {
       };
       jest
         .spyOn(service, "buscarPorId")
-        .mockResolvedValue({ id: "ciclo-id", etapa: "INFANTIL" } as any);
+        .mockResolvedValue(cicloFixture({ etapa: "INFANTIL" }));
       const excluirSpy = jest
         .spyOn(service, "excluirCiclo")
-        .mockResolvedValue({ success: true } as any);
+        .mockResolvedValue({
+          success: true,
+          message: "Ciclo de prova excluido com sucesso",
+        });
 
       await controller.excluirCiclo(session, "ciclo-id");
 

@@ -151,7 +151,7 @@ describe("ProvaCicloService", () => {
         .mockResolvedValue(undefined);
 
       await expect(
-        (service as any).excluirCiclo("ciclo-id", "unidade-id"),
+        service.excluirCiclo("ciclo-id", "unidade-id"),
       ).rejects.toThrow("Não é possível excluir");
 
       expect(mockDelete).not.toHaveBeenCalled();
@@ -172,7 +172,7 @@ describe("ProvaCicloService", () => {
         .mockResolvedValue(undefined);
 
       await expect(
-        (service as any).excluirCiclo("ciclo-id", "unidade-id"),
+        service.excluirCiclo("ciclo-id", "unidade-id"),
       ).resolves.toEqual({
         success: true,
         message: "Ciclo de prova excluido com sucesso",
@@ -205,7 +205,7 @@ describe("ProvaCicloService", () => {
         .mockResolvedValue(undefined);
 
       await expect(
-        (service as any).excluirCiclo("ciclo-id", "unidade-2"),
+        service.excluirCiclo("ciclo-id", "unidade-2"),
       ).rejects.toThrow("Ciclo de prova nao encontrado");
 
       expect(mockDelete).not.toHaveBeenCalled();
@@ -233,7 +233,7 @@ describe("ProvaCicloService", () => {
       mockReturning.mockResolvedValueOnce([{ id: "ciclo-id" }]);
 
       await expect(
-        (service as any).editarCiclo("ciclo-id", "unidade-2", {
+        service.editarCiclo("ciclo-id", "unidade-2", {
           descricao: "Nova descrição",
         }),
       ).rejects.toThrow("Ciclo de prova nao encontrado");
