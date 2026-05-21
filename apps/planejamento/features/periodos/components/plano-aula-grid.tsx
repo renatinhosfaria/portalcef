@@ -7,6 +7,8 @@
 
 "use client";
 
+import { criarDataCivil } from "@essencia/shared/formatar-data";
+
 import { PlanoAulaCard } from "./plano-aula-card";
 
 interface Periodo {
@@ -45,12 +47,12 @@ function getSemestre(
   dataInicio: string,
   dataInicioFeriasJulho?: string,
 ): 1 | 2 {
-  const data = new Date(dataInicio);
+  const data = criarDataCivil(dataInicio);
   const ano = data.getFullYear();
 
   // Usar data de férias passada ou fallback para 13 de julho
   const inicioFerias = dataInicioFeriasJulho
-    ? new Date(dataInicioFeriasJulho)
+    ? criarDataCivil(dataInicioFeriasJulho)
     : new Date(ano, 6, 13); // 13 de julho como fallback
 
   return data < inicioFerias ? 1 : 2;

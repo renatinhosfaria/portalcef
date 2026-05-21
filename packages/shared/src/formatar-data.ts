@@ -10,16 +10,25 @@ const LOCALE = "pt-BR";
 
 type DataInput = string | Date;
 
+export function criarDataCivil(data: string): Date {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(data)) {
+    return new Date(data);
+  }
+
+  const [ano, mes, dia] = data.split("-").map(Number) as [
+    number,
+    number,
+    number,
+  ];
+  return new Date(ano, mes - 1, dia);
+}
+
 function toDate(data: DataInput): Date {
   if (typeof data !== "string") {
     return data;
   }
 
-  if (/^\d{4}-\d{2}-\d{2}$/.test(data)) {
-    return new Date(`${data}T00:00:00`);
-  }
-
-  return new Date(data);
+  return criarDataCivil(data);
 }
 
 /** dd/MM/yyyy (ex: "15/03/2026") */

@@ -6,7 +6,10 @@
 
 "use client";
 
-import { formatarDataCurta } from "@essencia/shared/formatar-data";
+import {
+  criarDataCivil,
+  formatarDataCurta,
+} from "@essencia/shared/formatar-data";
 import { cn } from "@essencia/ui/lib/utils";
 import { differenceInDays, isPast } from "date-fns";
 import { CheckCircle2, Clock, FileText, Lock } from "lucide-react";
@@ -32,7 +35,7 @@ interface PlanoAulaCardProps {
 type DeadlineStatus = "on-time" | "near" | "late";
 
 function getDeadlineStatus(dataMaximaEntrega: string): DeadlineStatus {
-  const dataMaxima = new Date(dataMaximaEntrega);
+  const dataMaxima = criarDataCivil(dataMaximaEntrega);
   const hoje = new Date();
 
   if (isPast(dataMaxima)) {
