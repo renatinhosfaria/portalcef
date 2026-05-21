@@ -30,9 +30,9 @@ export interface PlanoDocumento {
   tipo: DocumentoTipo;
   storageKey?: string;
   url?: string;
-  fileName?: string;
+  fileName?: string | null;
   fileSize?: number;
-  mimeType?: string;
+  mimeType?: string | null;
   createdAt: string;
   updatedAt?: string;
   // Campos de edição via SharePoint (temporários)
