@@ -21,15 +21,6 @@ jest.mock("@essencia/db", () => ({
   sql: jest.fn(),
 }));
 
-// Mock do módulo @essencia/shared/config/quinzenas
-jest.mock("@essencia/shared/config/quinzenas", () => ({
-  getQuinzenaById: jest.fn(),
-  getCurrentQuinzena2026: jest.fn(),
-  isInVacationPeriod: jest.fn(),
-  formatQuinzenaDateRange: jest.fn(),
-  QUINZENAS_2026: [],
-}));
-
 // Mock do CalendarService
 const mockCalendarService = {
   validateQuinzenaSchoolDays: jest.fn(),
