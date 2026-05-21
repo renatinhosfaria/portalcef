@@ -1,6 +1,7 @@
 import { Injectable, BadRequestException } from "@nestjs/common";
-import { eq, and, asc, getDb } from "@essencia/db";
+import { eq, and, asc, getDb, sql } from "@essencia/db";
 import {
+  planoAula,
   planoAulaPeriodo,
   type PlanoAulaPeriodo,
   turmas,
@@ -18,11 +19,18 @@ export class PlanoAulaPeriodoService {
   }
 
   async listarPorUnidade(unidadeId: string) {
-    return this.db
+    const periodos: PlanoAulaPeriodo[] = await this.db
       .select()
       .from(planoAulaPeriodo)
       .where(eq(planoAulaPeriodo.unidadeId, unidadeId))
       .orderBy(asc(planoAulaPeriodo.etapa), asc(planoAulaPeriodo.numero));
+
+    return Promise.all(
+      periodos.map(async (periodo) => ({
+        ...periodo,
+        planosVinculados: await this.contarPlanosVinculados(periodo.id),
+      })),
+    );
   }
 
   async buscarPorId(id: string, unitId: string) {
@@ -255,6 +263,13 @@ export class PlanoAulaPeriodoService {
   }
 
   async excluirPeriodo(id: string) {
+    const planosVinculados = await this.contarPlanosVinculados(id);
+    if (planosVinculados > 0) {
+      throw new BadRequestException(
+        `Não é possível excluir. ${planosVinculados} professoras já iniciaram este período.`,
+      );
+    }
+
     // Buscar período
     const [periodo] = await this.db
       .select()
@@ -265,9 +280,6 @@ export class PlanoAulaPeriodoService {
       throw new BadRequestException("Período não encontrado");
     }
 
-    // TODO: Verificar se há planos de aula vinculados
-    // Quando o schema plano_aula for atualizado com periodoId
-
     // Excluir período
     await this.db.delete(planoAulaPeriodo).where(eq(planoAulaPeriodo.id, id));
 
@@ -275,6 +287,15 @@ export class PlanoAulaPeriodoService {
     await this.renumerarPeriodosSeNecessario(periodo.unidadeId, periodo.etapa);
 
     return { success: true, message: "Período excluído com sucesso" };
+  }
+
+  private async contarPlanosVinculados(periodoId: string): Promise<number> {
+    const [resultado] = await this.db
+      .select({ total: sql<number>`count(*)::int` })
+      .from(planoAula)
+      .where(eq(planoAula.planoAulaPeriodoId, periodoId));
+
+    return Number(resultado?.total ?? 0);
   }
 
   private async verificarSobreposicao(
