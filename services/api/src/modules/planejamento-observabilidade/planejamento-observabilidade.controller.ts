@@ -42,8 +42,8 @@ export class PlanejamentoObservabilidadeController {
       });
     }
 
-    await Promise.all(
-      parsed.data.eventos.map((evento) =>
+    await Promise.allSettled(
+      parsed.data.eventos.map(async (evento) =>
         this.service.registrarEvento({
           ...evento,
           nivel: this.obterNivel(evento),

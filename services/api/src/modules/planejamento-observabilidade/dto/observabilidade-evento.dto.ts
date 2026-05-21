@@ -7,6 +7,23 @@ const TAMANHO_MENSAGEM = 500;
 const TAMANHO_STACK = 1000;
 const TAMANHO_ID = 120;
 const TAMANHO_TEXTO_CURTO = 120;
+const TAMANHO_DETALHES_TEXTO = 500;
+const LIMITE_DETALHES_PROFUNDIDADE = 3;
+const LIMITE_DETALHES_CHAVES = 20;
+const LIMITE_DETALHES_ARRAY = 20;
+
+const chavesDetalhesProibidas = new Set([
+  "authorization",
+  "body",
+  "conteudo",
+  "cookie",
+  "headers",
+  "html",
+  "password",
+  "payload",
+  "senha",
+  "token",
+]);
 
 const eventoSchema = z.enum([
   "pagina_aberta",
@@ -50,6 +67,140 @@ const erroSchema = z.object({
   stackResumo: z.string().trim().max(TAMANHO_STACK).nullable().optional(),
 });
 
+function ehObjetoSimples(valor: unknown): valor is Record<string, unknown> {
+  if (
+    typeof valor !== "object" ||
+    valor === null ||
+    Array.isArray(valor)
+  ) {
+    return false;
+  }
+
+  const prototipo = Object.getPrototypeOf(valor);
+
+  return prototipo === Object.prototype || prototipo === null;
+}
+
+function adicionarErroDetalhes(
+  ctx: z.RefinementCtx,
+  caminho: Array<string | number>,
+  mensagem: string,
+) {
+  ctx.addIssue({
+    code: z.ZodIssueCode.custom,
+    path: caminho,
+    message: mensagem,
+  });
+}
+
+function validarValorDetalhes(
+  valor: unknown,
+  ctx: z.RefinementCtx,
+  caminho: Array<string | number>,
+  profundidade: number,
+): void {
+  if (profundidade > LIMITE_DETALHES_PROFUNDIDADE) {
+    adicionarErroDetalhes(
+      ctx,
+      caminho,
+      "detalhes excede a profundidade permitida",
+    );
+    return;
+  }
+
+  if (valor === null || typeof valor === "boolean") {
+    return;
+  }
+
+  if (typeof valor === "string") {
+    if (valor.length > TAMANHO_DETALHES_TEXTO) {
+      adicionarErroDetalhes(
+        ctx,
+        caminho,
+        "detalhes possui texto acima do limite permitido",
+      );
+    }
+
+    return;
+  }
+
+  if (typeof valor === "number") {
+    if (!Number.isFinite(valor)) {
+      adicionarErroDetalhes(
+        ctx,
+        caminho,
+        "detalhes possui numero invalido",
+      );
+    }
+
+    return;
+  }
+
+  if (Array.isArray(valor)) {
+    if (valor.length > LIMITE_DETALHES_ARRAY) {
+      adicionarErroDetalhes(
+        ctx,
+        caminho,
+        "detalhes possui lista acima do limite permitido",
+      );
+    }
+
+    valor
+      .slice(0, LIMITE_DETALHES_ARRAY)
+      .forEach((item, indice) =>
+        validarValorDetalhes(
+          item,
+          ctx,
+          [...caminho, indice],
+          profundidade + 1,
+        ),
+      );
+    return;
+  }
+
+  if (ehObjetoSimples(valor)) {
+    const chaves = Object.keys(valor);
+
+    if (chaves.length > LIMITE_DETALHES_CHAVES) {
+      adicionarErroDetalhes(
+        ctx,
+        caminho,
+        "detalhes possui objeto acima do limite permitido",
+      );
+    }
+
+    chaves.slice(0, LIMITE_DETALHES_CHAVES).forEach((chave) => {
+      const caminhoAtual = [...caminho, chave];
+
+      if (chavesDetalhesProibidas.has(chave.toLowerCase())) {
+        adicionarErroDetalhes(
+          ctx,
+          caminhoAtual,
+          "detalhes possui chave sensivel",
+        );
+      }
+
+      validarValorDetalhes(
+        valor[chave],
+        ctx,
+        caminhoAtual,
+        profundidade + 1,
+      );
+    });
+    return;
+  }
+
+  adicionarErroDetalhes(
+    ctx,
+    caminho,
+    "detalhes possui tipo nao permitido",
+  );
+}
+
+const detalhesSchema = z.record(z.unknown()).superRefine((detalhes, ctx) => {
+  validarValorDetalhes(detalhes, ctx, [], 0);
+});
+
 const observabilidadeEventoSchema = z.object({
   timestamp: z.string().datetime().optional(),
   ambiente: textoCurtoSchema.optional(),
@@ -63,7 +214,7 @@ const observabilidadeEventoSchema = z.object({
   pagina: paginaSchema.optional(),
   arquivo: arquivoSchema.optional(),
   erro: erroSchema.optional(),
-  detalhes: z.record(z.unknown()).nullable().optional(),
+  detalhes: detalhesSchema.nullable().optional(),
 });
 
 export const observabilidadeEventosSchema = z.object({

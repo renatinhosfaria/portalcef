@@ -1,3 +1,5 @@
+import { BadRequestException } from "@nestjs/common";
+
 import type { AuthenticatedRequest } from "../../common/guards/auth.guard";
 
 import { PlanejamentoObservabilidadeController } from "./planejamento-observabilidade.controller";
@@ -27,6 +29,23 @@ describe("PlanejamentoObservabilidadeController", () => {
     user: AuthenticatedRequest["user"] = usuarioSessao,
   ): AuthenticatedRequest {
     return { user } as AuthenticatedRequest;
+  }
+
+  function eventoValido(overrides: Record<string, unknown> = {}) {
+    return {
+      origem: "browser",
+      evento: "pagina_aberta",
+      ...overrides,
+    };
+  }
+
+  async function esperarBadRequest(body: unknown) {
+    const { controller, service } = criarController();
+
+    await expect(
+      controller.registrarEventos(reqComUsuario(), body),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(service.registrarEvento).not.toHaveBeenCalled();
   }
 
   it("registra lote com um evento usando o usuario da sessao", async () => {
@@ -109,5 +128,149 @@ describe("PlanejamentoObservabilidadeController", () => {
         nivel: "error",
       }),
     );
+  });
+
+  it("aceita detalhes tecnicos simples do navegador", async () => {
+    const { controller, service } = criarController();
+
+    const resultado = await controller.registrarEventos(reqComUsuario(), {
+      eventos: [
+        eventoValido({
+          detalhes: {
+            navegador: "Chrome",
+            sistema: "Windows",
+            duracaoTotalMs: 123,
+            tentativa: 1,
+            lento: true,
+          },
+        }),
+      ],
+    });
+
+    expect(resultado).toEqual({ success: true });
+    expect(service.registrarEvento).toHaveBeenCalledWith(
+      expect.objectContaining({
+        detalhes: {
+          navegador: "Chrome",
+          sistema: "Windows",
+          duracaoTotalMs: 123,
+          tentativa: 1,
+          lento: true,
+        },
+      }),
+    );
+  });
+
+  it("rejeita detalhes com string acima do limite", async () => {
+    await esperarBadRequest({
+      eventos: [
+        eventoValido({
+          detalhes: {
+            navegador: "C".repeat(501),
+          },
+        }),
+      ],
+    });
+  });
+
+  it.each([
+    "token",
+    "cookie",
+    "authorization",
+    "payload",
+    "body",
+    "html",
+    "conteudo",
+    "senha",
+    "password",
+    "headers",
+  ])("rejeita detalhes com chave sensivel %s", async (chave) => {
+    await esperarBadRequest({
+      eventos: [
+        eventoValido({
+          detalhes: {
+            navegador: "Chrome",
+            contexto: {
+              [chave]: "segredo",
+            },
+          },
+        }),
+      ],
+    });
+  });
+
+  it("rejeita detalhes com objeto muito profundo", async () => {
+    await esperarBadRequest({
+      eventos: [
+        eventoValido({
+          detalhes: {
+            nivel1: {
+              nivel2: {
+                nivel3: {
+                  nivel4: "profundo",
+                },
+              },
+            },
+          },
+        }),
+      ],
+    });
+  });
+
+  it("rejeita detalhes com muitas chaves", async () => {
+    await esperarBadRequest({
+      eventos: [
+        eventoValido({
+          detalhes: Object.fromEntries(
+            Array.from({ length: 21 }, (_, indice) => [
+              `campo${indice}`,
+              indice,
+            ]),
+          ),
+        }),
+      ],
+    });
+  });
+
+  it("mantem a rota best effort quando o registro de evento falha", async () => {
+    const { controller, service } = criarController();
+    service.registrarEvento.mockRejectedValue(new Error("falha"));
+
+    const resultado = await controller.registrarEventos(reqComUsuario(), {
+      eventos: [eventoValido()],
+    });
+
+    expect(resultado).toEqual({ success: true });
+    expect(service.registrarEvento).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejeita evento que nao veio do navegador", async () => {
+    await esperarBadRequest({
+      eventos: [eventoValido({ origem: "servidor" })],
+    });
+  });
+
+  it("rejeita lote vazio", async () => {
+    await esperarBadRequest({
+      eventos: [],
+    });
+  });
+
+  it("rejeita lote com mais de 25 eventos", async () => {
+    await esperarBadRequest({
+      eventos: Array.from({ length: 26 }, () => eventoValido()),
+    });
+  });
+
+  it("rejeita strings acima do limite nos campos centrais", async () => {
+    await esperarBadRequest({
+      eventos: [
+        eventoValido({
+          pagina: {
+            url: `/${"a".repeat(2001)}`,
+          },
+        }),
+      ],
+    });
   });
 });
