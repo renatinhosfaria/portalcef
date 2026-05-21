@@ -199,6 +199,26 @@ describe("PlanejamentoObservabilidadeController", () => {
     });
   });
 
+  it.each([
+    "accessToken",
+    "authorizationHeader",
+    "email",
+    "resposta",
+    "conteudoDigitado",
+    "requestBody",
+  ])("rejeita detalhes com chave fora da allowlist %s", async (chave) => {
+    await esperarBadRequest({
+      eventos: [
+        eventoValido({
+          detalhes: {
+            navegador: "Chrome",
+            [chave]: "valor informado pelo navegador",
+          },
+        }),
+      ],
+    });
+  });
+
   it("rejeita detalhes com objeto muito profundo", async () => {
     await esperarBadRequest({
       eventos: [
@@ -227,6 +247,18 @@ describe("PlanejamentoObservabilidadeController", () => {
               indice,
             ]),
           ),
+        }),
+      ],
+    });
+  });
+
+  it("rejeita detalhes com array muito grande", async () => {
+    await esperarBadRequest({
+      eventos: [
+        eventoValido({
+          detalhes: {
+            resultado: Array.from({ length: 21 }, (_, indice) => indice),
+          },
         }),
       ],
     });

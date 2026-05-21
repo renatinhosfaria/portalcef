@@ -12,17 +12,26 @@ const LIMITE_DETALHES_PROFUNDIDADE = 3;
 const LIMITE_DETALHES_CHAVES = 20;
 const LIMITE_DETALHES_ARRAY = 20;
 
-const chavesDetalhesProibidas = new Set([
-  "authorization",
-  "body",
-  "conteudo",
-  "cookie",
-  "headers",
-  "html",
-  "password",
-  "payload",
-  "senha",
-  "token",
+const chavesDetalhesPermitidas = new Set([
+  "acao",
+  "duracaoMs",
+  "duracaoTotalMs",
+  "etapa",
+  "fallback",
+  "limiteMs",
+  "lento",
+  "modulo",
+  "navegador",
+  "online",
+  "origemAcao",
+  "quantidade",
+  "resultado",
+  "sistema",
+  "status",
+  "tamanhoBytes",
+  "tentativa",
+  "tipo",
+  "visibilidade",
 ]);
 
 const eventoSchema = z.enum([
@@ -172,11 +181,11 @@ function validarValorDetalhes(
     chaves.slice(0, LIMITE_DETALHES_CHAVES).forEach((chave) => {
       const caminhoAtual = [...caminho, chave];
 
-      if (chavesDetalhesProibidas.has(chave.toLowerCase())) {
+      if (!chavesDetalhesPermitidas.has(chave)) {
         adicionarErroDetalhes(
           ctx,
           caminhoAtual,
-          "detalhes possui chave sensivel",
+          "detalhes possui chave nao permitida",
         );
       }
 
@@ -197,9 +206,13 @@ function validarValorDetalhes(
   );
 }
 
-const detalhesSchema = z.record(z.unknown()).superRefine((detalhes, ctx) => {
-  validarValorDetalhes(detalhes, ctx, [], 0);
-});
+const detalhesSchema = z
+  .custom<Record<string, unknown>>((valor) => ehObjetoSimples(valor), {
+    message: "detalhes deve ser um objeto simples",
+  })
+  .superRefine((detalhes, ctx) => {
+    validarValorDetalhes(detalhes, ctx, [], 0);
+  });
 
 const observabilidadeEventoSchema = z.object({
   timestamp: z.string().datetime().optional(),
