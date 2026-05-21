@@ -415,11 +415,24 @@ logging:
 
 Os logs estruturados do planejamento ficam no host em `./logs/planejamento` e são montados no container da API em `/var/log/essencia/planejamento`.
 
+Antes do deploy, crie o diretório no host com permissão de escrita para o usuário `nestjs` da imagem da API, que usa UID/GID `1001:1001`:
+
+```bash
+install -d -m 0750 -o 1001 -g 1001 logs/planejamento
+```
+
+Se o diretório já existir com outro dono, ajuste a permissão antes de subir os containers:
+
+```bash
+chown 1001:1001 logs/planejamento
+chmod 0750 logs/planejamento
+```
+
 Para consultar eventos por usuário, evento ou documento:
 
 ```bash
 # Por usuário
-grep -R '"usuarioId":"<usuario-id>"' logs/planejamento
+grep -R '"usuario":{"id":"<usuario-id>"' logs/planejamento
 
 # Por evento
 grep -R '"evento":"<nome-do-evento>"' logs/planejamento

@@ -15,11 +15,18 @@ function obterSlowMsConfigurado(): number | undefined {
   return Number.isFinite(valor) && valor > 0 ? valor : undefined;
 }
 
+function obterDiretorioConfigurado(): string | undefined {
+  const diretorio = process.env.PLANEJAMENTO_OBSERVABILIDADE_DIR?.trim();
+
+  return diretorio ? diretorio : undefined;
+}
+
 @Module({
   providers: [
     {
       provide: PLANEJAMENTO_OBSERVABILIDADE_CONFIG,
       useFactory: () => ({
+        diretorio: obterDiretorioConfigurado(),
         slowMs: obterSlowMsConfigurado(),
       }),
     },
