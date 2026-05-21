@@ -14,6 +14,7 @@ import { CalendarModule } from "./modules/calendar/calendar.module";
 import { HealthModule } from "./modules/health/health.module";
 import { PlanoAulaModule } from "./modules/plano-aula/plano-aula.module";
 import { PlanoAulaPeriodoModule } from "./modules/plano-aula-periodo/plano-aula-periodo.module";
+import { PlanejamentoObservabilidadeModule } from "./modules/planejamento-observabilidade/planejamento-observabilidade.module";
 import { PlanningsModule } from "./modules/plannings/plannings.module";
 import { SchoolsModule } from "./modules/schools/schools.module";
 import { SetupModule } from "./modules/setup/setup.module";
@@ -72,6 +73,7 @@ import { EventoInscricoesModule } from "./modules/evento-inscricoes/evento-inscr
     AuthModule,
     CalendarModule,
     PlanningsModule,
+    PlanejamentoObservabilidadeModule,
     // Novo workflow de Plano de Aula
     PlanoAulaModule,
     PlanoAulaPeriodoModule,
