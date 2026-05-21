@@ -20,6 +20,7 @@ import {
   planoAulaHistorico,
   planoDocumento,
   documentoComentario,
+  planoAulaPeriodo,
   quinzenaConfig,
   turmas,
   users,
@@ -144,12 +145,31 @@ export class PlanoAulaService {
     // Verificar se turma existe e pertence à unidade do usuário
     const turma = await db.query.turmas.findFirst({
       where: and(eq(turmas.id, dto.turmaId), eq(turmas.unitId, user.unitId)),
+      with: { stage: true },
     });
 
     if (!turma) {
       throw new NotFoundException(
         "Turma não encontrada ou não pertence à sua unidade",
       );
+    }
+
+    const periodo = await db.query.planoAulaPeriodo.findFirst({
+      where: and(
+        eq(planoAulaPeriodo.id, dto.quinzenaId),
+        eq(planoAulaPeriodo.unidadeId, user.unitId),
+      ),
+    });
+
+    if (!periodo) {
+      throw new NotFoundException(
+        "Período de plano de aula não encontrado ou não pertence à sua unidade",
+      );
+    }
+
+    const turmaStageCode = turma.stage?.code;
+    if (turmaStageCode && periodo.etapa !== turmaStageCode) {
+      throw new BadRequestException("Período não pertence à etapa da turma");
     }
 
     // Verificar se já existe plano para esta turma/quinzena
