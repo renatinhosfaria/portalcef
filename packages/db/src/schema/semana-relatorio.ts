@@ -62,7 +62,7 @@ export const semanaRelatorioRelations = relations(
       fields: [semanaRelatorio.unidadeId],
       references: [units.id],
     }),
-    criador: one(users, {
+    criadoPorUser: one(users, {
       fields: [semanaRelatorio.criadoPor],
       references: [users.id],
     }),
