@@ -14,6 +14,9 @@ export interface DocumentoParaPdf {
   url: string | null;
   fileName: string | null;
   mimeType: string | null;
+  sharepointItemId?: string | null;
+  sharepointEditUrl?: string | null;
+  editandoDesde?: Date | null;
 }
 
 export interface PdfGerado {
@@ -66,14 +69,36 @@ export class PdfGeneratorService {
     }
 
     const fileName = documento.fileName ?? "documento.docx";
+    const itemAtivo =
+      documento.sharepointItemId && documento.editandoDesde
+        ? {
+            id: documento.sharepointItemId,
+            editandoDesde: documento.editandoDesde,
+          }
+        : null;
 
-    let itemId: string | null = null;
+    let itemId: string | null = itemAtivo?.id ?? null;
     try {
-      itemId = await this.sharePointService.uploadParaSharePoint(
-        documento.storageKey,
-        fileName,
-        documento.id,
-      );
+      if (itemAtivo) {
+        await this.sincronizarItemAtivoSeNecessario(
+          documento,
+          itemAtivo.id,
+          itemAtivo.editandoDesde,
+          fileName,
+        );
+      } else {
+        itemId = await this.sharePointService.uploadParaSharePoint(
+          documento.storageKey,
+          fileName,
+          documento.id,
+        );
+      }
+
+      if (!itemId) {
+        throw new Error(
+          `Item SharePoint não definido para documento ${documento.id}`,
+        );
+      }
 
       const pdfBuffer = await this.sharePointService.converterParaPdf(itemId);
 
@@ -102,6 +127,28 @@ export class PdfGeneratorService {
 
   private isWord(mimeType: string): boolean {
     return mimeType === DOCX_MIME || mimeType === DOC_MIME;
+  }
+
+  private async sincronizarItemAtivoSeNecessario(
+    documento: DocumentoParaPdf,
+    itemId: string,
+    editandoDesde: Date,
+    fileName: string,
+  ): Promise<void> {
+    const foiModificado = await this.sharePointService.foiModificadoApos(
+      itemId,
+      editandoDesde,
+    );
+
+    if (!foiModificado) return;
+
+    const buffer = await this.sharePointService.baixarArquivo(itemId);
+    await this.storageService.replaceFile(
+      documento.storageKey!,
+      buffer,
+      documento.mimeType ?? DOCX_MIME,
+      fileName,
+    );
   }
 
   private trocarExtensaoParaPdf(fileName: string): string {
