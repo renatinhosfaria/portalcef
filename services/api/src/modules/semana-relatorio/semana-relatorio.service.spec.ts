@@ -111,8 +111,8 @@ describe("SemanaRelatorioService", () => {
           dataMaximaEntrega: "2026-02-25",
         },
       ]);
-      // Para contarRelatoriosVinculados: select().from().where()
-      mockDb.where.mockResolvedValueOnce([{ id: "rel-1" }, { id: "rel-2" }]);
+      // Para contarRelatoriosVinculados: select({ total }).from().where() → COUNT(*)
+      mockDb.where.mockResolvedValueOnce([{ total: 2 }]);
 
       const resultado = await service.listarPorUnidade("unit-123");
 
@@ -192,8 +192,12 @@ describe("SemanaRelatorioService", () => {
 
   describe("excluir", () => {
     it("deve bloquear exclusão quando há relatórios vinculados", async () => {
-      // contarRelatoriosVinculados retorna registros
-      mockDb.where.mockResolvedValueOnce([{ id: "rel-1" }]);
+      // buscarPorId é chamado PRIMEIRO (validação de tenant)
+      mockDb.where.mockResolvedValueOnce([
+        { id: "semana-1", unidadeId: "unit-123", etapa: "INFANTIL" },
+      ]);
+      // contarRelatoriosVinculados retorna count > 0
+      mockDb.where.mockResolvedValueOnce([{ total: 2 }]);
 
       await expect(
         service.excluir("semana-1", "unit-123"),
@@ -203,12 +207,12 @@ describe("SemanaRelatorioService", () => {
     });
 
     it("deve excluir semana sem relatórios vinculados", async () => {
-      // contarRelatoriosVinculados retorna vazio
-      mockDb.where.mockResolvedValueOnce([]);
-      // buscarPorId
+      // buscarPorId é chamado PRIMEIRO
       mockDb.where.mockResolvedValueOnce([
         { id: "semana-1", unidadeId: "unit-123", etapa: "INFANTIL" },
       ]);
+      // contarRelatoriosVinculados retorna count = 0
+      mockDb.where.mockResolvedValueOnce([{ total: 0 }]);
 
       const result = await service.excluir("semana-1", "unit-123");
 

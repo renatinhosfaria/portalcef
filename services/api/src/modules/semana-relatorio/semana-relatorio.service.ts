@@ -1,5 +1,5 @@
 import { Injectable, BadRequestException } from "@nestjs/common";
-import { eq, and, asc, getDb } from "@essencia/db";
+import { eq, and, asc, getDb, sql } from "@essencia/db";
 import {
   semanaRelatorio,
   relatorio,
@@ -112,9 +112,10 @@ export class SemanaRelatorioService {
 
     const campos: Partial<SemanaRelatorio> = {};
     if (dto.descricao !== undefined) campos.descricao = dto.descricao;
-    if (dto.dataInicio) campos.dataInicio = dto.dataInicio;
-    if (dto.dataFim) campos.dataFim = dto.dataFim;
-    if (dto.dataMaximaEntrega) campos.dataMaximaEntrega = dto.dataMaximaEntrega;
+    if (dto.dataInicio !== undefined) campos.dataInicio = dto.dataInicio;
+    if (dto.dataFim !== undefined) campos.dataFim = dto.dataFim;
+    if (dto.dataMaximaEntrega !== undefined)
+      campos.dataMaximaEntrega = dto.dataMaximaEntrega;
 
     const [atualizada] = await this.db
       .update(semanaRelatorio)
@@ -126,14 +127,14 @@ export class SemanaRelatorioService {
   }
 
   async excluir(id: string, unitId: string) {
+    await this.buscarPorId(id, unitId);
+
     const vinculados = await this.contarRelatoriosVinculados(id);
     if (vinculados > 0) {
       throw new BadRequestException(
         `Não é possível excluir: ${vinculados} relatório(s) vinculado(s)`,
       );
     }
-
-    await this.buscarPorId(id, unitId);
 
     await this.db
       .delete(semanaRelatorio)
@@ -148,11 +149,10 @@ export class SemanaRelatorioService {
   }
 
   private async contarRelatoriosVinculados(semanaId: string): Promise<number> {
-    const result = await this.db
-      .select()
+    const [result] = await this.db
+      .select({ total: sql<number>`count(*)::int` })
       .from(relatorio)
       .where(eq(relatorio.semanaRelatorioId, semanaId));
-
-    return result.length;
+    return result?.total ?? 0;
   }
 }
