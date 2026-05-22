@@ -213,6 +213,7 @@ describe("DocumentoList", () => {
       id: "doc-word-com-pdf",
       pdfUrl: "https://cdn/pdf/abc.pdf",
       pdfStorageKey: "pdf/abc.pdf",
+      pdfStatus: "PRONTO" as const,
     };
 
     const mockYoutubeAprovado = {
@@ -242,6 +243,93 @@ describe("DocumentoList", () => {
 
     const botoesImprimir = screen.getAllByRole("button", { name: /imprimir/i });
     expect(botoesImprimir).toHaveLength(2);
+  });
+
+  it("exibe PDF em preparação e não mostra imprimir para Word aprovado pendente", () => {
+    const onImprimir = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <DocumentoList
+        documentos={[
+          {
+            ...mockDocumentoAprovado,
+            pdfStatus: "PENDENTE",
+            pdfUrl: "https://cdn/pdf/pendente.pdf",
+          },
+        ]}
+        onImprimir={onImprimir}
+      />,
+    );
+
+    expect(screen.getByText(/pdf em preparação/i)).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /imprimir documento/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("exibe estado de carregamento para Word aprovado com PDF gerando", () => {
+    render(
+      <DocumentoList
+        documentos={[
+          {
+            ...mockDocumentoAprovado,
+            pdfStatus: "GERANDO",
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText(/preparando pdf/i)).toBeInTheDocument();
+  });
+
+  it("mostra imprimir para Word aprovado com PDF pronto", () => {
+    const onImprimir = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <DocumentoList
+        documentos={[
+          {
+            ...mockDocumentoAprovado,
+            pdfStatus: "PRONTO",
+            pdfUrl: "https://cdn/pdf/pronto.pdf",
+          },
+        ]}
+        onImprimir={onImprimir}
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: /imprimir documento/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("mostra ação para tentar gerar PDF novamente quando Word aprovado está com erro", async () => {
+    const user = userEvent.setup();
+    const onRegerarPdf = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <DocumentoList
+        documentos={[
+          {
+            ...mockDocumentoAprovado,
+            pdfStatus: "ERRO",
+            pdfError: "Falha no Graph",
+          },
+        ]}
+        canAprovar={true}
+        onRegerarPdf={onRegerarPdf}
+      />,
+    );
+
+    expect(screen.getByText(/falha no pdf/i)).toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", {
+        name: /tentar gerar pdf novamente/i,
+      }),
+    );
+
+    expect(onRegerarPdf).toHaveBeenCalledWith("doc-aprovado");
   });
 
   it("chama callback onImprimir ao clicar no botão Imprimir e confirmar", async () => {

@@ -52,6 +52,13 @@ interface RevisaoContentProps {
   planoId: string;
 }
 
+function isDocumentoWord(mimeType?: string | null): boolean {
+  return (
+    mimeType?.includes("word") === true ||
+    mimeType?.includes("msword") === true
+  );
+}
+
 export function RevisaoContent({ planoId }: RevisaoContentProps) {
   const router = useRouter();
   const {
@@ -62,8 +69,14 @@ export function RevisaoContent({ planoId }: RevisaoContentProps) {
     refetch,
   } = usePlanoDetalhe();
   const { loading: loadingAction, aprovar, devolver } = useAnalistaActions();
-  const { uploadDocumento, addLink, aprovarDocumento, desaprovarDocumento, imprimirDocumento } =
-    usePlanoAula();
+  const {
+    uploadDocumento,
+    addLink,
+    aprovarDocumento,
+    desaprovarDocumento,
+    regerarPdfDocumento,
+    imprimirDocumento,
+  } = usePlanoAula();
 
   // Buscar dados do período para exibir no header
   const { periodo: periodoData, etapaNome, isLoading: isLoadingPeriodo } = usePeriodoData(plano?.quinzenaId);
@@ -76,6 +89,25 @@ export function RevisaoContent({ planoId }: RevisaoContentProps) {
   useEffect(() => {
     fetchPlano(planoId);
   }, [planoId, fetchPlano]);
+
+  const temPdfPendente =
+    plano?.documentos.some(
+      (documento) =>
+        !!documento.approvedBy &&
+        isDocumentoWord(documento.mimeType) &&
+        (documento.pdfStatus === "PENDENTE" ||
+          documento.pdfStatus === "GERANDO"),
+    ) ?? false;
+
+  useEffect(() => {
+    if (!temPdfPendente) return;
+
+    const intervalId = window.setInterval(() => {
+      void refetch();
+    }, 5000);
+
+    return () => window.clearInterval(intervalId);
+  }, [refetch, temPdfPendente]);
 
   /**
    * Aprova um documento individualmente
@@ -139,6 +171,27 @@ export function RevisaoContent({ planoId }: RevisaoContentProps) {
       }
     },
     [imprimirDocumento, refetch],
+  );
+
+  /**
+   * Tenta gerar o PDF de impressão novamente.
+   */
+  const handleRegerarPdfDocumento = useCallback(
+    async (documentoId: string) => {
+      try {
+        await regerarPdfDocumento(documentoId);
+        await refetch();
+        setSuccessMessage("PDF enviado para preparação!");
+        setTimeout(() => setSuccessMessage(null), 3000);
+      } catch (err) {
+        const message = obterMensagemErro(
+          err,
+          "Não foi possível tentar gerar o PDF novamente. Tente novamente.",
+        );
+        setActionError(message);
+      }
+    },
+    [regerarPdfDocumento, refetch],
   );
 
   /**
@@ -369,6 +422,7 @@ export function RevisaoContent({ planoId }: RevisaoContentProps) {
                 canComentar={true}
                 onAprovar={handleAprovarDocumento}
                 onDesaprovar={handleDesaprovarDocumento}
+                onRegerarPdf={handleRegerarPdfDocumento}
                 onImprimir={handleImprimirDocumento}
               />
             </CardContent>

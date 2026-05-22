@@ -33,6 +33,7 @@ interface UsePlanoAulaReturn {
   deleteDocumento: (planoId: string, docId: string) => Promise<void>;
   aprovarDocumento: (documentoId: string) => Promise<PlanoDocumento>;
   desaprovarDocumento: (documentoId: string) => Promise<PlanoDocumento>;
+  regerarPdfDocumento: (documentoId: string) => Promise<PlanoDocumento>;
   imprimirDocumento: (documentoId: string) => Promise<PlanoDocumento>;
   submeterPlano: (planoId: string) => Promise<{ success: boolean }>;
   recuperarPlano: (planoId: string) => Promise<{ success: boolean }>;
@@ -211,6 +212,30 @@ export function usePlanoAula(): UsePlanoAulaReturn {
     [],
   );
 
+  const regerarPdfDocumento = useCallback(
+    async (documentoId: string): Promise<PlanoDocumento> => {
+      setLoading(true);
+      setError(null);
+      try {
+        const result = await api.post<PlanoDocumento>(
+          `/plano-aula/documentos/${documentoId}/pdf/regerar`,
+          {},
+        );
+        return result;
+      } catch (err) {
+        const message = obterMensagemErro(
+          err,
+          "Não foi possível tentar gerar o PDF novamente. Tente novamente.",
+        );
+        setError(message);
+        throw new Error(message);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [],
+  );
+
   const imprimirDocumento = useCallback(
     async (documentoId: string): Promise<PlanoDocumento> => {
       setLoading(true);
@@ -293,6 +318,7 @@ export function usePlanoAula(): UsePlanoAulaReturn {
     deleteDocumento,
     aprovarDocumento,
     desaprovarDocumento,
+    regerarPdfDocumento,
     imprimirDocumento,
     submeterPlano,
     recuperarPlano,

@@ -26,6 +26,7 @@ import { Button } from "@essencia/ui/components/button";
 import { cn } from "@essencia/ui/lib/utils";
 import { toast } from "@essencia/ui/toaster";
 import {
+  AlertCircle,
   CheckCircle,
   Eye,
   ExternalLink,
@@ -60,6 +61,7 @@ interface DocumentoListProps {
   onAprovar?: (docId: string) => Promise<void>;
   onDesaprovar?: (docId: string) => Promise<void>;
   onImprimir?: (docId: string) => Promise<void>;
+  onRegerarPdf?: (docId: string) => Promise<void>;
   canDelete?: boolean;
   canAprovar?: boolean;
   canEdit?: boolean;
@@ -138,6 +140,12 @@ function getDocumentUrl(documento: PlanoDocumento): string | undefined {
 }
 
 function getUrlParaImpressao(documento: PlanoDocumento): string | null {
+  if (isWordDocument(documento)) {
+    return documento.pdfStatus === "PRONTO" && documento.pdfUrl
+      ? documento.pdfUrl
+      : null;
+  }
+
   // pdfUrl é o PDF derivado gerado na aprovação (para DOCX) ou espelho
   // do próprio url quando o documento já é PDF.
   if (documento.pdfUrl) return documento.pdfUrl;
@@ -190,6 +198,45 @@ function isWordDocument(documento: PlanoDocumento): boolean {
   );
 }
 
+function getPdfStatusInfo(documento: PlanoDocumento): {
+  label: string;
+  className: string;
+  icon: typeof RefreshCw;
+  animate?: boolean;
+} | null {
+  if (!isWordDocument(documento) || !documento.approvedBy) return null;
+
+  switch (documento.pdfStatus) {
+    case "PENDENTE":
+      return {
+        label: "PDF em preparação",
+        className: "border-amber-200 bg-amber-50 text-amber-700",
+        icon: RefreshCw,
+      };
+    case "GERANDO":
+      return {
+        label: "Preparando PDF",
+        className: "border-blue-200 bg-blue-50 text-blue-700",
+        icon: RefreshCw,
+        animate: true,
+      };
+    case "PRONTO":
+      return {
+        label: "PDF pronto",
+        className: "border-emerald-200 bg-emerald-50 text-emerald-700",
+        icon: CheckCircle,
+      };
+    case "ERRO":
+      return {
+        label: "Falha no PDF",
+        className: "border-red-200 bg-red-50 text-red-700",
+        icon: AlertCircle,
+      };
+    default:
+      return null;
+  }
+}
+
 function getDocumentName(documento: PlanoDocumento): string {
   if (documento.tipo === "LINK_YOUTUBE" && documento.url) {
     // Extrair ID do video do YouTube para exibicao
@@ -229,6 +276,7 @@ export function DocumentoList({
   onAprovar,
   onDesaprovar,
   onImprimir,
+  onRegerarPdf,
   canDelete = false,
   canAprovar = false,
   canEdit = false,
@@ -240,6 +288,7 @@ export function DocumentoList({
   const [imprimindoId, setImprimindoId] = useState<string | null>(null);
   const [desaprovandoId, setDesaprovandoId] = useState<string | null>(null);
   const [sincronizandoId, setSincronizandoId] = useState<string | null>(null);
+  const [regerandoPdfId, setRegerandoPdfId] = useState<string | null>(null);
   const [showConfirmarImpressao, setShowConfirmarImpressao] = useState(false);
   const [documentoParaImprimir, setDocumentoParaImprimir] = useState<string | null>(null);
 
@@ -307,6 +356,24 @@ export function DocumentoList({
       console.error("Erro ao desfazer aprovação:", error);
     } finally {
       setDesaprovandoId(null);
+    }
+  };
+
+  const handleRegerarPdf = async (docId: string) => {
+    if (!onRegerarPdf) return;
+    try {
+      setRegerandoPdfId(docId);
+      await onRegerarPdf(docId);
+    } catch (error) {
+      console.error("Erro ao reprocessar PDF:", error);
+      toast.error(
+        obterMensagemErro(
+          error,
+          "Não foi possível tentar gerar o PDF novamente. Tente mais tarde.",
+        ),
+      );
+    } finally {
+      setRegerandoPdfId(null);
     }
   };
 
@@ -394,6 +461,12 @@ export function DocumentoList({
         const podeAprovar = canAprovar && !!onAprovar && !documento.approvedBy;
         const podeDesaprovar =
           canAprovar && !!onDesaprovar && !!documento.approvedBy;
+        const podeRegerarPdf =
+          canAprovar &&
+          !!onRegerarPdf &&
+          !!documento.approvedBy &&
+          isWordDocument(documento) &&
+          documento.pdfStatus === "ERRO";
         const podeImprimir =
           documento.tipo !== "LINK_YOUTUBE" &&
           !!getUrlParaImpressao(documento) &&
@@ -406,8 +479,11 @@ export function DocumentoList({
           podeEditar ||
           podeAprovar ||
           podeDesaprovar ||
+          podeRegerarPdf ||
           podeImprimir ||
           podeExcluir;
+        const pdfStatusInfo = getPdfStatusInfo(documento);
+        const PdfStatusIcon = pdfStatusInfo?.icon;
 
         return (
           <div
@@ -490,6 +566,23 @@ export function DocumentoList({
                         >
                           <CheckCircle className="h-3 w-3 mr-1" />
                           Aprovado
+                        </Badge>
+                      )}
+                      {pdfStatusInfo && PdfStatusIcon && (
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            "text-[10px] px-1.5 py-0 h-5 font-medium",
+                            pdfStatusInfo.className,
+                          )}
+                        >
+                          <PdfStatusIcon
+                            className={cn(
+                              "h-3 w-3 mr-1",
+                              pdfStatusInfo.animate && "animate-spin",
+                            )}
+                          />
+                          {pdfStatusInfo.label}
                         </Badge>
                       )}
                       {documento.printedAt && (
@@ -726,6 +819,25 @@ export function DocumentoList({
                         className={cn(
                           "h-4 w-4",
                           desaprovandoId === documento.id && "animate-pulse",
+                        )}
+                      />
+                    </Button>
+                  )}
+
+                  {podeRegerarPdf && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-red-600 hover:bg-red-50 hover:text-red-700"
+                      onClick={() => handleRegerarPdf(documento.id)}
+                      disabled={regerandoPdfId === documento.id}
+                      title="Tentar gerar PDF novamente"
+                      aria-label="Tentar gerar PDF novamente"
+                    >
+                      <RefreshCw
+                        className={cn(
+                          "h-4 w-4",
+                          regerandoPdfId === documento.id && "animate-spin",
                         )}
                       />
                     </Button>
