@@ -26,12 +26,13 @@ import {
   type PlanoAula,
   type PlanoDocumento,
   type DocumentoComentario,
+  type PdfStatus,
   type PlanoAulaStatus,
 } from "@essencia/db";
 
-import { PdfGeneratorService } from "../../common/sharepoint/pdf-generator.service";
 import { StorageService } from "../../common/storage/storage.service";
 import { PlanoAulaHistoricoService } from "./plano-aula-historico.service";
+import { PlanoAulaPdfQueueService } from "./plano-aula-pdf-queue.service";
 
 import {
   type CreatePlanoDto,
@@ -53,6 +54,11 @@ type DbTransaction = Parameters<DbInstance["transaction"]>[0] extends (
 ) => Promise<unknown>
   ? T
   : never;
+
+const DOCX_MIME =
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+const DOC_MIME = "application/msword";
+const PDF_MIME = "application/pdf";
 
 // ============================================
 // Types
@@ -112,7 +118,7 @@ export interface DashboardItem {
 export class PlanoAulaService {
   constructor(
     private readonly historicoService: PlanoAulaHistoricoService,
-    private readonly pdfGeneratorService: PdfGeneratorService,
+    private readonly planoAulaPdfQueueService: PlanoAulaPdfQueueService,
     private readonly storageService: StorageService,
   ) {}
 
@@ -1189,28 +1195,22 @@ export class PlanoAulaService {
       );
     }
 
-    // Gerar PDF derivado para impressão (só acontece na aprovação).
-    // Falhas não bloqueiam a aprovação — impressão fica indisponível até
-    // que o analista desaprove e reaprove, ou até que o back-fill rode.
+    const agora = new Date();
     let pdfStorageKey: string | null = null;
     let pdfUrl: string | null = null;
-    try {
-      const pdf = await this.pdfGeneratorService.gerarParaImpressao({
-        id: documento.id,
-        storageKey: documento.storageKey,
-        url: documento.url,
-        fileName: documento.fileName,
-        mimeType: documento.mimeType,
-      });
-      if (pdf) {
-        pdfStorageKey = pdf.pdfStorageKey;
-        pdfUrl = pdf.pdfUrl;
-      }
-    } catch (error) {
-      const mensagem = error instanceof Error ? error.message : String(error);
-      console.error(
-        `Falha ao gerar PDF de impress\u00e3o para documento ${documento.id}: ${mensagem}`,
-      );
+    let pdfStatus: PdfStatus = "NAO_APLICAVEL";
+    let pdfRequestedAt: Date | null = null;
+    let pdfGeneratedAt: Date | null = null;
+
+    if (this.isPdfNativo(documento.mimeType)) {
+      pdfStatus = "PRONTO";
+      pdfStorageKey = documento.storageKey;
+      pdfUrl = documento.url;
+      pdfRequestedAt = agora;
+      pdfGeneratedAt = agora;
+    } else if (this.isWord(documento.mimeType)) {
+      pdfStatus = "PENDENTE";
+      pdfRequestedAt = agora;
     }
 
     // Atualizar documento com aprovação
@@ -1218,15 +1218,31 @@ export class PlanoAulaService {
       .update(planoDocumento)
       .set({
         approvedBy: user.userId,
-        approvedAt: new Date(),
+        approvedAt: agora,
         pdfStorageKey,
         pdfUrl,
+        pdfStatus,
+        pdfError: null,
+        pdfRequestedAt,
+        pdfGeneratedAt,
         updatedAt: new Date(),
       })
       .where(eq(planoDocumento.id, documentoId))
       .returning();
 
+    if (pdfStatus === "PENDENTE") {
+      await this.planoAulaPdfQueueService.adicionar(documentoId);
+    }
+
     return documentoAtualizado;
+  }
+
+  private isPdfNativo(mimeType: string | null): boolean {
+    return mimeType === PDF_MIME;
+  }
+
+  private isWord(mimeType: string | null): boolean {
+    return mimeType === DOCX_MIME || mimeType === DOC_MIME;
   }
 
   /**

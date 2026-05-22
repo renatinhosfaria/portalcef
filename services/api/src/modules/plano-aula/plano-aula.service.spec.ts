@@ -4,6 +4,7 @@ import { Test, TestingModule } from "@nestjs/testing";
 import { PdfGeneratorService } from "../../common/sharepoint/pdf-generator.service";
 import { StorageService } from "../../common/storage/storage.service";
 import { PlanoAulaHistoricoService } from "./plano-aula-historico.service";
+import { PlanoAulaPdfQueueService } from "./plano-aula-pdf-queue.service";
 import { PlanoAulaService } from "./plano-aula.service";
 
 const mockTx = {
@@ -86,7 +87,12 @@ describe("PlanoAulaService", () => {
     stageId: null,
   };
 
-  const pdfGeneratorServiceMock = {};
+  const pdfGeneratorServiceMock = {
+    gerarParaImpressao: jest.fn(),
+  };
+  const planoAulaPdfQueueServiceMock = {
+    adicionar: jest.fn(),
+  };
   const storageServiceMock = {};
 
   beforeEach(async () => {
@@ -100,6 +106,10 @@ describe("PlanoAulaService", () => {
         {
           provide: PdfGeneratorService,
           useValue: pdfGeneratorServiceMock,
+        },
+        {
+          provide: PlanoAulaPdfQueueService,
+          useValue: planoAulaPdfQueueServiceMock,
         },
         {
           provide: StorageService,
@@ -254,6 +264,125 @@ describe("PlanoAulaService", () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (service as any).registrarImpressaoDocumento(usuarioLogado, "doc-2"),
       ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe("aprovarDocumento", () => {
+    beforeEach(() => {
+      mockDb.query.planoDocumento.findFirst.mockReset();
+      mockDb.returning.mockReset();
+      pdfGeneratorServiceMock.gerarParaImpressao.mockReset();
+      planoAulaPdfQueueServiceMock.adicionar.mockReset();
+    });
+
+    it("aprova Word como PDF pendente e enfileira geração sem bloquear", async () => {
+      mockDb.query.planoDocumento.findFirst.mockResolvedValue({
+        id: "doc-word",
+        planoId: "plano-1",
+        storageKey: "documentos/plano.docx",
+        url: "https://cdn.exemplo.com/plano.docx",
+        fileName: "Plano semanal.docx",
+        mimeType:
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        plano: { unitId: "unit-1" },
+      });
+      mockDb.returning.mockResolvedValue([
+        {
+          id: "doc-word",
+          approvedBy: usuarioLogado.userId,
+          pdfStatus: "PENDENTE",
+        },
+      ]);
+
+      await service.aprovarDocumento(usuarioLogado, "doc-word");
+
+      expect(pdfGeneratorServiceMock.gerarParaImpressao).not.toHaveBeenCalled();
+      expect(planoAulaPdfQueueServiceMock.adicionar).toHaveBeenCalledWith(
+        "doc-word",
+      );
+      expect(mockDb.set).toHaveBeenCalledWith(
+        expect.objectContaining({
+          approvedBy: usuarioLogado.userId,
+          approvedAt: expect.any(Date),
+          pdfStatus: "PENDENTE",
+          pdfStorageKey: null,
+          pdfUrl: null,
+          pdfError: null,
+          pdfRequestedAt: expect.any(Date),
+          pdfGeneratedAt: null,
+          updatedAt: expect.any(Date),
+        }),
+      );
+    });
+
+    it("aprova PDF nativo como pronto e espelha arquivo original", async () => {
+      mockDb.query.planoDocumento.findFirst.mockResolvedValue({
+        id: "doc-pdf",
+        planoId: "plano-1",
+        storageKey: "documentos/plano.pdf",
+        url: "https://cdn.exemplo.com/plano.pdf",
+        fileName: "Plano semanal.pdf",
+        mimeType: "application/pdf",
+        plano: { unitId: "unit-1" },
+      });
+      mockDb.returning.mockResolvedValue([
+        {
+          id: "doc-pdf",
+          approvedBy: usuarioLogado.userId,
+          pdfStatus: "PRONTO",
+        },
+      ]);
+
+      await service.aprovarDocumento(usuarioLogado, "doc-pdf");
+
+      expect(pdfGeneratorServiceMock.gerarParaImpressao).not.toHaveBeenCalled();
+      expect(planoAulaPdfQueueServiceMock.adicionar).not.toHaveBeenCalled();
+      expect(mockDb.set).toHaveBeenCalledWith(
+        expect.objectContaining({
+          approvedBy: usuarioLogado.userId,
+          pdfStatus: "PRONTO",
+          pdfStorageKey: "documentos/plano.pdf",
+          pdfUrl: "https://cdn.exemplo.com/plano.pdf",
+          pdfError: null,
+          pdfRequestedAt: expect.any(Date),
+          pdfGeneratedAt: expect.any(Date),
+        }),
+      );
+    });
+
+    it("aprova link sem geração de PDF", async () => {
+      mockDb.query.planoDocumento.findFirst.mockResolvedValue({
+        id: "doc-link",
+        planoId: "plano-1",
+        storageKey: null,
+        url: "https://youtube.com/watch?v=123",
+        fileName: null,
+        mimeType: null,
+        plano: { unitId: "unit-1" },
+      });
+      mockDb.returning.mockResolvedValue([
+        {
+          id: "doc-link",
+          approvedBy: usuarioLogado.userId,
+          pdfStatus: "NAO_APLICAVEL",
+        },
+      ]);
+
+      await service.aprovarDocumento(usuarioLogado, "doc-link");
+
+      expect(pdfGeneratorServiceMock.gerarParaImpressao).not.toHaveBeenCalled();
+      expect(planoAulaPdfQueueServiceMock.adicionar).not.toHaveBeenCalled();
+      expect(mockDb.set).toHaveBeenCalledWith(
+        expect.objectContaining({
+          approvedBy: usuarioLogado.userId,
+          pdfStatus: "NAO_APLICAVEL",
+          pdfStorageKey: null,
+          pdfUrl: null,
+          pdfError: null,
+          pdfRequestedAt: null,
+          pdfGeneratedAt: null,
+        }),
+      );
     });
   });
 
