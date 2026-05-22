@@ -18,6 +18,7 @@ jest.mock("@essencia/db", () => ({
   users: {},
 }));
 
+import { ROLES_KEY } from "../../common/decorators/roles.decorator";
 import { PlanoAulaController } from "./plano-aula.controller";
 import type { UserContext } from "./plano-aula.service";
 
@@ -56,6 +57,11 @@ describe("PlanoAulaController", () => {
       getDocumentoById: jest.fn().mockResolvedValue(documentoWord),
       adicionarDocumentoUpload: jest.fn().mockResolvedValue(documentoWord),
       atualizarDocumento: jest.fn().mockResolvedValue(undefined),
+      regerarPdfDocumento: jest.fn().mockResolvedValue({
+        ...documentoWord,
+        pdfStatus: "PENDENTE",
+        pdfError: null,
+      }),
     };
 
     const storageService = {
@@ -313,6 +319,39 @@ describe("PlanoAulaController", () => {
           }),
         }),
       );
+    });
+  });
+
+  describe("regerarPdfDocumento", () => {
+    it("deve expor rota apenas para analista_pedagogico", () => {
+      const roles = Reflect.getMetadata(
+        ROLES_KEY,
+        PlanoAulaController.prototype.regerarPdfDocumento,
+      );
+
+      expect(roles).toEqual(["analista_pedagogico"]);
+    });
+
+    it("deve delegar reprocessamento ao service e retornar sucesso", async () => {
+      const { controller, planoAulaService } = criarController();
+
+      const resultado = await controller.regerarPdfDocumento(
+        reqComUsuario,
+        "doc-1",
+      );
+
+      expect(planoAulaService.regerarPdfDocumento).toHaveBeenCalledWith(
+        usuario,
+        "doc-1",
+      );
+      expect(resultado).toEqual({
+        success: true,
+        data: expect.objectContaining({
+          id: "doc-1",
+          pdfStatus: "PENDENTE",
+          pdfError: null,
+        }),
+      });
     });
   });
 });

@@ -444,6 +444,94 @@ describe("PlanoAulaService", () => {
     });
   });
 
+  describe("regerarPdfDocumento", () => {
+    beforeEach(() => {
+      mockDb.query.planoDocumento.findFirst.mockReset();
+      mockDb.returning.mockReset();
+      planoAulaPdfQueueServiceMock.adicionar.mockReset();
+      pdfGeneratorServiceMock.gerarParaImpressao.mockReset();
+    });
+
+    it("exige documento aprovado", async () => {
+      mockDb.query.planoDocumento.findFirst.mockResolvedValue({
+        id: "doc-word",
+        mimeType:
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        approvedBy: null,
+        approvedAt: null,
+        plano: { unitId: "unit-1" },
+      });
+
+      await expect(
+        service.regerarPdfDocumento(usuarioLogado, "doc-word"),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(planoAulaPdfQueueServiceMock.adicionar).not.toHaveBeenCalled();
+    });
+
+    it("exige documento Word", async () => {
+      mockDb.query.planoDocumento.findFirst.mockResolvedValue({
+        id: "doc-pdf",
+        mimeType: "application/pdf",
+        approvedBy: "analista-1",
+        approvedAt: new Date("2026-05-22T10:00:00.000Z"),
+        plano: { unitId: "unit-1" },
+      });
+
+      await expect(
+        service.regerarPdfDocumento(usuarioLogado, "doc-pdf"),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(planoAulaPdfQueueServiceMock.adicionar).not.toHaveBeenCalled();
+    });
+
+    it("marca PDF como pendente, limpa erro e enfileira sem gerar PDF síncrono", async () => {
+      mockDb.query.planoDocumento.findFirst.mockResolvedValue({
+        id: "doc-word",
+        mimeType:
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        approvedBy: "analista-1",
+        approvedAt: new Date("2026-05-22T10:00:00.000Z"),
+        plano: { unitId: "unit-1" },
+      });
+      mockDb.returning.mockResolvedValue([
+        {
+          id: "doc-word",
+          pdfStatus: "PENDENTE",
+          pdfError: null,
+        },
+      ]);
+
+      const resultado = await service.regerarPdfDocumento(
+        usuarioLogado,
+        "doc-word",
+      );
+
+      expect(pdfGeneratorServiceMock.gerarParaImpressao).not.toHaveBeenCalled();
+      expect(mockDb.set).toHaveBeenCalledWith(
+        expect.objectContaining({
+          pdfStatus: "PENDENTE",
+          pdfError: null,
+          pdfRequestedAt: expect.any(Date),
+          pdfGeneratedAt: null,
+          pdfStorageKey: null,
+          pdfUrl: null,
+          updatedAt: expect.any(Date),
+        }),
+      );
+      expect(planoAulaPdfQueueServiceMock.adicionar).toHaveBeenCalledWith(
+        "doc-word",
+      );
+      expect(resultado).toEqual(
+        expect.objectContaining({
+          id: "doc-word",
+          pdfStatus: "PENDENTE",
+          pdfError: null,
+        }),
+      );
+    });
+  });
+
   describe("getDashboard", () => {
     it("bloqueia gerente_unidade consultando dashboard de outra unidade", async () => {
       const user = {

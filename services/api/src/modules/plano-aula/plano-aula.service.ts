@@ -1257,6 +1257,56 @@ export class PlanoAulaService {
     return documento ?? null;
   }
 
+  async regerarPdfDocumento(
+    user: UserContext,
+    documentoId: string,
+  ): Promise<PlanoDocumento> {
+    const db = getDb();
+
+    const documento = await db.query.planoDocumento.findFirst({
+      where: eq(planoDocumento.id, documentoId),
+      with: { plano: true },
+    });
+
+    if (!documento) {
+      throw new NotFoundException("Documento não encontrado");
+    }
+
+    if (documento.plano.unitId !== user.unitId) {
+      throw new ForbiddenException(
+        "Você não tem permissão para reprocessar este PDF",
+      );
+    }
+
+    if (!documento.approvedBy || !documento.approvedAt) {
+      throw new BadRequestException("Documento precisa estar aprovado");
+    }
+
+    if (!this.isWord(documento.mimeType)) {
+      throw new BadRequestException(
+        "Apenas documentos Word podem ter PDF reprocessado",
+      );
+    }
+
+    const [documentoAtualizado] = await db
+      .update(planoDocumento)
+      .set({
+        pdfStatus: "PENDENTE",
+        pdfError: null,
+        pdfRequestedAt: new Date(),
+        pdfGeneratedAt: null,
+        pdfStorageKey: null,
+        pdfUrl: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(planoDocumento.id, documentoId))
+      .returning();
+
+    await this.planoAulaPdfQueueService.adicionar(documentoId);
+
+    return documentoAtualizado;
+  }
+
   async marcarPdfGerando(documentoId: string): Promise<void> {
     const db = getDb();
     await db

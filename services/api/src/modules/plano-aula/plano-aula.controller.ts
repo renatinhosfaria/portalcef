@@ -1243,6 +1243,26 @@ export class PlanoAulaController {
   }
 
   /**
+   * POST /plano-aula/documentos/:id/pdf/regerar
+   * Reprocessa PDF de impressão de documento Word aprovado.
+   */
+  @Post("documentos/:id/pdf/regerar")
+  @Roles("analista_pedagogico")
+  async regerarPdfDocumento(
+    @Req() req: { user: UserContext },
+    @Param("id") documentoId: string,
+  ) {
+    const documento = await this.planoAulaService.regerarPdfDocumento(
+      req.user,
+      documentoId,
+    );
+    return {
+      success: true,
+      data: documento,
+    };
+  }
+
+  /**
    * POST /plano-aula/documentos/:id/imprimir
    * Registra a impressão de um documento aprovado
    */
