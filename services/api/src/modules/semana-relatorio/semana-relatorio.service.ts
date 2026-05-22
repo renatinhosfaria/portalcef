@@ -126,7 +126,7 @@ export class SemanaRelatorioService {
     return atualizada;
   }
 
-  async excluir(id: string, unitId: string) {
+  async excluir(id: string, unitId: string): Promise<void> {
     await this.buscarPorId(id, unitId);
 
     const vinculados = await this.contarRelatoriosVinculados(id);
@@ -144,8 +144,6 @@ export class SemanaRelatorioService {
           eq(semanaRelatorio.unidadeId, unitId),
         ),
       );
-
-    return { success: true };
   }
 
   private async contarRelatoriosVinculados(semanaId: string): Promise<number> {

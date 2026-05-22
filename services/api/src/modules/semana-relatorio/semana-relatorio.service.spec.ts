@@ -214,9 +214,9 @@ describe("SemanaRelatorioService", () => {
       // contarRelatoriosVinculados retorna count = 0
       mockDb.where.mockResolvedValueOnce([{ total: 0 }]);
 
-      const result = await service.excluir("semana-1", "unit-123");
-
-      expect(result).toEqual({ success: true });
+      await expect(
+        service.excluir("semana-1", "unit-123"),
+      ).resolves.toBeUndefined();
       expect(mockDelete).toHaveBeenCalled();
     });
   });
