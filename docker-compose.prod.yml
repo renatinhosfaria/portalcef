@@ -101,7 +101,7 @@ services:
     image: redis:7-alpine
     container_name: essencia-redis
     <<: *common
-    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy noeviction
     volumes:
       - essencia-redis-data:/data
     healthcheck:
