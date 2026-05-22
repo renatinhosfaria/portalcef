@@ -12,7 +12,8 @@ export type PlanejamentoObservabilidadeEvento =
   | "arquivo_acao"
   | "erro_navegador"
   | "upload_resultado"
-  | "sharepoint_word";
+  | "sharepoint_word"
+  | "pdf_impressao";
 
 export type PlanejamentoObservabilidadeNivel = "info" | "warn" | "error";
 

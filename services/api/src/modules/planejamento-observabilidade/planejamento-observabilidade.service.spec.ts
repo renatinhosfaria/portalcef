@@ -219,6 +219,52 @@ describe("PlanejamentoObservabilidadeService", () => {
     });
   });
 
+  it("normaliza evento de geração de PDF de impressão", () => {
+    const evento = service.normalizarEvento({
+      origem: "api",
+      evento: "pdf_impressao",
+      nivel: "info",
+      usuario: {
+        id: "analista-1",
+        role: "analista_pedagogico",
+        schoolId: "school-1",
+        unitId: "unit-1",
+      },
+      arquivo: {
+        planoId: "plano-1",
+        documentoId: "doc-1",
+        nome: "Plano.docx",
+        tipo: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        tamanhoBytes: 1024,
+      },
+      detalhes: {
+        etapa: "converter_pdf",
+        duracaoMs: 4200,
+      },
+    });
+
+    expect(evento).toMatchObject({
+      origem: "api",
+      evento: "pdf_impressao",
+      nivel: "info",
+      usuario: {
+        id: "analista-1",
+        role: "analista_pedagogico",
+        schoolId: "school-1",
+        unitId: "unit-1",
+      },
+      arquivo: {
+        planoId: "plano-1",
+        documentoId: "doc-1",
+        nome: "Plano.docx",
+      },
+      detalhes: {
+        etapa: "converter_pdf",
+        duracaoMs: 4200,
+      },
+    });
+  });
+
   it("nao rejeita a promise quando a escrita falha", async () => {
     const caminhoArquivo = join(dir, "bloqueio");
     await writeFile(caminhoArquivo, "nao e diretorio", "utf8");

@@ -3,6 +3,7 @@ import { Worker } from "bullmq";
 import Redis from "ioredis";
 
 import { PdfGeneratorService } from "../../common/sharepoint/pdf-generator.service";
+import { PlanejamentoObservabilidadeService } from "../planejamento-observabilidade/planejamento-observabilidade.service";
 import { PlanoAulaPdfWorkerService } from "./plano-aula-pdf-worker.service";
 import { PlanoAulaService } from "./plano-aula.service";
 
@@ -56,6 +57,9 @@ describe("PlanoAulaPdfWorkerService", () => {
   let pdfGeneratorServiceMock: {
     gerarParaImpressao: jest.Mock;
   };
+  let observabilidadeServiceMock: {
+    registrarEvento: jest.Mock;
+  };
 
   const configServiceMock = {
     get: jest.fn((key: string) => {
@@ -96,11 +100,15 @@ describe("PlanoAulaPdfWorkerService", () => {
         pdfUrl: "https://cdn.exemplo.com/pdf/documento-1.pdf",
       }),
     };
+    observabilidadeServiceMock = {
+      registrarEvento: jest.fn().mockResolvedValue(undefined),
+    };
 
     workerService = new PlanoAulaPdfWorkerService(
       configServiceMock as unknown as ConfigService,
       planoAulaServiceMock as unknown as PlanoAulaService,
       pdfGeneratorServiceMock as unknown as PdfGeneratorService,
+      observabilidadeServiceMock as unknown as PlanejamentoObservabilidadeService,
     );
   });
 
@@ -169,6 +177,9 @@ describe("PlanoAulaPdfWorkerService", () => {
         sharepointEditUrl: "https://sharepoint/edit",
         editandoDesde: new Date("2026-05-22T09:50:00.000Z"),
       }),
+      expect.objectContaining({
+        onEtapa: expect.any(Function),
+      }),
     );
   });
 
@@ -201,6 +212,58 @@ describe("PlanoAulaPdfWorkerService", () => {
 
     expect(planoAulaServiceMock.limparEdicaoSharePoint).toHaveBeenCalledWith(
       "documento-1",
+    );
+  });
+
+  it("registra eventos pdf_impressao de início, etapa interna e fim", async () => {
+    pdfGeneratorServiceMock.gerarParaImpressao.mockImplementationOnce(
+      async (_documento, opcoes) => {
+        await opcoes.onEtapa({
+          etapa: "converter_pdf",
+          duracaoMs: 42,
+        });
+        return {
+          pdfStorageKey: "pdf/documento-1.pdf",
+          pdfUrl: "https://cdn.exemplo.com/pdf/documento-1.pdf",
+        };
+      },
+    );
+
+    await workerService.processarDocumento("documento-1");
+
+    expect(observabilidadeServiceMock.registrarEvento).toHaveBeenCalledWith(
+      expect.objectContaining({
+        origem: "api",
+        evento: "pdf_impressao",
+        nivel: "info",
+        arquivo: expect.objectContaining({
+          documentoId: "documento-1",
+          nome: "Plano semanal.docx",
+        }),
+        detalhes: expect.objectContaining({
+          etapa: "inicio",
+          duracaoMs: expect.any(Number),
+        }),
+      }),
+    );
+    expect(observabilidadeServiceMock.registrarEvento).toHaveBeenCalledWith(
+      expect.objectContaining({
+        evento: "pdf_impressao",
+        detalhes: expect.objectContaining({
+          etapa: "converter_pdf",
+          duracaoMs: 42,
+        }),
+      }),
+    );
+    expect(observabilidadeServiceMock.registrarEvento).toHaveBeenCalledWith(
+      expect.objectContaining({
+        evento: "pdf_impressao",
+        nivel: "info",
+        detalhes: expect.objectContaining({
+          etapa: "fim",
+          duracaoMs: expect.any(Number),
+        }),
+      }),
     );
   });
 });

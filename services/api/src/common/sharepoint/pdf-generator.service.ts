@@ -24,6 +24,16 @@ export interface PdfGerado {
   pdfUrl: string;
 }
 
+export interface PdfGeneratorEtapa {
+  etapa: string;
+  duracaoMs: number;
+  detalhes?: Record<string, unknown>;
+}
+
+export interface PdfGeneratorObservabilidade {
+  onEtapa?: (etapa: PdfGeneratorEtapa) => void | Promise<void>;
+}
+
 /**
  * Gera um PDF derivado do documento para ser usado na impressão
  * (iframe + print() nativo do browser).
@@ -45,12 +55,18 @@ export class PdfGeneratorService {
 
   async gerarParaImpressao(
     documento: DocumentoParaPdf,
+    observabilidade?: PdfGeneratorObservabilidade,
   ): Promise<PdfGerado | null> {
     if (!documento.mimeType || !documento.storageKey || !documento.url) {
       return null;
     }
 
     if (documento.mimeType === PDF_MIME) {
+      await this.registrarEtapa(observabilidade, {
+        etapa: "pdf_nativo",
+        duracaoMs: 0,
+      });
+
       return {
         pdfStorageKey: documento.storageKey,
         pdfUrl: documento.url,
@@ -68,6 +84,7 @@ export class PdfGeneratorService {
       return null;
     }
 
+    const storageKey = documento.storageKey;
     const fileName = documento.fileName ?? "documento.docx";
     const itemAtivo =
       documento.sharepointItemId && documento.editandoDesde
@@ -80,17 +97,28 @@ export class PdfGeneratorService {
     let itemId: string | null = itemAtivo?.id ?? null;
     try {
       if (itemAtivo) {
+        await this.registrarEtapa(observabilidade, {
+          etapa: "sharepoint_item_ativo",
+          duracaoMs: 0,
+          detalhes: { itemAtivo: true },
+        });
         await this.sincronizarItemAtivoSeNecessario(
           documento,
           itemAtivo.id,
           itemAtivo.editandoDesde,
           fileName,
+          observabilidade,
         );
       } else {
-        itemId = await this.sharePointService.uploadParaSharePoint(
-          documento.storageKey,
-          fileName,
-          documento.id,
+        itemId = await this.medirEtapa(
+          observabilidade,
+          "upload_sharepoint",
+          () =>
+            this.sharePointService.uploadParaSharePoint(
+              storageKey,
+              fileName,
+              documento.id,
+            ),
         );
       }
 
@@ -100,14 +128,24 @@ export class PdfGeneratorService {
         );
       }
 
-      const pdfBuffer = await this.sharePointService.converterParaPdf(itemId);
+      const itemIdParaConverter = itemId;
+      const pdfBuffer = await this.medirEtapa(
+        observabilidade,
+        "converter_pdf",
+        () => this.sharePointService.converterParaPdf(itemIdParaConverter),
+      );
 
       const pdfFileName = this.trocarExtensaoParaPdf(fileName);
-      const upload = await this.storageService.uploadBuffer(
-        pdfBuffer,
-        pdfFileName,
-        PDF_MIME,
-        "pdf",
+      const upload = await this.medirEtapa(
+        observabilidade,
+        "upload_pdf_storage",
+        () =>
+          this.storageService.uploadBuffer(
+            pdfBuffer,
+            pdfFileName,
+            PDF_MIME,
+            "pdf",
+          ),
       );
 
       this.logger.log(
@@ -120,7 +158,13 @@ export class PdfGeneratorService {
       };
     } finally {
       if (itemId) {
-        await this.sharePointService.removerArquivo(itemId).catch(() => {});
+        await this.medirEtapa(
+          observabilidade,
+          "remover_sharepoint",
+          async () => {
+            await this.sharePointService.removerArquivo(itemId!).catch(() => {});
+          },
+        );
       }
     }
   }
@@ -134,21 +178,71 @@ export class PdfGeneratorService {
     itemId: string,
     editandoDesde: Date,
     fileName: string,
+    observabilidade?: PdfGeneratorObservabilidade,
   ): Promise<void> {
-    const foiModificado = await this.sharePointService.foiModificadoApos(
-      itemId,
-      editandoDesde,
+    const foiModificado = await this.medirEtapa(
+      observabilidade,
+      "verificar_modificacao_sharepoint",
+      () => this.sharePointService.foiModificadoApos(itemId, editandoDesde),
     );
 
     if (!foiModificado) return;
 
-    const buffer = await this.sharePointService.baixarArquivo(itemId);
-    await this.storageService.replaceFile(
-      documento.storageKey!,
-      buffer,
-      documento.mimeType ?? DOCX_MIME,
-      fileName,
+    await this.medirEtapa(
+      observabilidade,
+      "sincronizar_word",
+      async () => {
+        const buffer = await this.sharePointService.baixarArquivo(itemId);
+        await this.storageService.replaceFile(
+          documento.storageKey!,
+          buffer,
+          documento.mimeType ?? DOCX_MIME,
+          fileName,
+        );
+      },
+      { modificado: true },
     );
+  }
+
+  private async medirEtapa<T>(
+    observabilidade: PdfGeneratorObservabilidade | undefined,
+    etapa: string,
+    executar: () => Promise<T>,
+    detalhes?: Record<string, unknown>,
+  ): Promise<T> {
+    const inicio = Date.now();
+    try {
+      const resultado = await executar();
+      await this.registrarEtapa(observabilidade, {
+        etapa,
+        duracaoMs: Date.now() - inicio,
+        detalhes,
+      });
+      return resultado;
+    } catch (error) {
+      await this.registrarEtapa(observabilidade, {
+        etapa,
+        duracaoMs: Date.now() - inicio,
+        detalhes: {
+          ...(detalhes ?? {}),
+          erro: error instanceof Error ? error.message : String(error),
+        },
+      });
+      throw error;
+    }
+  }
+
+  private async registrarEtapa(
+    observabilidade: PdfGeneratorObservabilidade | undefined,
+    etapa: PdfGeneratorEtapa,
+  ): Promise<void> {
+    if (!observabilidade?.onEtapa) return;
+
+    try {
+      await observabilidade.onEtapa(etapa);
+    } catch {
+      return;
+    }
   }
 
   private trocarExtensaoParaPdf(fileName: string): string {
