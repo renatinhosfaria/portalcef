@@ -6,6 +6,7 @@ import { AuthModule } from "../auth/auth.module";
 import { PlanejamentoObservabilidadeProvidersModule } from "../planejamento-observabilidade/planejamento-observabilidade.module";
 import { PlanoAulaController } from "./plano-aula.controller";
 import { PlanoAulaHistoricoService } from "./plano-aula-historico.service";
+import { PlanoAulaPdfQueueService } from "./plano-aula-pdf-queue.service";
 import { PlanoAulaService } from "./plano-aula.service";
 
 /**
@@ -25,7 +26,11 @@ import { PlanoAulaService } from "./plano-aula.service";
     PlanejamentoObservabilidadeProvidersModule,
   ],
   controllers: [PlanoAulaController],
-  providers: [PlanoAulaService, PlanoAulaHistoricoService],
+  providers: [
+    PlanoAulaService,
+    PlanoAulaHistoricoService,
+    PlanoAulaPdfQueueService,
+  ],
   exports: [PlanoAulaService],
 })
 export class PlanoAulaModule {}
