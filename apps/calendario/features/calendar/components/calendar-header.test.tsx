@@ -17,7 +17,7 @@ describe("CalendarHeader", () => {
       />,
     );
 
-    expect(screen.getByText(/janeiro 2026/i)).toBeInTheDocument();
+    expect(screen.getByText(/janeiro de 2026/i)).toBeInTheDocument();
   });
 
   it("should call onPrevMonth when clicking previous button", async () => {

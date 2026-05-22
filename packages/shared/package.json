@@ -76,7 +76,7 @@
     "build": "tsc -p tsconfig.build.json",
     "clean": "rimraf dist",
     "lint": "eslint src/",
-    "test": "vitest run --environment node --globals",
+    "test": "vitest run --environment node --globals --exclude \"dist/**\"",
     "format": "prettier --write \"**/*.{ts,tsx,md,json}\"",
     "typecheck": "tsc --noEmit"
   },

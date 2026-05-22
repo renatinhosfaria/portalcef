@@ -114,7 +114,7 @@ export class ShopExpirationJob {
 
       if (!currentOrder) {
         this.logger.warn(
-          `Pedido ${order.orderNumber} não está mais aguardando pagamento`,
+          `Pedido ${order.orderNumber} nao esta mais aguardando pagamento`,
         );
         return;
       }

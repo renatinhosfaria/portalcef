@@ -8,6 +8,8 @@ const mockDb: Record<string, unknown> & {
   values: jest.Mock;
   returning: jest.Mock;
   query: { tarefas: { findFirst: jest.Mock } };
+  select: jest.Mock;
+  from: jest.Mock;
   update: jest.Mock;
   set: jest.Mock;
   where: jest.Mock;
@@ -22,6 +24,8 @@ const mockDb: Record<string, unknown> & {
     },
   },
   update: jest.fn().mockReturnThis(),
+  select: jest.fn().mockReturnThis(),
+  from: jest.fn().mockReturnThis(),
   set: jest.fn().mockReturnThis(),
   where: jest.fn().mockReturnThis(),
   transaction: jest.fn(),
@@ -35,8 +39,10 @@ mockDb.transaction.mockImplementation(
 jest.mock("@essencia/db", () => ({
   tarefas: {},
   tarefaContextos: {},
+  users: { id: "users.id", name: "users.name" },
   eq: jest.fn(),
   and: jest.fn(),
+  inArray: jest.fn(),
 }));
 
 describe("TarefasService", () => {
@@ -214,6 +220,10 @@ describe("TarefasService", () => {
       };
 
       mockDb.query.tarefas.findFirst.mockResolvedValue(mockTarefaDb);
+      mockDb.where.mockResolvedValueOnce([
+        { id: "user-uuid-1", name: "Usuária criadora" },
+        { id: "user-uuid-2", name: "Usuária responsável" },
+      ]);
 
       const resultado = await service.findById("tarefa-uuid-1");
 
@@ -223,8 +233,14 @@ describe("TarefasService", () => {
       expect(resultado?.status).toBe("PENDENTE");
       expect(resultado?.prazo).toBe("2026-01-25T23:59:59.000Z");
       expect(typeof resultado?.prazo).toBe("string");
+      expect(resultado?.criadoPorNome).toBe("Usuária criadora");
+      expect(resultado?.responsavelNome).toBe("Usuária responsável");
 
       expect(mockDb.query.tarefas.findFirst).toHaveBeenCalled();
+      expect(mockDb.select).toHaveBeenCalledWith({
+        id: "users.id",
+        name: "users.name",
+      });
     });
 
     it("deve retornar null se tarefa não existir", async () => {

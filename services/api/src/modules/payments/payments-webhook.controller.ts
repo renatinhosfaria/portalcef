@@ -313,7 +313,7 @@ export class PaymentsWebhookController {
 
     if (!paymentMethod) {
       this.logger.log(
-        `PaymentIntent ${paymentIntent.id} com método ambíguo; aguardando evento de Checkout Session`,
+        `PaymentIntent ${paymentIntent.id} com metodo ambiguo; aguardando evento de Checkout Session`,
       );
       return;
     }
