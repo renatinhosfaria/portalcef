@@ -239,6 +239,13 @@
       "when": 1779366733143,
       "tag": "0033_restringe_exclusao_planejamento",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1779457228422,
+      "tag": "0034_pdf_status_planejamento",
+      "breakpoints": true
     }
   ]
 }
