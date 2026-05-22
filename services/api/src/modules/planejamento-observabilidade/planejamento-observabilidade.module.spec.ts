@@ -52,11 +52,7 @@ describe("PlanejamentoObservabilidadeProvidersModule", () => {
       nivel: "info",
     });
 
-    const hoje = new Date().toISOString().slice(0, 10);
-    const conteudo = await readFile(
-      join(dir, `planejamento-${hoje}.jsonl`),
-      "utf8",
-    );
+    const conteudo = await readFile(service.obterArquivoDoDia(), "utf8");
 
     expect(conteudo).toContain('"evento":"api_chamada"');
 
