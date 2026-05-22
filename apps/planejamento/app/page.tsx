@@ -6,13 +6,15 @@
  * Cada card direciona para a area correta conforme o role do usuario
  */
 
+import { api } from "@essencia/shared/fetchers/client";
 import { useTenant } from "@essencia/shared/providers/tenant";
 import {
   Card,
   CardContent,
 } from "@essencia/ui/components/card";
-import { ClipboardCheck, FileText } from "lucide-react";
+import { BookOpen, ClipboardCheck, FileText } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 
 import { getDashboardForRole } from "../lib/role-groups";
 
@@ -48,16 +50,56 @@ function getProvaUrl(dashboardType: string): string {
   }
 }
 
+/**
+ * Retorna a URL de destino para Relatórios conforme o tipo de dashboard
+ */
+function getRelatorioUrl(dashboardType: string): string {
+  switch (dashboardType) {
+    case "professora":
+      return "/relatorios/turmas";
+    case "analise":
+      return "/relatorios/analise";
+    case "gestao":
+      return "/relatorios/gestao";
+    default:
+      return "/relatorios/turmas";
+  }
+}
+
 export default function HomePage() {
   const { role, isLoaded } = useTenant();
   const router = useRouter();
+  const dashboardType = getDashboardForRole(role);
+  const [temTurmaInfantil, setTemTurmaInfantil] = useState<boolean | null>(
+    null,
+  );
+
+  useEffect(() => {
+    if (!isLoaded || dashboardType !== "professora") {
+      setTemTurmaInfantil(null);
+      return;
+    }
+
+    let ativo = true;
+
+    api
+      .get<{ temInfantil: boolean }>("/relatorio/tem-turma-infantil")
+      .then((res) => {
+        if (ativo) setTemTurmaInfantil(res.temInfantil);
+      })
+      .catch(() => {
+        if (ativo) setTemTurmaInfantil(false);
+      });
+
+    return () => {
+      ativo = false;
+    };
+  }, [dashboardType, isLoaded]);
 
   // Loading state
   if (!isLoaded) {
     return <LoadingSkeleton />;
   }
-
-  const dashboardType = getDashboardForRole(role);
 
   // Sem acesso -> portal principal
   if (dashboardType === "no-access" || dashboardType === "unknown") {
@@ -66,6 +108,11 @@ export default function HomePage() {
 
   const planoUrl = getPlanoUrl(dashboardType);
   const provaUrl = getProvaUrl(dashboardType);
+  const relatorioUrl = getRelatorioUrl(dashboardType);
+  const mostrarRelatorios =
+    dashboardType === "analise" ||
+    dashboardType === "gestao" ||
+    (dashboardType === "professora" && temTurmaInfantil === true);
 
   return (
     <div className="container mx-auto max-w-4xl px-4 py-12">
@@ -78,7 +125,7 @@ export default function HomePage() {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {/* Card Planos de Aula */}
         <Card
           className="cursor-pointer transition-all hover:shadow-lg hover:border-primary/50 hover:scale-[1.02]"
@@ -126,6 +173,31 @@ export default function HomePage() {
             </div>
           </CardContent>
         </Card>
+
+        {mostrarRelatorios && (
+          <Card
+            className="cursor-pointer transition-all hover:shadow-lg hover:border-primary/50 hover:scale-[1.02]"
+            onClick={() => {
+              if (dashboardType === "professora") {
+                window.location.href = `/planejamento${relatorioUrl}`;
+              } else {
+                router.push(relatorioUrl);
+              }
+            }}
+          >
+            <CardContent className="flex flex-col items-center gap-4 p-8">
+              <div className="rounded-xl bg-primary/10 p-4">
+                <BookOpen className="h-10 w-10 text-primary" />
+              </div>
+              <div className="text-center">
+                <h2 className="text-xl font-semibold">Relatórios</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Relatórios semanais da educação infantil
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </div>
   );
