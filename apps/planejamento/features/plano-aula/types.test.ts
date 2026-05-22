@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { PlanoDocumento } from "./types";
+
+import { PDF_STATUS_VALUES, type PlanoDocumento } from "./types";
 
 describe("PlanoDocumento", () => {
   it("aceita campos de edição via SharePoint", () => {
@@ -25,5 +26,21 @@ describe("PlanoDocumento", () => {
     };
 
     expect(doc.sharepointItemId).toBeUndefined();
+  });
+
+  it("representa status de PDF de impressão", () => {
+    const doc: PlanoDocumento = {
+      id: "doc-3",
+      planoId: "plano-1",
+      tipo: "ARQUIVO",
+      createdAt: "2026-05-22T10:00:00.000Z",
+      pdfStatus: "GERANDO",
+      pdfError: null,
+      pdfRequestedAt: "2026-05-22T10:00:00.000Z",
+      pdfGeneratedAt: null,
+    };
+
+    expect(doc.pdfStatus).toBe("GERANDO");
+    expect(PDF_STATUS_VALUES).toContain("GERANDO");
   });
 });

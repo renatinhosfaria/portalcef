@@ -22,6 +22,24 @@ export type PlanoAulaStatus =
 export type DocumentoTipo = "ARQUIVO" | "LINK_YOUTUBE";
 
 /**
+ * Status de geração do PDF usado para impressão.
+ */
+export type PdfStatus =
+  | "NAO_APLICAVEL"
+  | "PENDENTE"
+  | "GERANDO"
+  | "PRONTO"
+  | "ERRO";
+
+export const PDF_STATUS_VALUES: PdfStatus[] = [
+  "NAO_APLICAVEL",
+  "PENDENTE",
+  "GERANDO",
+  "PRONTO",
+  "ERRO",
+];
+
+/**
  * Documento anexado ao plano de aula
  */
 export interface PlanoDocumento {
@@ -42,6 +60,10 @@ export interface PlanoDocumento {
   // PDF derivado para impressão (gerado na aprovação)
   pdfStorageKey?: string | null;
   pdfUrl?: string | null;
+  pdfStatus?: PdfStatus;
+  pdfError?: string | null;
+  pdfRequestedAt?: string | null;
+  pdfGeneratedAt?: string | null;
   // Campos de aprovação individual (analista_pedagogico)
   approvedBy?: string;
   approvedAt?: string;

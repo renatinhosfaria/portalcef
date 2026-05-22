@@ -38,6 +38,17 @@ export type PlanoAulaStatus = (typeof planoAulaStatusEnum)[number];
 export const documentoTipoEnum = ["ARQUIVO", "LINK_YOUTUBE"] as const;
 export type DocumentoTipo = (typeof documentoTipoEnum)[number];
 
+// ============================================
+// PDF Status Enum
+// ============================================
+export const pdfStatusEnum = [
+  "NAO_APLICAVEL",
+  "PENDENTE",
+  "GERANDO",
+  "PRONTO",
+  "ERRO",
+] as const;
+export type PdfStatus = (typeof pdfStatusEnum)[number];
 
 // ============================================
 // Table: plano_aula (Mestre)
@@ -138,6 +149,12 @@ export const planoDocumento = pgTable(
     // PDF derivado para impressão (gerado no momento da aprovação)
     pdfStorageKey: varchar("pdf_storage_key", { length: 500 }),
     pdfUrl: varchar("pdf_url", { length: 1000 }),
+    pdfStatus: text("pdf_status", { enum: pdfStatusEnum })
+      .notNull()
+      .default("NAO_APLICAVEL"),
+    pdfError: text("pdf_error"),
+    pdfRequestedAt: timestamp("pdf_requested_at", { withTimezone: true }),
+    pdfGeneratedAt: timestamp("pdf_generated_at", { withTimezone: true }),
 
     // Aprovação pelo Analista Pedagógico
     approvedBy: uuid("approved_by").references(() => users.id, {
