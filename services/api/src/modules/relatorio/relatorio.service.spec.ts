@@ -262,6 +262,146 @@ describe("RelatorioService", () => {
     });
   });
 
+  describe("adicionarYoutube", () => {
+    const session = {
+      userId: "u-1",
+      role: "professora",
+      unitId: "unit-1",
+      schoolId: null,
+      stageId: null,
+    };
+
+    it("rejeita quando relatório não encontrado", async () => {
+      mockDb.query.relatorio.findFirst.mockResolvedValueOnce(null);
+
+      await expect(
+        service.adicionarYoutube(
+          "r-1",
+          { url: "https://youtube.com/watch?v=abc" },
+          session,
+        ),
+      ).rejects.toThrow("Relatório não encontrado");
+    });
+
+    it("rejeita quando o usuário não é o autor", async () => {
+      mockDb.query.relatorio.findFirst.mockResolvedValueOnce({
+        id: "r-1",
+        userId: "outro",
+        status: "RASCUNHO",
+      });
+
+      await expect(
+        service.adicionarYoutube(
+          "r-1",
+          { url: "https://youtube.com/watch?v=abc" },
+          session,
+        ),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it("rejeita quando status não permite edição", async () => {
+      mockDb.query.relatorio.findFirst.mockResolvedValueOnce({
+        id: "r-1",
+        userId: "u-1",
+        status: "AGUARDANDO_ANALISTA",
+      });
+
+      await expect(
+        service.adicionarYoutube(
+          "r-1",
+          { url: "https://youtube.com/watch?v=abc" },
+          session,
+        ),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it("adiciona YouTube com sucesso quando autor e status permitem", async () => {
+      mockDb.query.relatorio.findFirst.mockResolvedValueOnce({
+        id: "r-1",
+        userId: "u-1",
+        status: "RASCUNHO",
+      });
+      mockDb.returning.mockResolvedValueOnce([
+        {
+          id: "doc-1",
+          relatorioId: "r-1",
+          tipo: "LINK_YOUTUBE",
+          url: "https://youtube.com/watch?v=abc",
+          fileName: "Meu vídeo",
+        },
+      ]);
+
+      const result = await service.adicionarYoutube(
+        "r-1",
+        { url: "https://youtube.com/watch?v=abc", titulo: "Meu vídeo" },
+        session,
+      );
+
+      expect(result.tipo).toBe("LINK_YOUTUBE");
+    });
+  });
+
+  describe("removerDocumento", () => {
+    const session = {
+      userId: "u-1",
+      role: "professora",
+      unitId: "unit-1",
+      schoolId: null,
+      stageId: null,
+    };
+
+    it("rejeita quando relatório não encontrado", async () => {
+      mockDb.query.relatorio.findFirst.mockResolvedValueOnce(null);
+
+      await expect(
+        service.removerDocumento("r-1", "doc-1", session),
+      ).rejects.toThrow("Relatório não encontrado");
+    });
+
+    it("rejeita quando o usuário não é o autor do relatório", async () => {
+      mockDb.query.relatorio.findFirst.mockResolvedValueOnce({
+        id: "r-1",
+        userId: "outro",
+        status: "RASCUNHO",
+      });
+
+      await expect(
+        service.removerDocumento("r-1", "doc-1", session),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it("rejeita quando documento não encontrado", async () => {
+      mockDb.query.relatorio.findFirst.mockResolvedValueOnce({
+        id: "r-1",
+        userId: "u-1",
+        status: "RASCUNHO",
+      });
+      mockDb.query.relatorioDocumento.findFirst.mockResolvedValueOnce(null);
+
+      await expect(
+        service.removerDocumento("r-1", "doc-1", session),
+      ).rejects.toThrow("Documento não encontrado");
+    });
+
+    it("remove documento com sucesso quando autor e documento existem", async () => {
+      mockDb.query.relatorio.findFirst.mockResolvedValueOnce({
+        id: "r-1",
+        userId: "u-1",
+        status: "RASCUNHO",
+      });
+      mockDb.query.relatorioDocumento.findFirst.mockResolvedValueOnce({
+        id: "doc-1",
+        relatorioId: "r-1",
+        storageKey: null,
+        pdfStorageKey: null,
+      });
+
+      await expect(
+        service.removerDocumento("r-1", "doc-1", session),
+      ).resolves.toBeUndefined();
+    });
+  });
+
   describe("submeter", () => {
     const session = {
       userId: "u-1",

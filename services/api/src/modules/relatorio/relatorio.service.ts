@@ -933,6 +933,7 @@ export class RelatorioService {
   async adicionarYoutube(
     relatorioId: string,
     dados: { url: string; titulo?: string },
+    session: UserContext,
   ): Promise<RelatorioDocumento> {
     const db = getDb();
 
@@ -942,6 +943,12 @@ export class RelatorioService {
 
     if (!encontrado) {
       throw new NotFoundException("Relatório não encontrado");
+    }
+
+    if (encontrado.userId !== session.userId) {
+      throw new ForbiddenException(
+        "Apenas o autor pode adicionar links ao relatório",
+      );
     }
 
     if (!this.statusPermiteEdicao(encontrado.status)) {
@@ -969,8 +976,23 @@ export class RelatorioService {
   async removerDocumento(
     relatorioId: string,
     documentoId: string,
+    session: UserContext,
   ): Promise<void> {
     const db = getDb();
+
+    const encontrado = await db.query.relatorio.findFirst({
+      where: eq(relatorio.id, relatorioId),
+    });
+
+    if (!encontrado) {
+      throw new NotFoundException("Relatório não encontrado");
+    }
+
+    if (encontrado.userId !== session.userId) {
+      throw new ForbiddenException(
+        "Apenas o autor pode remover documentos do relatório",
+      );
+    }
 
     const documento = await db.query.relatorioDocumento.findFirst({
       where: and(
