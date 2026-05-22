@@ -262,6 +262,84 @@ describe("RelatorioService", () => {
     });
   });
 
+  describe("adicionarDocumentoUpload", () => {
+    const session = {
+      userId: "u-1",
+      role: "professora",
+      unitId: "unit-1",
+      schoolId: null,
+      stageId: null,
+    };
+
+    const dadosUpload = {
+      fileName: "arquivo.pdf",
+      storageKey: "relatorios/arquivo.pdf",
+      url: "https://storage.example.com/arquivo.pdf",
+      fileSize: 12345,
+      mimeType: "application/pdf",
+    };
+
+    it("rejeita quando relatório não encontrado", async () => {
+      mockDb.query.relatorio.findFirst.mockResolvedValueOnce(null);
+
+      await expect(
+        service.adicionarDocumentoUpload("r-1", dadosUpload, session),
+      ).rejects.toThrow("Relatório não encontrado");
+    });
+
+    it("rejeita quando o usuário não é o autor", async () => {
+      mockDb.query.relatorio.findFirst.mockResolvedValueOnce({
+        id: "r-1",
+        userId: "outro",
+        status: "RASCUNHO",
+      });
+
+      await expect(
+        service.adicionarDocumentoUpload("r-1", dadosUpload, session),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it("rejeita quando status não permite edição", async () => {
+      mockDb.query.relatorio.findFirst.mockResolvedValueOnce({
+        id: "r-1",
+        userId: "u-1",
+        status: "AGUARDANDO_ANALISTA",
+      });
+
+      await expect(
+        service.adicionarDocumentoUpload("r-1", dadosUpload, session),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it("adiciona documento com sucesso quando autor e status permitem", async () => {
+      mockDb.query.relatorio.findFirst.mockResolvedValueOnce({
+        id: "r-1",
+        userId: "u-1",
+        status: "RASCUNHO",
+      });
+      mockDb.returning.mockResolvedValueOnce([
+        {
+          id: "doc-1",
+          relatorioId: "r-1",
+          tipo: "ARQUIVO",
+          fileName: "arquivo.pdf",
+          storageKey: "relatorios/arquivo.pdf",
+          url: "https://storage.example.com/arquivo.pdf",
+          fileSize: 12345,
+          mimeType: "application/pdf",
+        },
+      ]);
+
+      const result = await service.adicionarDocumentoUpload(
+        "r-1",
+        dadosUpload,
+        session,
+      );
+
+      expect(result.tipo).toBe("ARQUIVO");
+    });
+  });
+
   describe("adicionarYoutube", () => {
     const session = {
       userId: "u-1",

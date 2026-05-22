@@ -894,6 +894,7 @@ export class RelatorioService {
       fileSize: number;
       mimeType: string;
     },
+    session: UserContext,
   ): Promise<RelatorioDocumento> {
     const db = getDb();
 
@@ -903,6 +904,12 @@ export class RelatorioService {
 
     if (!encontrado) {
       throw new NotFoundException("Relatório não encontrado");
+    }
+
+    if (encontrado.userId !== session.userId) {
+      throw new ForbiddenException(
+        "Apenas o autor pode adicionar documentos ao relatório",
+      );
     }
 
     if (!this.statusPermiteEdicao(encontrado.status)) {
