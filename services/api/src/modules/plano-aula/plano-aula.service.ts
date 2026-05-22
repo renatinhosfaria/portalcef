@@ -30,6 +30,7 @@ import {
   type PlanoAulaStatus,
 } from "@essencia/db";
 
+import type { PdfGerado } from "../../common/sharepoint/pdf-generator.service";
 import { StorageService } from "../../common/storage/storage.service";
 import { PlanoAulaHistoricoService } from "./plano-aula-historico.service";
 import { PlanoAulaPdfQueueService } from "./plano-aula-pdf-queue.service";
@@ -1243,6 +1244,74 @@ export class PlanoAulaService {
 
   private isWord(mimeType: string | null): boolean {
     return mimeType === DOCX_MIME || mimeType === DOC_MIME;
+  }
+
+  async buscarDocumentoParaPdf(
+    documentoId: string,
+  ): Promise<PlanoDocumento | null> {
+    const db = getDb();
+    const documento = await db.query.planoDocumento.findFirst({
+      where: eq(planoDocumento.id, documentoId),
+    });
+
+    return documento ?? null;
+  }
+
+  async marcarPdfGerando(documentoId: string): Promise<void> {
+    const db = getDb();
+    await db
+      .update(planoDocumento)
+      .set({
+        pdfStatus: "GERANDO",
+        pdfError: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(planoDocumento.id, documentoId));
+  }
+
+  async marcarPdfPronto(
+    documentoId: string,
+    pdf: PdfGerado,
+  ): Promise<void> {
+    const db = getDb();
+    await db
+      .update(planoDocumento)
+      .set({
+        pdfStorageKey: pdf.pdfStorageKey,
+        pdfUrl: pdf.pdfUrl,
+        pdfStatus: "PRONTO",
+        pdfError: null,
+        pdfGeneratedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(planoDocumento.id, documentoId));
+  }
+
+  async marcarPdfErro(documentoId: string, error: unknown): Promise<void> {
+    const db = getDb();
+    const mensagem = error instanceof Error ? error.message : String(error);
+
+    await db
+      .update(planoDocumento)
+      .set({
+        pdfStatus: "ERRO",
+        pdfError: mensagem.slice(0, 1000),
+        updatedAt: new Date(),
+      })
+      .where(eq(planoDocumento.id, documentoId));
+  }
+
+  async limparEdicaoSharePoint(documentoId: string): Promise<void> {
+    const db = getDb();
+    await db
+      .update(planoDocumento)
+      .set({
+        sharepointItemId: null,
+        sharepointEditUrl: null,
+        editandoDesde: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(planoDocumento.id, documentoId));
   }
 
   /**

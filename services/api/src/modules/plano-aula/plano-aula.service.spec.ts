@@ -386,6 +386,64 @@ describe("PlanoAulaService", () => {
     });
   });
 
+  describe("persistência do PDF de impressão", () => {
+    beforeEach(() => {
+      mockDb.query.planoDocumento.findFirst.mockReset();
+      mockDb.returning.mockReset();
+    });
+
+    it("busca documento para geração de PDF", async () => {
+      mockDb.query.planoDocumento.findFirst.mockResolvedValue({
+        id: "doc-pdf",
+        pdfStatus: "PENDENTE",
+      });
+
+      const resultado = await service.buscarDocumentoParaPdf("doc-pdf");
+
+      expect(resultado).toEqual({
+        id: "doc-pdf",
+        pdfStatus: "PENDENTE",
+      });
+      expect(mockDb.query.planoDocumento.findFirst).toHaveBeenCalled();
+    });
+
+    it("marca PDF como pronto com chave e URL geradas", async () => {
+      mockDb.returning.mockResolvedValue([
+        { id: "doc-pdf", pdfStatus: "PRONTO" },
+      ]);
+
+      await service.marcarPdfPronto("doc-pdf", {
+        pdfStorageKey: "pdf/doc-pdf.pdf",
+        pdfUrl: "https://cdn.exemplo.com/pdf/doc-pdf.pdf",
+      });
+
+      expect(mockDb.set).toHaveBeenCalledWith(
+        expect.objectContaining({
+          pdfStorageKey: "pdf/doc-pdf.pdf",
+          pdfUrl: "https://cdn.exemplo.com/pdf/doc-pdf.pdf",
+          pdfStatus: "PRONTO",
+          pdfError: null,
+          pdfGeneratedAt: expect.any(Date),
+          updatedAt: expect.any(Date),
+        }),
+      );
+    });
+
+    it("marca erro de PDF com mensagem truncada", async () => {
+      const mensagemLonga = "x".repeat(1200);
+
+      await service.marcarPdfErro("doc-pdf", new Error(mensagemLonga));
+
+      expect(mockDb.set).toHaveBeenCalledWith(
+        expect.objectContaining({
+          pdfStatus: "ERRO",
+          pdfError: "x".repeat(1000),
+          updatedAt: expect.any(Date),
+        }),
+      );
+    });
+  });
+
   describe("getDashboard", () => {
     it("bloqueia gerente_unidade consultando dashboard de outra unidade", async () => {
       const user = {

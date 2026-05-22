@@ -7,6 +7,7 @@ import { PlanejamentoObservabilidadeProvidersModule } from "../planejamento-obse
 import { PlanoAulaController } from "./plano-aula.controller";
 import { PlanoAulaHistoricoService } from "./plano-aula-historico.service";
 import { PlanoAulaPdfQueueService } from "./plano-aula-pdf-queue.service";
+import { PlanoAulaPdfWorkerService } from "./plano-aula-pdf-worker.service";
 import { PlanoAulaService } from "./plano-aula.service";
 
 /**
@@ -30,6 +31,7 @@ import { PlanoAulaService } from "./plano-aula.service";
     PlanoAulaService,
     PlanoAulaHistoricoService,
     PlanoAulaPdfQueueService,
+    PlanoAulaPdfWorkerService,
   ],
   exports: [PlanoAulaService],
 })
