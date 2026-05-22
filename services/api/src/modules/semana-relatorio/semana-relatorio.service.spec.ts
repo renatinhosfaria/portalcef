@@ -6,6 +6,10 @@ const mockValues = jest.fn(() => ({ returning: mockReturning }));
 const mockInsert = jest.fn(() => ({ values: mockValues }));
 const mockDeleteWhere = jest.fn().mockResolvedValue(undefined);
 const mockDelete = jest.fn(() => ({ where: mockDeleteWhere }));
+const mockUpdateReturning = jest.fn();
+const mockUpdateWhere = jest.fn(() => ({ returning: mockUpdateReturning }));
+const mockSet = jest.fn(() => ({ where: mockUpdateWhere }));
+const mockUpdate = jest.fn(() => ({ set: mockSet }));
 
 const mockDb = {
   insert: mockInsert,
@@ -13,8 +17,8 @@ const mockDb = {
   select: jest.fn().mockReturnThis(),
   from: jest.fn().mockReturnThis(),
   where: jest.fn().mockResolvedValue([]),
-  update: jest.fn().mockReturnThis(),
-  set: jest.fn().mockReturnThis(),
+  update: mockUpdate,
+  set: mockSet,
   orderBy: jest.fn().mockResolvedValue([]),
   innerJoin: jest.fn().mockReturnThis(),
 };
@@ -64,6 +68,13 @@ describe("SemanaRelatorioService", () => {
     mockInsert.mockClear();
     mockDelete.mockClear();
     mockDeleteWhere.mockClear();
+    mockUpdateReturning.mockReset();
+    mockUpdateWhere.mockClear();
+    mockSet.mockClear();
+    mockUpdate.mockClear();
+    mockUpdate.mockReturnValue({ set: mockSet });
+    mockSet.mockReturnValue({ where: mockUpdateWhere });
+    mockUpdateWhere.mockReturnValue({ returning: mockUpdateReturning });
     mockDb.where.mockReset();
     mockDb.where.mockResolvedValue([]);
     mockDb.orderBy.mockReset();
@@ -203,6 +214,129 @@ describe("SemanaRelatorioService", () => {
 
       expect(result).toEqual({ success: true });
       expect(mockDelete).toHaveBeenCalled();
+    });
+  });
+
+  describe("editar", () => {
+    it("deve lançar exceção quando semana não encontrada", async () => {
+      // buscarPorId retorna vazio
+      mockDb.where.mockResolvedValueOnce([]);
+
+      await expect(
+        service.editar("semana-inexistente", { dataInicio: "2026-03-01" }, "unit-123"),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(mockUpdate).not.toHaveBeenCalled();
+    });
+
+    it("deve chamar buscarPorId antes de atualizar", async () => {
+      // buscarPorId retorna a semana
+      const semana = { id: "semana-1", unidadeId: "unit-123", etapa: "INFANTIL" };
+      mockDb.where.mockResolvedValueOnce([semana]);
+
+      const semanaAtualizada = { ...semana, dataInicio: "2026-04-01", atualizadoEm: expect.any(Date) };
+      mockUpdateReturning.mockResolvedValueOnce([semanaAtualizada]);
+
+      await service.editar("semana-1", { dataInicio: "2026-04-01" }, "unit-123");
+
+      expect(mockUpdate).toHaveBeenCalled();
+      expect(mockSet).toHaveBeenCalledWith(
+        expect.objectContaining({ atualizadoEm: expect.any(Date) }),
+      );
+    });
+
+    it("deve atualizar somente os campos fornecidos no DTO", async () => {
+      const semana = { id: "semana-1", unidadeId: "unit-123", etapa: "INFANTIL" };
+      mockDb.where.mockResolvedValueOnce([semana]);
+
+      const dto = { dataFim: "2026-03-14", dataMaximaEntrega: "2026-03-10" };
+      const semanaAtualizada = { ...semana, ...dto, atualizadoEm: new Date() };
+      mockUpdateReturning.mockResolvedValueOnce([semanaAtualizada]);
+
+      const result = await service.editar("semana-1", dto, "unit-123");
+
+      expect(mockSet).toHaveBeenCalledWith(
+        expect.objectContaining({
+          dataFim: "2026-03-14",
+          dataMaximaEntrega: "2026-03-10",
+          atualizadoEm: expect.any(Date),
+        }),
+      );
+      expect(result).toEqual(semanaAtualizada);
+    });
+
+    it("deve incluir atualizadoEm no set independente dos campos fornecidos", async () => {
+      const semana = { id: "semana-1", unidadeId: "unit-123", etapa: "BERCARIO" };
+      mockDb.where.mockResolvedValueOnce([semana]);
+
+      const semanaAtualizada = { ...semana, descricao: "nova desc", atualizadoEm: new Date() };
+      mockUpdateReturning.mockResolvedValueOnce([semanaAtualizada]);
+
+      await service.editar("semana-1", { descricao: "nova desc" }, "unit-123");
+
+      expect(mockSet).toHaveBeenCalledWith(
+        expect.objectContaining({ atualizadoEm: expect.any(Date) }),
+      );
+    });
+  });
+
+  describe("buscarPorTurma", () => {
+    it("deve lançar exceção quando turma não encontrada", async () => {
+      // innerJoin().where() retorna vazio = turma não existe
+      mockDb.where.mockResolvedValueOnce([]);
+
+      await expect(
+        service.buscarPorTurma("turma-inexistente", "unit-123"),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it("deve lançar exceção quando turma pertence a etapa FUNDAMENTAL_I", async () => {
+      // innerJoin().where() retorna turma com etapa inválida
+      mockDb.where.mockResolvedValueOnce([
+        { turmaId: "turma-1", stageId: "stage-1", etapaCode: "FUNDAMENTAL_I" },
+      ]);
+
+      await expect(
+        service.buscarPorTurma("turma-1", "unit-123"),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it("deve retornar semanas para turma BERCARIO", async () => {
+      // innerJoin().where() retorna turma BERCARIO
+      mockDb.where.mockResolvedValueOnce([
+        { turmaId: "turma-1", stageId: "stage-bercario", etapaCode: "BERCARIO" },
+      ]);
+
+      const semanasMock = [
+        { id: "semana-1", unidadeId: "unit-123", etapa: "BERCARIO", numero: 1 },
+        { id: "semana-2", unidadeId: "unit-123", etapa: "BERCARIO", numero: 2 },
+      ];
+
+      // select().from().where().orderBy() — where retorna chainable com orderBy
+      mockDb.where.mockReturnValueOnce({ orderBy: mockDb.orderBy });
+      mockDb.orderBy.mockResolvedValueOnce(semanasMock);
+
+      const result = await service.buscarPorTurma("turma-1", "unit-123");
+
+      expect(result).toEqual(semanasMock);
+    });
+
+    it("deve retornar semanas para turma INFANTIL", async () => {
+      // innerJoin().where() retorna turma INFANTIL
+      mockDb.where.mockResolvedValueOnce([
+        { turmaId: "turma-2", stageId: "stage-infantil", etapaCode: "INFANTIL" },
+      ]);
+
+      const semanasMock = [
+        { id: "semana-3", unidadeId: "unit-123", etapa: "INFANTIL", numero: 1 },
+      ];
+
+      mockDb.where.mockReturnValueOnce({ orderBy: mockDb.orderBy });
+      mockDb.orderBy.mockResolvedValueOnce(semanasMock);
+
+      const result = await service.buscarPorTurma("turma-2", "unit-123");
+
+      expect(result).toEqual(semanasMock);
     });
   });
 });
