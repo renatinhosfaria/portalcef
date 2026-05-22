@@ -13,6 +13,7 @@ import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 
 import { units } from "./units.js";
 import { users } from "./users.js";
+import { relatorio } from "./relatorio.js";
 
 // ============================================
 // Table: semana_relatorio
@@ -57,7 +58,7 @@ export const semanaRelatorio = pgTable(
 
 export const semanaRelatorioRelations = relations(
   semanaRelatorio,
-  ({ one }) => ({
+  ({ one, many }) => ({
     unidade: one(units, {
       fields: [semanaRelatorio.unidadeId],
       references: [units.id],
@@ -66,6 +67,7 @@ export const semanaRelatorioRelations = relations(
       fields: [semanaRelatorio.criadoPor],
       references: [users.id],
     }),
+    relatorios: many(relatorio),
   }),
 );
 
