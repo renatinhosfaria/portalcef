@@ -66,17 +66,26 @@ if ! docker compose -f $COMPOSE_FILE ps $CONTAINER | grep -q "Up"; then
     exit 1
 fi
 
+get_postgres_container_env() {
+    docker exec essencia-postgres printenv "$1" 2>/dev/null || true
+}
+
 # Backup antes de migrations (apenas em produção)
 if [ "$ENV" = "prod" ]; then
     echo -e "${YELLOW}[1/3]${NC} Criando backup do banco..."
 
+    DB_USER="${POSTGRES_USER:-$(get_postgres_container_env POSTGRES_USER)}"
+    DB_NAME="${POSTGRES_DB:-$(get_postgres_container_env POSTGRES_DB)}"
+    DB_USER="${DB_USER:-essencia}"
+    DB_NAME="${DB_NAME:-essencia_db}"
+
     BACKUP_FILE="backup_pre_migration_$(date +%Y%m%d_%H%M%S).sql"
+    mkdir -p "$PROJECT_DIR/backup"
 
     docker exec essencia-postgres pg_dump \
-        -U "$POSTGRES_USER" \
-        -d "$POSTGRES_DB" \
+        -U "$DB_USER" \
+        -d "$DB_NAME" \
         > "$PROJECT_DIR/backup/$BACKUP_FILE" 2>/dev/null || {
-            mkdir -p "$PROJECT_DIR/backup"
             docker exec essencia-postgres pg_dump \
                 -U essencia \
                 -d essencia_db \
@@ -95,7 +104,14 @@ fi
 if [ "$ENV" = "dev" ]; then
     docker compose -f $COMPOSE_FILE run --rm $CONTAINER pnpm db:migrate
 else
-    docker compose -f $COMPOSE_FILE exec $CONTAINER pnpm --filter @essencia/db migrate
+    if docker compose -f $COMPOSE_FILE exec $CONTAINER sh -lc "command -v pnpm >/dev/null 2>&1"; then
+        docker compose -f $COMPOSE_FILE exec $CONTAINER pnpm --filter @essencia/db migrate
+    elif docker compose -f $COMPOSE_FILE exec $CONTAINER sh -lc "test -f /app/packages/db/dist/migrate.js"; then
+        docker compose -f $COMPOSE_FILE exec $CONTAINER node /app/packages/db/dist/migrate.js
+    else
+        echo -e "${RED}Erro: não foi encontrado pnpm nem /app/packages/db/dist/migrate.js no container '$CONTAINER'${NC}"
+        exit 1
+    fi
 fi
 
 echo -e "${GREEN}✓ Migrations executadas${NC}"
@@ -110,8 +126,8 @@ fi
 
 # Verificar conexão
 docker exec essencia-postgres psql \
-    -U "${POSTGRES_USER:-essencia}" \
-    -d "${POSTGRES_DB:-essencia_db}" \
+    -U "${DB_USER:-${POSTGRES_USER:-essencia}}" \
+    -d "${DB_NAME:-${POSTGRES_DB:-essencia_db}}" \
     -c "SELECT COUNT(*) as tabelas FROM information_schema.tables WHERE table_schema = 'public';" \
     2>/dev/null || echo "Verificação manual necessária"
 

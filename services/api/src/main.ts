@@ -65,7 +65,7 @@ async function bootstrap() {
 
   // Set global prefix (exclude health check)
   app.setGlobalPrefix("api", {
-    exclude: ["/health"],
+    exclude: ["/health", "/api/health"],
   });
 
   // Enable CORS for the frontend apps

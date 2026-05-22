@@ -9,13 +9,7 @@ import {
   RELATORIO_PDF_QUEUE_NAME,
   type RelatorioPdfJobData,
 } from "./relatorio-pdf-queue.service";
-
-export interface IRelatorioServicePdf {
-  processarPdfDocumento(
-    documentoId: string,
-    pdfGeneratorService: PdfGeneratorService,
-  ): Promise<void>;
-}
+import { RelatorioService } from "./relatorio.service";
 
 @Injectable()
 export class RelatorioPdfWorkerService implements OnModuleDestroy {
@@ -29,7 +23,7 @@ export class RelatorioPdfWorkerService implements OnModuleDestroy {
 
   constructor(
     private readonly configService: ConfigService,
-    private readonly relatorioService: IRelatorioServicePdf,
+    private readonly relatorioService: RelatorioService,
     private readonly pdfGeneratorService: PdfGeneratorService,
   ) {
     const redisUrl =
