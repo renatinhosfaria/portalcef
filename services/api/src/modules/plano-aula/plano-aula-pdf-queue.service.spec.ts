@@ -58,7 +58,7 @@ describe("PlanoAulaPdfQueueService", () => {
       "gerar-pdf",
       { documentoId: "documento-1" },
       {
-        jobId: "plano-documento:documento-1",
+        jobId: "plano-documento-documento-1",
         attempts: 3,
         backoff: { type: "exponential", delay: 5000 },
         removeOnComplete: 1000,

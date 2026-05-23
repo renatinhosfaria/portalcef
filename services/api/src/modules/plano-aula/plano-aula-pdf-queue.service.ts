@@ -42,7 +42,7 @@ export class PlanoAulaPdfQueueService implements OnModuleDestroy {
         PLANEJAMENTO_PDF_JOB_NAME,
         { documentoId },
         {
-          jobId: `plano-documento:${documentoId}`,
+          jobId: `plano-documento-${documentoId}`,
           attempts: 3,
           backoff: { type: "exponential", delay: 5000 },
           removeOnComplete: 1000,
