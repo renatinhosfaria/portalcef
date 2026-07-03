@@ -62,6 +62,18 @@ export class WorkflowsCategoriasService {
   private async garantirCategoriasPadrao(
     session: WorkflowUserContext & { schoolId: string; unitId: string },
   ) {
+    const categoriaExistente =
+      await this.database.db.query.workflowCategorias.findFirst({
+        where: and(
+          eq(workflowCategorias.schoolId, session.schoolId),
+          eq(workflowCategorias.unitId, session.unitId),
+        ),
+      });
+
+    if (categoriaExistente) {
+      return;
+    }
+
     await this.database.db
       .insert(workflowCategorias)
       .values(
