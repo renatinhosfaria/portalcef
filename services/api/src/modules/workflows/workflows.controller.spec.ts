@@ -17,6 +17,10 @@ jest.mock("@essencia/db", () => ({
   eq: jest.fn(),
   ilike: jest.fn(),
   inArray: jest.fn(),
+  desc: jest.fn(),
+  workflowAnexos: {
+    createdAt: "workflowAnexos.createdAt",
+  },
   workflowCategorias: {
     id: "workflowCategorias.id",
     schoolId: "workflowCategorias.schoolId",
@@ -39,11 +43,19 @@ jest.mock("@essencia/db", () => ({
     schoolId: "workflowExecucoes.schoolId",
     unitId: "workflowExecucoes.unitId",
     status: "workflowExecucoes.status",
+    teste: "workflowExecucoes.teste",
+    iniciadoPor: "workflowExecucoes.iniciadoPor",
+    titulo: "workflowExecucoes.titulo",
+    createdAt: "workflowExecucoes.createdAt",
+    updatedAt: "workflowExecucoes.updatedAt",
   },
   workflowFases: {
     id: "workflowFases.id",
     modeloId: "workflowFases.modeloId",
     ordem: "workflowFases.ordem",
+  },
+  workflowHistorico: {
+    createdAt: "workflowHistorico.createdAt",
   },
   workflowModelos: {
     id: "workflowModelos.id",
@@ -212,5 +224,173 @@ describe("WorkflowsController", () => {
     expect(modelosService.publicar).toHaveBeenCalledWith(usuarioBase, "modelo-1");
     expect(modelosService.inativar).toHaveBeenCalledWith(usuarioBase, "modelo-1");
     expect(modelosService.duplicar).toHaveBeenCalledWith(usuarioBase, "modelo-1");
+  });
+
+  it("valida payload antes de iniciar execucao", async () => {
+    await expect(
+      controller.iniciarExecucao({ user: usuarioBase }, "modelo-1", {
+        titulo: "",
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(execucoesService.iniciar).not.toHaveBeenCalled();
+  });
+
+  it("encaminha endpoints de consulta de execucoes", async () => {
+    execucoesService.listar.mockResolvedValue([]);
+    execucoesService.buscarPorId.mockResolvedValue({ id: "execucao-1" });
+
+    await expect(
+      controller.listarExecucoes(
+        { user: usuarioBase },
+        { status: "todos", teste: "false", busca: "Evento" },
+      ),
+    ).resolves.toEqual({ success: true, data: [] });
+    await expect(
+      controller.buscarExecucao({ user: usuarioBase }, "execucao-1"),
+    ).resolves.toEqual({ success: true, data: { id: "execucao-1" } });
+
+    expect(execucoesService.listar).toHaveBeenCalledWith(usuarioBase, {
+      status: "todos",
+      teste: false,
+      busca: "Evento",
+    });
+    expect(execucoesService.buscarPorId).toHaveBeenCalledWith(
+      usuarioBase,
+      "execucao-1",
+    );
+  });
+
+  it("encaminha criacao e edicao de execucao com payload validado", async () => {
+    execucoesService.iniciar.mockResolvedValue({ id: "execucao-1" });
+    execucoesService.editarTitulo.mockResolvedValue({
+      id: "execucao-1",
+      titulo: "Novo titulo",
+    });
+    execucoesService.atualizarEtapa.mockResolvedValue({
+      etapaId: "11111111-1111-1111-1111-111111111111",
+      concluida: true,
+    });
+
+    await expect(
+      controller.iniciarExecucao({ user: usuarioBase }, "modelo-1", {
+        titulo: "Evento Dia dos Pais",
+      }),
+    ).resolves.toEqual({ success: true, data: { id: "execucao-1" } });
+    await expect(
+      controller.editarTituloExecucao({ user: usuarioBase }, "execucao-1", {
+        titulo: "Novo titulo",
+      }),
+    ).resolves.toEqual({
+      success: true,
+      data: { id: "execucao-1", titulo: "Novo titulo" },
+    });
+    await expect(
+      controller.atualizarEtapa(
+        { user: usuarioBase },
+        "execucao-1",
+        "11111111-1111-1111-1111-111111111111",
+        { concluida: true, observacao: "Feito" },
+      ),
+    ).resolves.toEqual({
+      success: true,
+      data: {
+        etapaId: "11111111-1111-1111-1111-111111111111",
+        concluida: true,
+      },
+    });
+
+    expect(execucoesService.iniciar).toHaveBeenCalledWith(usuarioBase, "modelo-1", {
+      titulo: "Evento Dia dos Pais",
+      teste: false,
+    });
+    expect(execucoesService.editarTitulo).toHaveBeenCalledWith(
+      usuarioBase,
+      "execucao-1",
+      { titulo: "Novo titulo" },
+    );
+    expect(execucoesService.atualizarEtapa).toHaveBeenCalledWith(
+      usuarioBase,
+      "execucao-1",
+      "11111111-1111-1111-1111-111111111111",
+      { concluida: true, observacao: "Feito" },
+    );
+  });
+
+  it("valida motivo obrigatorio antes de cancelar e reabrir", async () => {
+    await expect(
+      controller.cancelarExecucao({ user: usuarioBase }, "execucao-1", {
+        motivo: "x",
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      controller.reabrirExecucao({ user: usuarioBase }, "execucao-1", {
+        motivo: "",
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(execucoesService.cancelar).not.toHaveBeenCalled();
+    expect(execucoesService.reabrir).not.toHaveBeenCalled();
+  });
+
+  it("encaminha acoes de status e descarte de execucao", async () => {
+    execucoesService.concluir.mockResolvedValue({
+      id: "execucao-1",
+      status: "CONCLUIDA",
+    });
+    execucoesService.cancelar.mockResolvedValue({
+      id: "execucao-1",
+      status: "CANCELADA",
+    });
+    execucoesService.reabrir.mockResolvedValue({
+      id: "execucao-1",
+      status: "EM_ANDAMENTO",
+    });
+    execucoesService.descartarTeste.mockResolvedValue(undefined);
+
+    await expect(
+      controller.concluirExecucao({ user: usuarioBase }, "execucao-1"),
+    ).resolves.toEqual({
+      success: true,
+      data: { id: "execucao-1", status: "CONCLUIDA" },
+    });
+    await expect(
+      controller.cancelarExecucao({ user: usuarioBase }, "execucao-1", {
+        motivo: "Cancelamento solicitado",
+      }),
+    ).resolves.toEqual({
+      success: true,
+      data: { id: "execucao-1", status: "CANCELADA" },
+    });
+    await expect(
+      controller.reabrirExecucao({ user: usuarioBase }, "execucao-1", {
+        motivo: "Reabrir para ajuste",
+      }),
+    ).resolves.toEqual({
+      success: true,
+      data: { id: "execucao-1", status: "EM_ANDAMENTO" },
+    });
+    await expect(
+      controller.descartarExecucaoTeste({ user: usuarioBase }, "execucao-1"),
+    ).resolves.toEqual({ success: true, data: null });
+
+    expect(execucoesService.concluir).toHaveBeenCalledWith(
+      usuarioBase,
+      "execucao-1",
+    );
+    expect(execucoesService.cancelar).toHaveBeenCalledWith(
+      usuarioBase,
+      "execucao-1",
+      { motivo: "Cancelamento solicitado" },
+    );
+    expect(execucoesService.reabrir).toHaveBeenCalledWith(
+      usuarioBase,
+      "execucao-1",
+      { motivo: "Reabrir para ajuste" },
+    );
+    expect(execucoesService.descartarTeste).toHaveBeenCalledWith(
+      usuarioBase,
+      "execucao-1",
+    );
   });
 });

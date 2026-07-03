@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -16,16 +17,22 @@ import { AuthGuard } from "../../common/guards/auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
 import {
   atualizarCategoriaSchema,
+  atualizarEtapaSchema,
   atualizarModeloSchema,
   criarCategoriaSchema,
   criarModeloSchema,
+  editarTituloExecucaoSchema,
+  iniciarExecucaoSchema,
+  listarExecucoesSchema,
   listarModelosSchema,
+  motivoObrigatorioSchema,
 } from "./dto/workflows.dto";
 import {
   WORKFLOW_GESTAO_ROLES,
   WORKFLOW_ROLES_ACESSO,
 } from "./workflows.constants";
 import { WorkflowsCategoriasService } from "./workflows-categorias.service";
+import { WorkflowsExecucoesService } from "./workflows-execucoes.service";
 import { WorkflowsModelosService } from "./workflows-modelos.service";
 import type { WorkflowUserContext } from "./workflows.types";
 
@@ -46,6 +53,7 @@ export class WorkflowsController {
   constructor(
     private readonly categoriasService: WorkflowsCategoriasService,
     private readonly modelosService: WorkflowsModelosService,
+    private readonly execucoesService: WorkflowsExecucoesService,
   ) {}
 
   private validar<T>(schema: SchemaValidavel<T>, input: unknown): T {
@@ -188,5 +196,132 @@ export class WorkflowsController {
       success: true,
       data: await this.modelosService.duplicar(req.user, modeloId),
     };
+  }
+
+  @Post("modelos/:modeloId/execucoes")
+  @Roles(...WORKFLOW_ROLES_ACESSO)
+  async iniciarExecucao(
+    @Req() req: RequestComUsuario,
+    @Param("modeloId") modeloId: string,
+    @Body() body: unknown,
+  ) {
+    const dto = this.validar(iniciarExecucaoSchema, body);
+    return {
+      success: true,
+      data: await this.execucoesService.iniciar(req.user, modeloId, dto),
+    };
+  }
+
+  @Get("execucoes")
+  @Roles(...WORKFLOW_ROLES_ACESSO)
+  async listarExecucoes(
+    @Req() req: RequestComUsuario,
+    @Query() query: unknown,
+  ) {
+    const dto = this.validar(listarExecucoesSchema, query);
+    return {
+      success: true,
+      data: await this.execucoesService.listar(req.user, dto),
+    };
+  }
+
+  @Get("execucoes/:execucaoId")
+  @Roles(...WORKFLOW_ROLES_ACESSO)
+  async buscarExecucao(
+    @Req() req: RequestComUsuario,
+    @Param("execucaoId") execucaoId: string,
+  ) {
+    return {
+      success: true,
+      data: await this.execucoesService.buscarPorId(req.user, execucaoId),
+    };
+  }
+
+  @Patch("execucoes/:execucaoId/titulo")
+  @Roles(...WORKFLOW_ROLES_ACESSO)
+  async editarTituloExecucao(
+    @Req() req: RequestComUsuario,
+    @Param("execucaoId") execucaoId: string,
+    @Body() body: unknown,
+  ) {
+    const dto = this.validar(editarTituloExecucaoSchema, body);
+    return {
+      success: true,
+      data: await this.execucoesService.editarTitulo(
+        req.user,
+        execucaoId,
+        dto,
+      ),
+    };
+  }
+
+  @Patch("execucoes/:execucaoId/etapas/:etapaId")
+  @Roles(...WORKFLOW_ROLES_ACESSO)
+  async atualizarEtapa(
+    @Req() req: RequestComUsuario,
+    @Param("execucaoId") execucaoId: string,
+    @Param("etapaId") etapaId: string,
+    @Body() body: unknown,
+  ) {
+    const dto = this.validar(atualizarEtapaSchema, body);
+    return {
+      success: true,
+      data: await this.execucoesService.atualizarEtapa(
+        req.user,
+        execucaoId,
+        etapaId,
+        dto,
+      ),
+    };
+  }
+
+  @Post("execucoes/:execucaoId/concluir")
+  @Roles(...WORKFLOW_ROLES_ACESSO)
+  async concluirExecucao(
+    @Req() req: RequestComUsuario,
+    @Param("execucaoId") execucaoId: string,
+  ) {
+    return {
+      success: true,
+      data: await this.execucoesService.concluir(req.user, execucaoId),
+    };
+  }
+
+  @Post("execucoes/:execucaoId/cancelar")
+  @Roles(...WORKFLOW_ROLES_ACESSO)
+  async cancelarExecucao(
+    @Req() req: RequestComUsuario,
+    @Param("execucaoId") execucaoId: string,
+    @Body() body: unknown,
+  ) {
+    const dto = this.validar(motivoObrigatorioSchema, body);
+    return {
+      success: true,
+      data: await this.execucoesService.cancelar(req.user, execucaoId, dto),
+    };
+  }
+
+  @Post("execucoes/:execucaoId/reabrir")
+  @Roles(...WORKFLOW_GESTAO_ROLES)
+  async reabrirExecucao(
+    @Req() req: RequestComUsuario,
+    @Param("execucaoId") execucaoId: string,
+    @Body() body: unknown,
+  ) {
+    const dto = this.validar(motivoObrigatorioSchema, body);
+    return {
+      success: true,
+      data: await this.execucoesService.reabrir(req.user, execucaoId, dto),
+    };
+  }
+
+  @Delete("execucoes/:execucaoId")
+  @Roles(...WORKFLOW_GESTAO_ROLES)
+  async descartarExecucaoTeste(
+    @Req() req: RequestComUsuario,
+    @Param("execucaoId") execucaoId: string,
+  ) {
+    await this.execucoesService.descartarTeste(req.user, execucaoId);
+    return { success: true, data: null };
   }
 }
