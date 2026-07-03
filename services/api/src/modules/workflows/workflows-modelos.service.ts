@@ -243,6 +243,11 @@ export class WorkflowsModelosService {
           "Modelos publicados nao permitem usar fase desconhecida",
         );
       }
+      if (fase.ordem !== faseAtual.ordem) {
+        throw new BadRequestException(
+          "Modelos publicados nao permitem reordenar fases",
+        );
+      }
       faseIdsNovas.add(fase.id);
 
       this.validarEtapasPublicadas(faseAtual, fase.etapas);
@@ -270,9 +275,15 @@ export class WorkflowsModelosService {
         );
       }
 
-      if (!etapasAtuais.has(etapa.id)) {
+      const etapaAtual = etapasAtuais.get(etapa.id);
+      if (!etapaAtual) {
         throw new BadRequestException(
           "Modelos publicados nao permitem usar etapa desconhecida ou mover etapa entre fases",
+        );
+      }
+      if (etapa.ordem !== etapaAtual.ordem) {
+        throw new BadRequestException(
+          "Modelos publicados nao permitem reordenar etapas",
         );
       }
 

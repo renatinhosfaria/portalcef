@@ -183,6 +183,40 @@ const modeloPublicadoComDuasEtapas = {
   ],
 };
 
+const modeloPublicadoComDuasFases = {
+  ...modeloPublicado,
+  fases: [
+    {
+      id: "fase-1",
+      nome: "Preparacao",
+      ordem: 1,
+      etapas: [
+        {
+          id: "etapa-1",
+          titulo: "Antigo",
+          instrucao: null,
+          ordem: 1,
+          versao: 2,
+        },
+      ],
+    },
+    {
+      id: "fase-2",
+      nome: "Finalizacao",
+      ordem: 2,
+      etapas: [
+        {
+          id: "etapa-2",
+          titulo: "Encerrar",
+          instrucao: null,
+          ordem: 1,
+          versao: 1,
+        },
+      ],
+    },
+  ],
+};
+
 function configurarCadeias() {
   tx.insert.mockReturnValue(tx);
   tx.values.mockReturnValue(tx);
@@ -527,6 +561,81 @@ describe("WorkflowsModelosService", () => {
     ).rejects.toBeInstanceOf(BadRequestException);
 
     expect(tx.delete).not.toHaveBeenCalledWith(workflowFases);
+  });
+
+  it("bloqueia reordenacao de fases existentes em modelo publicado", async () => {
+    db.query.workflowModelos.findFirst.mockResolvedValue(
+      modeloPublicadoComDuasFases,
+    );
+
+    await expect(
+      service.atualizar(gestao, "modelo-1", {
+        fases: [
+          {
+            id: "fase-2",
+            nome: "Finalizacao",
+            ordem: 1,
+            etapas: [
+              {
+                id: "etapa-2",
+                titulo: "Encerrar",
+                instrucao: null,
+                ordem: 1,
+              },
+            ],
+          },
+          {
+            id: "fase-1",
+            nome: "Preparacao",
+            ordem: 2,
+            etapas: [
+              {
+                id: "etapa-1",
+                titulo: "Antigo",
+                instrucao: null,
+                ordem: 1,
+              },
+            ],
+          },
+        ],
+      }),
+    ).rejects.toThrow("Modelos publicados nao permitem reordenar fases");
+
+    expect(tx.update).not.toHaveBeenCalledWith(workflowFases);
+  });
+
+  it("bloqueia reordenacao de etapas existentes em modelo publicado", async () => {
+    db.query.workflowModelos.findFirst.mockResolvedValue(
+      modeloPublicadoComDuasEtapas,
+    );
+
+    await expect(
+      service.atualizar(gestao, "modelo-1", {
+        fases: [
+          {
+            id: "fase-1",
+            nome: "Preparacao",
+            ordem: 1,
+            etapas: [
+              {
+                id: "etapa-2",
+                titulo: "Conferir materiais",
+                instrucao: null,
+                ordem: 1,
+              },
+              {
+                id: "etapa-1",
+                titulo: "Antigo",
+                instrucao: null,
+                ordem: 2,
+              },
+            ],
+          },
+        ],
+      }),
+    ).rejects.toThrow("Modelos publicados nao permitem reordenar etapas");
+
+    expect(tx.update).not.toHaveBeenCalledWith(workflowEtapas);
   });
 
   it("usuario comum nao lista rascunhos quando pede todos", async () => {
