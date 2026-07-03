@@ -220,6 +220,74 @@ export class WorkflowsModelosService {
     return alteradas;
   }
 
+  private validarEstruturaPublicada(modelo: ModeloComColecoes, fases: FaseDto[]) {
+    if (modelo.status !== "PUBLICADO") {
+      return;
+    }
+
+    const fasesAtuais = new Map(
+      (modelo.fases ?? []).map((fase) => [fase.id, fase]),
+    );
+    const faseIdsNovas = new Set<string>();
+
+    for (const fase of fases) {
+      if (!fase.id) {
+        throw new BadRequestException(
+          "Modelos publicados nao permitem adicionar fases",
+        );
+      }
+
+      const faseAtual = fasesAtuais.get(fase.id);
+      if (!faseAtual) {
+        throw new BadRequestException(
+          "Modelos publicados nao permitem usar fase desconhecida",
+        );
+      }
+      faseIdsNovas.add(fase.id);
+
+      this.validarEtapasPublicadas(faseAtual, fase.etapas);
+    }
+
+    for (const faseId of fasesAtuais.keys()) {
+      if (!faseIdsNovas.has(faseId)) {
+        throw new BadRequestException(
+          "Modelos publicados nao permitem remover fases",
+        );
+      }
+    }
+  }
+
+  private validarEtapasPublicadas(faseAtual: FaseAtual, etapas: EtapaDto[]) {
+    const etapasAtuais = new Map(
+      (faseAtual.etapas ?? []).map((etapa) => [etapa.id, etapa]),
+    );
+    const etapaIdsNovas = new Set<string>();
+
+    for (const etapa of etapas) {
+      if (!etapa.id) {
+        throw new BadRequestException(
+          "Modelos publicados nao permitem adicionar etapas",
+        );
+      }
+
+      if (!etapasAtuais.has(etapa.id)) {
+        throw new BadRequestException(
+          "Modelos publicados nao permitem usar etapa desconhecida ou mover etapa entre fases",
+        );
+      }
+
+      etapaIdsNovas.add(etapa.id);
+    }
+
+    for (const etapaId of etapasAtuais.keys()) {
+      if (!etapaIdsNovas.has(etapaId)) {
+        throw new BadRequestException(
+          "Modelos publicados nao permitem remover etapas",
+        );
+      }
+    }
+  }
+
   private async inserirOrientacoes(
     tx: DbTransaction,
     modeloId: string,
@@ -456,19 +524,23 @@ export class WorkflowsModelosService {
     modeloId: string,
     execucaoIds: string[],
     etapasAlteradas: EtapaAlterada[],
+    executor: DbTransaction,
   ) {
     await Promise.all(
       execucaoIds.map((execucaoId) =>
-        this.historicoService.registrar({
-          execucaoId,
-          tipo: "MODELO_ATUALIZADO",
-          descricao: "Workflow modelo atualizado pela gestao",
-          autorId: session.userId,
-          metadata: {
-            modeloId,
-            etapasAtualizadas: etapasAlteradas.map((etapa) => etapa.etapaId),
+        this.historicoService.registrar(
+          {
+            execucaoId,
+            tipo: "MODELO_ATUALIZADO",
+            descricao: "Workflow modelo atualizado pela gestao",
+            autorId: session.userId,
+            metadata: {
+              modeloId,
+              etapasAtualizadas: etapasAlteradas.map((etapa) => etapa.etapaId),
+            },
           },
-        }),
+          executor,
+        ),
       ),
     );
   }
@@ -567,6 +639,9 @@ export class WorkflowsModelosService {
         "Modelo precisa ter ao menos uma fase e uma etapa para publicar",
       );
     }
+    if (dto.fases !== undefined) {
+      this.validarEstruturaPublicada(modelo, dto.fases);
+    }
 
     const etapasAlteradas = this.identificarEtapasAlteradas(modelo, dto.fases);
     const execucoesImpactadas =
@@ -618,18 +693,16 @@ export class WorkflowsModelosService {
           execucaoIds,
           etapasAlteradas,
         );
+
+        await this.registrarHistoricoModeloAtualizado(
+          session,
+          modeloId,
+          execucaoIds,
+          etapasAlteradas,
+          tx,
+        );
       }
     });
-
-    if (execucaoIds.length > 0 && etapasAlteradas.length > 0) {
-      await this.registrarHistoricoModeloAtualizado(
-        session,
-        modeloId,
-        execucaoIds,
-        etapasAlteradas,
-      );
-    }
-
     return this.buscarModeloDaUnidade(session, modeloId);
   }
 

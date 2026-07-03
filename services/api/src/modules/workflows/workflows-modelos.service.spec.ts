@@ -156,6 +156,33 @@ const modeloPublicado = {
   ],
 };
 
+const modeloPublicadoComDuasEtapas = {
+  ...modeloPublicado,
+  fases: [
+    {
+      id: "fase-1",
+      nome: "Preparacao",
+      ordem: 1,
+      etapas: [
+        {
+          id: "etapa-1",
+          titulo: "Antigo",
+          instrucao: null,
+          ordem: 1,
+          versao: 2,
+        },
+        {
+          id: "etapa-2",
+          titulo: "Conferir materiais",
+          instrucao: null,
+          ordem: 2,
+          versao: 1,
+        },
+      ],
+    },
+  ],
+};
+
 function configurarCadeias() {
   tx.insert.mockReturnValue(tx);
   tx.values.mockReturnValue(tx);
@@ -312,7 +339,194 @@ describe("WorkflowsModelosService", () => {
         tipo: "MODELO_ATUALIZADO",
         autorId: "gestor-1",
       }),
+      tx,
     );
+  });
+
+  it("bloqueia remocao de etapa de modelo publicado sem apagar progresso", async () => {
+    db.query.workflowModelos.findFirst.mockResolvedValue(
+      modeloPublicadoComDuasEtapas,
+    );
+
+    await expect(
+      service.atualizar(gestao, "modelo-1", {
+        fases: [
+          {
+            id: "fase-1",
+            nome: "Preparacao",
+            ordem: 1,
+            etapas: [
+              {
+                id: "etapa-1",
+                titulo: "Antigo",
+                instrucao: null,
+                ordem: 1,
+              },
+            ],
+          },
+        ],
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(tx.delete).not.toHaveBeenCalledWith(workflowEtapas);
+    expect(tx.update).not.toHaveBeenCalledWith(workflowEtapaProgresso);
+  });
+
+  it("bloqueia adicao de etapa nova em modelo publicado", async () => {
+    db.query.workflowModelos.findFirst.mockResolvedValue(modeloPublicado);
+
+    await expect(
+      service.atualizar(gestao, "modelo-1", {
+        fases: [
+          {
+            id: "fase-1",
+            nome: "Preparacao",
+            ordem: 1,
+            etapas: [
+              {
+                id: "etapa-1",
+                titulo: "Antigo",
+                instrucao: null,
+                ordem: 1,
+              },
+              {
+                titulo: "Nova etapa",
+                instrucao: null,
+                ordem: 2,
+              },
+            ],
+          },
+        ],
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(tx.insert).not.toHaveBeenCalledWith(workflowEtapas);
+  });
+
+  it("bloqueia adicao de fase nova em modelo publicado", async () => {
+    db.query.workflowModelos.findFirst.mockResolvedValue(modeloPublicado);
+
+    await expect(
+      service.atualizar(gestao, "modelo-1", {
+        fases: [
+          {
+            id: "fase-1",
+            nome: "Preparacao",
+            ordem: 1,
+            etapas: [
+              {
+                id: "etapa-1",
+                titulo: "Antigo",
+                instrucao: null,
+                ordem: 1,
+              },
+            ],
+          },
+          {
+            nome: "Nova fase",
+            ordem: 2,
+            etapas: [
+              {
+                titulo: "Nova etapa",
+                instrucao: null,
+                ordem: 1,
+              },
+            ],
+          },
+        ],
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(tx.insert).not.toHaveBeenCalledWith(workflowFases);
+  });
+
+  it("bloqueia id desconhecido de fase ou etapa em modelo publicado", async () => {
+    db.query.workflowModelos.findFirst.mockResolvedValue(modeloPublicado);
+
+    await expect(
+      service.atualizar(gestao, "modelo-1", {
+        fases: [
+          {
+            id: "fase-desconhecida",
+            nome: "Preparacao",
+            ordem: 1,
+            etapas: [
+              {
+                id: "etapa-1",
+                titulo: "Antigo",
+                instrucao: null,
+                ordem: 1,
+              },
+            ],
+          },
+        ],
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    await expect(
+      service.atualizar(gestao, "modelo-1", {
+        fases: [
+          {
+            id: "fase-1",
+            nome: "Preparacao",
+            ordem: 1,
+            etapas: [
+              {
+                id: "etapa-desconhecida",
+                titulo: "Antigo",
+                instrucao: null,
+                ordem: 1,
+              },
+            ],
+          },
+        ],
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it("bloqueia remocao de fase de modelo publicado", async () => {
+    db.query.workflowModelos.findFirst.mockResolvedValue({
+      ...modeloPublicado,
+      fases: [
+        ...modeloPublicado.fases,
+        {
+          id: "fase-2",
+          nome: "Finalizacao",
+          ordem: 2,
+          etapas: [
+            {
+              id: "etapa-2",
+              titulo: "Encerrar",
+              instrucao: null,
+              ordem: 1,
+              versao: 1,
+            },
+          ],
+        },
+      ],
+    });
+
+    await expect(
+      service.atualizar(gestao, "modelo-1", {
+        fases: [
+          {
+            id: "fase-1",
+            nome: "Preparacao",
+            ordem: 1,
+            etapas: [
+              {
+                id: "etapa-1",
+                titulo: "Antigo",
+                instrucao: null,
+                ordem: 1,
+              },
+            ],
+          },
+        ],
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(tx.delete).not.toHaveBeenCalledWith(workflowFases);
   });
 
   it("usuario comum nao lista rascunhos quando pede todos", async () => {
@@ -321,6 +535,16 @@ describe("WorkflowsModelosService", () => {
     await service.listar({ ...gestao, role: "professora" }, { status: "todos" });
 
     expect(db.query.workflowModelos.findMany).toHaveBeenCalled();
+    expect(mockEq).toHaveBeenCalledWith(workflowModelos.status, "PUBLICADO");
+  });
+
+  it("usuario comum nao busca modelo rascunho ou inativo por id", async () => {
+    db.query.workflowModelos.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.buscarPorId({ ...gestao, role: "professora" }, "modelo-1"),
+    ).rejects.toBeInstanceOf(NotFoundException);
+
     expect(mockEq).toHaveBeenCalledWith(workflowModelos.status, "PUBLICADO");
   });
 
@@ -334,5 +558,39 @@ describe("WorkflowsModelosService", () => {
     await expect(service.publicar(gestao, "modelo-1")).rejects.toBeInstanceOf(
       BadRequestException,
     );
+  });
+
+  it("publicar filtra por tenant ao atualizar status", async () => {
+    db.query.workflowModelos.findFirst.mockResolvedValue(modeloPublicado);
+    db.returning.mockResolvedValue([{ id: "modelo-1", status: "PUBLICADO" }]);
+
+    await service.publicar(gestao, "modelo-1");
+
+    expect(mockEq).toHaveBeenCalledWith(workflowModelos.id, "modelo-1");
+    expect(mockEq).toHaveBeenCalledWith(workflowModelos.schoolId, "school-1");
+    expect(mockEq).toHaveBeenCalledWith(workflowModelos.unitId, "unit-1");
+  });
+
+  it("inativar filtra por tenant ao atualizar status", async () => {
+    db.returning.mockResolvedValue([{ id: "modelo-1", status: "INATIVO" }]);
+
+    await service.inativar(gestao, "modelo-1");
+
+    expect(mockEq).toHaveBeenCalledWith(workflowModelos.id, "modelo-1");
+    expect(mockEq).toHaveBeenCalledWith(workflowModelos.schoolId, "school-1");
+    expect(mockEq).toHaveBeenCalledWith(workflowModelos.unitId, "unit-1");
+  });
+
+  it("duplicar busca modelo completo dentro do tenant", async () => {
+    db.query.workflowModelos.findFirst.mockResolvedValue(modeloPublicado);
+    tx.returning
+      .mockResolvedValueOnce([{ id: "modelo-2" }])
+      .mockResolvedValueOnce([{ id: "fase-duplicada" }]);
+
+    await service.duplicar(gestao, "modelo-1");
+
+    expect(mockEq).toHaveBeenCalledWith(workflowModelos.id, "modelo-1");
+    expect(mockEq).toHaveBeenCalledWith(workflowModelos.schoolId, "school-1");
+    expect(mockEq).toHaveBeenCalledWith(workflowModelos.unitId, "unit-1");
   });
 });
