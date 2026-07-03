@@ -31,7 +31,7 @@ import { ProvaCicloModule } from "./modules/prova-ciclo/prova-ciclo.module";
 import { ProvaModule } from "./modules/prova/prova.module";
 import { SecurityModule } from "./modules/security/security.module";
 import { EventoInscricoesModule } from "./modules/evento-inscricoes/evento-inscricoes.module";
-import { SemanaRelatorioModule } from "./modules/semana-relatorio/semana-relatorio.module";
+import { SemestreRelatorioModule } from "./modules/semestre-relatorio/semestre-relatorio.module";
 import { RelatorioModule } from "./modules/relatorio/relatorio.module";
 
 @Module({
@@ -101,8 +101,8 @@ import { RelatorioModule } from "./modules/relatorio/relatorio.module";
     ProvaModule,
     // Inscrições de eventos (landing pública + admin restrito)
     EventoInscricoesModule,
-    // Relatórios (workflow semanal para BERCARIO e INFANTIL)
-    SemanaRelatorioModule,
+    // Relatórios (workflow semestral para BERCARIO e INFANTIL)
+    SemestreRelatorioModule,
     RelatorioModule,
   ],
   providers: [

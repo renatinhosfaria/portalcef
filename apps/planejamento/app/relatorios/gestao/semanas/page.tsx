@@ -1,5 +1,5 @@
-import { SemanasRelatorioContent } from "./semanas-content";
+import { redirect } from "next/navigation";
 
-export default function SemanasRelatorioPage() {
-  return <SemanasRelatorioContent />;
+export default function SemanasRelatorioCompatPage() {
+  redirect("/gestao/semestres");
 }

@@ -20,21 +20,21 @@ describe("useRelatorio", () => {
     mockApiPost.mockResolvedValue({ id: "relatorio-1" });
   });
 
-  it("cria relatório usando turma, semana e semana configurada", async () => {
+  it("cria relatório usando turma, semestre e configuração semestral", async () => {
     const { result } = renderHook(() => useRelatorio());
 
     await act(async () => {
       await result.current.criarRelatorio(
         "turma-1",
-        "semana-roteamento-1",
-        "semana-config-1",
+        "semestre-roteamento-1",
+        "semestre-config-1",
       );
     });
 
     expect(mockApiPost).toHaveBeenCalledWith("/relatorio", {
       turmaId: "turma-1",
-      semanaId: "semana-roteamento-1",
-      semanaRelatorioId: "semana-config-1",
+      semestreId: "semestre-roteamento-1",
+      semestreRelatorioId: "semestre-config-1",
     });
   });
 

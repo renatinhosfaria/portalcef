@@ -245,6 +245,21 @@ describe("DocumentoList", () => {
     expect(botoesImprimir).toHaveLength(2);
   });
 
+  it("permite impressão de PDF de prova antes da aprovação quando liberado pelo fluxo de gestão", () => {
+    render(
+      <DocumentoList
+        documentos={[mockDocumentoPdf]}
+        onImprimir={vi.fn()}
+        modulo="prova"
+        permitirImpressaoSemAprovacao
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: /imprimir documento/i }),
+    ).toBeInTheDocument();
+  });
+
   it("exibe PDF em preparação e não mostra imprimir para Word aprovado pendente", () => {
     const onImprimir = vi.fn().mockResolvedValue(undefined);
 
@@ -621,5 +636,38 @@ describe("DocumentoList", () => {
         }),
       );
     });
+  });
+
+  it("abre o PDF de impressão ao visualizar prova Word com PDF pronto", async () => {
+    const user = userEvent.setup();
+    const abrirJanela = vi.spyOn(window, "open").mockImplementation(() => null);
+
+    render(
+      <DocumentoList
+        documentos={[
+          {
+            ...mockDocumentoWord,
+            id: "doc-prova-pdf",
+            planoId: "prova-1",
+            pdfStatus: "PRONTO",
+            pdfUrl: "https://cdn/prova-impressao.pdf",
+          },
+        ]}
+        modulo="prova"
+      />,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: /visualizar documento/i }),
+    );
+
+    expect(abrirJanela).toHaveBeenCalledWith(
+      "https://cdn/prova-impressao.pdf",
+      "_blank",
+    );
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    abrirJanela.mockRestore();
   });
 });

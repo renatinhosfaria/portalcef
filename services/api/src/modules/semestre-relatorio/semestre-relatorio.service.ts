@@ -1,54 +1,58 @@
 import { Injectable, BadRequestException } from "@nestjs/common";
 import { eq, and, asc, getDb, sql } from "@essencia/db";
 import {
-  semanaRelatorio,
+  semestreRelatorio,
   relatorio,
   turmas,
   educationStages,
-  type SemanaRelatorio,
+  type SemestreRelatorio,
 } from "@essencia/db/schema";
 import {
-  CriarSemanaRelatorioDto,
-  EditarSemanaRelatorioDto,
-} from "./dto/semana-relatorio.dto";
+  CriarSemestreRelatorioDto,
+  EditarSemestreRelatorioDto,
+} from "./dto/semestre-relatorio.dto";
 
 @Injectable()
-export class SemanaRelatorioService {
+export class SemestreRelatorioService {
   private get db() {
     return getDb();
   }
 
   async listarPorUnidade(unidadeId: string) {
-    const semanas: SemanaRelatorio[] = await this.db
+    const semestres: SemestreRelatorio[] = await this.db
       .select()
-      .from(semanaRelatorio)
-      .where(eq(semanaRelatorio.unidadeId, unidadeId))
-      .orderBy(asc(semanaRelatorio.etapa), asc(semanaRelatorio.numero));
+      .from(semestreRelatorio)
+      .where(eq(semestreRelatorio.unidadeId, unidadeId))
+      .orderBy(
+        asc(semestreRelatorio.etapa),
+        asc(semestreRelatorio.anoLetivo),
+        asc(semestreRelatorio.semestre),
+      );
 
     return Promise.all(
-      semanas.map(async (semana) => ({
-        ...semana,
-        relatoriosVinculados: await this.contarRelatoriosVinculados(semana.id),
+      semestres.map(async (semestre) => ({
+        ...semestre,
+        relatoriosVinculados: await this.contarRelatoriosVinculados(semestre.id),
       })),
     );
   }
 
   async buscarPorId(id: string, unitId: string) {
-    const [semana] = await this.db
+    const [semestre] = await this.db
       .select()
-      .from(semanaRelatorio)
+      .from(semestreRelatorio)
       .where(
         and(
-          eq(semanaRelatorio.id, id),
-          eq(semanaRelatorio.unidadeId, unitId),
+          eq(semestreRelatorio.id, id),
+          eq(semestreRelatorio.unidadeId, unitId),
         ),
       );
 
-    if (!semana) {
-      throw new BadRequestException("Semana não encontrada");
+    if (!semestre) {
+      throw new BadRequestException("Semestre não encontrado");
     }
 
-    return semana;
+    return semestre;
   }
 
   async buscarPorTurma(turmaId: string, unitId: string) {
@@ -75,23 +79,27 @@ export class SemanaRelatorioService {
 
     return this.db
       .select()
-      .from(semanaRelatorio)
+      .from(semestreRelatorio)
       .where(
         and(
-          eq(semanaRelatorio.unidadeId, unitId),
-          eq(semanaRelatorio.etapa, etapa),
+          eq(semestreRelatorio.unidadeId, unitId),
+          eq(semestreRelatorio.etapa, etapa),
         ),
       )
-      .orderBy(asc(semanaRelatorio.numero));
+      .orderBy(
+        asc(semestreRelatorio.anoLetivo),
+        asc(semestreRelatorio.semestre),
+      );
   }
 
-  async criar(dto: CriarSemanaRelatorioDto, unitId: string, userId: string) {
+  async criar(dto: CriarSemestreRelatorioDto, unitId: string, userId: string) {
     const [criada] = await this.db
-      .insert(semanaRelatorio)
+      .insert(semestreRelatorio)
       .values({
         unidadeId: unitId,
-        etapa: dto.etapa as SemanaRelatorio["etapa"],
-        numero: dto.numero,
+        etapa: dto.etapa as SemestreRelatorio["etapa"],
+        anoLetivo: dto.anoLetivo,
+        semestre: dto.semestre,
         descricao: dto.descricao,
         dataInicio: dto.dataInicio,
         dataFim: dto.dataFim,
@@ -101,16 +109,16 @@ export class SemanaRelatorioService {
       .returning();
 
     if (!criada) {
-      throw new BadRequestException("Falha ao criar semana de relatório");
+      throw new BadRequestException("Falha ao criar semestre de relatório");
     }
 
     return criada;
   }
 
-  async editar(id: string, dto: EditarSemanaRelatorioDto, unitId: string) {
+  async editar(id: string, dto: EditarSemestreRelatorioDto, unitId: string) {
     await this.buscarPorId(id, unitId);
 
-    const campos: Partial<SemanaRelatorio> = {};
+    const campos: Partial<SemestreRelatorio> = {};
     if (dto.descricao !== undefined) campos.descricao = dto.descricao;
     if (dto.dataInicio !== undefined) campos.dataInicio = dto.dataInicio;
     if (dto.dataFim !== undefined) campos.dataFim = dto.dataFim;
@@ -118,9 +126,9 @@ export class SemanaRelatorioService {
       campos.dataMaximaEntrega = dto.dataMaximaEntrega;
 
     const [atualizada] = await this.db
-      .update(semanaRelatorio)
+      .update(semestreRelatorio)
       .set({ ...campos, atualizadoEm: new Date() })
-      .where(eq(semanaRelatorio.id, id))
+      .where(eq(semestreRelatorio.id, id))
       .returning();
 
     return atualizada;
@@ -137,20 +145,20 @@ export class SemanaRelatorioService {
     }
 
     await this.db
-      .delete(semanaRelatorio)
+      .delete(semestreRelatorio)
       .where(
         and(
-          eq(semanaRelatorio.id, id),
-          eq(semanaRelatorio.unidadeId, unitId),
+          eq(semestreRelatorio.id, id),
+          eq(semestreRelatorio.unidadeId, unitId),
         ),
       );
   }
 
-  private async contarRelatoriosVinculados(semanaId: string): Promise<number> {
+  private async contarRelatoriosVinculados(semestreId: string): Promise<number> {
     const [result] = await this.db
       .select({ total: sql<number>`count(*)::int` })
       .from(relatorio)
-      .where(eq(relatorio.semanaRelatorioId, semanaId));
+      .where(eq(relatorio.semestreRelatorioId, semestreId));
     return result?.total ?? 0;
   }
 }

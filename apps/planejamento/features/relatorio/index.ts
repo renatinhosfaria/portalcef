@@ -9,10 +9,11 @@ export type {
   RelatorioListItem,
   RelatorioStatus,
   RelatorioSummary,
-  SemanaRelatorio,
+  SemestreRelatorio,
 } from "./types";
 export { STATUS_COLORS, STATUS_LABELS } from "./types";
 export { useAnalistaRelatorio } from "./hooks/use-analista-relatorio";
 export { useGestaoRelatorio } from "./hooks/use-gestao-relatorio";
 export { useRelatorio } from "./hooks/use-relatorio";
-export { useSemanaRelatorio } from "./hooks/use-semanas-relatorio";
+export { useSemestreRelatorio } from "./hooks/use-semestres-relatorio";
+export { RelatorioHeader } from "./components";

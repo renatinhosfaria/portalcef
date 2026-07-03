@@ -28,12 +28,14 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
+import { HistoricoTimeline } from "../../../../features/plano-aula";
 import {
-  STATUS_LABELS,
+  RelatorioHeader,
   type Relatorio,
   type RelatorioDocumento,
   useAnalistaRelatorio,
   useRelatorio,
+  useSemestreRelatorio,
 } from "../../../../features/relatorio";
 import { obterMensagemErro } from "../../../../lib/mensagens-erro";
 
@@ -49,6 +51,15 @@ function isDocumentoWord(documento: RelatorioDocumento): boolean {
   );
 }
 
+function getEtapaRelatorioLabel(etapa?: string): string | undefined {
+  const labels: Record<string, string> = {
+    BERCARIO: "Berçário",
+    INFANTIL: "Infantil",
+  };
+
+  return etapa ? labels[etapa] || etapa : undefined;
+}
+
 export function RevisaoRelatorioContent({
   relatorioId,
 }: RevisaoRelatorioContentProps) {
@@ -59,6 +70,7 @@ export function RevisaoRelatorioContent({
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const { getRelatorio, editarWord, sincronizarWord } = useRelatorio();
+  const { semestres, isLoading: isLoadingSemestre } = useSemestreRelatorio();
   const {
     loading: loadingAction,
     aprovar,
@@ -229,6 +241,11 @@ export function RevisaoRelatorioContent({
   const canPerformActions =
     relatorio.status === "AGUARDANDO_ANALISTA" ||
     relatorio.status === "REVISAO_ANALISTA";
+  const semestre = semestres.find(
+    (item) =>
+      item.id === relatorio.semestreRelatorioId ||
+      item.id === relatorio.semestreId,
+  );
 
   return (
     <div className="container mx-auto max-w-7xl px-4 py-8">
@@ -242,16 +259,20 @@ export function RevisaoRelatorioContent({
         </Link>
       </div>
 
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold tracking-tight">
-          Revisão de Relatório
-        </h1>
-        <p className="text-muted-foreground">
-          {relatorio.user?.name || relatorio.professorName || "Professora"} •{" "}
-          {relatorio.turma?.name || relatorio.turmaName || "Turma"} •{" "}
-          {STATUS_LABELS[relatorio.status]}
-        </p>
-      </div>
+      <RelatorioHeader
+        professorName={relatorio.user?.name || relatorio.professorName || ""}
+        turmaName={relatorio.turma?.name || relatorio.turmaName || ""}
+        turmaCode={relatorio.turma?.code || relatorio.turmaCode}
+        semestreNumero={semestre?.semestre}
+        semestreDescricao={semestre?.descricao}
+        semestreInicio={semestre?.dataInicio}
+        semestreFim={semestre?.dataFim}
+        prazoEntrega={semestre?.dataMaximaEntrega ?? relatorio.deadline}
+        etapaNome={getEtapaRelatorioLabel(semestre?.etapa)}
+        status={relatorio.status}
+        submittedAt={relatorio.submittedAt}
+        isLoadingSemestre={isLoadingSemestre}
+      />
 
       {successMessage && (
         <Alert className="mb-6 border-green-400 bg-green-50">
@@ -366,7 +387,9 @@ export function RevisaoRelatorioContent({
           </Card>
         </div>
 
-        <div>
+        <div className="space-y-6">
+          <HistoricoTimeline planoId={relatorioId} modulo="relatorio" />
+
           <Card>
             <CardHeader>
               <CardTitle className="text-lg">Ações</CardTitle>

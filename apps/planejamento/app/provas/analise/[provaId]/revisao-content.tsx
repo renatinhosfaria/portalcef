@@ -25,6 +25,7 @@ import {
   Check,
   ClipboardCheck,
   Loader2,
+  Plus,
   RotateCcw,
   Send,
   Upload,
@@ -40,12 +41,14 @@ import {
   type PlanoDocumento,
 } from "../../../../features/plano-aula";
 import {
+  adaptarDocumentoProvaParaDocumentoList,
   ProvaHeader,
   useAnalistaProvaActions,
   useProva,
   useProvaDetalhe,
 } from "../../../../features/prova";
 import { obterMensagemErro } from "../../../../lib/mensagens-erro";
+import { TarefaForm } from "../../../analise/[planoId]/tarefa-form";
 
 interface RevisaoProvaContentProps {
   provaId: string;
@@ -61,11 +64,18 @@ export function RevisaoProvaContent({ provaId }: RevisaoProvaContentProps) {
     refetch,
   } = useProvaDetalhe();
   const { loading: loadingAction, aprovar, devolver } = useAnalistaProvaActions();
-  const { uploadDocumento, addLink, aprovarDocumento, desaprovarDocumento, imprimirDocumento } =
-    useProva();
+  const {
+    uploadDocumento,
+    addLink,
+    aprovarDocumento,
+    desaprovarDocumento,
+    regerarPdfDocumento,
+    imprimirDocumento,
+  } = useProva();
 
   const [actionError, setActionError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [isTarefaFormOpen, setIsTarefaFormOpen] = useState(false);
 
   // Carrega a prova na montagem
   useEffect(() => {
@@ -133,6 +143,27 @@ export function RevisaoProvaContent({ provaId }: RevisaoProvaContentProps) {
       }
     },
     [imprimirDocumento, refetch],
+  );
+
+  /**
+   * Tenta gerar novamente o PDF de impressão.
+   */
+  const handleRegerarPdfDocumento = useCallback(
+    async (documentoId: string) => {
+      try {
+        await regerarPdfDocumento(documentoId);
+        await refetch();
+        setSuccessMessage("PDF enviado para preparação!");
+        setTimeout(() => setSuccessMessage(null), 3000);
+      } catch (err) {
+        const message = obterMensagemErro(
+          err,
+          "Não foi possível tentar gerar o PDF novamente. Tente novamente.",
+        );
+        setActionError(message);
+      }
+    },
+    [regerarPdfDocumento, refetch],
   );
 
   /**
@@ -290,10 +321,9 @@ export function RevisaoProvaContent({ provaId }: RevisaoProvaContentProps) {
     !isLoading && prova.status === "AGUARDANDO_ANALISTA";
 
   // Adaptar documentos da prova para o formato esperado pelo DocumentoList (PlanoDocumento)
-  const documentosAdaptados: PlanoDocumento[] = prova.documentos.map((doc) => ({
-    ...doc,
-    planoId: doc.provaId,
-  } as unknown as PlanoDocumento));
+  const documentosAdaptados: PlanoDocumento[] = prova.documentos.map(
+    adaptarDocumentoProvaParaDocumentoList,
+  );
 
   return (
     <div className="container mx-auto max-w-7xl px-4 py-8">
@@ -366,6 +396,7 @@ export function RevisaoProvaContent({ provaId }: RevisaoProvaContentProps) {
                 canComentar={true}
                 onAprovar={handleAprovarDocumento}
                 onDesaprovar={handleDesaprovarDocumento}
+                onRegerarPdf={handleRegerarPdfDocumento}
                 onImprimir={handleImprimirDocumento}
                 modulo="prova"
               />
@@ -376,7 +407,7 @@ export function RevisaoProvaContent({ provaId }: RevisaoProvaContentProps) {
         {/* Sidebar - 1 coluna */}
         <div className="space-y-6">
           {/* Historico */}
-          <HistoricoTimeline planoId={provaId} />
+          <HistoricoTimeline planoId={provaId} modulo="prova" />
 
           {/* Acoes */}
           <Card>
@@ -430,6 +461,17 @@ export function RevisaoProvaContent({ provaId }: RevisaoProvaContentProps) {
                     )}
                   </Button>
 
+                  {/* Botao Criar Tarefa */}
+                  <Button
+                    onClick={() => setIsTarefaFormOpen(true)}
+                    disabled={isLoading}
+                    variant="outline"
+                    className="w-full border-blue-400 bg-blue-50 text-blue-700 hover:bg-blue-100 hover:text-blue-800"
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    Criar Tarefa vinculada à Prova
+                  </Button>
+
                   {/* Aviso sobre comentarios */}
                   <p className="text-xs text-muted-foreground text-center">
                     Adicione comentários aos documentos usando o botão
@@ -470,6 +512,19 @@ export function RevisaoProvaContent({ provaId }: RevisaoProvaContentProps) {
           </Card>
         </div>
       </div>
+
+      <TarefaForm
+        isOpen={isTarefaFormOpen}
+        onClose={() => setIsTarefaFormOpen(false)}
+        initialContexts={{
+          provaId: prova.id,
+          etapaId:
+            (prova.turma as { stageId?: string } | undefined)?.stageId ??
+            prova.stageId,
+          turmaId: prova.turmaId,
+          professoraId: prova.userId,
+        }}
+      />
     </div>
   );
 }

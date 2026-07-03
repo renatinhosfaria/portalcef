@@ -19,6 +19,23 @@ function criarArquivo(nome: string, tipo: string, tamanhoMB = 1): File {
   return new File([bytes], nome, { type: tipo });
 }
 
+const UM_MB_EM_BYTES = 1024 * 1024;
+const LIMITE_ARQUIVO_MB = 500;
+const LIMITE_ARQUIVO_BYTES = LIMITE_ARQUIVO_MB * UM_MB_EM_BYTES;
+
+function criarArquivoComTamanhoDeclarado(
+  nome: string,
+  tipo: string,
+  tamanhoBytes: number,
+): File {
+  const arquivo = criarArquivo(nome, tipo);
+  Object.defineProperty(arquivo, "size", {
+    configurable: true,
+    value: tamanhoBytes,
+  });
+  return arquivo;
+}
+
 describe("DocumentoUpload - Upload Múltiplo", () => {
   beforeEach(() => {
     vi.mocked(registrarEventoObservabilidade).mockReset();
@@ -48,6 +65,99 @@ describe("DocumentoUpload - Upload Múltiplo", () => {
     await waitFor(() => {
       expect(onUpload).toHaveBeenCalledTimes(2);
     });
+  });
+
+  it("limita a quantidade de uploads simultâneos", async () => {
+    const user = userEvent.setup();
+    const uploadsPendentes: Array<() => void> = [];
+    const onUpload = vi.fn().mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          uploadsPendentes.push(resolve);
+        }),
+    );
+    const onAddLink = vi.fn();
+
+    render(
+      <DocumentoUpload onUpload={onUpload} onAddLink={onAddLink} />,
+    );
+
+    const arquivos = Array.from({ length: 5 }, (_, indice) =>
+      criarArquivo(`doc-${indice}.pdf`, "application/pdf"),
+    );
+    const input = document.querySelector(
+      'input[type="file"]',
+    ) as HTMLInputElement;
+
+    await user.upload(input, arquivos);
+
+    await waitFor(() => {
+      expect(onUpload).toHaveBeenCalledTimes(3);
+    });
+    expect(onUpload).toHaveBeenCalledTimes(3);
+
+    uploadsPendentes[0]?.();
+
+    await waitFor(() => {
+      expect(onUpload).toHaveBeenCalledTimes(4);
+    });
+  });
+
+  it("aceita arquivo com tamanho máximo de 500 MB", async () => {
+    const onUpload = vi.fn().mockResolvedValue({ id: "doc-500" });
+    const onAddLink = vi.fn();
+
+    render(
+      <DocumentoUpload onUpload={onUpload} onAddLink={onAddLink} />,
+    );
+
+    const arquivo = criarArquivoComTamanhoDeclarado(
+      "plano.pdf",
+      "application/pdf",
+      LIMITE_ARQUIVO_BYTES,
+    );
+    const input = document.querySelector(
+      'input[type="file"]',
+    ) as HTMLInputElement;
+
+    fireEvent.change(input, {
+      target: {
+        files: [arquivo],
+      },
+    });
+
+    await waitFor(() => {
+      expect(onUpload).toHaveBeenCalledWith(arquivo);
+    });
+  });
+
+  it("rejeita arquivo acima de 500 MB sem chamar onUpload", async () => {
+    const onUpload = vi.fn();
+    const onAddLink = vi.fn();
+
+    render(
+      <DocumentoUpload onUpload={onUpload} onAddLink={onAddLink} />,
+    );
+
+    const arquivo = criarArquivoComTamanhoDeclarado(
+      "plano-pesado.pdf",
+      "application/pdf",
+      LIMITE_ARQUIVO_BYTES + 1,
+    );
+    const input = document.querySelector(
+      'input[type="file"]',
+    ) as HTMLInputElement;
+
+    fireEvent.change(input, {
+      target: {
+        files: [arquivo],
+      },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText(/até 500 MB/i)).toBeInTheDocument();
+    });
+    expect(onUpload).not.toHaveBeenCalled();
   });
 
   it("mostra progresso individual por arquivo", async () => {
@@ -237,6 +347,40 @@ describe("DocumentoUpload - Upload Múltiplo", () => {
         }),
       );
     });
+  });
+
+  it("não tenta reenviar automaticamente quando o erro de upload é definitivo", async () => {
+    const user = userEvent.setup();
+    const onUpload = vi.fn().mockRejectedValue(
+      new Error("O arquivo é muito grande. Envie um arquivo de até 500 MB."),
+    );
+    const onAddLink = vi.fn();
+
+    render(
+      <DocumentoUpload onUpload={onUpload} onAddLink={onAddLink} />,
+    );
+
+    const arquivo = criarArquivo("plano-pesado.pdf", "application/pdf");
+    const input = document.querySelector(
+      'input[type="file"]',
+    ) as HTMLInputElement;
+
+    await user.upload(input, [arquivo]);
+
+    await waitFor(() => {
+      expect(screen.getByText(/até 500 MB/i)).toBeInTheDocument();
+    });
+    expect(onUpload).toHaveBeenCalledTimes(1);
+    expect(registrarEventoObservabilidade).toHaveBeenCalledWith(
+      expect.objectContaining({
+        evento: "upload_resultado",
+        nivel: "error",
+        detalhes: expect.objectContaining({
+          status: "erro",
+          tentativa: 1,
+        }),
+      }),
+    );
   });
 
   it("registra link do YouTube rejeitado por validação sem gravar a URL", async () => {

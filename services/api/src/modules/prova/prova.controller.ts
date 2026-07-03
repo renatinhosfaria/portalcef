@@ -21,6 +21,10 @@ import { AuthGuard } from "../../common/guards/auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
 import { SharePointService } from "../../common/sharepoint/sharepoint.service";
 import { StorageService } from "../../common/storage/storage.service";
+import {
+  LIMITE_UPLOAD_ARQUIVO_BYTES,
+  MENSAGEM_ARQUIVO_GRANDE,
+} from "../../common/upload-limits";
 import { PlanejamentoObservabilidadeService } from "../planejamento-observabilidade/planejamento-observabilidade.service";
 import type { PlanejamentoObservabilidadeEventoEntrada } from "../planejamento-observabilidade/planejamento-observabilidade.types";
 import {
@@ -405,13 +409,11 @@ export class ProvaController {
       });
     }
 
-    // Validar tamanho (100MB max)
-    const MAX_SIZE = 100 * 1024 * 1024; // 100MB
     const buffer = await data.toBuffer();
-    if (buffer.length > MAX_SIZE) {
+    if (buffer.length > LIMITE_UPLOAD_ARQUIVO_BYTES) {
       throw new BadRequestException({
         code: "FILE_TOO_LARGE",
-        message: "Arquivo muito grande. Tamanho máximo: 100MB",
+        message: MENSAGEM_ARQUIVO_GRANDE,
       });
     }
 
@@ -816,11 +818,10 @@ export class ProvaController {
     }
 
     const buffer = await data.toBuffer();
-    const MAX_SIZE = 100 * 1024 * 1024;
-    if (buffer.length > MAX_SIZE) {
+    if (buffer.length > LIMITE_UPLOAD_ARQUIVO_BYTES) {
       throw new BadRequestException({
         code: "FILE_TOO_LARGE",
-        message: "Arquivo muito grande. Tamanho máximo: 100MB",
+        message: MENSAGEM_ARQUIVO_GRANDE,
       });
     }
 
@@ -1074,7 +1075,7 @@ export class ProvaController {
 
   /**
    * POST /prova/:id/enviar-responder
-   * Gestao confirma que imprimiu e envia para professora responder
+   * Compatibilidade: gestao confirma que imprimiu e envia direto para analise
    */
   @Post(":id/enviar-responder")
   @Roles(...GESTAO_ACCESS, ...COORDENADORA_ACCESS)
@@ -1199,6 +1200,26 @@ export class ProvaController {
     @Param("id") documentoId: string,
   ) {
     const documento = await this.provaService.desaprovarDocumento(
+      req.user,
+      documentoId,
+    );
+    return {
+      success: true,
+      data: documento,
+    };
+  }
+
+  /**
+   * POST /prova/documentos/:id/pdf/regerar
+   * Reprocessa PDF de impressão de documento Word aprovado.
+   */
+  @Post("documentos/:id/pdf/regerar")
+  @Roles("analista_pedagogico")
+  async regerarPdfDocumento(
+    @Req() req: { user: UserContext },
+    @Param("id") documentoId: string,
+  ) {
+    const documento = await this.provaService.regerarPdfDocumento(
       req.user,
       documentoId,
     );

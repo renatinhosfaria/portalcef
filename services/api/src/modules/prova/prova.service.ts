@@ -96,6 +96,72 @@ export class ProvaService {
   // Métodos da Professora
   // ============================================
 
+  private isDocumentoWord(mimeType: string | null | undefined): boolean {
+    return (
+      mimeType?.includes("word") === true ||
+      mimeType?.includes("msword") === true
+    );
+  }
+
+  private isDocumentoImprimivel(
+    documento: Pick<ProvaDocumento, "tipo">,
+  ): boolean {
+    return documento.tipo !== "LINK_YOUTUBE";
+  }
+
+  private getDocumentosPendentesImpressao(
+    documentos: Pick<ProvaDocumento, "tipo" | "printedAt">[],
+  ): Pick<ProvaDocumento, "tipo" | "printedAt">[] {
+    return documentos.filter(
+      (documento) =>
+        this.isDocumentoImprimivel(documento) && !documento.printedAt,
+    );
+  }
+
+  private async prepararPdfsParaImpressao(
+    documentos: ProvaDocumento[],
+  ): Promise<void> {
+    const db = getDb();
+
+    for (const documento of documentos) {
+      if (documento.pdfUrl || documento.tipo === "LINK_YOUTUBE") {
+        continue;
+      }
+
+      const pdf = await this.pdfGeneratorService.gerarParaImpressao({
+        id: documento.id,
+        storageKey: documento.storageKey,
+        url: documento.url,
+        fileName: documento.fileName,
+        mimeType: documento.mimeType,
+        sharepointItemId: documento.sharepointItemId,
+        sharepointEditUrl: documento.sharepointEditUrl,
+        editandoDesde: documento.editandoDesde,
+      });
+
+      if (!pdf) {
+        if (this.isDocumentoWord(documento.mimeType)) {
+          throw new BadRequestException(
+            `Não foi possível preparar o PDF de impressão do documento ${
+              documento.fileName || "sem nome"
+            }. Tente novamente em instantes.`,
+          );
+        }
+
+        continue;
+      }
+
+      await db
+        .update(provaDocumento)
+        .set({
+          pdfStorageKey: pdf.pdfStorageKey,
+          pdfUrl: pdf.pdfUrl,
+          updatedAt: new Date(),
+        })
+        .where(eq(provaDocumento.id, documento.id));
+    }
+  }
+
   /**
    * Cria ou busca prova existente para turma/ciclo
    * Se já existe, retorna a prova existente
@@ -256,6 +322,7 @@ export class ProvaService {
     }
 
     const statusAnterior = provaEncontrada.status;
+    await this.prepararPdfsParaImpressao(provaEncontrada.documentos);
 
     const [atualizada] = await db
       .update(prova)
@@ -447,13 +514,17 @@ export class ProvaService {
   // ============================================
 
   /**
-   * Marca prova como enviada para responder (AGUARDANDO_IMPRESSAO -> AGUARDANDO_RESPOSTA)
+   * Marca prova como enviada para analise apos impressao
+   * (AGUARDANDO_IMPRESSAO -> AGUARDANDO_ANALISTA)
    */
   async enviarParaResponder(user: UserContext, provaId: string): Promise<Prova> {
     const db = getDb();
 
     const provaEncontrada = await db.query.prova.findFirst({
       where: eq(prova.id, provaId),
+      with: {
+        documentos: true,
+      },
     });
 
     if (!provaEncontrada) {
@@ -466,7 +537,16 @@ export class ProvaService {
 
     if (provaEncontrada.status !== "AGUARDANDO_IMPRESSAO") {
       throw new BadRequestException(
-        `Nao e possivel enviar para responder prova com status ${provaEncontrada.status}`,
+        `Nao e possivel enviar para analise prova com status ${provaEncontrada.status}`,
+      );
+    }
+
+    const documentos = provaEncontrada.documentos ?? [];
+    const documentosPendentes = this.getDocumentosPendentesImpressao(documentos);
+
+    if (documentosPendentes.length > 0) {
+      throw new BadRequestException(
+        "Imprima todos os documentos da prova antes de enviar para análise.",
       );
     }
 
@@ -475,7 +555,7 @@ export class ProvaService {
     const [atualizada] = await db
       .update(prova)
       .set({
-        status: "AGUARDANDO_RESPOSTA",
+        status: "AGUARDANDO_ANALISTA",
         updatedAt: new Date(),
       })
       .where(eq(prova.id, provaId))
@@ -487,9 +567,12 @@ export class ProvaService {
       userId: user.userId,
       userName,
       userRole: user.role,
-      acao: "ENVIADO_RESPONDER",
+      acao: "SUBMETIDO_ANALISTA",
       statusAnterior,
-      statusNovo: "AGUARDANDO_RESPOSTA",
+      statusNovo: "AGUARDANDO_ANALISTA",
+      detalhes: {
+        origem: "gestao_impressao",
+      },
     });
 
     return atualizada;
@@ -769,6 +852,7 @@ export class ProvaService {
       turmaName: string;
       segmento: string;
       provaCicloId: string;
+      cicloPeriodo: string;
       status: ProvaStatus;
       submittedAt: string | null;
       createdAt: string;
@@ -791,11 +875,16 @@ export class ProvaService {
     }
 
     // Verificar permissão de acesso
-    if (!isGestao(user.role)) {
+    const isGestaoUser = isGestao(user.role);
+    const isCoordenadoraUser = isCoordenadora(user.role);
+
+    if (!isGestaoUser && !isCoordenadoraUser) {
       throw new ForbiddenException(
         "Você não tem permissão para acessar esta listagem",
       );
     }
+
+    const segmentosPermitidos = getSegmentosPermitidos(user.role);
 
     // Construir condições de filtro
     const conditions: ReturnType<typeof eq>[] = [
@@ -835,6 +924,7 @@ export class ProvaService {
             stage: true,
           },
         },
+        provaCiclo: true,
         documentos: true,
       },
       orderBy: [desc(prova.submittedAt), desc(prova.createdAt)],
@@ -855,13 +945,24 @@ export class ProvaService {
       });
     }
 
-    // Filtro por segmento
-    if (dto.segmentoId) {
-      provasFiltradas = provasFiltradas.filter((p: ProvaComRelacoes) => {
-        const turmaComStage = p.turma as { stage?: { code: string } };
-        return turmaComStage?.stage?.code === dto.segmentoId;
-      });
-    }
+    // Filtro por segmento respeitando o escopo das coordenadoras especificas.
+    provasFiltradas = provasFiltradas.filter((p: ProvaComRelacoes) => {
+      const turmaComStage = p.turma as { stage?: { code: string } };
+      const stageCode = turmaComStage?.stage?.code;
+
+      if (
+        segmentosPermitidos &&
+        !segmentosPermitidos.includes(stageCode || "")
+      ) {
+        return false;
+      }
+
+      if (dto.segmentoId) {
+        return stageCode === dto.segmentoId;
+      }
+
+      return true;
+    });
 
     // Calcular paginação
     const total = provasFiltradas.length;
@@ -880,6 +981,9 @@ export class ProvaService {
         code: string;
         stage?: { name: string; code: string };
       };
+      const ciclo = provaItem.provaCiclo as
+        | { numero?: number; descricao?: string | null }
+        | undefined;
 
       return {
         id: provaItem.id,
@@ -888,6 +992,9 @@ export class ProvaService {
         turmaName: turmaComStage?.name || "",
         segmento: turmaComStage?.stage?.name || "",
         provaCicloId: provaItem.provaCicloId,
+        cicloPeriodo:
+          ciclo?.descricao ||
+          (ciclo?.numero ? `${ciclo.numero}a Prova` : ""),
         status: provaItem.status,
         submittedAt: provaItem.submittedAt?.toISOString() || null,
         createdAt: provaItem.createdAt.toISOString(),
@@ -1284,6 +1391,79 @@ export class ProvaService {
         approvedAt: null,
         pdfStorageKey: null,
         pdfUrl: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(provaDocumento.id, documentoId))
+      .returning();
+
+    return documentoAtualizado;
+  }
+
+  /**
+   * Reprocessa PDF de impressão de um documento Word aprovado.
+   */
+  async regerarPdfDocumento(
+    user: UserContext,
+    documentoId: string,
+  ): Promise<ProvaDocumento> {
+    const db = getDb();
+
+    const documento = await db.query.provaDocumento.findFirst({
+      where: eq(provaDocumento.id, documentoId),
+      with: {
+        prova: {
+          columns: {
+            unitId: true,
+          },
+        },
+      },
+    });
+
+    if (!documento) {
+      throw new NotFoundException("Documento não encontrado");
+    }
+
+    if (documento.prova.unitId !== user.unitId) {
+      throw new ForbiddenException(
+        "Você não tem permissão para reprocessar este PDF",
+      );
+    }
+
+    if (!documento.approvedBy || !documento.approvedAt) {
+      throw new BadRequestException("Documento precisa estar aprovado");
+    }
+
+    if (
+      documento.tipo === "LINK_YOUTUBE" ||
+      !this.isDocumentoWord(documento.mimeType)
+    ) {
+      throw new BadRequestException(
+        "Apenas documentos Word podem ter PDF reprocessado",
+      );
+    }
+
+    const pdf = await this.pdfGeneratorService.gerarParaImpressao({
+      id: documento.id,
+      storageKey: documento.storageKey,
+      url: documento.url,
+      fileName: documento.fileName,
+      mimeType: documento.mimeType,
+      sharepointItemId: documento.sharepointItemId,
+      sharepointEditUrl: documento.sharepointEditUrl,
+      editandoDesde: documento.editandoDesde,
+    });
+
+    if (!pdf) {
+      throw new BadRequestException(
+        "Não foi possível preparar o PDF de impressão deste documento. Tente novamente em instantes.",
+      );
+    }
+
+    const [documentoAtualizado] = await db
+      .update(provaDocumento)
+      .set({
+        pdfStorageKey: pdf.pdfStorageKey,
+        pdfUrl: pdf.pdfUrl,
         updatedAt: new Date(),
       })
       .where(eq(provaDocumento.id, documentoId))

@@ -2,6 +2,7 @@ type ObjetoErro = Record<string, unknown>;
 
 const MENSAGEM_DOCUMENTO_INDISPONIVEL =
   "Não conseguimos abrir esse documento agora. Tente abrir novamente em alguns instantes.";
+const LIMITE_UPLOAD_ARQUIVO_MB = 500;
 
 function isObjeto(valor: unknown): valor is ObjetoErro {
   return typeof valor === "object" && valor !== null;
@@ -135,7 +136,7 @@ export function obterMensagemErro(
     status === 413 ||
     contem(mensagemNormalizada, /arquivo muito grande|payload too large|file too large/)
   ) {
-    return "O arquivo é muito grande. Envie um arquivo de até 100 MB.";
+    return `O arquivo é muito grande. Envie um arquivo de até ${LIMITE_UPLOAD_ARQUIVO_MB} MB.`;
   }
 
   if (

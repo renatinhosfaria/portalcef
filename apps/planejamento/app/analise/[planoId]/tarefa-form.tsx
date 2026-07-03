@@ -40,6 +40,7 @@ interface TarefaFormProps {
   onClose: () => void;
   initialContexts?: {
     quinzenaId?: string;
+    provaId?: string;
     turmaId?: string;
     etapaId?: string;
     professoraId?: string;
@@ -98,17 +99,19 @@ export function TarefaForm({
     contextos: {
       modulo: "planejamento",
       quinzenaId: initialContexts?.quinzenaId || "",
+      provaId: initialContexts?.provaId || "",
     },
   });
 
   // Update form data when initialContexts changes
   useEffect(() => {
-    if (initialContexts?.quinzenaId) {
+    if (initialContexts?.quinzenaId || initialContexts?.provaId) {
       setFormData((prev) => ({
         ...prev,
         contextos: {
           ...prev.contextos,
           quinzenaId: initialContexts.quinzenaId || "",
+          provaId: initialContexts.provaId || "",
         },
       }));
     }
@@ -124,6 +127,7 @@ export function TarefaForm({
       contextos: {
         modulo: "planejamento",
         quinzenaId: initialContexts?.quinzenaId || "",
+        provaId: initialContexts?.provaId || "",
       },
     });
     setError(null);
@@ -152,6 +156,7 @@ export function TarefaForm({
           {
             modulo: formData.contextos.modulo.toUpperCase(),
             quinzenaId: formData.contextos.quinzenaId || undefined,
+            provaId: formData.contextos.provaId || undefined,
             etapaId: initialContexts?.etapaId || undefined,
             turmaId: initialContexts?.turmaId || undefined,
             professoraId: initialContexts?.professoraId || undefined,
@@ -310,15 +315,32 @@ export function TarefaForm({
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="quinzenaId">ID da Quinzena</Label>
+          <Label htmlFor="quinzenaId">
+            {initialContexts?.provaId ? "ID da Prova" : "ID da Quinzena"}
+          </Label>
           <Input
             id="quinzenaId"
-            value={formData.contextos.quinzenaId}
-            onChange={(e) => handleContextChange("quinzenaId", e.target.value)}
-            placeholder="UUID da quinzena (opcional)"
+            value={
+              initialContexts?.provaId
+                ? formData.contextos.provaId
+                : formData.contextos.quinzenaId
+            }
+            onChange={(e) =>
+              handleContextChange(
+                initialContexts?.provaId ? "provaId" : "quinzenaId",
+                e.target.value,
+              )
+            }
+            placeholder={
+              initialContexts?.provaId
+                ? "UUID da prova (opcional)"
+                : "UUID da quinzena (opcional)"
+            }
           />
           <p className="text-xs text-slate-500">
-            Vincule esta tarefa a uma quinzena específica (opcional)
+            {initialContexts?.provaId
+              ? "Vincule esta tarefa a uma prova específica (opcional)"
+              : "Vincule esta tarefa a uma quinzena específica (opcional)"}
           </p>
         </div>
 

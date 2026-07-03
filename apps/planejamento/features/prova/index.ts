@@ -15,6 +15,7 @@ export type {
 } from "./types";
 
 export { PROVA_STATUS_LABELS, PROVA_STATUS_COLORS } from "./types";
+export { adaptarDocumentoProvaParaDocumentoList } from "./adaptar-documento";
 
 // Hooks
 export {

@@ -16,6 +16,10 @@ import { Roles } from "../../common/decorators/roles.decorator";
 import { AuthGuard } from "../../common/guards/auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
 import { StorageService } from "../../common/storage/storage.service";
+import {
+  LIMITE_UPLOAD_ARQUIVO_BYTES,
+  MENSAGEM_ARQUIVO_GRANDE,
+} from "../../common/upload-limits";
 import { QuinzenaDocumentsService } from "./quinzena-documents.service";
 
 interface FastifyMultipartRequest extends FastifyRequest {
@@ -128,13 +132,11 @@ export class QuinzenaDocumentsController {
       });
     }
 
-    // Validar tamanho (100MB max)
-    const MAX_SIZE = 100 * 1024 * 1024; // 100MB
     const buffer = await data.toBuffer();
-    if (buffer.length > MAX_SIZE) {
+    if (buffer.length > LIMITE_UPLOAD_ARQUIVO_BYTES) {
       throw new BadRequestException({
         code: "FILE_TOO_LARGE",
-        message: "Arquivo muito grande. Tamanho máximo: 100MB",
+        message: MENSAGEM_ARQUIVO_GRANDE,
       });
     }
 

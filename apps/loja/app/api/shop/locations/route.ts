@@ -15,7 +15,7 @@ export async function GET(_request: NextRequest) {
       headers: {
         "Content-Type": "application/json",
       },
-      cache: "no-store",
+      next: { revalidate: 300 }, // locations mudam raramente
     });
 
     const data = await response.json();

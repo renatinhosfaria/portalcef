@@ -26,7 +26,7 @@
     {
       "idx": 3,
       "version": "7",
-      "when": 1736292000000,
+      "when": 1767116250523,
       "tag": "0004_seed_education_stages",
       "breakpoints": true
     },
@@ -250,8 +250,29 @@
     {
       "idx": 35,
       "version": "7",
-      "when": 1748908800000,
+      "when": 1779466153000,
       "tag": "0035_relatorios_infantil",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1779466153001,
+      "tag": "0036_relatorios_semestrais",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1781800000000,
+      "tag": "0037_tarefas_prova_contexto",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1781800000001,
+      "tag": "0038_provas_resposta_para_analise",
       "breakpoints": true
     }
   ]

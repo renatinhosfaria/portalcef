@@ -132,6 +132,55 @@ describe("TarefasService", () => {
       expect(mockDb.returning).toHaveBeenCalled();
     });
 
+    it("deve criar uma tarefa vinculada a uma prova", async () => {
+      const mockTarefaDb = {
+        id: "tarefa-uuid-prova",
+        schoolId: "school-uuid-1",
+        unitId: "unit-uuid-1",
+        titulo: "Revisar prova corrigida",
+        descricao: "Tarefa vinculada a prova",
+        status: "PENDENTE",
+        prioridade: "MEDIA",
+        prazo: new Date("2026-07-01T12:00:00Z"),
+        criadoPor: "user-uuid-1",
+        responsavel: "user-uuid-2",
+        tipoOrigem: "MANUAL",
+        createdAt: new Date("2026-06-18T10:00:00Z"),
+        updatedAt: new Date("2026-06-18T10:00:00Z"),
+        concluidaEm: null,
+      };
+
+      mockDb.returning.mockResolvedValue([mockTarefaDb]);
+
+      await service.create({
+        schoolId: "school-uuid-1",
+        unitId: "unit-uuid-1",
+        titulo: "Revisar prova corrigida",
+        descricao: "Tarefa vinculada a prova",
+        prioridade: "MEDIA",
+        prazo: new Date("2026-07-01T12:00:00Z"),
+        criadoPor: "user-uuid-1",
+        responsavel: "user-uuid-2",
+        tipoOrigem: "MANUAL",
+        contextos: [
+          {
+            modulo: "PLANEJAMENTO",
+            provaId: "11111111-1111-4111-8111-111111111111",
+            etapaId: "22222222-2222-4222-8222-222222222222",
+            turmaId: "33333333-3333-4333-8333-333333333333",
+            professoraId: "44444444-4444-4444-8444-444444444444",
+          },
+        ],
+      });
+
+      expect(mockDb.values).toHaveBeenLastCalledWith([
+        expect.objectContaining({
+          provaId: "11111111-1111-4111-8111-111111111111",
+          quinzenaId: null,
+        }),
+      ]);
+    });
+
     it("deve criar tarefa sem contextos", async () => {
       const mockTarefaDb = {
         id: "tarefa-uuid-2",
@@ -461,6 +510,61 @@ describe("TarefasService", () => {
       expect(resultado.criadoPor).toBe("user-uuid-coord");
     });
 
+    it("deve aceitar gestor criando tarefa vinculada a prova sem quinzena", async () => {
+      const mockTarefaDb = {
+        id: "tarefa-uuid-prova",
+        schoolId: "school-uuid-1",
+        unitId: "unit-uuid-1",
+        titulo: "Revisar prova",
+        descricao: null,
+        status: "PENDENTE",
+        prioridade: "MEDIA",
+        prazo: new Date("2026-12-31"),
+        criadoPor: "user-uuid-coord",
+        responsavel: "user-uuid-prof",
+        tipoOrigem: "MANUAL",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        concluidaEm: null,
+      };
+
+      mockDb.returning.mockResolvedValue([mockTarefaDb]);
+
+      const dto = {
+        titulo: "Revisar prova",
+        descricao: null,
+        prioridade: "MEDIA" as const,
+        prazo: new Date("2026-12-31"),
+        responsavel: "user-uuid-prof",
+        contextos: [
+          {
+            modulo: "PLANEJAMENTO" as const,
+            provaId: "11111111-1111-4111-8111-111111111111",
+            etapaId: "etapa-uuid-1",
+            turmaId: "turma-uuid-1",
+            professoraId: "user-uuid-prof",
+          },
+        ],
+      };
+
+      const session = {
+        userId: "user-uuid-coord",
+        role: "coordenadora_geral",
+        schoolId: "school-uuid-1",
+        unitId: "unit-uuid-1",
+        stageId: null,
+      };
+
+      const resultado = await service.criarManual(dto, session);
+
+      expect(resultado).toBeDefined();
+      expect(mockDb.values).toHaveBeenLastCalledWith([
+        expect.objectContaining({
+          provaId: "11111111-1111-4111-8111-111111111111",
+        }),
+      ]);
+    });
+
     it("deve validar contextos completos para gestores", async () => {
       const dto = {
         titulo: "Tarefa com contexto incompleto",
@@ -486,7 +590,7 @@ describe("TarefasService", () => {
       };
 
       await expect(service.criarManual(dto, session)).rejects.toThrow(
-        "Gestores devem fornecer módulo, quinzenaId, etapaId, turmaId e professoraId em todos os contextos",
+        "Gestores devem fornecer módulo, quinzenaId ou provaId, etapaId, turmaId e professoraId em todos os contextos",
       );
     });
   });

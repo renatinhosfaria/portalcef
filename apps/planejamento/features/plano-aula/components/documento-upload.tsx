@@ -60,8 +60,9 @@ const ACCEPTED_FILE_TYPES = {
 };
 
 const ACCEPTED_EXTENSIONS = ".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg";
-const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
-const MAX_UPLOADS_SIMULTANEOS = 10;
+const MAX_FILE_SIZE_MB = 500;
+const MAX_FILE_SIZE = MAX_FILE_SIZE_MB * 1024 * 1024;
+const MAX_UPLOADS_SIMULTANEOS = 3;
 const MAX_TENTATIVAS = 5;
 const TEMPO_REMOVER_SUCESSO = 2000;
 
@@ -75,7 +76,7 @@ function validateFile(file: File): string | null {
     return "Esse arquivo não é aceito. Envie PDF, Word, Excel, PNG ou JPG.";
   }
   if (file.size > MAX_FILE_SIZE) {
-    return "O arquivo é muito grande. Envie um arquivo de até 100 MB.";
+    return `O arquivo é muito grande. Envie um arquivo de até ${MAX_FILE_SIZE_MB} MB.`;
   }
   return null;
 }
@@ -98,6 +99,37 @@ function criarMetadadosLinkYouTube() {
 
 function obterMensagemObservabilidade(error: unknown): string {
   return error instanceof Error ? error.message : "Erro desconhecido";
+}
+
+function obterStatusErroUpload(error: unknown): number | null {
+  if (typeof error !== "object" || error === null) return null;
+
+  const valor = error as { status?: unknown; statusCode?: unknown };
+  const status = valor.status ?? valor.statusCode;
+
+  if (typeof status === "number" && Number.isFinite(status)) return status;
+  if (typeof status === "string" && status.trim()) {
+    const numero = Number(status);
+    return Number.isFinite(numero) ? numero : null;
+  }
+
+  return null;
+}
+
+function mensagemIndicaErroDefinitivo(mensagem: string): boolean {
+  return /arquivo é muito grande|arquivo não é aceito|não é aceito|permissão|sessão expirou|revise as informações|não encontramos esse item|muitas tentativas/i.test(
+    mensagem,
+  );
+}
+
+function deveTentarUploadNovamente(error: unknown, mensagem: string): boolean {
+  const status = obterStatusErroUpload(error);
+
+  if (status !== null && status >= 400 && status < 500) {
+    return false;
+  }
+
+  return !mensagemIndicaErroDefinitivo(mensagem);
 }
 
 function enviarObservabilidadeBestEffort() {
@@ -224,8 +256,15 @@ export function DocumentoUpload({
         }, TEMPO_REMOVER_SUCESSO);
       } catch (err) {
         const novaTentativa = tentativaAtual;
+        const mensagemErro = obterMensagemErro(
+          err,
+          "Não foi possível enviar o arquivo. Verifique sua conexão e tente novamente.",
+        );
 
-        if (novaTentativa < MAX_TENTATIVAS) {
+        if (
+          novaTentativa < MAX_TENTATIVAS &&
+          deveTentarUploadNovamente(err, mensagemErro)
+        ) {
           // Recolocar como pendente para nova tentativa
           setUploadQueue((prev) =>
             prev.map((i) =>
@@ -265,10 +304,7 @@ export function DocumentoUpload({
                     ...i,
                     status: "erro" as const,
                     tentativas: novaTentativa,
-                    erro: obterMensagemErro(
-                      err,
-                      "Não foi possível enviar o arquivo. Verifique sua conexão e tente novamente.",
-                    ),
+                    erro: mensagemErro,
                   }
                 : i,
             ),
@@ -487,7 +523,7 @@ export function DocumentoUpload({
               : "Arraste arquivos ou clique para selecionar"}
         </p>
         <p className="text-xs text-muted-foreground mt-1">
-          PDF, DOC, DOCX, XLS, XLSX, PNG, JPG (max. 100MB)
+          PDF, DOC, DOCX, XLS, XLSX, PNG, JPG (max. 500MB)
         </p>
       </div>
 

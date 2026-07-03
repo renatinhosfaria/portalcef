@@ -12,7 +12,7 @@ import { CalendarDays, LayoutDashboard, Loader2, Users } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
-import type { SemanaRelatorio } from "../../../features/relatorio";
+import type { SemestreRelatorio } from "../../../features/relatorio";
 import { obterMensagemErro } from "../../../lib/mensagens-erro";
 
 interface Turma {
@@ -31,7 +31,7 @@ interface Stage {
 interface TurmaRelatorio {
   turma: Turma;
   etapa: Stage;
-  semanas: SemanaRelatorio[];
+  semestres: SemestreRelatorio[];
 }
 
 const ETAPAS_RELATORIO = new Set(["BERCARIO", "INFANTIL"]);
@@ -64,33 +64,33 @@ export function TurmasRelatorioContent() {
           },
         );
 
-        const turmasComSemanas = await Promise.all(
+        const turmasComSemestres = await Promise.all(
           turmas.map(async (turma) => {
             const etapa = stageMap.get(turma.stageId);
-            const semanas = await api
-              .get<SemanaRelatorio[]>(`/semana-relatorio/turma/${turma.id}`)
+            const semestres = await api
+              .get<SemestreRelatorio[]>(`/semestre-relatorio/turma/${turma.id}`)
               .catch(() => []);
 
             return etapa
               ? {
                   turma,
                   etapa,
-                  semanas: Array.isArray(semanas) ? semanas : [],
+                  semestres: Array.isArray(semestres) ? semestres : [],
                 }
               : null;
           }),
         );
 
-        const filtradas = turmasComSemanas.filter(
+        const filtradas = turmasComSemestres.filter(
           (item): item is TurmaRelatorio => item !== null,
         );
 
         if (!ativo) return;
 
-        if (filtradas.length === 1 && filtradas[0]!.semanas.length === 1) {
+        if (filtradas.length === 1 && filtradas[0]!.semestres.length === 1) {
           const unico = filtradas[0]!;
           router.replace(
-            `/relatorios/${unico.semanas[0]!.id}?turmaId=${unico.turma.id}`,
+            `/relatorios/${unico.semestres[0]!.id}?turmaId=${unico.turma.id}`,
           );
           return;
         }
@@ -116,8 +116,8 @@ export function TurmasRelatorioContent() {
     };
   }, [router]);
 
-  const totalSemanas = useMemo(
-    () => itens.reduce((total, item) => total + item.semanas.length, 0),
+  const totalSemestres = useMemo(
+    () => itens.reduce((total, item) => total + item.semestres.length, 0),
     [itens],
   );
 
@@ -154,31 +154,31 @@ export function TurmasRelatorioContent() {
           </div>
           <div>
             <h1 className="text-2xl font-bold tracking-tight">
-              Relatórios Semanais
+              Relatórios Semestrais
             </h1>
             <p className="text-muted-foreground">
-              Selecione uma turma e uma semana para enviar o relatório.
+              Selecione uma turma e um semestre para enviar o relatório.
             </p>
           </div>
         </div>
       </div>
 
-      {itens.length === 0 || totalSemanas === 0 ? (
+      {itens.length === 0 || totalSemestres === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12 text-center">
             <CalendarDays className="mb-4 h-12 w-12 text-muted-foreground/60" />
             <h2 className="mb-2 text-lg font-semibold">
-              Nenhuma semana disponível
+              Nenhum semestre disponível
             </h2>
             <p className="max-w-md text-muted-foreground">
-              Não há semanas de relatório configuradas para suas turmas de
+              Não há semestres de relatório configurados para suas turmas de
               Berçário ou Infantil.
             </p>
           </CardContent>
         </Card>
       ) : (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          {itens.map(({ turma, etapa, semanas }) => (
+          {itens.map(({ turma, etapa, semestres }) => (
             <Card key={turma.id}>
               <CardHeader>
                 <CardTitle className="flex items-start justify-between gap-3">
@@ -198,22 +198,22 @@ export function TurmasRelatorioContent() {
               </CardHeader>
               <CardContent>
                 <div className="grid gap-2 sm:grid-cols-2">
-                  {semanas.map((semana) => (
+                  {semestres.map((semestre) => (
                     <button
-                      key={semana.id}
+                      key={semestre.id}
                       type="button"
                       className="rounded-md border p-3 text-left transition-colors hover:border-primary hover:bg-primary/5"
                       onClick={() =>
                         router.push(
-                          `/relatorios/${semana.id}?turmaId=${turma.id}`,
+                          `/relatorios/${semestre.id}?turmaId=${turma.id}`,
                         )
                       }
                     >
                       <span className="block text-sm font-medium">
-                        Semana {semana.numero}
+                        Semestre {semestre.semestre}
                       </span>
                       <span className="mt-1 block text-xs text-muted-foreground">
-                        {semana.descricao || "Relatório semanal"}
+                        {semestre.descricao || "Relatório semestral"}
                       </span>
                     </button>
                   ))}

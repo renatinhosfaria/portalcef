@@ -10,11 +10,11 @@ import {
   ForbiddenException,
   BadRequestException,
 } from "@nestjs/common";
-import { SemanaRelatorioService } from "./semana-relatorio.service";
+import { SemestreRelatorioService } from "./semestre-relatorio.service";
 import {
-  CriarSemanaRelatorioDto,
-  EditarSemanaRelatorioDto,
-} from "./dto/semana-relatorio.dto";
+  CriarSemestreRelatorioDto,
+  EditarSemestreRelatorioDto,
+} from "./dto/semestre-relatorio.dto";
 import { AuthGuard } from "../../common/guards/auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
 import { TenantGuard } from "../../common/guards/tenant.guard";
@@ -51,14 +51,14 @@ const GERENCIAR_ROLES = [
   "coordenadora_infantil",
 ] as const;
 
-@Controller("semana-relatorio")
+@Controller(["semestre-relatorio", "semana-relatorio"])
 @UseGuards(AuthGuard, RolesGuard, TenantGuard)
-export class SemanaRelatorioController {
-  constructor(private readonly service: SemanaRelatorioService) {}
+export class SemestreRelatorioController {
+  constructor(private readonly service: SemestreRelatorioService) {}
 
   @Get()
   @Roles(...VISUALIZAR_ROLES)
-  async listarSemanas(@CurrentUser() session: UserContext) {
+  async listarSemestres(@CurrentUser() session: UserContext) {
     if (!session.unitId) throw new BadRequestException("unitId ausente");
     const data = await this.service.listarPorUnidade(session.unitId);
     return { success: true, data };
@@ -77,7 +77,7 @@ export class SemanaRelatorioController {
 
   @Get(":id")
   @Roles(...VISUALIZAR_ROLES)
-  async buscarSemana(
+  async buscarSemestre(
     @CurrentUser() session: UserContext,
     @Param("id") id: string,
   ) {
@@ -88,13 +88,13 @@ export class SemanaRelatorioController {
 
   @Post()
   @Roles(...GERENCIAR_ROLES)
-  async criarSemana(
+  async criarSemestre(
     @CurrentUser() session: UserContext,
-    @Body() dto: CriarSemanaRelatorioDto,
+    @Body() dto: CriarSemestreRelatorioDto,
   ) {
     if (!session.unitId) throw new BadRequestException("unitId ausente");
     if (!this.podeGerenciarEtapa(session.role, dto.etapa)) {
-      throw new ForbiddenException("Sem permissão para criar semanas desta etapa");
+      throw new ForbiddenException("Sem permissão para criar semestres desta etapa");
     }
     const data = await this.service.criar(dto, session.unitId, session.userId);
     return { success: true, data };
@@ -102,15 +102,15 @@ export class SemanaRelatorioController {
 
   @Patch(":id")
   @Roles(...GERENCIAR_ROLES)
-  async editarSemana(
+  async editarSemestre(
     @CurrentUser() session: UserContext,
     @Param("id") id: string,
-    @Body() dto: EditarSemanaRelatorioDto,
+    @Body() dto: EditarSemestreRelatorioDto,
   ) {
     if (!session.unitId) throw new BadRequestException("unitId ausente");
-    const semana = await this.service.buscarPorId(id, session.unitId);
-    if (!this.podeGerenciarEtapa(session.role, semana.etapa)) {
-      throw new ForbiddenException("Sem permissão para editar semanas desta etapa");
+    const semestre = await this.service.buscarPorId(id, session.unitId);
+    if (!this.podeGerenciarEtapa(session.role, semestre.etapa)) {
+      throw new ForbiddenException("Sem permissão para editar semestres desta etapa");
     }
     const data = await this.service.editar(id, dto, session.unitId);
     return { success: true, data };
@@ -118,14 +118,14 @@ export class SemanaRelatorioController {
 
   @Delete(":id")
   @Roles(...GERENCIAR_ROLES)
-  async excluirSemana(
+  async excluirSemestre(
     @CurrentUser() session: UserContext,
     @Param("id") id: string,
   ) {
     if (!session.unitId) throw new BadRequestException("unitId ausente");
-    const semana = await this.service.buscarPorId(id, session.unitId);
-    if (!this.podeGerenciarEtapa(session.role, semana.etapa)) {
-      throw new ForbiddenException("Sem permissão para excluir semanas desta etapa");
+    const semestre = await this.service.buscarPorId(id, session.unitId);
+    if (!this.podeGerenciarEtapa(session.role, semestre.etapa)) {
+      throw new ForbiddenException("Sem permissão para excluir semestres desta etapa");
     }
     await this.service.excluir(id, session.unitId);
     return { success: true };

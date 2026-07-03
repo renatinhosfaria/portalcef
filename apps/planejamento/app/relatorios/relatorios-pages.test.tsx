@@ -1,6 +1,8 @@
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import SemestresGestaoPage from "../gestao/semestres/page";
+
 import AnaliseRelatorioPage from "./analise/page";
 import GestaoRelatorioPage from "./gestao/page";
 import TurmasRelatorioPage from "./turmas/page";
@@ -36,7 +38,7 @@ describe("rotas do módulo Relatórios", () => {
   it("renderiza a seleção de turmas da professora", async () => {
     render(<TurmasRelatorioPage />);
 
-    expect(await screen.findByText("Relatórios Semanais")).toBeTruthy();
+    expect(await screen.findByText("Relatórios Semestrais")).toBeTruthy();
   });
 
   it("renderiza a fila de análise de relatórios", async () => {
@@ -49,5 +51,11 @@ describe("rotas do módulo Relatórios", () => {
     render(<GestaoRelatorioPage />);
 
     expect(await screen.findByText("Dashboard de Relatórios")).toBeTruthy();
+  });
+
+  it("renderiza a gestão de semestres pela rota canônica", async () => {
+    render(<SemestresGestaoPage />);
+
+    expect(await screen.findByText("Semestres de Relatórios")).toBeTruthy();
   });
 });

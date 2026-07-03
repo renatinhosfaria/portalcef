@@ -19,7 +19,7 @@ import {
   documentoTipoEnum,
   pdfStatusEnum,
 } from "./plano-aula.js";
-import { semanaRelatorio } from "./semana-relatorio.js";
+import { semestreRelatorio } from "./semestre-relatorio.js";
 
 // ============================================
 // Relatório Status Enum
@@ -54,13 +54,13 @@ export const relatorio = pgTable(
     unitId: uuid("unit_id")
       .notNull()
       .references(() => units.id, { onDelete: "cascade" }),
-    semanaRelatorioId: uuid("semana_relatorio_id").references(
-      () => semanaRelatorio.id,
+    semestreRelatorioId: uuid("semestre_relatorio_id").references(
+      () => semestreRelatorio.id,
       { onDelete: "restrict" },
     ),
 
-    // Identificador da semana
-    semanaId: uuid("semana_id").notNull(),
+    // Identificador do semestre
+    semestreId: uuid("semestre_id").notNull(),
 
     // Status e fluxo
     status: text("status", { enum: relatorioStatusEnum })
@@ -82,17 +82,17 @@ export const relatorio = pgTable(
   (table) => ({
     // Índices para queries de dashboard
     statusIdx: index("relatorio_status_idx").on(table.status),
-    semanaIdIdx: index("relatorio_semana_id_idx").on(table.semanaId),
+    semestreIdIdx: index("relatorio_semestre_id_idx").on(table.semestreId),
     unitIdIdx: index("relatorio_unit_id_idx").on(table.unitId),
     userIdx: index("relatorio_user_idx").on(table.userId),
-    semanaRelatorioIdx: index("relatorio_semana_relatorio_id_idx").on(
-      table.semanaRelatorioId,
+    semestreRelatorioIdx: index("relatorio_semestre_relatorio_id_idx").on(
+      table.semestreRelatorioId,
     ),
-    // Constraint: uma professora não pode ter 2 relatórios para mesma turma/semana
-    uniqueRelatorioIdx: uniqueIndex("relatorio_user_turma_semana_unique").on(
+    // Constraint: uma professora não pode ter 2 relatórios para mesma turma/semestre
+    uniqueRelatorioIdx: uniqueIndex("relatorio_user_turma_semestre_unique").on(
       table.userId,
       table.turmaId,
-      table.semanaId,
+      table.semestreId,
     ),
   }),
 );
@@ -190,9 +190,9 @@ export const relatorioRelations = relations(relatorio, ({ one, many }) => ({
     fields: [relatorio.unitId],
     references: [units.id],
   }),
-  semana: one(semanaRelatorio, {
-    fields: [relatorio.semanaRelatorioId],
-    references: [semanaRelatorio.id],
+  semestre: one(semestreRelatorio, {
+    fields: [relatorio.semestreRelatorioId],
+    references: [semestreRelatorio.id],
   }),
   documentos: many(relatorioDocumento),
 }));

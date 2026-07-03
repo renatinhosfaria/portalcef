@@ -57,9 +57,9 @@ jest.mock("@essencia/db", () => ({
     userId: "userId",
     turmaId: "turmaId",
     unitId: "unitId",
-    semanaId: "semanaId",
+    semestreId: "semestreId",
     status: "status",
-    semanaRelatorioId: "semanaRelatorioId",
+    semestreRelatorioId: "semestreRelatorioId",
   },
   relatorioDocumento: {
     id: "id",
@@ -141,7 +141,7 @@ describe("RelatorioService", () => {
 
       await expect(
         service.criar(
-          { turmaId: "t-1", semanaId: "s-1" },
+          { turmaId: "t-1", semestreId: "s-1" },
           session,
         ),
       ).rejects.toThrow(BadRequestException);
@@ -150,7 +150,7 @@ describe("RelatorioService", () => {
     it("rejeita quando unitId não está na sessão", async () => {
       await expect(
         service.criar(
-          { turmaId: "t-1", semanaId: "s-1" },
+          { turmaId: "t-1", semestreId: "s-1" },
           { ...session, unitId: null },
         ),
       ).rejects.toThrow(BadRequestException);
@@ -161,7 +161,7 @@ describe("RelatorioService", () => {
 
       await expect(
         service.criar(
-          { turmaId: "t-1", semanaId: "s-1" },
+          { turmaId: "t-1", semestreId: "s-1" },
           session,
         ),
       ).rejects.toThrow();
@@ -176,14 +176,14 @@ describe("RelatorioService", () => {
           userId: "u-1",
           turmaId: "t-1",
           unitId: "unit-1",
-          semanaId: "s-1",
+          semestreId: "s-1",
           status: "RASCUNHO",
         },
       ]);
       mockDb.query.users.findFirst.mockResolvedValueOnce({ name: "Professora" });
 
       const result = await service.criar(
-        { turmaId: "t-1", semanaId: "s-1" },
+        { turmaId: "t-1", semestreId: "s-1" },
         session,
       );
 
@@ -200,13 +200,13 @@ describe("RelatorioService", () => {
         userId: "u-1",
         turmaId: "t-1",
         unitId: "unit-1",
-        semanaId: "s-1",
+        semestreId: "s-1",
         status: "RASCUNHO",
       };
       mockDb.query.relatorio.findFirst.mockResolvedValueOnce(existente);
 
       const result = await service.criar(
-        { turmaId: "t-1", semanaId: "s-1" },
+        { turmaId: "t-1", semestreId: "s-1" },
         session,
       );
 
@@ -532,6 +532,48 @@ describe("RelatorioService", () => {
 
       const result = await service.submeter("r-1", session);
       expect(result.status).toBe("AGUARDANDO_ANALISTA");
+    });
+  });
+
+  describe("devolverAnalista", () => {
+    const session = {
+      userId: "analista-1",
+      role: "analista_pedagogico",
+      unitId: "unit-1",
+      schoolId: null,
+      stageId: null,
+    };
+
+    it("devolve sem exigir motivo e registra histórico sem detalhes", async () => {
+      mockDb.query.relatorio.findFirst.mockResolvedValueOnce({
+        id: "r-1",
+        unitId: "unit-1",
+        status: "AGUARDANDO_ANALISTA",
+      });
+      mockDb.returning.mockResolvedValueOnce([
+        {
+          id: "r-1",
+          status: "DEVOLVIDO_ANALISTA",
+        },
+      ]);
+      mockDb.query.users.findFirst.mockResolvedValueOnce({ name: "Analista" });
+      const devolverAnalista = service.devolverAnalista as unknown as (
+        relatorioId: string,
+        user: typeof session,
+      ) => Promise<{ status: string }>;
+
+      const result = await devolverAnalista.call(service, "r-1", session);
+
+      expect(result.status).toBe("DEVOLVIDO_ANALISTA");
+      expect(mockHistorico.registrar).toHaveBeenCalledWith({
+        relatorioId: "r-1",
+        userId: "analista-1",
+        userName: "Analista",
+        userRole: "analista_pedagogico",
+        acao: "DEVOLVIDO_ANALISTA",
+        statusAnterior: "AGUARDANDO_ANALISTA",
+        statusNovo: "DEVOLVIDO_ANALISTA",
+      });
     });
   });
 });

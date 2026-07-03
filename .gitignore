@@ -11,6 +11,7 @@ dist
 # Backups (não commitar dados)
 backup/
 backup-*.sql
+backup_*.sql
 backup-*.tar.gz
 backups/
 *.sql.gz
@@ -23,6 +24,7 @@ backups/
 # Logs e crashes
 .logs/
 logs/planejamento/
+/relatorios/
 *.log
 api-crash.log
 loja_logs.txt

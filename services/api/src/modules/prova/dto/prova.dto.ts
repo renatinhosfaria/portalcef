@@ -4,7 +4,7 @@ import { z } from "zod";
  * DTOs para o módulo prova (workflow de provas com impressão)
  *
  * Status Flow:
- * RASCUNHO -> AGUARDANDO_IMPRESSAO -> AGUARDANDO_RESPOSTA -> AGUARDANDO_ANALISTA -> APROVADO
+ * RASCUNHO -> AGUARDANDO_IMPRESSAO -> AGUARDANDO_ANALISTA -> APROVADO
  *                                                                    |
  *                                                                    v
  *                                                           DEVOLVIDO_ANALISTA

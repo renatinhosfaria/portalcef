@@ -192,7 +192,7 @@ export default function HomePage() {
               <div className="text-center">
                 <h2 className="text-xl font-semibold">Relatórios</h2>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Relatórios semanais da educação infantil
+                  Relatórios semestrais da educação infantil
                 </p>
               </div>
             </CardContent>

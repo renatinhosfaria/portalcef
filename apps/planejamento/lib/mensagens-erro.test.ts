@@ -49,6 +49,15 @@ describe("mensagens de erro amigáveis", () => {
     );
   });
 
+  it("informa limite máximo de arquivo de 500 MB", () => {
+    expect(
+      obterMensagemErro(
+        { status: 413, error: { code: "FILE_TOO_LARGE" } },
+        "Não foi possível enviar o arquivo.",
+      ),
+    ).toBe("O arquivo é muito grande. Envie um arquivo de até 500 MB.");
+  });
+
   it("preserva mensagem de domínio quando ela já é clara", () => {
     expect(
       obterMensagemErro(

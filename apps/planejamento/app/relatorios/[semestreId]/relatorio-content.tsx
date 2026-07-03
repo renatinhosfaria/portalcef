@@ -46,7 +46,7 @@ import {
 import { obterMensagemErro } from "../../../lib/mensagens-erro";
 
 interface RelatorioContentProps {
-  semanaId: string;
+  semestreId: string;
   turmaId: string | null;
 }
 
@@ -114,7 +114,7 @@ function HistoricoRelatorio({
   );
 }
 
-export function RelatorioContent({ semanaId, turmaId }: RelatorioContentProps) {
+export function RelatorioContent({ semestreId, turmaId }: RelatorioContentProps) {
   const [relatorio, setRelatorio] = useState<Relatorio | null>(null);
   const [historico, setHistorico] = useState<HistoricoEntry[]>([]);
   const [initialLoading, setInitialLoading] = useState(true);
@@ -159,7 +159,7 @@ export function RelatorioContent({ semanaId, turmaId }: RelatorioContentProps) {
 
     try {
       setInitialLoading(true);
-      const criado = await criarRelatorio(turmaId, semanaId, semanaId);
+      const criado = await criarRelatorio(turmaId, semestreId, semestreId);
       const detalhe = await getRelatorio(criado.id);
       setRelatorio(detalhe);
       await carregarHistorico(detalhe.id);
@@ -174,7 +174,7 @@ export function RelatorioContent({ semanaId, turmaId }: RelatorioContentProps) {
     } finally {
       setInitialLoading(false);
     }
-  }, [carregarHistorico, criarRelatorio, getRelatorio, semanaId, turmaId]);
+  }, [carregarHistorico, criarRelatorio, getRelatorio, semestreId, turmaId]);
 
   useEffect(() => {
     void carregarOuCriarRelatorio();
@@ -285,7 +285,7 @@ export function RelatorioContent({ semanaId, turmaId }: RelatorioContentProps) {
     <div className="container mx-auto max-w-5xl space-y-6 px-4 py-8">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">
-          Relatório Semanal
+          Relatório Semestral
         </h1>
         <p className="text-muted-foreground">
           {relatorio.turma?.name || relatorio.turmaName || "Turma"} •{" "}

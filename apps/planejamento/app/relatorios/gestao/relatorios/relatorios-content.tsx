@@ -69,7 +69,7 @@ function StatusBadge({ status }: { status: RelatorioStatus }) {
 
 function getVerUrl(relatorio: RelatorioListItem): string {
   if (relatorio.status === "RASCUNHO") {
-    return `/relatorios/${relatorio.semanaId}?turmaId=${relatorio.id}`;
+    return `/relatorios/${relatorio.semestreId}?turmaId=${relatorio.id}`;
   }
   return `/relatorios/analise/${relatorio.id}`;
 }
@@ -155,7 +155,7 @@ export function RelatoriosGestaoContent() {
               Relatórios da Gestão
             </h1>
             <p className="text-muted-foreground">
-              Listagem gerencial de relatórios semanais
+              Listagem gerencial de relatórios semestrais
             </p>
           </div>
         </div>

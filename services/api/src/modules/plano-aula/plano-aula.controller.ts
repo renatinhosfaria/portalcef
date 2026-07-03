@@ -21,6 +21,10 @@ import { AuthGuard } from "../../common/guards/auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
 import { SharePointService } from "../../common/sharepoint/sharepoint.service";
 import { StorageService } from "../../common/storage/storage.service";
+import {
+  LIMITE_UPLOAD_ARQUIVO_BYTES,
+  MENSAGEM_ARQUIVO_GRANDE,
+} from "../../common/upload-limits";
 import { PlanejamentoObservabilidadeService } from "../planejamento-observabilidade/planejamento-observabilidade.service";
 import type { PlanejamentoObservabilidadeEventoEntrada } from "../planejamento-observabilidade/planejamento-observabilidade.types";
 import {
@@ -375,13 +379,11 @@ export class PlanoAulaController {
       });
     }
 
-    // Validar tamanho (100MB max)
-    const MAX_SIZE = 100 * 1024 * 1024; // 100MB
     const buffer = await data.toBuffer();
-    if (buffer.length > MAX_SIZE) {
+    if (buffer.length > LIMITE_UPLOAD_ARQUIVO_BYTES) {
       throw new BadRequestException({
         code: "FILE_TOO_LARGE",
-        message: "Arquivo muito grande. Tamanho máximo: 100MB",
+        message: MENSAGEM_ARQUIVO_GRANDE,
       });
     }
 
@@ -795,11 +797,10 @@ export class PlanoAulaController {
     }
 
     const buffer = await data.toBuffer();
-    const MAX_SIZE = 100 * 1024 * 1024;
-    if (buffer.length > MAX_SIZE) {
+    if (buffer.length > LIMITE_UPLOAD_ARQUIVO_BYTES) {
       throw new BadRequestException({
         code: "FILE_TOO_LARGE",
-        message: "Arquivo muito grande. Tamanho máximo: 100MB",
+        message: MENSAGEM_ARQUIVO_GRANDE,
       });
     }
 

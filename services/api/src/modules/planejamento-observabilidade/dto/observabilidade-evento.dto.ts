@@ -64,6 +64,7 @@ const paginaSchema = z.object({
 const arquivoSchema = z.object({
   planoId: idSchema.nullable().optional(),
   provaId: idSchema.nullable().optional(),
+  relatorioId: idSchema.nullable().optional(),
   documentoId: idSchema.nullable().optional(),
   nome: z.string().trim().max(TAMANHO_NOME).nullable().optional(),
   tipo: textoCurtoSchema.nullable().optional(),

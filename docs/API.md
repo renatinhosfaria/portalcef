@@ -436,7 +436,7 @@ Upload de arquivo para o plano (multipart/form-data).
 
 Acesso: Professora, Analista.
 
-Tipos aceitos: PDF, DOC, DOCX, PNG, JPG. Tamanho maximo: 100MB.
+Tipos aceitos: PDF, DOC, DOCX, PNG, JPG. Tamanho maximo: 500MB.
 
 ---
 

@@ -35,6 +35,9 @@ describe("HomePage", () => {
     render(<HomePage />);
 
     expect(screen.getByText("Relatórios")).toBeTruthy();
+    expect(
+      screen.getByText("Relatórios semestrais da educação infantil"),
+    ).toBeTruthy();
   });
 
   it("mostra o card Relatórios para professora com turma infantil", async () => {

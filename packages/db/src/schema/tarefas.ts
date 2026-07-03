@@ -10,6 +10,7 @@ import {
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 
 import { educationStages } from "./education-stages.js";
+import { prova } from "./prova.js";
 import { schools } from "./schools.js";
 import { turmas } from "./turmas.js";
 import { units } from "./units.js";
@@ -133,6 +134,9 @@ export const tarefaContextos = pgTable(
 
     // Contexto flexível (opcional)
     quinzenaId: varchar("quinzena_id", { length: 10 }),
+    provaId: uuid("prova_id").references(() => prova.id, {
+      onDelete: "cascade",
+    }),
     etapaId: uuid("etapa_id").references(() => educationStages.id),
     turmaId: uuid("turma_id").references(() => turmas.id),
     professoraId: uuid("professora_id").references(() => users.id),
@@ -143,6 +147,7 @@ export const tarefaContextos = pgTable(
     quinzenaIdIdx: index("idx_tarefa_contextos_quinzena_id").on(
       table.quinzenaId,
     ),
+    provaIdIdx: index("idx_tarefa_contextos_prova_id").on(table.provaId),
     turmaIdIdx: index("idx_tarefa_contextos_turma_id").on(table.turmaId),
   }),
 );
@@ -190,6 +195,10 @@ export const tarefaContextosRelations = relations(
     turma: one(turmas, {
       fields: [tarefaContextos.turmaId],
       references: [turmas.id],
+    }),
+    prova: one(prova, {
+      fields: [tarefaContextos.provaId],
+      references: [prova.id],
     }),
     professora: one(users, {
       fields: [tarefaContextos.professoraId],

@@ -233,16 +233,16 @@ export function GestaoRelatorioContent() {
                 Dashboard de Relatórios
               </h1>
               <p className="text-muted-foreground">
-                Acompanhamento dos relatórios semanais da educação infantil
+                Acompanhamento dos relatórios semestrais da educação infantil
               </p>
             </div>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Link href="/relatorios/gestao/semanas">
+          <Link href="/gestao/semestres">
             <Button variant="outline" className="gap-2">
               <CalendarClock className="h-4 w-4" />
-              Configurar Semanas
+              Configurar Semestres
             </Button>
           </Link>
           <Link href="/relatorios/gestao/relatorios">

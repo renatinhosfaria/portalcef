@@ -48,8 +48,8 @@ export interface Relatorio {
   userId: string;
   turmaId: string;
   unitId: string;
-  semanaId: string;
-  semanaRelatorioId?: string | null;
+  semestreId: string;
+  semestreRelatorioId?: string | null;
   status: RelatorioStatus;
   submittedAt?: string | null;
   approvedAt?: string | null;
@@ -67,8 +67,8 @@ export interface Relatorio {
 
 export interface RelatorioSummary {
   id: string;
-  semanaId: string;
-  semanaRelatorioId?: string | null;
+  semestreId: string;
+  semestreRelatorioId?: string | null;
   status: RelatorioStatus;
   submittedAt?: string | null;
   professorName: string;
@@ -78,11 +78,12 @@ export interface RelatorioSummary {
   etapaName?: string;
 }
 
-export interface SemanaRelatorio {
+export interface SemestreRelatorio {
   id: string;
   unidadeId: string;
   etapa: "BERCARIO" | "INFANTIL";
-  numero: number;
+  anoLetivo: number;
+  semestre: number;
   descricao?: string | null;
   dataInicio: string;
   dataFim: string;
@@ -113,8 +114,8 @@ export interface RelatorioListItem {
   turmaName: string;
   etapaCode: string;
   etapaName: string;
-  semanaId: string;
-  semanaRelatorioId?: string | null;
+  semestreId: string;
+  semestreRelatorioId?: string | null;
   status: RelatorioStatus;
   submittedAt: string | null;
   approvedAt: string | null;
@@ -126,7 +127,7 @@ export interface RelatorioListItem {
 export interface FiltrosGestaoRelatorios {
   status?: string;
   etapa?: "BERCARIO" | "INFANTIL";
-  semanaId?: string;
+  semestreId?: string;
 }
 
 export const STATUS_LABELS: Record<RelatorioStatus, string> = {

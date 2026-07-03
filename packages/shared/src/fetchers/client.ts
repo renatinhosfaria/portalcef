@@ -75,6 +75,21 @@ export async function clientFetch<T>(
     throw new FetchError(403, "FORBIDDEN", "Acesso negado");
   }
 
+  const responseContentType = response.headers.get("content-type") ?? "";
+  const isJsonResponse = responseContentType.includes("application/json");
+
+  if (!isJsonResponse) {
+    if (!response.ok) {
+      throw new FetchError(
+        response.status,
+        `HTTP_${response.status}`,
+        response.statusText || "Erro HTTP",
+      );
+    }
+
+    return (await response.text()) as T;
+  }
+
   const data = await response.json();
 
   if (

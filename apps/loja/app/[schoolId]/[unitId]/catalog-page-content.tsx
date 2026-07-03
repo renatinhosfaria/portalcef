@@ -157,6 +157,10 @@ export default function CatalogPageContent({
         fetch(buildCatalogUrl('PRE_VENDA')),
       ]);
 
+      if (readyResponse.status === 429 || preSaleResponse.status === 429) {
+        throw new Error('Servidor ocupado. Aguarde alguns segundos e tente novamente.');
+      }
+
       if (!readyResponse.ok || !preSaleResponse.ok) {
         throw new Error('Falha ao carregar produtos');
       }

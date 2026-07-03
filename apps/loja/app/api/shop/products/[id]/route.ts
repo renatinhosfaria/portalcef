@@ -20,7 +20,7 @@ export async function GET(
             headers: {
                 "Content-Type": "application/json",
             },
-            cache: "no-store",
+            next: { revalidate: 30 },
         });
 
         const data = await response.json();

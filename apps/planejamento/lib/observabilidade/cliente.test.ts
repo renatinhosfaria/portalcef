@@ -318,6 +318,7 @@ describe("cliente de observabilidade", () => {
       arquivo: {
         planoId: texto(130),
         provaId: texto(130),
+        relatorioId: texto(130),
         documentoId: texto(130),
         nome: texto(300),
         tipo: texto(130),
@@ -375,6 +376,7 @@ describe("cliente de observabilidade", () => {
         arquivo: {
           planoId: texto(120),
           provaId: texto(120),
+          relatorioId: texto(120),
           documentoId: texto(120),
           nome: texto(255),
           tipo: texto(120),

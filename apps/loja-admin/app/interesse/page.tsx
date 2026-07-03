@@ -46,6 +46,28 @@ interface Order {
 
 type PaymentMethod = 'DINHEIRO' | 'PIX' | 'CARTAO_CREDITO' | 'CARTAO_DEBITO' | 'BRINDE';
 
+const WhatsAppIcon = () => (
+    <svg className="w-4 h-4 text-emerald-500 fill-current" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.06 5.348 5.397.01 12.008.01c3.202.001 6.212 1.246 8.477 3.514 2.266 2.268 3.507 5.28 3.505 8.484-.004 6.657-5.34 11.997-11.953 11.997-2.005-.001-3.973-.502-5.724-1.457L0 24zm6.59-4.846c1.6.95 3.188 1.449 4.625 1.45 5.323.002 9.613-4.294 9.615-9.617.002-2.58-1.001-5.005-2.825-6.83C16.237 2.33 13.811 1.326 11.23 1.325 5.908 1.325 1.618 5.62 1.615 10.943c-.001 1.502.4 2.977 1.162 4.259l-.993 3.628 3.71-.973l.563.337z"/>
+    </svg>
+);
+
+const getWhatsAppUrl = (phone: string, customerName: string, productName: string) => {
+    const cleanPhone = phone.replace(/\D/g, '');
+    const message = `Olá, ${customerName}! Tudo bem? Vimos que você reservou o produto "${productName}" no Portal do Colégio Essência Feliz. Gostaria de confirmar o andamento do seu pedido?`;
+    return `https://wa.me/55${cleanPhone}?text=${encodeURIComponent(message)}`;
+};
+
+interface GroupedProduct {
+    productId: string;
+    productName: string;
+    totalReserved: number;
+    totalPaid: number;
+    totalPickedUp: number;
+    totalQuantity: number;
+    variants: PreSaleSummaryItem[];
+}
+
 export default function PreVendaPage() {
     const [summaryItems, setSummaryItems] = useState<PreSaleSummaryItem[]>([]);
     const [summaryLoading, setSummaryLoading] = useState(true);
@@ -58,6 +80,7 @@ export default function PreVendaPage() {
     const [totalPages, setTotalPages] = useState(1);
     const [totalOrders, setTotalOrders] = useState(0);
     const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
+    const [expandedProducts, setExpandedProducts] = useState<Record<string, boolean>>({});
 
     const [confirmPaymentModal, setConfirmPaymentModal] = useState<{
         open: boolean;
@@ -277,6 +300,29 @@ export default function PreVendaPage() {
     const modalTotalPaid = modalPayments.reduce((acc, p) => acc + p.amount, 0);
     const modalRemaining = confirmPaymentModal ? confirmPaymentModal.totalAmount - modalTotalPaid : 0;
 
+    const groupedProducts = summaryItems.reduce<Record<string, GroupedProduct>>((acc, item) => {
+        if (!acc[item.productId]) {
+            acc[item.productId] = {
+                productId: item.productId,
+                productName: item.productName,
+                totalReserved: 0,
+                totalPaid: 0,
+                totalPickedUp: 0,
+                totalQuantity: 0,
+                variants: [],
+            };
+        }
+        const gp = acc[item.productId];
+        gp.totalReserved += item.reservedQuantity;
+        gp.totalPaid += item.paidQuantity;
+        gp.totalPickedUp += item.pickedUpQuantity;
+        gp.totalQuantity += item.totalQuantity;
+        gp.variants.push(item);
+        return acc;
+    }, {});
+
+    const sortedGroupedProducts = Object.values(groupedProducts).sort((a, b) => b.totalQuantity - a.totalQuantity);
+
     return (
         <div className="space-y-8">
             {/* Header */}
@@ -352,63 +398,203 @@ export default function PreVendaPage() {
 
             {/* Demanda por produto */}
             <div className="admin-card">
-                <h2 className="text-lg font-semibold text-slate-800 mb-4">Demanda por produto</h2>
-                {summaryLoading ? (
-                    <div className="flex justify-center py-8">
-                        <div className="loading-spinner-admin" />
+                <div className="px-6 py-4 border-b border-slate-200 bg-slate-50/50 flex justify-between items-center">
+                    <div>
+                        <h2 className="text-lg font-semibold text-slate-800">Demanda por produto</h2>
+                        <p className="text-xs text-slate-500 mt-0.5">Agrupado por produto com controle de status e tamanhos</p>
                     </div>
-                ) : summaryItems.length === 0 ? (
+                    <span className="text-xs font-medium text-slate-500 bg-slate-200/60 px-2.5 py-1 rounded-full">
+                        {sortedGroupedProducts.length} {sortedGroupedProducts.length === 1 ? 'Produto' : 'Produtos'}
+                    </span>
+                </div>
+
+                {summaryLoading ? (
+                    <div className="flex justify-center py-12">
+                        <div className="loading-spinner-admin mx-auto" />
+                    </div>
+                ) : sortedGroupedProducts.length === 0 ? (
                     <div className="empty-state">
-                        <div className="empty-state-icon">📦</div>
+                        <div className="empty-state-icon text-4xl">📦</div>
                         <div className="empty-state-title">Nenhuma demanda de pré-venda</div>
+                        <p className="text-sm text-slate-500 mt-1">Nenhum produto foi reservado até o momento.</p>
                     </div>
                 ) : (
-                    <div className="overflow-x-auto">
-                        <table className="data-table">
-                            <thead>
-                                <tr>
-                                    <th>Produto</th>
-                                    <th>Tamanho</th>
-                                    <th className="text-right">Reservado</th>
-                                    <th className="text-right">Pago</th>
-                                    <th className="text-right">Retirado</th>
-                                    <th className="text-right">Total</th>
-                                    <th>Clientes</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {summaryItems.map((item) => (
-                                    <tr key={item.variantId} className="align-top">
-                                        <td>
-                                            <p className="font-medium text-slate-800">{item.productName}</p>
-                                            {item.variantSku && (
-                                                <p className="text-xs text-slate-400 mt-0.5">{item.variantSku}</p>
-                                            )}
-                                        </td>
-                                        <td className="text-slate-600">{item.variantSize}</td>
-                                        <td className="text-right font-medium text-amber-600">{item.reservedQuantity}</td>
-                                        <td className="text-right font-medium text-blue-600">{item.paidQuantity}</td>
-                                        <td className="text-right font-medium text-[#5a7a1f]">{item.pickedUpQuantity}</td>
-                                        <td className="text-right font-semibold text-slate-800">{item.totalQuantity}</td>
-                                        <td className="min-w-48">
-                                            <div className="space-y-1">
-                                                {item.customers.slice(0, 3).map((c) => (
-                                                    <div key={`${c.phone}-${c.name}`} className="text-xs text-slate-600">
-                                                        <span className="font-medium text-slate-700">{c.name}</span>
-                                                        <span className="text-slate-400"> · {c.phone}</span>
-                                                    </div>
-                                                ))}
-                                                {item.customers.length > 3 && (
-                                                    <p className="text-xs text-slate-400">
-                                                        +{item.customers.length - 3} clientes
-                                                    </p>
+                    <div className="divide-y divide-slate-100">
+                        {sortedGroupedProducts.map((product) => {
+                            const isExpanded = !!expandedProducts[product.productId];
+                            const reservedPct = product.totalQuantity > 0 ? (product.totalReserved / product.totalQuantity) * 100 : 0;
+                            const paidPct = product.totalQuantity > 0 ? (product.totalPaid / product.totalQuantity) * 100 : 0;
+                            const pickedUpPct = product.totalQuantity > 0 ? (product.totalPickedUp / product.totalQuantity) * 100 : 0;
+
+                            return (
+                                <div key={product.productId} className="group hover:bg-slate-50/30 transition-all duration-150">
+                                    {/* Product Header Row */}
+                                    <div
+                                        onClick={() => setExpandedProducts(prev => ({ ...prev, [product.productId]: !prev[product.productId] }))}
+                                        className="px-6 py-5 flex flex-col md:flex-row md:items-center justify-between gap-4 cursor-pointer select-none"
+                                    >
+                                        <div className="flex items-start gap-3 min-w-[250px] flex-1">
+                                            <div className="mt-1 text-slate-400 group-hover:text-[#A3D154] transition-colors">
+                                                {isExpanded ? (
+                                                    <ChevronDown className="w-5 h-5" />
+                                                ) : (
+                                                    <ChevronRight className="w-5 h-5" />
                                                 )}
                                             </div>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                                            <div>
+                                                <h3 className="font-semibold text-slate-800 text-base group-hover:text-[#A3D154] transition-colors">
+                                                    {product.productName}
+                                                </h3>
+                                                <p className="text-xs text-slate-400 mt-0.5">
+                                                    {product.variants.length} {product.variants.length === 1 ? 'tamanho disponível' : 'tamanhos disponíveis'}
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        {/* Progress Bar */}
+                                        <div className="hidden lg:flex flex-col w-48 xl:w-64 gap-1.5">
+                                            <div className="flex justify-between text-[10px] font-medium text-slate-400 px-0.5">
+                                                <span>Distribuição de Status</span>
+                                                <span className="font-semibold text-slate-700">{product.totalQuantity} un.</span>
+                                            </div>
+                                            <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden flex">
+                                                {product.totalReserved > 0 && (
+                                                    <div
+                                                        className="bg-amber-500 h-full transition-all duration-300"
+                                                        style={{ width: `${reservedPct}%` }}
+                                                        title={`Reservado: ${product.totalReserved} un.`}
+                                                    />
+                                                )}
+                                                {product.totalPaid > 0 && (
+                                                    <div
+                                                        className="bg-blue-500 h-full transition-all duration-300"
+                                                        style={{ width: `${paidPct}%` }}
+                                                        title={`Pago: ${product.totalPaid} un.`}
+                                                    />
+                                                )}
+                                                {product.totalPickedUp > 0 && (
+                                                    <div
+                                                        className="bg-emerald-500 h-full transition-all duration-300"
+                                                        style={{ width: `${pickedUpPct}%` }}
+                                                        title={`Retirado: ${product.totalPickedUp} un.`}
+                                                    />
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {/* Status Totals Grid */}
+                                        <div className="flex flex-wrap items-center gap-2 sm:gap-4 md:justify-end text-sm">
+                                            <div className="px-2.5 py-1 rounded-md bg-amber-50 border border-amber-100 flex items-center gap-1.5">
+                                                <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                                                <span className="text-xs text-amber-700 font-medium">{product.totalReserved} <span className="hidden sm:inline">Reservados</span></span>
+                                            </div>
+                                            <div className="px-2.5 py-1 rounded-md bg-blue-50 border border-blue-100 flex items-center gap-1.5">
+                                                <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                                                <span className="text-xs text-blue-700 font-medium">{product.totalPaid} <span className="hidden sm:inline">Pagos</span></span>
+                                            </div>
+                                            <div className="px-2.5 py-1 rounded-md bg-emerald-50 border border-emerald-100 flex items-center gap-1.5">
+                                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                                <span className="text-xs text-emerald-700 font-medium">{product.totalPickedUp} <span className="hidden sm:inline">Retirados</span></span>
+                                            </div>
+                                            <div className="px-3 py-1 rounded-md bg-slate-100 border border-slate-200 text-slate-800 font-bold text-xs">
+                                                {product.totalQuantity} <span className="font-normal text-slate-500">Total</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Expanded Panel */}
+                                    {isExpanded && (
+                                        <div className="px-6 pb-6 pt-2 bg-slate-50/40 border-t border-slate-100 space-y-6">
+                                            {/* Sub-table by sizes */}
+                                            <div>
+                                                <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2.5">Detalhamento por Tamanho</h4>
+                                                <div className="bg-white rounded-lg border border-slate-200 overflow-hidden shadow-sm">
+                                                    <table className="w-full text-left border-collapse">
+                                                        <thead>
+                                                            <tr className="bg-slate-50 text-[10px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200">
+                                                                <th className="px-4 py-2.5">Tamanho</th>
+                                                                <th className="px-4 py-2.5">SKU</th>
+                                                                <th className="px-4 py-2.5 text-right">Reservado</th>
+                                                                <th className="px-4 py-2.5 text-right">Pago</th>
+                                                                <th className="px-4 py-2.5 text-right">Retirado</th>
+                                                                <th className="px-4 py-2.5 text-right bg-slate-50/80 font-bold">Total</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody className="divide-y divide-slate-100 text-sm">
+                                                            {product.variants.map((v) => (
+                                                                <tr key={v.variantId} className="hover:bg-slate-50/50 transition-colors">
+                                                                    <td className="px-4 py-3 font-medium text-slate-800">{v.variantSize}</td>
+                                                                    <td className="px-4 py-3 font-mono text-xs text-slate-400">{v.variantSku || '—'}</td>
+                                                                    <td className="px-4 py-3 text-right font-medium text-amber-600">{v.reservedQuantity}</td>
+                                                                    <td className="px-4 py-3 text-right font-medium text-blue-600">{v.paidQuantity}</td>
+                                                                    <td className="px-4 py-3 text-right font-medium text-emerald-600">{v.pickedUpQuantity}</td>
+                                                                    <td className="px-4 py-3 text-right font-semibold text-slate-800 bg-slate-50/20">{v.totalQuantity}</td>
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </div>
+
+                                            {/* Customers List for the product */}
+                                            <div>
+                                                <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2.5">Clientes Interessados</h4>
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                                                    {(() => {
+                                                        const uniqueCustomersMap = new Map();
+                                                        product.variants.forEach(v => {
+                                                            v.customers.forEach(c => {
+                                                                if (!uniqueCustomersMap.has(c.phone)) {
+                                                                    uniqueCustomersMap.set(c.phone, {
+                                                                        name: c.name,
+                                                                        phone: c.phone,
+                                                                        sizes: [v.variantSize]
+                                                                    });
+                                                                } else {
+                                                                    const existing = uniqueCustomersMap.get(c.phone);
+                                                                    if (!existing.sizes.includes(v.variantSize)) {
+                                                                        existing.sizes.push(v.variantSize);
+                                                                    }
+                                                                }
+                                                            });
+                                                        });
+                                                        const uniqueCustomers = Array.from(uniqueCustomersMap.values());
+
+                                                        return uniqueCustomers.map((customer) => (
+                                                            <div
+                                                                key={customer.phone}
+                                                                className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm flex items-center justify-between hover:border-slate-300 transition-colors"
+                                                            >
+                                                                <div className="min-w-0 pr-2">
+                                                                    <p className="font-medium text-slate-800 text-sm truncate" title={customer.name}>
+                                                                        {customer.name}
+                                                                    </p>
+                                                                    <p className="text-xs text-slate-500 font-mono mt-0.5 flex items-center gap-1.5">
+                                                                        <span>{formatPhone(customer.phone)}</span>
+                                                                        <span className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-sans">
+                                                                            Tam. {customer.sizes.join(', ')}
+                                                                        </span>
+                                                                    </p>
+                                                                </div>
+                                                                <a
+                                                                    href={getWhatsAppUrl(customer.phone, customer.name, product.productName)}
+                                                                    target="_blank"
+                                                                    rel="noopener noreferrer"
+                                                                    className="flex items-center justify-center p-2 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-600 transition-colors"
+                                                                    title={`Conversar com ${customer.name} no WhatsApp`}
+                                                                >
+                                                                    <WhatsAppIcon />
+                                                                </a>
+                                                            </div>
+                                                        ));
+                                                    })()}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
                     </div>
                 )}
             </div>

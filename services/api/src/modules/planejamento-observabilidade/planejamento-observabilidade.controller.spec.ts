@@ -161,6 +161,43 @@ describe("PlanejamentoObservabilidadeController", () => {
     );
   });
 
+  it("aceita identificador de relatório em eventos de arquivo do navegador", async () => {
+    const { controller, service } = criarController();
+
+    await controller.registrarEventos(reqComUsuario(), {
+      eventos: [
+        eventoValido({
+          evento: "arquivo_acao",
+          arquivo: {
+            relatorioId: "relatorio-1",
+            documentoId: "documento-1",
+            nome: "Relatorio.docx",
+            tipo: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            tamanhoBytes: 1024,
+          },
+          detalhes: {
+            modulo: "planejamento",
+            acao: "download",
+            status: "sucesso",
+          },
+        }),
+      ],
+    });
+
+    expect(service.registrarEvento).toHaveBeenCalledWith(
+      expect.objectContaining({
+        evento: "arquivo_acao",
+        arquivo: {
+          relatorioId: "relatorio-1",
+          documentoId: "documento-1",
+          nome: "Relatorio.docx",
+          tipo: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          tamanhoBytes: 1024,
+        },
+      }),
+    );
+  });
+
   it("rejeita detalhes com string acima do limite", async () => {
     await esperarBadRequest({
       eventos: [

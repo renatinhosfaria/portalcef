@@ -1,12 +1,12 @@
 import { RelatorioContent } from "./relatorio-content";
 
 interface Props {
-  params: Promise<{ semanaId: string }>;
+  params: Promise<{ semestreId: string }>;
   searchParams: Promise<{ turmaId?: string }>;
 }
 
 export default async function RelatorioPage({ params, searchParams }: Props) {
-  const { semanaId } = await params;
+  const { semestreId } = await params;
   const { turmaId } = await searchParams;
-  return <RelatorioContent semanaId={semanaId} turmaId={turmaId ?? null} />;
+  return <RelatorioContent semestreId={semestreId} turmaId={turmaId ?? null} />;
 }

@@ -21,6 +21,7 @@ import { z } from "zod";
 export const tarefaContextoSchema = z.object({
   modulo: z.enum(["PLANEJAMENTO", "CALENDARIO", "USUARIOS", "TURMAS", "LOJA"]),
   quinzenaId: z.string().optional(),
+  provaId: z.string().uuid().optional(),
   etapaId: z.string().uuid().optional(),
   turmaId: z.string().uuid().optional(),
   professoraId: z.string().uuid().optional(),
@@ -88,6 +89,7 @@ export const listarTarefasSchema = z.object({
     .enum(["PLANEJAMENTO", "CALENDARIO", "USUARIOS", "TURMAS", "LOJA"])
     .optional(),
   quinzenaId: z.string().optional(),
+  provaId: z.string().uuid().optional(),
   etapaId: z.string().uuid().optional(),
   turmaId: z.string().uuid().optional(),
 

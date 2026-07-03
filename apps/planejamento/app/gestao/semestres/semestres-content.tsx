@@ -26,9 +26,9 @@ import { Loader2, Plus, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import {
-  type SemanaRelatorio,
-  useSemanaRelatorio,
-} from "../../../../features/relatorio";
+  type SemestreRelatorio,
+  useSemestreRelatorio,
+} from "../../../features/relatorio";
 
 const ETAPAS = ["BERCARIO", "INFANTIL"] as const;
 type Etapa = (typeof ETAPAS)[number];
@@ -48,23 +48,27 @@ function getEtapasPermitidas(role?: string): Etapa[] {
   return [];
 }
 
-function semanaLabel(semana: SemanaRelatorio) {
-  return semana.descricao || `Semana ${semana.numero}`;
+function semestreLabel(semestre: SemestreRelatorio) {
+  return (
+    semestre.descricao ||
+    `${semestre.semestre}º semestre de ${semestre.anoLetivo}`
+  );
 }
 
-export function SemanasRelatorioContent() {
+export function SemestresRelatorioContent() {
   const { role, isLoaded } = useTenant();
   const {
-    semanas,
+    semestres,
     isLoading,
     error,
-    criarSemana,
-    excluirSemana,
-  } = useSemanaRelatorio();
+    criarSemestre,
+    excluirSemestre,
+  } = useSemestreRelatorio();
   const etapasPermitidas = useMemo(() => getEtapasPermitidas(role), [role]);
   const [selectedEtapa, setSelectedEtapa] = useState<Etapa>("BERCARIO");
   const [form, setForm] = useState({
-    numero: "",
+    anoLetivo: String(new Date().getFullYear()),
+    semestre: "",
     descricao: "",
     dataInicio: "",
     dataFim: "",
@@ -80,16 +84,18 @@ export function SemanasRelatorioContent() {
     if (!selectedEtapaValida) return;
     setSalvando(true);
     try {
-      await criarSemana({
+      await criarSemestre({
         etapa: selectedEtapaValida,
-        numero: Number(form.numero),
+        anoLetivo: Number(form.anoLetivo),
+        semestre: Number(form.semestre),
         descricao: form.descricao || undefined,
         dataInicio: form.dataInicio,
         dataFim: form.dataFim,
         dataMaximaEntrega: form.dataMaximaEntrega,
       });
       setForm({
-        numero: "",
+        anoLetivo: String(new Date().getFullYear()),
+        semestre: "",
         descricao: "",
         dataInicio: "",
         dataFim: "",
@@ -114,7 +120,7 @@ export function SemanasRelatorioContent() {
     return (
       <div className="container mx-auto py-6">
         <p className="py-12 text-center text-muted-foreground">
-          Você não tem permissão para gerenciar semanas de relatório.
+          Você não tem permissão para gerenciar semestres de relatório.
         </p>
       </div>
     );
@@ -124,7 +130,7 @@ export function SemanasRelatorioContent() {
     return (
       <div className="container mx-auto py-6">
         <p className="py-12 text-center text-destructive">
-          Erro ao carregar semanas de relatório.
+          Erro ao carregar semestres de relatório.
         </p>
       </div>
     );
@@ -133,17 +139,17 @@ export function SemanasRelatorioContent() {
   return (
     <div className="container mx-auto py-6">
       <div className="mb-6">
-        <h1 className="text-3xl font-bold">Semanas de Relatórios</h1>
+        <h1 className="text-3xl font-bold">Semestres de Relatórios</h1>
         <p className="mt-2 text-muted-foreground">
-          Configure semanas para Berçário e Infantil.
+          Configure semestres para Berçário e Infantil.
         </p>
       </div>
 
       <Card className="mb-6">
         <CardHeader>
-          <CardTitle className="text-lg">Nova Semana</CardTitle>
+          <CardTitle className="text-lg">Novo Semestre</CardTitle>
         </CardHeader>
-        <CardContent className="grid gap-3 md:grid-cols-6">
+        <CardContent className="grid gap-3 md:grid-cols-7">
           <Select
             value={selectedEtapaValida}
             onValueChange={(value) => setSelectedEtapa(value as Etapa)}
@@ -161,10 +167,18 @@ export function SemanasRelatorioContent() {
           </Select>
           <Input
             type="number"
-            placeholder="Número"
-            value={form.numero}
+            placeholder="Ano letivo"
+            value={form.anoLetivo}
             onChange={(event) =>
-              setForm((atual) => ({ ...atual, numero: event.target.value }))
+              setForm((atual) => ({ ...atual, anoLetivo: event.target.value }))
+            }
+          />
+          <Input
+            type="number"
+            placeholder="Semestre"
+            value={form.semestre}
+            onChange={(event) =>
+              setForm((atual) => ({ ...atual, semestre: event.target.value }))
             }
           />
           <Input
@@ -203,7 +217,8 @@ export function SemanasRelatorioContent() {
               onClick={handleSubmit}
               disabled={
                 salvando ||
-                !form.numero ||
+                !form.anoLetivo ||
+                !form.semestre ||
                 !form.dataInicio ||
                 !form.dataFim ||
                 !form.dataMaximaEntrega
@@ -239,26 +254,28 @@ export function SemanasRelatorioContent() {
         {ETAPAS.map((etapa) => (
           <TabsContent key={etapa} value={etapa} className="mt-6">
             <div className="grid gap-3 md:grid-cols-2">
-              {semanas
-                .filter((semana) => semana.etapa === etapa)
-                .map((semana) => (
-                  <Card key={semana.id}>
+              {semestres
+                .filter((semestre) => semestre.etapa === etapa)
+                .map((semestre) => (
+                  <Card key={semestre.id}>
                     <CardContent className="flex items-center justify-between p-4">
                       <div>
-                        <p className="font-medium">{semanaLabel(semana)}</p>
+                        <p className="font-medium">
+                          {semestreLabel(semestre)}
+                        </p>
                         <p className="text-sm text-muted-foreground">
-                          {semana.dataInicio} até {semana.dataFim} • Prazo{" "}
-                          {semana.dataMaximaEntrega}
+                          {semestre.dataInicio} até {semestre.dataFim} • Prazo{" "}
+                          {semestre.dataMaximaEntrega}
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          {semana.relatoriosVinculados ?? 0} relatório(s)
+                          {semestre.relatoriosVinculados ?? 0} relatório(s)
                           vinculado(s)
                         </p>
                       </div>
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => excluirSemana(semana.id)}
+                        onClick={() => excluirSemestre(semestre.id)}
                       >
                         <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>

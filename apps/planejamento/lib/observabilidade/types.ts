@@ -68,6 +68,7 @@ export interface PaginaObservabilidade {
 export interface ArquivoObservabilidade {
   planoId?: string | null;
   provaId?: string | null;
+  relatorioId?: string | null;
   documentoId?: string | null;
   nome?: string | null;
   tipo?: string | null;

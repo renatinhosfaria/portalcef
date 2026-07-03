@@ -34,12 +34,109 @@ import { cn } from "@essencia/ui/lib/utils";
 
 import type { AcaoHistorico, HistoricoEntry } from "@essencia/shared/types";
 
+import {
+  PROVA_STATUS_COLORS,
+  PROVA_STATUS_LABELS,
+  type ProvaStatus,
+} from "../../prova/types";
+import {
+  STATUS_COLORS as RELATORIO_STATUS_COLORS,
+  STATUS_LABELS as RELATORIO_STATUS_LABELS,
+  type RelatorioStatus,
+} from "../../relatorio/types";
 import { useHistorico } from "../hooks/use-historico";
-import type { PlanoAulaStatus } from "../types";
-import { PlanoStatusBadge } from "./status-badge";
+import {
+  STATUS_COLORS as PLANO_STATUS_COLORS,
+  STATUS_LABELS as PLANO_STATUS_LABELS,
+  type PlanoAulaStatus,
+} from "../types";
+
+type HistoricoModulo = "plano-aula" | "prova" | "relatorio";
 
 interface HistoricoTimelineProps {
   planoId: string;
+  modulo?: HistoricoModulo;
+}
+
+function isPlanoAulaStatus(status: string): status is PlanoAulaStatus {
+  return status in PLANO_STATUS_LABELS;
+}
+
+function isProvaStatus(status: string): status is ProvaStatus {
+  return status in PROVA_STATUS_LABELS;
+}
+
+function isRelatorioStatus(status: string): status is RelatorioStatus {
+  return status in RELATORIO_STATUS_LABELS;
+}
+
+function formatarStatusDesconhecido(status: string): string {
+  return status
+    .split("_")
+    .map((parte) => parte.charAt(0) + parte.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function HistoricoStatusBadge({
+  status,
+  modulo,
+}: {
+  status: string;
+  modulo: HistoricoModulo;
+}) {
+  if (modulo === "prova" && isProvaStatus(status)) {
+    return (
+      <Badge
+        variant="outline"
+        className={cn(PROVA_STATUS_COLORS[status], "border")}
+      >
+        {PROVA_STATUS_LABELS[status]}
+      </Badge>
+    );
+  }
+
+  if (modulo === "relatorio" && isRelatorioStatus(status)) {
+    return (
+      <Badge
+        variant="outline"
+        className={cn(RELATORIO_STATUS_COLORS[status], "border")}
+      >
+        {RELATORIO_STATUS_LABELS[status]}
+      </Badge>
+    );
+  }
+
+  if (isPlanoAulaStatus(status)) {
+    const colors = PLANO_STATUS_COLORS[status];
+    return (
+      <Badge
+        variant="outline"
+        className={cn(colors.bg, colors.text, colors.border, "border")}
+      >
+        {PLANO_STATUS_LABELS[status]}
+      </Badge>
+    );
+  }
+
+  if (isProvaStatus(status)) {
+    return (
+      <Badge
+        variant="outline"
+        className={cn(PROVA_STATUS_COLORS[status], "border")}
+      >
+        {PROVA_STATUS_LABELS[status]}
+      </Badge>
+    );
+  }
+
+  return (
+    <Badge
+      variant="outline"
+      className="border border-gray-300 bg-gray-100 text-gray-700"
+    >
+      {formatarStatusDesconhecido(status)}
+    </Badge>
+  );
 }
 
 /**
@@ -79,6 +176,10 @@ function getAcaoColor(acao: AcaoHistorico): string {
     case "CRIADO":
       return "bg-blue-100 text-blue-600";
     case "SUBMETIDO":
+    case "SUBMETIDO_IMPRESSAO":
+    case "SUBMETIDO_ANALISTA":
+    case "RESUBMETIDO_ANALISTA":
+    case "ENVIADO_RESPONDER":
       return "bg-yellow-100 text-yellow-600";
     case "APROVADO_ANALISTA":
     case "APROVADO_COORDENADORA":
@@ -102,12 +203,24 @@ function getAcaoColor(acao: AcaoHistorico): string {
 /**
  * Retorna o label em português para cada ação
  */
-function getAcaoLabel(acao: AcaoHistorico): string {
+function getAcaoLabel(acao: AcaoHistorico, modulo: HistoricoModulo): string {
   switch (acao) {
     case "CRIADO":
+      if (modulo === "relatorio") return "Relatório criado";
+      if (modulo === "prova") return "Prova criada";
       return "Plano criado";
     case "SUBMETIDO":
+      if (modulo === "relatorio") return "Relatório submetido para análise";
+      if (modulo === "prova") return "Prova submetida para análise";
       return "Plano submetido para análise";
+    case "SUBMETIDO_IMPRESSAO":
+      return "Prova enviada para impressão";
+    case "ENVIADO_RESPONDER":
+      return "Prova enviada para resposta";
+    case "SUBMETIDO_ANALISTA":
+      return "Prova enviada para análise";
+    case "RESUBMETIDO_ANALISTA":
+      return "Prova reenviada para análise";
     case "APROVADO_ANALISTA":
       return "Aprovado pela analista";
     case "DEVOLVIDO_ANALISTA":
@@ -119,10 +232,18 @@ function getAcaoLabel(acao: AcaoHistorico): string {
     case "DOCUMENTO_IMPRESSO":
       return "Documento impresso";
     case "RECUPERADO":
+      if (modulo === "relatorio") {
+        return "Relatório recuperado pela professora";
+      }
+      if (modulo === "prova") return "Prova recuperada pela professora";
       return "Plano recuperado pela professora";
     case "COMENTARIO_ADICIONADO":
       return "Comentário adicionado";
     case "TRANSFERIDO":
+      if (modulo === "relatorio") {
+        return "Relatório transferido entre professoras";
+      }
+      if (modulo === "prova") return "Prova transferida entre professoras";
       return "Plano transferido entre professoras";
     default:
       return acao;
@@ -221,7 +342,13 @@ function UserInfo({
 /**
  * Timeline Item Component
  */
-function TimelineItem({ entry }: { entry: HistoricoEntry }) {
+function TimelineItem({
+  entry,
+  modulo,
+}: {
+  entry: HistoricoEntry;
+  modulo: HistoricoModulo;
+}) {
   const detalhesMensagem = getDetalhesMensagem(entry);
 
   return (
@@ -237,7 +364,9 @@ function TimelineItem({ entry }: { entry: HistoricoEntry }) {
 
       <div className="flex-1 space-y-1 pb-6">
         <div className="flex items-center justify-between gap-2">
-          <p className="text-sm font-medium">{getAcaoLabel(entry.acao)}</p>
+          <p className="text-sm font-medium">
+            {getAcaoLabel(entry.acao, modulo)}
+          </p>
           <time className="text-xs text-muted-foreground whitespace-nowrap">
             {formatDistanceToNow(new Date(entry.createdAt), {
               addSuffix: true,
@@ -250,11 +379,12 @@ function TimelineItem({ entry }: { entry: HistoricoEntry }) {
 
         {entry.statusAnterior ? (
           <div className="flex items-center gap-2 text-xs pt-2">
-            <PlanoStatusBadge
-              status={entry.statusAnterior as PlanoAulaStatus}
+            <HistoricoStatusBadge
+              status={entry.statusAnterior}
+              modulo={modulo}
             />
             <ArrowRight className="h-3 w-3" />
-            <PlanoStatusBadge status={entry.statusNovo as PlanoAulaStatus} />
+            <HistoricoStatusBadge status={entry.statusNovo} modulo={modulo} />
           </div>
         ) : null}
 
@@ -273,8 +403,11 @@ function TimelineItem({ entry }: { entry: HistoricoEntry }) {
   );
 }
 
-export function HistoricoTimeline({ planoId }: HistoricoTimelineProps) {
-  const hookResult = useHistorico(planoId);
+export function HistoricoTimeline({
+  planoId,
+  modulo = "plano-aula",
+}: HistoricoTimelineProps) {
+  const hookResult = useHistorico(planoId, modulo);
   const historico: HistoricoEntry[] = hookResult.historico;
   const isLoading: boolean = hookResult.isLoading;
 
@@ -308,7 +441,7 @@ export function HistoricoTimeline({ planoId }: HistoricoTimelineProps) {
           <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-border" />
 
           {historico.map((entry) => (
-            <TimelineItem key={entry.id} entry={entry} />
+            <TimelineItem key={entry.id} entry={entry} modulo={modulo} />
           ))}
         </div>
       </CardContent>

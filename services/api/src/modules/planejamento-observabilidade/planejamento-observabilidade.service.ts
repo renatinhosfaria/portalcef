@@ -272,6 +272,7 @@ export class PlanejamentoObservabilidadeService implements OnModuleInit {
     const normalizado: PlanejamentoObservabilidadeArquivo = {};
     this.definirTextoOuNull(normalizado, "planoId", arquivo.planoId);
     this.definirTextoOuNull(normalizado, "provaId", arquivo.provaId);
+    this.definirTextoOuNull(normalizado, "relatorioId", arquivo.relatorioId);
     this.definirTextoOuNull(normalizado, "documentoId", arquivo.documentoId);
     this.definirTextoOuNull(normalizado, "nome", arquivo.nome);
     this.definirTextoOuNull(normalizado, "tipo", arquivo.tipo);

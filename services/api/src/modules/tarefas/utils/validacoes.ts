@@ -13,6 +13,7 @@ export function validarContextosPorRole(
   contextos: Array<{
     modulo: string;
     quinzenaId?: string | null;
+    provaId?: string | null;
     etapaId?: string | null;
     turmaId?: string | null;
     professoraId?: string | null;
@@ -28,11 +29,13 @@ export function validarContextosPorRole(
 
   // Validação específica por role
   if (role === "professora") {
-    // Professora precisa de modulo e quinzenaId
-    const camposFaltando = contextos.filter((c) => !c.modulo || !c.quinzenaId);
+    // Professora precisa de modulo e um vinculo principal do planejamento.
+    const camposFaltando = contextos.filter(
+      (c) => !c.modulo || (!c.quinzenaId && !c.provaId),
+    );
     if (camposFaltando.length > 0) {
       throw new BadRequestException(
-        "Professoras devem fornecer módulo e quinzenaId em todos os contextos",
+        "Professoras devem fornecer módulo e quinzenaId ou provaId em todos os contextos",
       );
     }
   } else if (
@@ -46,14 +49,14 @@ export function validarContextosPorRole(
     const camposFaltando = contextos.filter(
       (c) =>
         !c.modulo ||
-        !c.quinzenaId ||
+        (!c.quinzenaId && !c.provaId) ||
         !c.etapaId ||
         !c.turmaId ||
         !c.professoraId,
     );
     if (camposFaltando.length > 0) {
       throw new BadRequestException(
-        "Gestores devem fornecer módulo, quinzenaId, etapaId, turmaId e professoraId em todos os contextos",
+        "Gestores devem fornecer módulo, quinzenaId ou provaId, etapaId, turmaId e professoraId em todos os contextos",
       );
     }
   } else if (role === "master") {

@@ -69,6 +69,7 @@ export class TarefasService {
       contextos: Array<{
         modulo: TarefaContextoModulo;
         quinzenaId?: string | null;
+        provaId?: string | null;
         etapaId?: string | null;
         turmaId?: string | null;
         professoraId?: string | null;
@@ -138,6 +139,7 @@ export class TarefasService {
     contextos: Array<{
       modulo: TarefaContextoModulo;
       quinzenaId?: string | null;
+      provaId?: string | null;
       etapaId?: string | null;
       turmaId?: string | null;
       professoraId?: string | null;
@@ -176,6 +178,7 @@ export class TarefasService {
     contextos: Array<{
       modulo: TarefaContextoModulo;
       quinzenaId?: string | null;
+      provaId?: string | null;
       etapaId?: string | null;
       turmaId?: string | null;
       professoraId?: string | null;
@@ -212,6 +215,7 @@ export class TarefasService {
           tarefaId: tarefaCriada.id,
           modulo: contexto.modulo,
           quinzenaId: contexto.quinzenaId ?? null,
+          provaId: contexto.provaId ?? null,
           etapaId: contexto.etapaId ?? null,
           turmaId: contexto.turmaId ?? null,
           professoraId: contexto.professoraId ?? null,

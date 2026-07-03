@@ -12,6 +12,10 @@ import type { FastifyPluginCallback } from "fastify";
 import { AppModule } from "./app.module";
 import { ApiExceptionFilter } from "./common/filters/api-exception.filter";
 import { LoggingInterceptor } from "./common/interceptors/logging.interceptor";
+import {
+  LIMITE_UPLOAD_ARQUIVO_BYTES,
+  LIMITE_UPLOAD_REQUISICAO_BYTES,
+} from "./common/upload-limits";
 import { obterOrigensCors } from "./config/cors";
 
 async function bootstrap() {
@@ -19,7 +23,7 @@ async function bootstrap() {
     AppModule,
     new FastifyAdapter({
       logger: true,
-      bodyLimit: 50 * 1024 * 1024, // 50MB body limit for file uploads
+      bodyLimit: LIMITE_UPLOAD_REQUISICAO_BYTES,
     }),
     { rawBody: true },
   );
@@ -57,7 +61,7 @@ async function bootstrap() {
       fieldNameSize: 100, // Max field name size in bytes
       fieldSize: 1000000, // Max field value size in bytes (1MB)
       fields: 10, // Max number of non-file fields
-      fileSize: 50 * 1024 * 1024, // 50MB max file size
+      fileSize: LIMITE_UPLOAD_ARQUIVO_BYTES,
       files: 5, // Max number of file fields
       headerPairs: 2000, // Max number of header key=>value pairs
     },

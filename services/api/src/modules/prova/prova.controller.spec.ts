@@ -45,6 +45,9 @@ describe("ProvaController", () => {
     editandoDesde: null,
   };
 
+  const UM_MB_EM_BYTES = 1024 * 1024;
+  const LIMITE_UPLOAD_BYTES = 500 * UM_MB_EM_BYTES;
+
   const criarController = () => {
     const provaService = {
       getProvaById: jest.fn().mockResolvedValue({
@@ -52,7 +55,13 @@ describe("ProvaController", () => {
         user: { id: usuario.userId },
       }),
       getDocumentoById: jest.fn().mockResolvedValue(documentoWord),
+      adicionarDocumentoUpload: jest.fn().mockResolvedValue(documentoWord),
       atualizarDocumento: jest.fn().mockResolvedValue(undefined),
+      regerarPdfDocumento: jest.fn().mockResolvedValue({
+        ...documentoWord,
+        pdfStorageKey: "pdf/doc-prova-1.pdf",
+        pdfUrl: "https://cdn/doc-prova-1.pdf",
+      }),
     };
 
     const storageService = {
@@ -61,8 +70,12 @@ describe("ProvaController", () => {
         ContentType: documentoWord.mimeType,
         ContentLength: documentoWord.fileSize,
       }),
-      uploadFile: jest.fn(),
-      replaceFile: jest.fn(),
+      uploadFile: jest.fn().mockResolvedValue({
+        name: documentoWord.fileName,
+        key: documentoWord.storageKey,
+        url: "https://storage.test/prova-assinada",
+      }),
+      replaceFile: jest.fn().mockResolvedValue(undefined),
     };
 
     const sharePointService = {
@@ -108,6 +121,8 @@ describe("ProvaController", () => {
 
     return {
       controller,
+      provaService,
+      storageService,
       observabilidadeService,
     };
   };
@@ -116,6 +131,91 @@ describe("ProvaController", () => {
     header: jest.fn().mockReturnThis(),
     status: jest.fn().mockReturnThis(),
     send: jest.fn().mockReturnValue({ enviado: true }),
+  });
+
+  const criarBufferComTamanho = (tamanho: number) =>
+    ({ length: tamanho }) as Buffer;
+
+  const criarArquivoMultipart = (
+    tamanho: number,
+    mimetype =
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ) => ({
+    mimetype,
+    filename: "Prova.docx",
+    toBuffer: jest.fn().mockResolvedValue(criarBufferComTamanho(tamanho)),
+  });
+
+  const criarReqMultipart = (arquivo: unknown) =>
+    ({
+      ...reqComUsuario,
+      isMultipart: () => true,
+      file: jest.fn().mockResolvedValue(arquivo),
+    }) as never;
+
+  describe("uploadDocumento", () => {
+    it("deve aceitar arquivo com tamanho máximo de 500 MB", async () => {
+      const { controller, provaService, storageService } = criarController();
+      const arquivo = criarArquivoMultipart(LIMITE_UPLOAD_BYTES, "application/pdf");
+
+      const resultado = await controller.uploadDocumento(
+        "prova-1",
+        criarReqMultipart(arquivo),
+      );
+
+      expect(resultado.success).toBe(true);
+      expect(storageService.uploadFile).toHaveBeenCalledWith(arquivo);
+      expect(provaService.adicionarDocumentoUpload).toHaveBeenCalledWith(
+        "prova-1",
+        expect.objectContaining({
+          fileSize: LIMITE_UPLOAD_BYTES,
+          mimeType: "application/pdf",
+        }),
+      );
+    });
+
+    it("deve rejeitar arquivo acima de 500 MB", async () => {
+      const { controller } = criarController();
+
+      await expect(
+        controller.uploadDocumento(
+          "prova-1",
+          criarReqMultipart(criarArquivoMultipart(LIMITE_UPLOAD_BYTES + 1)),
+        ),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: "FILE_TOO_LARGE",
+          message: "Arquivo muito grande. Tamanho máximo: 500MB",
+        }),
+      });
+    });
+  });
+
+  describe("atualizarDocumento", () => {
+    it("deve aceitar reenvio de Word com tamanho máximo de 500 MB", async () => {
+      const { controller, provaService, storageService } = criarController();
+      const arquivo = criarArquivoMultipart(LIMITE_UPLOAD_BYTES);
+
+      const resultado = await controller.atualizarDocumento(
+        "prova-1",
+        "doc-prova-1",
+        criarReqMultipart(arquivo),
+      );
+
+      expect(resultado.success).toBe(true);
+      expect(storageService.replaceFile).toHaveBeenCalledWith(
+        documentoWord.storageKey,
+        expect.objectContaining({ length: LIMITE_UPLOAD_BYTES }),
+        documentoWord.mimeType,
+        "Prova.docx",
+      );
+      expect(provaService.atualizarDocumento).toHaveBeenCalledWith(
+        "doc-prova-1",
+        expect.objectContaining({
+          fileSize: LIMITE_UPLOAD_BYTES,
+        }),
+      );
+    });
   });
 
   it("deve registrar sharepoint_word ao editar Word", async () => {
@@ -186,5 +286,26 @@ describe("ProvaController", () => {
         }),
       }),
     );
+  });
+
+  it("deve reprocessar PDF de impressão de prova", async () => {
+    const { controller, provaService } = criarController();
+
+    const resultado = await controller.regerarPdfDocumento(
+      reqComUsuario,
+      "doc-prova-1",
+    );
+
+    expect(provaService.regerarPdfDocumento).toHaveBeenCalledWith(
+      usuario,
+      "doc-prova-1",
+    );
+    expect(resultado).toEqual({
+      success: true,
+      data: expect.objectContaining({
+        id: "doc-prova-1",
+        pdfUrl: "https://cdn/doc-prova-1.pdf",
+      }),
+    });
   });
 });

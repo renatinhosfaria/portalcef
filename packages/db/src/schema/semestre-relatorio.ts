@@ -16,21 +16,22 @@ import { users } from "./users.js";
 import { relatorio } from "./relatorio.js";
 
 // ============================================
-// Table: semana_relatorio
-// Configuração de semanas de relatório por unidade/etapa
+// Table: semestre_relatorio
+// Configuração de semestres de relatório por unidade/etapa
 // ============================================
-export const semanaRelatorioEtapaEnum = ["BERCARIO", "INFANTIL"] as const;
-export type SemanaRelatorioEtapa = (typeof semanaRelatorioEtapaEnum)[number];
+export const semestreRelatorioEtapaEnum = ["BERCARIO", "INFANTIL"] as const;
+export type SemestreRelatorioEtapa = (typeof semestreRelatorioEtapaEnum)[number];
 
-export const semanaRelatorio = pgTable(
-  "semana_relatorio",
+export const semestreRelatorio = pgTable(
+  "semestre_relatorio",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     unidadeId: uuid("unidade_id")
       .notNull()
       .references(() => units.id, { onDelete: "cascade" }),
-    etapa: text("etapa", { enum: semanaRelatorioEtapaEnum }).notNull(),
-    numero: integer("numero").notNull(),
+    etapa: text("etapa", { enum: semestreRelatorioEtapaEnum }).notNull(),
+    anoLetivo: integer("ano_letivo").notNull(),
+    semestre: integer("semestre").notNull(),
     descricao: text("descricao"),
     dataInicio: date("data_inicio").notNull(),
     dataFim: date("data_fim").notNull(),
@@ -44,40 +45,40 @@ export const semanaRelatorio = pgTable(
       .notNull(),
   },
   (table) => ({
-    semanaNumeroEtapaUnidadeIdx: uniqueIndex(
-      "semana_relatorio_unidade_etapa_numero_unique",
-    ).on(table.unidadeId, table.etapa, table.numero),
-    unidadeIdx: index("idx_semana_relatorio_unidade").on(table.unidadeId),
-    etapaIdx: index("idx_semana_relatorio_etapa").on(table.etapa),
-    datasIdx: index("idx_semana_relatorio_datas").on(
+    semestreAnoEtapaUnidadeIdx: uniqueIndex(
+      "semestre_relatorio_unidade_etapa_ano_semestre_unique",
+    ).on(table.unidadeId, table.etapa, table.anoLetivo, table.semestre),
+    unidadeIdx: index("idx_semestre_relatorio_unidade").on(table.unidadeId),
+    etapaIdx: index("idx_semestre_relatorio_etapa").on(table.etapa),
+    datasIdx: index("idx_semestre_relatorio_datas").on(
       table.dataInicio,
       table.dataFim,
     ),
   }),
 );
 
-export const semanaRelatorioRelations = relations(
-  semanaRelatorio,
+export const semestreRelatorioRelations = relations(
+  semestreRelatorio,
   ({ one, many }) => ({
     unidade: one(units, {
-      fields: [semanaRelatorio.unidadeId],
+      fields: [semestreRelatorio.unidadeId],
       references: [units.id],
     }),
     criadoPorUser: one(users, {
-      fields: [semanaRelatorio.criadoPor],
+      fields: [semestreRelatorio.criadoPor],
       references: [users.id],
     }),
     relatorios: many(relatorio),
   }),
 );
 
-export type SemanaRelatorio = typeof semanaRelatorio.$inferSelect;
-export type NovoSemanaRelatorio = typeof semanaRelatorio.$inferInsert;
+export type SemestreRelatorio = typeof semestreRelatorio.$inferSelect;
+export type NovoSemestreRelatorio = typeof semestreRelatorio.$inferInsert;
 
 // ============================================
 // Zod Schemas (drizzle-zod)
 // ============================================
-export const insertSemanaRelatorioSchema =
-  createInsertSchema(semanaRelatorio);
-export const selectSemanaRelatorioSchema =
-  createSelectSchema(semanaRelatorio);
+export const insertSemestreRelatorioSchema =
+  createInsertSchema(semestreRelatorio);
+export const selectSemestreRelatorioSchema =
+  createSelectSchema(semestreRelatorio);

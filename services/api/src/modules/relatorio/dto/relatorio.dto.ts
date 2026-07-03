@@ -12,11 +12,11 @@ export class CreateRelatorioDto {
   turmaId!: string;
 
   @IsUUID()
-  semanaId!: string;
+  semestreId!: string;
 
   @IsOptional()
   @IsUUID()
-  semanaRelatorioId?: string;
+  semestreRelatorioId?: string;
 }
 
 export class DevolverRelatorioDto {
@@ -36,7 +36,7 @@ export class ListarRelatoriosGestaoDto {
 
   @IsOptional()
   @IsString()
-  semanaId?: string;
+  semestreId?: string;
 }
 
 // Helpers de role — análogos ao plano-aula.dto.ts

@@ -66,8 +66,11 @@ interface DocumentoListProps {
   canAprovar?: boolean;
   canEdit?: boolean;
   canComentar?: boolean;
-  modulo?: "plano-aula" | "prova";
+  permitirImpressaoSemAprovacao?: boolean;
+  modulo?: DocumentoModulo;
 }
+
+type DocumentoModulo = "plano-aula" | "prova";
 
 function formatFileSize(bytes: number | null | undefined): string {
   if (bytes === null || bytes === undefined) return "";
@@ -250,7 +253,7 @@ function getDocumentName(documento: PlanoDocumento): string {
 
 function criarMetadadosArquivo(
   documento: PlanoDocumento,
-  modulo: "plano-aula" | "prova",
+  modulo: DocumentoModulo,
 ) {
   return {
     planoId: modulo === "plano-aula" ? documento.planoId : undefined,
@@ -281,6 +284,7 @@ export function DocumentoList({
   canAprovar = false,
   canEdit = false,
   canComentar: _canComentar = false,
+  permitirImpressaoSemAprovacao = false,
   modulo = "plano-aula",
 }: DocumentoListProps) {
   const [editorDocId, setEditorDocId] = useState<string | null>(null);
@@ -455,9 +459,17 @@ export function DocumentoList({
       {documentos.map((documento) => {
         const Icon = getFileIcon(documento);
         const url = getDocumentUrl(documento);
+        const urlParaImpressao = getUrlParaImpressao(documento);
+        const documentoWord = isWordDocument(documento);
+        const urlPdfProva =
+          modulo === "prova" && documentoWord && urlParaImpressao
+            ? urlParaImpressao
+            : null;
+        const urlLinkDocumento = urlPdfProva ?? url;
+        const urlVisualizacaoAcao = urlPdfProva ?? (documentoWord ? undefined : url);
         const name = getDocumentName(documento);
-        const podeVisualizar = isWordDocument(documento) || !!url;
-        const podeEditar = canEdit && isWordDocument(documento);
+        const podeVisualizar = documentoWord || !!urlVisualizacaoAcao;
+        const podeEditar = canEdit && documentoWord;
         const podeAprovar = canAprovar && !!onAprovar && !documento.approvedBy;
         const podeDesaprovar =
           canAprovar && !!onDesaprovar && !!documento.approvedBy;
@@ -465,13 +477,13 @@ export function DocumentoList({
           canAprovar &&
           !!onRegerarPdf &&
           !!documento.approvedBy &&
-          isWordDocument(documento) &&
+          documentoWord &&
           documento.pdfStatus === "ERRO";
         const podeImprimir =
           documento.tipo !== "LINK_YOUTUBE" &&
-          !!getUrlParaImpressao(documento) &&
-          !!documento.approvedAt &&
-          !!documento.approvedBy &&
+          !!urlParaImpressao &&
+          (permitirImpressaoSemAprovacao ||
+            (!!documento.approvedAt && !!documento.approvedBy)) &&
           !!onImprimir;
         const podeExcluir = canDelete && !!onDelete;
         const temAcoesVisiveis =
@@ -513,9 +525,9 @@ export function DocumentoList({
 
                 <div className="min-w-0 flex-1 space-y-1.5">
                   {/* Nome do arquivo */}
-                  {url ? (
+                  {urlLinkDocumento ? (
                     <a
-                      href={url}
+                      href={urlLinkDocumento}
                       target="_blank"
                       rel="noopener noreferrer"
                       onClick={() => registrarVisualizacaoDocumento(documento)}
@@ -612,7 +624,7 @@ export function DocumentoList({
               {/* Acoes */}
               {temAcoesVisiveis && (
                 <div className="flex w-full flex-wrap items-center gap-2 lg:w-auto lg:justify-end">
-                  {isWordDocument(documento) ? (
+                  {documentoWord && !urlVisualizacaoAcao ? (
                     <Button
                       variant="ghost"
                       size="icon"
@@ -626,14 +638,14 @@ export function DocumentoList({
                     >
                       <Eye className="h-4 w-4" />
                     </Button>
-                  ) : url ? (
+                  ) : urlVisualizacaoAcao ? (
                     <Button
                       variant="ghost"
                       size="icon"
                       className="h-8 w-8"
                       onClick={() => {
                         registrarVisualizacaoDocumento(documento);
-                        window.open(url, "_blank");
+                        window.open(urlVisualizacaoAcao, "_blank");
                       }}
                       title="Visualizar documento"
                       aria-label="Visualizar documento"
@@ -892,7 +904,7 @@ export function DocumentoList({
             </div>
 
             {/* Modal de visualização do documento (Word) */}
-            {isWordDocument(documento) && (
+            {documentoWord && !urlPdfProva && (
               <DocumentoEditorModal
                 planoId={documento.planoId}
                 documentoId={documento.id}

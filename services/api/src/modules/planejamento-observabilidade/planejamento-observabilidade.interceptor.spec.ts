@@ -110,6 +110,40 @@ describe("PlanejamentoObservabilidadeInterceptor", () => {
     );
   });
 
+  it.each([
+    ["/api/relatorio/11111111-1111-1111-1111-111111111111", "/api/relatorio/:id"],
+    ["/api/semestre-relatorio", "/api/semestre-relatorio"],
+  ])("registra api_chamada para rota de relatório %s", async (url, rota) => {
+    mockTempo(1000, 1125);
+    const { interceptor, service } = criarInterceptor();
+
+    await lastValueFrom(
+      interceptor.intercept(
+        criarContexto({
+          method: "GET",
+          url,
+          correlationId: "correlation-relatorio",
+        }),
+        sucesso(),
+      ),
+    );
+
+    expect(service.registrarEvento).toHaveBeenCalledWith(
+      expect.objectContaining({
+        origem: "api",
+        evento: "api_chamada",
+        nivel: "info",
+        correlationId: "correlation-relatorio",
+        http: {
+          metodo: "GET",
+          rota,
+          status: 200,
+          duracaoMs: 125,
+        },
+      }),
+    );
+  });
+
   it("registra api_lenta quando a duracao atinge o limite configurado", async () => {
     mockTempo(5000, 7000);
     const { interceptor, service } = criarInterceptor();

@@ -13,8 +13,8 @@ interface UseRelatorioReturn {
   listarRelatorios: () => Promise<Relatorio[]>;
   criarRelatorio: (
     turmaId: string,
-    semanaId: string,
-    semanaRelatorioId?: string,
+    semestreId: string,
+    semestreRelatorioId?: string,
   ) => Promise<Relatorio>;
   getRelatorio: (id: string) => Promise<Relatorio>;
   getHistorico: (id: string) => Promise<HistoricoEntry[]>;
@@ -87,13 +87,13 @@ export function useRelatorio(): UseRelatorioReturn {
   );
 
   const criarRelatorio = useCallback(
-    (turmaId: string, semanaId: string, semanaRelatorioId?: string) =>
+    (turmaId: string, semestreId: string, semestreRelatorioId?: string) =>
       executar(
         () =>
           api.post<Relatorio>("/relatorio", {
             turmaId,
-            semanaId,
-            ...(semanaRelatorioId ? { semanaRelatorioId } : {}),
+            semestreId,
+            ...(semestreRelatorioId ? { semestreRelatorioId } : {}),
           }),
         "Não foi possível criar o relatório. Tente novamente.",
       ),

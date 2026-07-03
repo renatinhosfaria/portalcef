@@ -79,6 +79,28 @@ function isDevolvido(status: PlanoAulaStatus): boolean {
   return ["DEVOLVIDO_ANALISTA", "DEVOLVIDO_COORDENADORA"].includes(status);
 }
 
+type DocumentoComComentarios = PlanoAula["documentos"][number] & {
+  comentarios?: unknown[];
+};
+
+function planoPodeSerRecuperado(
+  plano: PlanoAula,
+  userId: string | null,
+): boolean {
+  if (plano.status !== "AGUARDANDO_ANALISTA" || plano.user?.id !== userId) {
+    return false;
+  }
+
+  return !plano.documentos.some((documento) => {
+    const doc = documento as DocumentoComComentarios;
+    return Boolean(
+      doc.approvedBy ||
+        doc.temComentarios ||
+        (Array.isArray(doc.comentarios) && doc.comentarios.length > 0),
+    );
+  });
+}
+
 /**
  * Obtem mensagem de feedback baseada no status
  */
@@ -382,7 +404,7 @@ export function PlanoContent({
                   : "Seu plano esta aguardando aprovacao da Coordenadora."}
               </AlertDescription>
             </Alert>
-            {plano.status === "AGUARDANDO_ANALISTA" && plano.user?.id === userId && (
+            {planoPodeSerRecuperado(plano, userId) && (
               <div className="mt-4">
                 <Button
                   variant="outline"

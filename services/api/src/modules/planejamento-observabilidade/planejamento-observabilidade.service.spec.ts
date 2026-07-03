@@ -66,6 +66,7 @@ describe("PlanejamentoObservabilidadeService", () => {
       arquivo: {
         planoId: "plano-1",
         provaId: null,
+        relatorioId: "relatorio-1",
         documentoId: "documento-1",
         nome: "Plano Bercario.docx",
         tipo: "docx",
@@ -111,6 +112,7 @@ describe("PlanejamentoObservabilidadeService", () => {
     expect(evento.arquivo).toEqual({
       planoId: "plano-1",
       provaId: null,
+      relatorioId: "relatorio-1",
       documentoId: "documento-1",
       nome: "Plano Bercario.docx",
       tipo: "docx",
@@ -232,6 +234,7 @@ describe("PlanejamentoObservabilidadeService", () => {
       },
       arquivo: {
         planoId: "plano-1",
+        relatorioId: "relatorio-1",
         documentoId: "doc-1",
         nome: "Plano.docx",
         tipo: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -255,6 +258,7 @@ describe("PlanejamentoObservabilidadeService", () => {
       },
       arquivo: {
         planoId: "plano-1",
+        relatorioId: "relatorio-1",
         documentoId: "doc-1",
         nome: "Plano.docx",
       },

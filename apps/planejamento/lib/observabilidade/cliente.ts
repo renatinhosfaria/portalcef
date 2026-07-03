@@ -229,6 +229,10 @@ function limparArquivo(valor: unknown): EventoObservabilidadeEnvio["arquivo"] {
   const resultado: NonNullable<EventoObservabilidadeEnvio["arquivo"]> = {};
   const planoId = valor.planoId === null ? null : limitarTexto(valor.planoId, TAMANHO_ID);
   const provaId = valor.provaId === null ? null : limitarTexto(valor.provaId, TAMANHO_ID);
+  const relatorioId =
+    valor.relatorioId === null
+      ? null
+      : limitarTexto(valor.relatorioId, TAMANHO_ID);
   const documentoId =
     valor.documentoId === null
       ? null
@@ -242,6 +246,7 @@ function limparArquivo(valor: unknown): EventoObservabilidadeEnvio["arquivo"] {
 
   if (planoId !== undefined) resultado.planoId = planoId;
   if (provaId !== undefined) resultado.provaId = provaId;
+  if (relatorioId !== undefined) resultado.relatorioId = relatorioId;
   if (documentoId !== undefined) resultado.documentoId = documentoId;
   if (nome !== undefined) resultado.nome = nome;
   if (tipo !== undefined) resultado.tipo = tipo;

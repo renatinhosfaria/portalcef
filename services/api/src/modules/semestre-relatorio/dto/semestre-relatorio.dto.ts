@@ -1,14 +1,27 @@
-import { IsString, IsDateString, IsOptional, IsEnum, IsInt, Min } from "class-validator";
+import {
+  IsString,
+  IsDateString,
+  IsOptional,
+  IsEnum,
+  IsInt,
+  Max,
+  Min,
+} from "class-validator";
 
-export class CriarSemanaRelatorioDto {
+export class CriarSemestreRelatorioDto {
   @IsEnum(["BERCARIO", "INFANTIL"], {
     message: "Etapa deve ser BERCARIO ou INFANTIL",
   })
   etapa!: string;
 
   @IsInt()
+  @Min(2000)
+  anoLetivo!: number;
+
+  @IsInt()
   @Min(1)
-  numero!: number;
+  @Max(2)
+  semestre!: number;
 
   @IsOptional()
   @IsString()
@@ -24,7 +37,7 @@ export class CriarSemanaRelatorioDto {
   dataMaximaEntrega!: string;
 }
 
-export class EditarSemanaRelatorioDto {
+export class EditarSemestreRelatorioDto {
   @IsOptional()
   @IsString()
   descricao?: string;
@@ -42,11 +55,12 @@ export class EditarSemanaRelatorioDto {
   dataMaximaEntrega?: string;
 }
 
-export class SemanaRelatorioResponseDto {
+export class SemestreRelatorioResponseDto {
   id!: string;
   unidadeId!: string;
   etapa!: string;
-  numero!: number;
+  anoLetivo!: number;
+  semestre!: number;
   descricao?: string;
   dataInicio!: string;
   dataFim!: string;

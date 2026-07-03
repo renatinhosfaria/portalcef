@@ -30,6 +30,7 @@ interface UseProvaReturn {
   deleteDocumento: (provaId: string, docId: string) => Promise<void>;
   aprovarDocumento: (documentoId: string) => Promise<ProvaDocumento>;
   desaprovarDocumento: (documentoId: string) => Promise<ProvaDocumento>;
+  regerarPdfDocumento: (documentoId: string) => Promise<ProvaDocumento>;
   imprimirDocumento: (documentoId: string) => Promise<ProvaDocumento>;
   enviarParaImpressao: (provaId: string) => Promise<{ success: boolean }>;
   recuperarProva: (provaId: string) => Promise<{ success: boolean }>;
@@ -235,6 +236,30 @@ export function useProva(): UseProvaReturn {
     [],
   );
 
+  const regerarPdfDocumento = useCallback(
+    async (documentoId: string): Promise<ProvaDocumento> => {
+      setLoading(true);
+      setError(null);
+      try {
+        const result = await api.post<ProvaDocumento>(
+          `/prova/documentos/${documentoId}/pdf/regerar`,
+          {},
+        );
+        return result;
+      } catch (err) {
+        const message = obterMensagemErro(
+          err,
+          "Não foi possível tentar gerar o PDF novamente. Tente novamente.",
+        );
+        setError(message);
+        throw new Error(message);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [],
+  );
+
   const enviarParaImpressao = useCallback(
     async (provaId: string): Promise<{ success: boolean }> => {
       setLoading(true);
@@ -341,6 +366,7 @@ export function useProva(): UseProvaReturn {
     deleteDocumento,
     aprovarDocumento,
     desaprovarDocumento,
+    regerarPdfDocumento,
     imprimirDocumento,
     enviarParaImpressao,
     recuperarProva,
@@ -429,17 +455,18 @@ export function useAnalistaProvaActions(): UseAnalistaProvaActionsReturn {
 
 interface UseGestaoImpressaoReturn {
   loading: boolean;
+  enviarParaAnalise: (provaId: string) => Promise<void>;
   enviarParaResponder: (provaId: string) => Promise<void>;
 }
 
 /**
  * Hook para acoes da Gestao no fluxo de impressao
- * - Enviar para responder (apos imprimir)
+ * - Enviar para analise (apos imprimir)
  */
 export function useGestaoImpressao(): UseGestaoImpressaoReturn {
   const [loading, setLoading] = useState(false);
 
-  const enviarParaResponder = useCallback(
+  const enviarParaAnalise = useCallback(
     async (provaId: string): Promise<void> => {
       setLoading(true);
       try {
@@ -448,7 +475,7 @@ export function useGestaoImpressao(): UseGestaoImpressaoReturn {
         throw new Error(
           obterMensagemErro(
             err,
-            "Não foi possível enviar a prova para resposta. Tente novamente.",
+            "Não foi possível enviar a prova para análise. Tente novamente.",
           ),
         );
       } finally {
@@ -458,7 +485,11 @@ export function useGestaoImpressao(): UseGestaoImpressaoReturn {
     [],
   );
 
-  return { loading, enviarParaResponder };
+  return {
+    loading,
+    enviarParaAnalise,
+    enviarParaResponder: enviarParaAnalise,
+  };
 }
 
 // ============================================

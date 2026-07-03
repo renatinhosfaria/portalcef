@@ -37,7 +37,7 @@ describe("PlanoAulaPdfQueueService", () => {
     mockRedisQuit.mockResolvedValue(undefined);
   });
 
-  it("adiciona job de geração de PDF com opções idempotentes", async () => {
+  it("adiciona job de geração de PDF com identificador único", async () => {
     const service = new PlanoAulaPdfQueueService(
       configServiceMock as unknown as ConfigService,
     );
@@ -58,13 +58,34 @@ describe("PlanoAulaPdfQueueService", () => {
       "gerar-pdf",
       { documentoId: "documento-1" },
       {
-        jobId: "plano-documento-documento-1",
+        jobId: expect.stringMatching(/^plano-documento-documento-1-/),
         attempts: 3,
         backoff: { type: "exponential", delay: 5000 },
         removeOnComplete: 1000,
         removeOnFail: 1000,
       },
     );
+  });
+
+  it("enfileira novo processamento quando o mesmo documento é aprovado novamente", async () => {
+    const service = new PlanoAulaPdfQueueService(
+      configServiceMock as unknown as ConfigService,
+    );
+
+    await service.adicionar("documento-reaprovado");
+    await service.adicionar("documento-reaprovado");
+
+    const primeiroJobId = mockQueueAdd.mock.calls[0]?.[2]?.jobId;
+    const segundoJobId = mockQueueAdd.mock.calls[1]?.[2]?.jobId;
+
+    expect(mockQueueAdd).toHaveBeenCalledTimes(2);
+    expect(primeiroJobId).toEqual(
+      expect.stringMatching(/^plano-documento-documento-reaprovado-/),
+    );
+    expect(segundoJobId).toEqual(
+      expect.stringMatching(/^plano-documento-documento-reaprovado-/),
+    );
+    expect(segundoJobId).not.toBe(primeiroJobId);
   });
 
   it("não quebra o fluxo quando Redis falha ao enfileirar", async () => {

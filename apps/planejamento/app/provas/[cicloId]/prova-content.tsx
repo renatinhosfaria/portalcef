@@ -53,6 +53,7 @@ import {
   type PlanoDocumento,
 } from "../../../features/plano-aula";
 import {
+  adaptarDocumentoProvaParaDocumentoList,
   useProva,
   type Prova,
   type ProvaStatus,
@@ -334,10 +335,9 @@ export function ProvaDetailContent({
   const hasDocuments = prova.documentos.length > 0;
 
   // Adaptar documentos da prova para o formato esperado pelo DocumentoList (PlanoDocumento)
-  const documentosAdaptados: PlanoDocumento[] = prova.documentos.map((doc) => ({
-    ...doc,
-    planoId: doc.provaId,
-  } as unknown as PlanoDocumento));
+  const documentosAdaptados: PlanoDocumento[] = prova.documentos.map(
+    adaptarDocumentoProvaParaDocumentoList,
+  );
 
   return (
     <div className="space-y-6">
@@ -489,7 +489,7 @@ export function ProvaDetailContent({
             </TabsContent>
 
             <TabsContent value="historico">
-              <HistoricoTimeline planoId={prova.id} />
+              <HistoricoTimeline planoId={prova.id} modulo="prova" />
             </TabsContent>
           </Tabs>
         </CardContent>

@@ -21,6 +21,8 @@ const ROTAS_PLANEJAMENTO = [
   "/api/quinzena-documents",
   "/api/prova",
   "/api/prova-ciclo",
+  "/api/relatorio",
+  "/api/semestre-relatorio",
 ];
 
 const ROTA_OBSERVABILIDADE = "/api/planejamento-observabilidade";

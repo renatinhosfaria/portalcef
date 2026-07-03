@@ -48,6 +48,9 @@ describe("PlanoAulaController", () => {
     editandoDesde: new Date("2026-05-18T22:40:00.000Z"),
   };
 
+  const UM_MB_EM_BYTES = 1024 * 1024;
+  const LIMITE_UPLOAD_BYTES = 500 * UM_MB_EM_BYTES;
+
   const criarController = () => {
     const planoAulaService = {
       getPlanoById: jest.fn().mockResolvedValue({
@@ -146,6 +149,91 @@ describe("PlanoAulaController", () => {
 
     return reply;
   };
+
+  const criarBufferComTamanho = (tamanho: number) =>
+    ({ length: tamanho }) as Buffer;
+
+  const criarArquivoMultipart = (
+    tamanho: number,
+    mimetype =
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ) => ({
+    mimetype,
+    filename: "Plano.docx",
+    toBuffer: jest.fn().mockResolvedValue(criarBufferComTamanho(tamanho)),
+  });
+
+  const criarReqMultipart = (arquivo: unknown) =>
+    ({
+      ...reqComUsuario,
+      isMultipart: () => true,
+      file: jest.fn().mockResolvedValue(arquivo),
+    }) as never;
+
+  describe("uploadDocumento", () => {
+    it("deve aceitar arquivo com tamanho máximo de 500 MB", async () => {
+      const { controller, planoAulaService, storageService } = criarController();
+      const arquivo = criarArquivoMultipart(LIMITE_UPLOAD_BYTES, "application/pdf");
+
+      const resultado = await controller.uploadDocumento(
+        "plano-1",
+        criarReqMultipart(arquivo),
+      );
+
+      expect(resultado.success).toBe(true);
+      expect(storageService.uploadFile).toHaveBeenCalledWith(arquivo);
+      expect(planoAulaService.adicionarDocumentoUpload).toHaveBeenCalledWith(
+        "plano-1",
+        expect.objectContaining({
+          fileSize: LIMITE_UPLOAD_BYTES,
+          mimeType: "application/pdf",
+        }),
+      );
+    });
+
+    it("deve rejeitar arquivo acima de 500 MB", async () => {
+      const { controller } = criarController();
+
+      await expect(
+        controller.uploadDocumento(
+          "plano-1",
+          criarReqMultipart(criarArquivoMultipart(LIMITE_UPLOAD_BYTES + 1)),
+        ),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: "FILE_TOO_LARGE",
+          message: "Arquivo muito grande. Tamanho máximo: 500MB",
+        }),
+      });
+    });
+  });
+
+  describe("atualizarDocumento", () => {
+    it("deve aceitar reenvio de Word com tamanho máximo de 500 MB", async () => {
+      const { controller, planoAulaService, storageService } = criarController();
+      const arquivo = criarArquivoMultipart(LIMITE_UPLOAD_BYTES);
+
+      const resultado = await controller.atualizarDocumento(
+        "plano-1",
+        "doc-1",
+        criarReqMultipart(arquivo),
+      );
+
+      expect(resultado.success).toBe(true);
+      expect(storageService.replaceFile).toHaveBeenCalledWith(
+        documentoWord.storageKey,
+        expect.objectContaining({ length: LIMITE_UPLOAD_BYTES }),
+        documentoWord.mimeType,
+        "Plano.docx",
+      );
+      expect(planoAulaService.atualizarDocumento).toHaveBeenCalledWith(
+        "doc-1",
+        expect.objectContaining({
+          fileSize: LIMITE_UPLOAD_BYTES,
+        }),
+      );
+    });
+  });
 
   describe("editarWord", () => {
     it("deve registrar sharepoint_word no sucesso com documento, plano, arquivo e duração", async () => {

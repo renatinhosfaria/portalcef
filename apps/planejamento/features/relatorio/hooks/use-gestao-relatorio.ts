@@ -143,7 +143,7 @@ export function useGestaoRelatorio(): UseGestaoRelatorioReturn {
             params.set("status", filtros.status);
           }
           if (filtros.etapa) params.set("etapa", filtros.etapa);
-          if (filtros.semanaId) params.set("semanaId", filtros.semanaId);
+          if (filtros.semestreId) params.set("semestreId", filtros.semestreId);
           const query = params.toString() ? `?${params.toString()}` : "";
           const data =
             (await api.get<RelatorioListItem[]>(

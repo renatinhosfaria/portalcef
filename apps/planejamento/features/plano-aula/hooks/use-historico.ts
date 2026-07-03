@@ -16,7 +16,12 @@ interface UseHistoricoReturn {
   error: Error | null;
 }
 
-export function useHistorico(planoId: string): UseHistoricoReturn {
+type HistoricoModulo = "plano-aula" | "prova" | "relatorio";
+
+export function useHistorico(
+  planoId: string,
+  modulo: HistoricoModulo = "plano-aula",
+): UseHistoricoReturn {
   const [historico, setHistorico] = useState<HistoricoEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
@@ -32,7 +37,7 @@ export function useHistorico(planoId: string): UseHistoricoReturn {
         setIsLoading(true);
         setError(null);
         const data = await api.get<HistoricoEntry[]>(
-          `/plano-aula/${planoId}/historico`,
+          `/${modulo}/${planoId}/historico`,
         );
         setHistorico(data);
       } catch (err) {
@@ -45,7 +50,7 @@ export function useHistorico(planoId: string): UseHistoricoReturn {
     };
 
     void fetchHistorico();
-  }, [planoId]);
+  }, [planoId, modulo]);
 
   return { historico, isLoading, error };
 }

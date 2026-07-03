@@ -24,9 +24,15 @@ import { TenantGuard } from "../../common/guards/tenant.guard";
 import { SharePointService } from "../../common/sharepoint/sharepoint.service";
 import { StorageService } from "../../common/storage/storage.service";
 import {
-  type CreateRelatorioDto,
-  type DevolverRelatorioDto,
-  type ListarRelatoriosGestaoDto,
+  LIMITE_UPLOAD_ARQUIVO_BYTES,
+  MENSAGEM_ARQUIVO_GRANDE,
+} from "../../common/upload-limits";
+import { PlanejamentoObservabilidadeService } from "../planejamento-observabilidade/planejamento-observabilidade.service";
+import type { PlanejamentoObservabilidadeEventoEntrada } from "../planejamento-observabilidade/planejamento-observabilidade.types";
+import {
+  CreateRelatorioDto,
+  DevolverRelatorioDto,
+  ListarRelatoriosGestaoDto,
 } from "./dto/relatorio.dto";
 import { RelatorioHistoricoService } from "./relatorio-historico.service";
 import { RelatorioService, type UserContext } from "./relatorio.service";
@@ -45,6 +51,13 @@ interface FastifyMultipartRequest extends FastifyRequest {
 type RequestComUsuario = {
   user: UserContext;
   correlationId?: string;
+};
+
+type DocumentoObservabilidade = {
+  id: string;
+  fileName?: string | null;
+  mimeType?: string | null;
+  fileSize?: number | null;
 };
 
 // ============================================
@@ -99,7 +112,7 @@ const WORD_ACCESS = [
 /**
  * RelatorioController
  *
- * Controller para o workflow de relatórios semanais (BERCARIO e INFANTIL):
+ * Controller para o workflow de relatórios semestrais (BERCARIO e INFANTIL):
  * - Professora: criar, submeter, anexar documentos
  * - Analista: revisar, aprovar/devolver, gerenciar documentos
  * - Coordenadora: aprovação final ou devolução
@@ -118,7 +131,84 @@ export class RelatorioController {
     private readonly storageService: StorageService,
     private readonly historicoService: RelatorioHistoricoService,
     private readonly sharePointService: SharePointService,
+    private readonly observabilidadeService: PlanejamentoObservabilidadeService,
   ) {}
+
+  private registrarObservabilidade(
+    evento: PlanejamentoObservabilidadeEventoEntrada,
+  ): void {
+    try {
+      void this.observabilidadeService.registrarEvento(evento).catch(() => undefined);
+    } catch {
+      return;
+    }
+  }
+
+  private criarArquivoObservabilidade(
+    relatorioId: string,
+    documento: DocumentoObservabilidade,
+  ) {
+    return {
+      relatorioId,
+      documentoId: documento.id,
+      nome: documento.fileName,
+      tipo: documento.mimeType,
+      tamanhoBytes: documento.fileSize,
+    };
+  }
+
+  private registrarSharePointWord(params: {
+    req: RequestComUsuario;
+    relatorioId: string;
+    documento: DocumentoObservabilidade;
+    etapa: string;
+    duracaoMs: number;
+    detalhes?: Record<string, unknown>;
+  }): void {
+    this.registrarObservabilidade({
+      origem: "sharepoint",
+      evento: "sharepoint_word",
+      nivel: "info",
+      correlationId: params.req.correlationId,
+      usuario: this.observabilidadeService.criarUsuarioDoRequest(params.req.user),
+      arquivo: this.criarArquivoObservabilidade(
+        params.relatorioId,
+        params.documento,
+      ),
+      detalhes: {
+        etapa: params.etapa,
+        duracaoMs: params.duracaoMs,
+        ...params.detalhes,
+      },
+    });
+  }
+
+  private registrarAcaoArquivo(params: {
+    req?: RequestComUsuario;
+    relatorioId: string;
+    documento: DocumentoObservabilidade;
+    acao: string;
+    status: number;
+    duracaoMs: number;
+    nivel?: "info" | "error";
+  }): void {
+    this.registrarObservabilidade({
+      origem: "storage",
+      evento: "arquivo_acao",
+      nivel: params.nivel ?? "info",
+      correlationId: params.req?.correlationId,
+      usuario: this.observabilidadeService.criarUsuarioDoRequest(params.req?.user),
+      arquivo: this.criarArquivoObservabilidade(
+        params.relatorioId,
+        params.documento,
+      ),
+      detalhes: {
+        acao: params.acao,
+        status: params.status,
+        duracaoMs: params.duracaoMs,
+      },
+    });
+  }
 
   // ============================================
   // Endpoints da Professora
@@ -126,7 +216,7 @@ export class RelatorioController {
 
   /**
    * POST /relatorio
-   * Cria (ou retorna existente) relatório para turma/semana
+   * Cria (ou retorna existente) relatório para turma/semestre
    */
   @Post()
   @Roles(...PROFESSORA_ACCESS)
@@ -339,6 +429,8 @@ export class RelatorioController {
     @Param("id") relatorioId: string,
     @Req() req: FastifyMultipartRequest,
   ) {
+    const inicio = Date.now();
+
     if (!req.isMultipart()) {
       throw new BadRequestException({
         code: "INVALID_REQUEST",
@@ -382,13 +474,11 @@ export class RelatorioController {
       });
     }
 
-    // Validar tamanho (100MB max)
-    const MAX_SIZE = 100 * 1024 * 1024;
     const buffer = await data.toBuffer();
-    if (buffer.length > MAX_SIZE) {
+    if (buffer.length > LIMITE_UPLOAD_ARQUIVO_BYTES) {
       throw new BadRequestException({
         code: "FILE_TOO_LARGE",
-        message: "Arquivo muito grande. Tamanho máximo: 100MB",
+        message: MENSAGEM_ARQUIVO_GRANDE,
       });
     }
 
@@ -408,6 +498,15 @@ export class RelatorioController {
         },
         user,
       );
+
+      this.registrarAcaoArquivo({
+        req,
+        relatorioId,
+        documento,
+        acao: "upload",
+        status: 201,
+        duracaoMs: Date.now() - inicio,
+      });
 
       return {
         success: true,
@@ -522,12 +621,23 @@ export class RelatorioController {
     @Res() reply: FastifyReply,
     @Param("id") relatorioId: string,
     @Param("docId") docId: string,
+    @Req() req?: RequestComUsuario,
   ) {
+    const inicio = Date.now();
     const documento = await this.relatorioService.getDocumentoById(
       relatorioId,
       docId,
     );
     if (!documento.storageKey) {
+      this.registrarAcaoArquivo({
+        req,
+        relatorioId,
+        documento,
+        acao: "download",
+        status: 404,
+        duracaoMs: Date.now() - inicio,
+        nivel: "error",
+      });
       return reply.status(404).send({ error: "Arquivo não encontrado" });
     }
 
@@ -544,9 +654,28 @@ export class RelatorioController {
         reply.header("Content-Length", s3Response.ContentLength);
       }
 
-      return reply.send(s3Response.Body);
+      const resposta = reply.send(s3Response.Body);
+      this.registrarAcaoArquivo({
+        req,
+        relatorioId,
+        documento,
+        acao: "download",
+        status: 200,
+        duracaoMs: Date.now() - inicio,
+      });
+
+      return resposta;
     } catch (error) {
       this.logger.error(`Erro ao baixar documento ${docId}: ${error}`);
+      this.registrarAcaoArquivo({
+        req,
+        relatorioId,
+        documento,
+        acao: "download",
+        status: 500,
+        duracaoMs: Date.now() - inicio,
+        nivel: "error",
+      });
       return reply.status(500).send({ error: "Erro ao baixar arquivo" });
     }
   }
@@ -566,6 +695,8 @@ export class RelatorioController {
     @Param("id") relatorioId: string,
     @Param("docId") docId: string,
   ) {
+    const inicio = Date.now();
+
     if (!this.sharePointService.isConfigurado()) {
       throw new BadRequestException({
         code: "SHAREPOINT_NOT_CONFIGURED",
@@ -597,6 +728,15 @@ export class RelatorioController {
           const msWordUrl = this.sharePointService.construirMsWordUrl(
             documento.sharepointEditUrl,
           );
+
+          this.registrarSharePointWord({
+            req,
+            relatorioId,
+            documento,
+            etapa: "editar_word",
+            duracaoMs: Date.now() - inicio,
+            detalhes: { reutilizouItemExistente: true },
+          });
 
           return {
             success: true,
@@ -635,6 +775,14 @@ export class RelatorioController {
 
     const msWordUrl = this.sharePointService.construirMsWordUrl(directUrl);
 
+    this.registrarSharePointWord({
+      req,
+      relatorioId,
+      documento,
+      etapa: "editar_word",
+      duracaoMs: Date.now() - inicio,
+    });
+
     return {
       success: true,
       data: { url: msWordUrl },
@@ -652,6 +800,8 @@ export class RelatorioController {
     @Param("id") relatorioId: string,
     @Param("docId") docId: string,
   ) {
+    const inicio = Date.now();
+
     if (!this.sharePointService.isConfigurado()) {
       return { success: true, data: { disponivel: false } };
     }
@@ -675,6 +825,7 @@ export class RelatorioController {
 
     let itemId: string | null = null;
     let reutilizouItemExistente = false;
+    let reenviado = false;
     if (documento.sharepointItemId && documento.editandoDesde) {
       const expirado = this.sharePointService.calcularLimiteEdicao();
       if (documento.editandoDesde > expirado) {
@@ -689,6 +840,7 @@ export class RelatorioController {
         documento.fileName || "documento.docx",
         docId,
       );
+      reenviado = true;
 
       await this.relatorioService.atualizarDocumento(docId, {
         sharepointItemId: itemId,
@@ -724,6 +876,7 @@ export class RelatorioController {
         documento.fileName || "documento.docx",
         docId,
       );
+      reenviado = true;
 
       await this.relatorioService.atualizarDocumento(docId, {
         sharepointItemId: itemId,
@@ -734,6 +887,15 @@ export class RelatorioController {
       ({ embedUrl } =
         await this.sharePointService.criarLinkVisualizacao(itemId));
     }
+
+    this.registrarSharePointWord({
+      req,
+      relatorioId,
+      documento,
+      etapa: "visualizar_sharepoint",
+      duracaoMs: Date.now() - inicio,
+      detalhes: { reenviado },
+    });
 
     return {
       success: true,
@@ -752,6 +914,7 @@ export class RelatorioController {
     @Param("id") relatorioId: string,
     @Param("docId") docId: string,
   ) {
+    const inicio = Date.now();
     const user = req.user;
     // Validação de permissão acontece no service
     await this.relatorioService.sincronizarWord(relatorioId, docId, user);
@@ -810,6 +973,15 @@ export class RelatorioController {
       updatedAt: new Date(),
     });
 
+    this.registrarSharePointWord({
+      req,
+      relatorioId,
+      documento,
+      etapa: "sincronizar_word",
+      duracaoMs: Date.now() - inicio,
+      detalhes: { sincronizado: foiModificado },
+    });
+
     return {
       success: true,
       data: { sincronizado: foiModificado },
@@ -849,11 +1021,9 @@ export class RelatorioController {
   async devolverAnalista(
     @Req() req: { user: UserContext },
     @Param("id") id: string,
-    @Body() body: DevolverRelatorioDto,
   ) {
     const relatorio = await this.relatorioService.devolverAnalista(
       id,
-      body,
       req.user,
     );
     return {

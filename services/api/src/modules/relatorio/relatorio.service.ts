@@ -93,7 +93,7 @@ export interface DashboardItem {
 /**
  * RelatorioService
  *
- * Implementa o workflow de aprovação de relatórios semanais
+ * Implementa o workflow de aprovação de relatórios semestrais
  * para etapas BERCARIO e INFANTIL:
  * - Professora: cria/submete relatório
  * - Analista: revisa/aprova/devolve para professora
@@ -113,7 +113,7 @@ export class RelatorioService {
   // ============================================
 
   /**
-   * Cria ou busca relatório existente para turma/semana.
+   * Cria ou busca relatório existente para turma/semestre.
    * Valida que a turma pertence a uma etapa permitida (BERCARIO ou INFANTIL).
    */
   async criar(
@@ -153,12 +153,12 @@ export class RelatorioService {
       );
     }
 
-    // Verificar se já existe relatório para (userId, turmaId, semanaId)
+    // Verificar se já existe relatório para (userId, turmaId, semestreId)
     const existente = await db.query.relatorio.findFirst({
       where: and(
         eq(relatorio.userId, user.userId),
         eq(relatorio.turmaId, dto.turmaId),
-        eq(relatorio.semanaId, dto.semanaId),
+        eq(relatorio.semestreId, dto.semestreId),
       ),
     });
 
@@ -172,8 +172,8 @@ export class RelatorioService {
         userId: user.userId,
         turmaId: dto.turmaId,
         unitId: user.unitId,
-        semanaId: dto.semanaId,
-        semanaRelatorioId: dto.semanaRelatorioId ?? null,
+        semestreId: dto.semestreId,
+        semestreRelatorioId: dto.semestreRelatorioId ?? null,
         status: "RASCUNHO",
       })
       .returning();
@@ -508,7 +508,6 @@ export class RelatorioService {
    */
   async devolverAnalista(
     relatorioId: string,
-    dto: DevolverRelatorioDto,
     user: UserContext,
   ): Promise<Relatorio> {
     const db = getDb();
@@ -558,7 +557,6 @@ export class RelatorioService {
       acao: "DEVOLVIDO_ANALISTA",
       statusAnterior,
       statusNovo: "DEVOLVIDO_ANALISTA",
-      detalhes: { motivo: dto.motivo },
     });
 
     return atualizado;
@@ -795,8 +793,8 @@ export class RelatorioService {
       conditions.push(eq(relatorio.status, filtros.status));
     }
 
-    if (filtros.semanaId) {
-      conditions.push(eq(relatorio.semanaId, filtros.semanaId));
+    if (filtros.semestreId) {
+      conditions.push(eq(relatorio.semestreId, filtros.semestreId));
     }
 
     const base = await db.query.relatorio.findMany({
@@ -833,8 +831,8 @@ export class RelatorioService {
         turmaName: turmaComStage?.name ?? "",
         etapaCode: turmaComStage?.stage?.code ?? "",
         etapaName: turmaComStage?.stage?.name ?? "",
-        semanaId: r.semanaId,
-        semanaRelatorioId: r.semanaRelatorioId,
+        semestreId: r.semestreId,
+        semestreRelatorioId: r.semestreRelatorioId,
         status: r.status,
         submittedAt: r.submittedAt?.toISOString() ?? null,
         approvedAt: r.approvedAt?.toISOString() ?? null,
@@ -1697,8 +1695,8 @@ export class RelatorioService {
   ) {
     return {
       id: rel.id,
-      semanaId: rel.semanaId,
-      semanaRelatorioId: rel.semanaRelatorioId,
+      semestreId: rel.semestreId,
+      semestreRelatorioId: rel.semestreRelatorioId,
       status: rel.status,
       submittedAt: rel.submittedAt?.toISOString(),
       professorName: rel.user?.name ?? "",
