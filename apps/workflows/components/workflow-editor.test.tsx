@@ -55,6 +55,50 @@ const modeloExistente: WorkflowModeloDetalhe = {
   ],
 };
 
+const modeloComEstruturaMultipla: WorkflowModeloDetalhe = {
+  ...modeloExistente,
+  fases: [
+    {
+      id: "fase-1",
+      nome: "Preparacao",
+      ordem: 1,
+      etapas: [
+        {
+          id: "etapa-1",
+          titulo: "Definir data",
+          instrucao: "Confirmar no calendario",
+          ordem: 1,
+          versao: 1,
+          updatedAt: "2026-07-03T10:00:00.000Z",
+        },
+        {
+          id: "etapa-2",
+          titulo: "Reservar espaço",
+          instrucao: "Validar disponibilidade",
+          ordem: 2,
+          versao: 1,
+          updatedAt: "2026-07-03T10:00:00.000Z",
+        },
+      ],
+    },
+    {
+      id: "fase-2",
+      nome: "Execucao",
+      ordem: 2,
+      etapas: [
+        {
+          id: "etapa-3",
+          titulo: "Montar recepção",
+          instrucao: "Organizar entrada",
+          ordem: 1,
+          versao: 1,
+          updatedAt: "2026-07-03T10:00:00.000Z",
+        },
+      ],
+    },
+  ],
+};
+
 describe("WorkflowEditor", () => {
   afterEach(() => {
     vi.clearAllMocks();
@@ -238,7 +282,7 @@ describe("WorkflowEditor", () => {
     render(
       <WorkflowEditor
         categorias={[categoriaEventos]}
-        modelo={{ ...modeloExistente, status: "PUBLICADO" }}
+        modelo={{ ...modeloComEstruturaMultipla, status: "PUBLICADO" }}
         onSalvar={vi.fn()}
         onInativar={vi.fn()}
         onDuplicar={vi.fn()}
@@ -247,8 +291,26 @@ describe("WorkflowEditor", () => {
 
     expect(screen.getByRole("button", { name: "Aplicar sugestões" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Adicionar fase" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Remover fase" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Adicionar etapa" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Remover etapa" })).toBeDisabled();
+    screen
+      .getAllByRole("button", { name: "Remover fase" })
+      .forEach((button) => expect(button).toBeDisabled());
+    screen
+      .getAllByRole("button", { name: "Adicionar etapa" })
+      .forEach((button) => expect(button).toBeDisabled());
+    screen
+      .getAllByRole("button", { name: "Remover etapa" })
+      .forEach((button) => expect(button).toBeDisabled());
+    screen
+      .getAllByRole("button", { name: "Mover fase para cima" })
+      .forEach((button) => expect(button).toBeDisabled());
+    screen
+      .getAllByRole("button", { name: "Mover fase para baixo" })
+      .forEach((button) => expect(button).toBeDisabled());
+    screen
+      .getAllByRole("button", { name: "Mover etapa para cima" })
+      .forEach((button) => expect(button).toBeDisabled());
+    screen
+      .getAllByRole("button", { name: "Mover etapa para baixo" })
+      .forEach((button) => expect(button).toBeDisabled());
   });
 });

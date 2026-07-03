@@ -288,6 +288,8 @@ export function WorkflowEditor({
   }
 
   function moverFase(index: number, direcao: -1 | 1) {
+    if (modeloPublicado) return;
+
     setEstado((atual) => ({
       ...atual,
       fases: moverItem(atual.fases, index, direcao),
@@ -357,6 +359,8 @@ export function WorkflowEditor({
   }
 
   function moverEtapa(faseIndex: number, etapaIndex: number, direcao: -1 | 1) {
+    if (modeloPublicado) return;
+
     setEstado((atual) => ({
       ...atual,
       fases: atual.fases.map((fase, index) =>
@@ -660,7 +664,9 @@ export function WorkflowEditor({
                         variant="outline"
                         size="icon"
                         aria-label="Mover fase para cima"
-                        disabled={faseIndex === 0}
+                        disabled={
+                          modeloPublicado || mutacaoEmAndamento || faseIndex === 0
+                        }
                         onClick={() => moverFase(faseIndex, -1)}
                       >
                         <ArrowUp className="h-4 w-4" />
@@ -670,7 +676,11 @@ export function WorkflowEditor({
                         variant="outline"
                         size="icon"
                         aria-label="Mover fase para baixo"
-                        disabled={faseIndex === estado.fases.length - 1}
+                        disabled={
+                          modeloPublicado ||
+                          mutacaoEmAndamento ||
+                          faseIndex === estado.fases.length - 1
+                        }
                         onClick={() => moverFase(faseIndex, 1)}
                       >
                         <ArrowDown className="h-4 w-4" />
@@ -762,7 +772,11 @@ export function WorkflowEditor({
                                   variant="outline"
                                   size="icon"
                                   aria-label="Mover etapa para cima"
-                                  disabled={etapaIndex === 0}
+                                  disabled={
+                                    modeloPublicado ||
+                                    mutacaoEmAndamento ||
+                                    etapaIndex === 0
+                                  }
                                   onClick={() =>
                                     moverEtapa(faseIndex, etapaIndex, -1)
                                   }
@@ -774,7 +788,11 @@ export function WorkflowEditor({
                                   variant="outline"
                                   size="icon"
                                   aria-label="Mover etapa para baixo"
-                                  disabled={etapaIndex === fase.etapas.length - 1}
+                                  disabled={
+                                    modeloPublicado ||
+                                    mutacaoEmAndamento ||
+                                    etapaIndex === fase.etapas.length - 1
+                                  }
                                   onClick={() =>
                                     moverEtapa(faseIndex, etapaIndex, 1)
                                   }
