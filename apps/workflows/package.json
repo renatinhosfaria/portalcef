@@ -1,0 +1,42 @@
+{
+  "name": "workflows",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "clean": "rimraf .next",
+    "dev": "next dev --port 3015",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --environment jsdom --globals"
+  },
+  "dependencies": {
+    "@essencia/components": "workspace:*",
+    "@essencia/shared": "workspace:*",
+    "@essencia/tailwind-config": "workspace:*",
+    "@essencia/ui": "workspace:*",
+    "date-fns": "^4.1.0",
+    "lucide-react": "^0.469.0",
+    "next": "15.1.12",
+    "react": "19.0.4",
+    "react-dom": "19.0.4"
+  },
+  "devDependencies": {
+    "@essencia/config": "workspace:*",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.1",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/node": "^22.10.2",
+    "@types/react": "^19.0.2",
+    "@types/react-dom": "^19.0.2",
+    "@vitejs/plugin-react": "^5.1.2",
+    "autoprefixer": "^10.4.20",
+    "jsdom": "^27.3.0",
+    "postcss": "^8.4.49",
+    "rimraf": "^5.0.5",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.7.2",
+    "vitest": "^4.0.16"
+  }
+}
