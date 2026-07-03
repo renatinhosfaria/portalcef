@@ -1,4 +1,4 @@
-import { BadRequestException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
 
 import { AuthGuard } from "../../common/guards/auth.guard";
@@ -392,5 +392,43 @@ describe("WorkflowsController", () => {
       usuarioBase,
       "execucao-1",
     );
+  });
+
+  it("nao faz upload de anexo quando execucao nao e visivel", async () => {
+    execucoesService.buscarPorId.mockRejectedValue(
+      new ForbiddenException("Sem permissao"),
+    );
+    storageService.uploadBuffer.mockResolvedValue({
+      url: "https://cdn/arquivo.pdf",
+      key: "workflows/arquivo.pdf",
+      name: "arquivo.pdf",
+    });
+
+    const parts = jest.fn(async function* () {
+      yield {
+        type: "file",
+        fieldname: "arquivo",
+        filename: "arquivo.pdf",
+        mimetype: "application/pdf",
+        toBuffer: async () => Buffer.from("%PDF-1.4"),
+      };
+    });
+    const req = {
+      user: usuarioBase,
+      isMultipart: () => true,
+      parts,
+    };
+
+    await expect(
+      controller.enviarAnexo("exec-1", req as never),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    expect(execucoesService.buscarPorId).toHaveBeenCalledWith(
+      usuarioBase,
+      "exec-1",
+    );
+    expect(parts).not.toHaveBeenCalled();
+    expect(storageService.uploadBuffer).not.toHaveBeenCalled();
+    expect(anexosService.registrarUpload).not.toHaveBeenCalled();
   });
 });

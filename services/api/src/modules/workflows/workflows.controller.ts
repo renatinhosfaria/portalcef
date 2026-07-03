@@ -1,9 +1,12 @@
+import type { Multipart } from "@fastify/multipart";
 import {
   BadRequestException,
   Body,
   Controller,
   Delete,
   Get,
+  InternalServerErrorException,
+  Logger,
   Param,
   Patch,
   Post,
@@ -11,10 +14,12 @@ import {
   Req,
   UseGuards,
 } from "@nestjs/common";
+import type { FastifyRequest } from "fastify";
 
 import { ExactRoles, Roles } from "../../common/decorators/roles.decorator";
 import { AuthGuard } from "../../common/guards/auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
+import { StorageService } from "../../common/storage/storage.service";
 import {
   atualizarCategoriaSchema,
   atualizarEtapaSchema,
@@ -31,12 +36,22 @@ import {
   WORKFLOW_GESTAO_ROLES,
   WORKFLOW_ROLES_ACESSO,
 } from "./workflows.constants";
+import { WorkflowsAnexosService } from "./workflows-anexos.service";
 import { WorkflowsCategoriasService } from "./workflows-categorias.service";
 import { WorkflowsExecucoesService } from "./workflows-execucoes.service";
 import { WorkflowsModelosService } from "./workflows-modelos.service";
-import type { WorkflowUserContext } from "./workflows.types";
+import type {
+  ArquivoWorkflowUpload,
+  WorkflowUserContext,
+} from "./workflows.types";
 
 type RequestComUsuario = { user: WorkflowUserContext };
+
+interface FastifyMultipartRequest extends FastifyRequest {
+  isMultipart: () => boolean;
+  parts: () => AsyncIterableIterator<Multipart>;
+  user: WorkflowUserContext;
+}
 
 type ResultadoValidacao<T> =
   | { success: true; data: T }
@@ -50,10 +65,14 @@ type SchemaValidavel<T> = {
 @ExactRoles()
 @UseGuards(AuthGuard, RolesGuard)
 export class WorkflowsController {
+  private readonly logger = new Logger(WorkflowsController.name);
+
   constructor(
     private readonly categoriasService: WorkflowsCategoriasService,
     private readonly modelosService: WorkflowsModelosService,
     private readonly execucoesService: WorkflowsExecucoesService,
+    private readonly anexosService: WorkflowsAnexosService,
+    private readonly storageService: StorageService,
   ) {}
 
   private validar<T>(schema: SchemaValidavel<T>, input: unknown): T {
@@ -66,6 +85,75 @@ export class WorkflowsController {
       });
     }
     return parsed.data;
+  }
+
+  private async processarArquivoUnico(
+    req: FastifyMultipartRequest,
+  ): Promise<ArquivoWorkflowUpload> {
+    if (!req.isMultipart()) {
+      throw new BadRequestException({
+        code: "INVALID_REQUEST",
+        message: "Request deve ser multipart/form-data",
+      });
+    }
+
+    const arquivos: ArquivoWorkflowUpload[] = [];
+
+    for await (const part of req.parts()) {
+      if (part.type !== "file") {
+        continue;
+      }
+
+      const buffer = await part.toBuffer();
+      if (buffer.length === 0) {
+        continue;
+      }
+
+      arquivos.push({
+        buffer,
+        nomeOriginal: part.filename,
+        mimetype: part.mimetype,
+        tamanhoBytes: buffer.length,
+      });
+
+      if (arquivos.length > 1) {
+        throw new BadRequestException({
+          code: "MULTIPLE_FILES",
+          message: "Envie apenas um arquivo por vez",
+        });
+      }
+    }
+
+    const [arquivo] = arquivos;
+    if (!arquivo) {
+      throw new BadRequestException({
+        code: "FILE_REQUIRED",
+        message: "Envie um arquivo nao vazio",
+      });
+    }
+
+    return arquivo;
+  }
+
+  private async enviarArquivoParaStorage(arquivo: ArquivoWorkflowUpload) {
+    try {
+      return await this.storageService.uploadBuffer(
+        arquivo.buffer,
+        arquivo.nomeOriginal,
+        arquivo.mimetype,
+        "workflows",
+      );
+    } catch (error) {
+      this.logger.error(
+        `Erro ao fazer upload de anexo de workflow: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      throw new InternalServerErrorException({
+        code: "UPLOAD_FAILED",
+        message: "Erro ao fazer upload do arquivo",
+      });
+    }
   }
 
   @Get("categorias")
@@ -313,6 +401,40 @@ export class WorkflowsController {
       success: true,
       data: await this.execucoesService.reabrir(req.user, execucaoId, dto),
     };
+  }
+
+  @Post("execucoes/:execucaoId/anexos")
+  @Roles(...WORKFLOW_ROLES_ACESSO)
+  async enviarAnexo(
+    @Param("execucaoId") execucaoId: string,
+    @Req() req: FastifyMultipartRequest,
+  ) {
+    await this.execucoesService.buscarPorId(req.user, execucaoId);
+    const arquivo = await this.processarArquivoUnico(req);
+    const resultado = await this.enviarArquivoParaStorage(arquivo);
+
+    return {
+      success: true,
+      data: await this.anexosService.registrarUpload(req.user, execucaoId, {
+        url: resultado.url,
+        storageKey: resultado.key,
+        nomeOriginal: arquivo.nomeOriginal,
+        mimetype: arquivo.mimetype,
+        tamanhoBytes: arquivo.tamanhoBytes,
+      }),
+    };
+  }
+
+  @Delete("execucoes/:execucaoId/anexos/:anexoId")
+  @Roles(...WORKFLOW_ROLES_ACESSO)
+  async removerAnexo(
+    @Req() req: RequestComUsuario,
+    @Param("execucaoId") execucaoId: string,
+    @Param("anexoId") anexoId: string,
+  ) {
+    await this.execucoesService.buscarPorId(req.user, execucaoId);
+    await this.anexosService.remover(req.user, execucaoId, anexoId);
+    return { success: true, data: null };
   }
 
   @Delete("execucoes/:execucaoId")
