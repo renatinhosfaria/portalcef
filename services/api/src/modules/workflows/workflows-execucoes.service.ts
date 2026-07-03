@@ -26,6 +26,7 @@ import type {
 } from "@essencia/db";
 
 import { DatabaseService } from "../../common/database/database.service";
+import { StorageService } from "../../common/storage/storage.service";
 import type {
   AtualizarEtapaDto,
   EditarTituloExecucaoDto,
@@ -66,6 +67,18 @@ type ProgressoEtapa = {
   observacao?: string | null;
 };
 
+type UsuarioRelacionado = {
+  name?: string | null;
+  nome?: string | null;
+  email?: string | null;
+};
+
+type AnexoExecucao = {
+  storageKey?: string;
+  enviadoPorUser?: UsuarioRelacionado | null;
+  [key: string]: unknown;
+};
+
 type ExecucaoComRelacoes = {
   id: string;
   schoolId: string;
@@ -77,13 +90,9 @@ type ExecucaoComRelacoes = {
   iniciadoPor: string;
   modelo?: ModeloComEtapas;
   progresso?: ProgressoEtapa[];
-  anexos?: unknown[];
+  anexos?: AnexoExecucao[];
   historico?: Array<{
-    autor?: {
-      name?: string | null;
-      nome?: string | null;
-      email?: string | null;
-    } | null;
+    autor?: UsuarioRelacionado | null;
   }>;
 };
 
@@ -92,6 +101,7 @@ export class WorkflowsExecucoesService {
   constructor(
     private readonly database: DatabaseService,
     private readonly historicoService: WorkflowsHistoricoService,
+    private readonly storageService: StorageService,
   ) {}
 
   private validarTenant(
@@ -164,6 +174,9 @@ export class WorkflowsExecucoesService {
       progresso: true,
       anexos: {
         orderBy: desc(workflowAnexos.createdAt),
+        with: {
+          enviadoPorUser: true,
+        },
       },
       historico: {
         orderBy: desc(workflowHistorico.createdAt),
@@ -232,6 +245,10 @@ export class WorkflowsExecucoesService {
     return Math.round((totalConcluidas / etapas.length) * 100);
   }
 
+  private nomeUsuario(usuario?: UsuarioRelacionado | null) {
+    return usuario?.name ?? usuario?.nome ?? usuario?.email ?? null;
+  }
+
   private normalizarExecucao<T extends ExecucaoComRelacoes>(execucao: T) {
     const modelo = execucao.modelo;
     const progresso = execucao.progresso ?? [];
@@ -239,11 +256,17 @@ export class WorkflowsExecucoesService {
     return {
       ...execucao,
       progresso,
-      anexos: execucao.anexos ?? [],
+      anexos: (execucao.anexos ?? []).map((anexo) => {
+        const { enviadoPorUser, ...dadosAnexo } = anexo;
+
+        return {
+          ...dadosAnexo,
+          enviadoPorNome: this.nomeUsuario(enviadoPorUser),
+        };
+      }),
       historico: (execucao.historico ?? []).map((item) => ({
         ...item,
-        autorNome:
-          item.autor?.name ?? item.autor?.nome ?? item.autor?.email ?? null,
+        autorNome: this.nomeUsuario(item.autor),
       })),
       faseAtual: modelo ? this.calcularFaseAtual(modelo, progresso) : null,
       progressoPercentual: modelo
@@ -797,6 +820,15 @@ export class WorkflowsExecucoesService {
           ),
         );
     });
+
+    await Promise.all(
+      (execucao.anexos ?? [])
+        .filter(
+          (anexo): anexo is AnexoExecucao & { storageKey: string } =>
+            typeof anexo.storageKey === "string" && anexo.storageKey.length > 0,
+        )
+        .map((anexo) => this.storageService.deleteFile(anexo.storageKey)),
+    );
 
     return undefined;
   }

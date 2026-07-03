@@ -417,16 +417,37 @@ export class WorkflowsController {
     const arquivo = await this.processarArquivoUnico(req);
     const resultado = await this.enviarArquivoParaStorage(arquivo);
 
-    return {
-      success: true,
-      data: await this.anexosService.registrarUpload(req.user, execucaoId, {
+    try {
+      const anexo = await this.anexosService.registrarUpload(req.user, execucaoId, {
         url: resultado.url,
         storageKey: resultado.key,
         nomeOriginal: arquivo.nomeOriginal,
         mimetype: arquivo.mimetype,
         tamanhoBytes: arquivo.tamanhoBytes,
-      }),
-    };
+      });
+
+      return {
+        success: true,
+        data: {
+          ...anexo,
+          enviadoPorNome: null,
+        },
+      };
+    } catch (error) {
+      try {
+        await this.storageService.deleteFile(resultado.key);
+      } catch (deleteError) {
+        this.logger.error(
+          `Erro ao remover anexo de workflow apos falha de registro: ${
+            deleteError instanceof Error
+              ? deleteError.message
+              : String(deleteError)
+          }`,
+        );
+      }
+
+      throw error;
+    }
   }
 
   @Delete("execucoes/:execucaoId/anexos/:anexoId")

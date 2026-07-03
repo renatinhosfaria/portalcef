@@ -11,6 +11,7 @@ import {
 } from "@essencia/db";
 
 import { DatabaseService } from "../../common/database/database.service";
+import { StorageService } from "../../common/storage/storage.service";
 import { WorkflowsExecucoesService } from "./workflows-execucoes.service";
 import { WorkflowsHistoricoService } from "./workflows-historico.service";
 import type { WorkflowUserContext } from "./workflows.types";
@@ -144,6 +145,7 @@ function configurarCadeias() {
 describe("WorkflowsExecucoesService", () => {
   let service: WorkflowsExecucoesService;
   const historicoService = { registrar: jest.fn() };
+  const storageService = { deleteFile: jest.fn() };
   const mockEq = eq as unknown as jest.Mock;
 
   beforeEach(async () => {
@@ -154,6 +156,7 @@ describe("WorkflowsExecucoesService", () => {
         WorkflowsExecucoesService,
         { provide: DatabaseService, useValue: { db } },
         { provide: WorkflowsHistoricoService, useValue: historicoService },
+        { provide: StorageService, useValue: storageService },
       ],
     }).compile();
 
@@ -165,6 +168,7 @@ describe("WorkflowsExecucoesService", () => {
     db.query.workflowExecucoes.findFirst.mockReset();
     db.query.workflowExecucoes.findMany.mockReset();
     historicoService.registrar.mockReset();
+    storageService.deleteFile.mockReset();
   });
 
   it("inicia execucao real de modelo publicado para usuario comum", async () => {
@@ -240,6 +244,42 @@ describe("WorkflowsExecucoesService", () => {
         faseAtual: "Preparacao",
       }),
     );
+  });
+
+  it("normaliza nome do usuario que enviou anexo", async () => {
+    db.query.workflowExecucoes.findFirst.mockResolvedValue({
+      id: "execucao-1",
+      status: "EM_ANDAMENTO",
+      iniciadoPor: "prof-1",
+      schoolId: "school-1",
+      unitId: "unit-1",
+      teste: false,
+      modelo: modeloPublicado,
+      progresso: [],
+      anexos: [
+        {
+          id: "anexo-1",
+          nomeOriginal: "arquivo.pdf",
+          storageKey: "workflows/arquivo.pdf",
+          enviadoPor: "user-2",
+          enviadoPorUser: {
+            name: "Maria Silva",
+            email: "maria@essencia.edu.br",
+          },
+        },
+      ],
+      historico: [],
+    });
+
+    const execucao = await service.buscarPorId(professora, "execucao-1");
+
+    expect(execucao.anexos).toEqual([
+      expect.objectContaining({
+        id: "anexo-1",
+        enviadoPor: "user-2",
+        enviadoPorNome: "Maria Silva",
+      }),
+    ]);
   });
 
   it("bloqueia usuario comum iniciando teste de rascunho", async () => {
@@ -539,6 +579,12 @@ describe("WorkflowsExecucoesService", () => {
       teste: true,
       modelo: modeloPublicado,
       progresso: [],
+      anexos: [
+        {
+          id: "anexo-1",
+          storageKey: "workflows/arquivo.pdf",
+        },
+      ],
     });
 
     await service.descartarTeste(gestao, "execucao-1");
@@ -552,6 +598,9 @@ describe("WorkflowsExecucoesService", () => {
         metadata: expect.objectContaining({ titulo: "Teste de fluxo" }),
       }),
       tx,
+    );
+    expect(storageService.deleteFile).toHaveBeenCalledWith(
+      "workflows/arquivo.pdf",
     );
   });
 });

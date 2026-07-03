@@ -115,6 +115,7 @@ describe("WorkflowsController", () => {
   };
   const storageService = {
     uploadBuffer: jest.fn(),
+    deleteFile: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -519,5 +520,83 @@ describe("WorkflowsController", () => {
 
     expect(storageService.uploadBuffer).not.toHaveBeenCalled();
     expect(anexosService.registrarUpload).not.toHaveBeenCalled();
+  });
+
+  it("retorna contrato completo ao enviar anexo", async () => {
+    execucoesService.buscarPorId.mockResolvedValue({ id: "exec-1" });
+    storageService.uploadBuffer.mockResolvedValue({
+      url: "https://cdn/arquivo.pdf",
+      key: "workflows/arquivo.pdf",
+      name: "arquivo.pdf",
+    });
+    anexosService.registrarUpload.mockResolvedValue({
+      id: "anexo-1",
+      nomeOriginal: "arquivo.pdf",
+      storageKey: "workflows/arquivo.pdf",
+      url: "https://cdn/arquivo.pdf",
+      mimeType: "application/pdf",
+      tamanhoBytes: 8,
+      enviadoPor: "user-1",
+      createdAt: "2026-07-03T12:00:00.000Z",
+    });
+    const req = {
+      user: usuarioBase,
+      isMultipart: () => true,
+      async *parts() {
+        yield {
+          type: "file",
+          fieldname: "arquivo",
+          filename: "arquivo.pdf",
+          mimetype: "application/pdf",
+          toBuffer: async () => Buffer.from("%PDF-1.4"),
+        };
+      },
+    };
+
+    await expect(
+      controller.enviarAnexo("exec-1", req as never),
+    ).resolves.toEqual({
+      success: true,
+      data: expect.objectContaining({
+        id: "anexo-1",
+        enviadoPor: "user-1",
+        enviadoPorNome: null,
+      }),
+    });
+  });
+
+  it("remove arquivo do storage quando registro do anexo falha", async () => {
+    execucoesService.buscarPorId.mockResolvedValue({ id: "exec-1" });
+    storageService.uploadBuffer.mockResolvedValue({
+      url: "https://cdn/arquivo.pdf",
+      key: "workflows/arquivo.pdf",
+      name: "arquivo.pdf",
+    });
+    anexosService.registrarUpload.mockRejectedValue(
+      new Error("banco indisponivel"),
+    );
+    const req = {
+      user: usuarioBase,
+      isMultipart: () => true,
+      async *parts() {
+        yield {
+          type: "file",
+          fieldname: "arquivo",
+          filename: "arquivo.pdf",
+          mimetype: "application/pdf",
+          toBuffer: async () => Buffer.from("%PDF-1.4"),
+        };
+      },
+    };
+
+    await expect(controller.enviarAnexo("exec-1", req as never)).rejects.toThrow(
+      "banco indisponivel",
+    );
+
+    expect(storageService.uploadBuffer).toHaveBeenCalled();
+    expect(anexosService.registrarUpload).toHaveBeenCalled();
+    expect(storageService.deleteFile).toHaveBeenCalledWith(
+      "workflows/arquivo.pdf",
+    );
   });
 });
