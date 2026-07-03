@@ -12,12 +12,56 @@ describe('controle de migrations do Drizzle', () => {
       'utf8',
     );
 
-    expect(migration).toContain('CREATE TABLE "workflow_categorias"');
-    expect(migration).toContain('CREATE TABLE "workflow_modelos"');
-    expect(migration).toContain('CREATE TABLE "workflow_execucoes"');
-    expect(migration).toContain('CREATE TABLE "workflow_historico"');
-    expect(migration).toContain('"school_id" uuid NOT NULL');
-    expect(migration).toContain('"unit_id" uuid NOT NULL');
+    const obterDefinicaoTabela = (nomeTabela: string) => {
+      const resultado = migration.match(
+        new RegExp(`CREATE TABLE "${nomeTabela}" \\(([\\s\\S]*?)\\);`),
+      );
+
+      expect(resultado).not.toBeNull();
+
+      return resultado?.[1] ?? '';
+    };
+
+    const tabelasWorkflows = [
+      'workflow_categorias',
+      'workflow_modelos',
+      'workflow_orientacoes',
+      'workflow_fases',
+      'workflow_etapas',
+      'workflow_execucoes',
+      'workflow_etapa_progresso',
+      'workflow_anexos',
+      'workflow_historico',
+    ];
+
+    for (const tabela of tabelasWorkflows) {
+      expect(migration).toContain(`CREATE TABLE "${tabela}"`);
+    }
+
+    for (const tabelaTenant of [
+      'workflow_categorias',
+      'workflow_modelos',
+      'workflow_execucoes',
+    ]) {
+      const definicaoTabela = obterDefinicaoTabela(tabelaTenant);
+
+      expect(definicaoTabela).toContain('"school_id" uuid NOT NULL');
+      expect(definicaoTabela).toContain('"unit_id" uuid NOT NULL');
+    }
+  });
+
+  it('registra a migration do modulo workflows no journal', () => {
+    const journalPath = path.resolve(
+      __dirname,
+      '../../../../packages/db/drizzle/meta/_journal.json',
+    );
+    const journal = JSON.parse(
+      fs.readFileSync(journalPath, 'utf8'),
+    ) as DrizzleJournal;
+
+    expect(journal.entries).toContainEqual(
+      expect.objectContaining({ tag: '0036_workflows' }),
+    );
   });
 
   it('registra todos os arquivos SQL no journal', () => {

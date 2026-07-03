@@ -431,13 +431,21 @@ export type NewWorkflowCategoria = typeof workflowCategorias.$inferInsert;
 export type WorkflowModelo = typeof workflowModelos.$inferSelect;
 export type NewWorkflowModelo = typeof workflowModelos.$inferInsert;
 export type WorkflowOrientacao = typeof workflowOrientacoes.$inferSelect;
+export type NewWorkflowOrientacao = typeof workflowOrientacoes.$inferInsert;
 export type WorkflowFase = typeof workflowFases.$inferSelect;
+export type NewWorkflowFase = typeof workflowFases.$inferInsert;
 export type WorkflowEtapa = typeof workflowEtapas.$inferSelect;
+export type NewWorkflowEtapa = typeof workflowEtapas.$inferInsert;
 export type WorkflowExecucao = typeof workflowExecucoes.$inferSelect;
+export type NewWorkflowExecucao = typeof workflowExecucoes.$inferInsert;
 export type WorkflowEtapaProgresso =
   typeof workflowEtapaProgresso.$inferSelect;
+export type NewWorkflowEtapaProgresso =
+  typeof workflowEtapaProgresso.$inferInsert;
 export type WorkflowAnexo = typeof workflowAnexos.$inferSelect;
+export type NewWorkflowAnexo = typeof workflowAnexos.$inferInsert;
 export type WorkflowHistorico = typeof workflowHistorico.$inferSelect;
+export type NewWorkflowHistorico = typeof workflowHistorico.$inferInsert;
 
 export const insertWorkflowCategoriaSchema =
   createInsertSchema(workflowCategorias);
@@ -445,7 +453,27 @@ export const selectWorkflowCategoriaSchema =
   createSelectSchema(workflowCategorias);
 export const insertWorkflowModeloSchema = createInsertSchema(workflowModelos);
 export const selectWorkflowModeloSchema = createSelectSchema(workflowModelos);
+export const insertWorkflowOrientacaoSchema =
+  createInsertSchema(workflowOrientacoes);
+export const selectWorkflowOrientacaoSchema =
+  createSelectSchema(workflowOrientacoes);
+export const insertWorkflowFaseSchema = createInsertSchema(workflowFases);
+export const selectWorkflowFaseSchema = createSelectSchema(workflowFases);
+export const insertWorkflowEtapaSchema = createInsertSchema(workflowEtapas);
+export const selectWorkflowEtapaSchema = createSelectSchema(workflowEtapas);
 export const insertWorkflowExecucaoSchema =
   createInsertSchema(workflowExecucoes);
 export const selectWorkflowExecucaoSchema =
   createSelectSchema(workflowExecucoes);
+export const insertWorkflowEtapaProgressoSchema = createInsertSchema(
+  workflowEtapaProgresso,
+);
+export const selectWorkflowEtapaProgressoSchema = createSelectSchema(
+  workflowEtapaProgresso,
+);
+export const insertWorkflowAnexoSchema = createInsertSchema(workflowAnexos);
+export const selectWorkflowAnexoSchema = createSelectSchema(workflowAnexos);
+export const insertWorkflowHistoricoSchema =
+  createInsertSchema(workflowHistorico);
+export const selectWorkflowHistoricoSchema =
+  createSelectSchema(workflowHistorico);
