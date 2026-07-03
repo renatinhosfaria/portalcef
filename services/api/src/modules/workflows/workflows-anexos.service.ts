@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { and, eq, workflowAnexos } from "@essencia/db";
+import type { Database } from "@essencia/db";
 
 import { DatabaseService } from "../../common/database/database.service";
 import { StorageService } from "../../common/storage/storage.service";
@@ -12,6 +13,12 @@ import type {
   ArquivoWorkflowSalvo,
   WorkflowUserContext,
 } from "./workflows.types";
+
+type DbTransaction = Parameters<Database["transaction"]>[0] extends (
+  tx: infer T,
+) => unknown
+  ? T
+  : never;
 
 @Injectable()
 export class WorkflowsAnexosService {
@@ -74,18 +81,24 @@ export class WorkflowsAnexosService {
       throw new NotFoundException("Anexo nao encontrado");
     }
 
-    await this.storageService.deleteFile(anexo.storageKey);
-    await this.database.db.delete(workflowAnexos).where(filtro);
+    await this.database.db.transaction(async (tx: DbTransaction) => {
+      await this.historicoService.registrar(
+        {
+          execucaoId,
+          tipo: "ANEXO_REMOVIDO",
+          descricao: "Anexo removido",
+          autorId: session.userId,
+          metadata: {
+            anexoId: anexo.id,
+            nomeOriginal: anexo.nomeOriginal,
+          },
+        },
+        tx,
+      );
 
-    await this.historicoService.registrar({
-      execucaoId,
-      tipo: "ANEXO_REMOVIDO",
-      descricao: "Anexo removido",
-      autorId: session.userId,
-      metadata: {
-        anexoId: anexo.id,
-        nomeOriginal: anexo.nomeOriginal,
-      },
+      await tx.delete(workflowAnexos).where(filtro);
     });
+
+    await this.storageService.deleteFile(anexo.storageKey);
   }
 }

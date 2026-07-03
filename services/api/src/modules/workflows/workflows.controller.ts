@@ -97,34 +97,38 @@ export class WorkflowsController {
       });
     }
 
-    const arquivos: ArquivoWorkflowUpload[] = [];
+    let quantidadeArquivos = 0;
+    let arquivo: ArquivoWorkflowUpload | null = null;
 
     for await (const part of req.parts()) {
       if (part.type !== "file") {
         continue;
       }
 
-      const buffer = await part.toBuffer();
-      if (buffer.length === 0) {
-        continue;
-      }
-
-      arquivos.push({
-        buffer,
-        nomeOriginal: part.filename,
-        mimetype: part.mimetype,
-        tamanhoBytes: buffer.length,
-      });
-
-      if (arquivos.length > 1) {
+      quantidadeArquivos += 1;
+      if (quantidadeArquivos > 1) {
         throw new BadRequestException({
           code: "MULTIPLE_FILES",
           message: "Envie apenas um arquivo por vez",
         });
       }
+
+      const buffer = await part.toBuffer();
+      if (buffer.length === 0) {
+        throw new BadRequestException({
+          code: "EMPTY_FILE",
+          message: "Envie um arquivo nao vazio",
+        });
+      }
+
+      arquivo = {
+        buffer,
+        nomeOriginal: part.filename,
+        mimetype: part.mimetype,
+        tamanhoBytes: buffer.length,
+      };
     }
 
-    const [arquivo] = arquivos;
     if (!arquivo) {
       throw new BadRequestException({
         code: "FILE_REQUIRED",

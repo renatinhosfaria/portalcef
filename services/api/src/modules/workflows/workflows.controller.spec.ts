@@ -431,4 +431,93 @@ describe("WorkflowsController", () => {
     expect(storageService.uploadBuffer).not.toHaveBeenCalled();
     expect(anexosService.registrarUpload).not.toHaveBeenCalled();
   });
+
+  it("rejeita anexo quando request nao e multipart", async () => {
+    execucoesService.buscarPorId.mockResolvedValue({ id: "exec-1" });
+    const req = {
+      user: usuarioBase,
+      isMultipart: () => false,
+      parts: jest.fn(),
+    };
+
+    await expect(
+      controller.enviarAnexo("exec-1", req as never),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(storageService.uploadBuffer).not.toHaveBeenCalled();
+    expect(anexosService.registrarUpload).not.toHaveBeenCalled();
+  });
+
+  it("rejeita anexo quando nenhum arquivo e enviado", async () => {
+    execucoesService.buscarPorId.mockResolvedValue({ id: "exec-1" });
+    const req = {
+      user: usuarioBase,
+      isMultipart: () => true,
+      async *parts() {
+        yield { type: "field", fieldname: "legenda", value: "Arquivo" };
+      },
+    };
+
+    await expect(
+      controller.enviarAnexo("exec-1", req as never),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(storageService.uploadBuffer).not.toHaveBeenCalled();
+    expect(anexosService.registrarUpload).not.toHaveBeenCalled();
+  });
+
+  it("rejeita arquivo vazio antes do upload", async () => {
+    execucoesService.buscarPorId.mockResolvedValue({ id: "exec-1" });
+    const req = {
+      user: usuarioBase,
+      isMultipart: () => true,
+      async *parts() {
+        yield {
+          type: "file",
+          fieldname: "arquivo",
+          filename: "vazio.pdf",
+          mimetype: "application/pdf",
+          toBuffer: async () => Buffer.alloc(0),
+        };
+      },
+    };
+
+    await expect(
+      controller.enviarAnexo("exec-1", req as never),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(storageService.uploadBuffer).not.toHaveBeenCalled();
+    expect(anexosService.registrarUpload).not.toHaveBeenCalled();
+  });
+
+  it("rejeita multiplos arquivos mesmo quando um esta vazio", async () => {
+    execucoesService.buscarPorId.mockResolvedValue({ id: "exec-1" });
+    const req = {
+      user: usuarioBase,
+      isMultipart: () => true,
+      async *parts() {
+        yield {
+          type: "file",
+          fieldname: "arquivo",
+          filename: "vazio.pdf",
+          mimetype: "application/pdf",
+          toBuffer: async () => Buffer.alloc(0),
+        };
+        yield {
+          type: "file",
+          fieldname: "arquivo",
+          filename: "arquivo.pdf",
+          mimetype: "application/pdf",
+          toBuffer: async () => Buffer.from("%PDF-1.4"),
+        };
+      },
+    };
+
+    await expect(
+      controller.enviarAnexo("exec-1", req as never),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(storageService.uploadBuffer).not.toHaveBeenCalled();
+    expect(anexosService.registrarUpload).not.toHaveBeenCalled();
+  });
 });

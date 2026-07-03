@@ -21,9 +21,15 @@ const db = {
   insert: jest.fn().mockReturnThis(),
   values: jest.fn().mockReturnThis(),
   returning: jest.fn(),
+  transaction: jest.fn(),
   query: {
     workflowAnexos: { findFirst: jest.fn() },
   },
+  delete: jest.fn().mockReturnThis(),
+  where: jest.fn().mockReturnThis(),
+};
+
+const tx = {
   delete: jest.fn().mockReturnThis(),
   where: jest.fn().mockReturnThis(),
 };
@@ -42,6 +48,10 @@ describe("WorkflowsAnexosService", () => {
   const storage = { deleteFile: jest.fn() };
 
   beforeEach(async () => {
+    db.transaction.mockImplementation(async (cb: (txParam: typeof tx) => unknown) =>
+      cb(tx),
+    );
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         WorkflowsAnexosService,
@@ -53,6 +63,9 @@ describe("WorkflowsAnexosService", () => {
 
     service = module.get(WorkflowsAnexosService);
     jest.clearAllMocks();
+    db.transaction.mockClear();
+    tx.delete.mockClear();
+    tx.where.mockClear();
   });
 
   it("registra anexo e historico", async () => {
@@ -105,9 +118,9 @@ describe("WorkflowsAnexosService", () => {
     expect(eq).toHaveBeenCalledWith(workflowAnexos.id, "anexo-1");
     expect(eq).toHaveBeenCalledWith(workflowAnexos.execucaoId, "exec-1");
     expect(and).toHaveBeenCalled();
-    expect(storage.deleteFile).toHaveBeenCalledWith("workflows/arquivo.pdf");
-    expect(db.delete).toHaveBeenCalledWith(workflowAnexos);
-    expect(db.where).toHaveBeenCalledWith("and-filtro");
+    expect(db.transaction).toHaveBeenCalled();
+    expect(tx.delete).toHaveBeenCalledWith(workflowAnexos);
+    expect(tx.where).toHaveBeenCalledWith("and-filtro");
     expect(historico.registrar).toHaveBeenCalledWith({
       execucaoId: "exec-1",
       tipo: "ANEXO_REMOVIDO",
@@ -117,7 +130,24 @@ describe("WorkflowsAnexosService", () => {
         anexoId: "anexo-1",
         nomeOriginal: "arquivo.pdf",
       },
+    }, tx);
+    expect(storage.deleteFile).toHaveBeenCalledWith("workflows/arquivo.pdf");
+  });
+
+  it("nao remove storage nem registro quando historico falha", async () => {
+    db.query.workflowAnexos.findFirst.mockResolvedValue({
+      id: "anexo-1",
+      storageKey: "workflows/arquivo.pdf",
+      nomeOriginal: "arquivo.pdf",
     });
+    historico.registrar.mockRejectedValue(new Error("historico indisponivel"));
+
+    await expect(
+      service.remover(usuarioBase, "exec-1", "anexo-1"),
+    ).rejects.toThrow("historico indisponivel");
+
+    expect(tx.delete).not.toHaveBeenCalled();
+    expect(storage.deleteFile).not.toHaveBeenCalled();
   });
 
   it("falha ao remover anexo inexistente", async () => {
