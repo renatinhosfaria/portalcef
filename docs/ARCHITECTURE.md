@@ -9,7 +9,7 @@ Este documento descreve a arquitetura tecnica do Portal Digital Colegio Essencia
 O sistema segue uma arquitetura de **monorepo** com separacao clara entre frontend (Next.js apps), backend (NestJS API) e pacotes compartilhados. A comunicacao entre camadas e feita exclusivamente via HTTP/REST.
 
 ```
-Frontend (Next.js 15 - 10 apps)
+Frontend (Next.js 15 - 12 apps)
   - home :3000
   - login :3003
   - usuarios :3004
@@ -21,13 +21,14 @@ Frontend (Next.js 15 - 10 apps)
   - loja :3010
   - loja-admin :3011
   - tarefas :3012
+  - workflows :3015
 
         |
         |  HTTP/REST
         v
 
 Backend (NestJS + Fastify)
-  - API :3001/3002       (18 modulos)
+  - API :3001/3002       (19 modulos)
   - Worker :3100         (conversao DOCX->PDF)
 
         |
@@ -139,6 +140,9 @@ apps/
 |   +-- app/
 |   +-- package.json
 +-- tarefas/            # Sistema de gerenciamento de tarefas (:3012)
+|   +-- app/
+|   +-- package.json
++-- workflows/          # Protocolos operacionais internos com checklist, anexos e historico (:3015)
     +-- app/
     +-- package.json
 ```
@@ -149,7 +153,7 @@ Backend API centralizado e worker de processamento.
 
 ```
 services/
-+-- api/                :3001/3002  # Backend NestJS (18 modulos)
++-- api/                :3001/3002  # Backend NestJS (19 modulos)
 |   +-- src/
 |   |   +-- app.module.ts           # Modulo raiz
 |   |   +-- main.ts                 # Bootstrap Fastify
@@ -179,6 +183,7 @@ services/
 |   |       +-- turmas/             # Turmas
 |   |       +-- units/              # Unidades
 |   |       +-- users/              # Usuarios
+|   |       +-- workflows/          # Protocolos operacionais internos
 |   +-- package.json
 +-- worker/             :3100       # Worker de conversao de documentos
     +-- src/

@@ -923,6 +923,32 @@ curl -X POST http://localhost:3001/shop/orders \
 
 ---
 
+## Workflows
+
+Modulo para protocolos operacionais internos por unidade.
+
+### Permissoes
+
+Todos os usuarios autenticados da unidade acessam modelos publicados e proprias execucoes. Gestao (`master`, `diretora_geral`, `gerente_unidade`, `coordenadora_geral`) gerencia modelos, categorias e todas as execucoes da unidade.
+
+### Endpoints principais
+
+- `GET /api/workflows/categorias`
+- `POST /api/workflows/categorias`
+- `GET /api/workflows/modelos`
+- `POST /api/workflows/modelos`
+- `PATCH /api/workflows/modelos/:modeloId`
+- `POST /api/workflows/modelos/:modeloId/execucoes`
+- `GET /api/workflows/execucoes`
+- `GET /api/workflows/execucoes/:execucaoId`
+- `PATCH /api/workflows/execucoes/:execucaoId/etapas/:etapaId`
+- `POST /api/workflows/execucoes/:execucaoId/concluir`
+- `POST /api/workflows/execucoes/:execucaoId/cancelar`
+- `POST /api/workflows/execucoes/:execucaoId/reabrir`
+- `POST /api/workflows/execucoes/:execucaoId/anexos`
+
+---
+
 ## Modulo de Tarefas
 
 Sistema de gerenciamento de tarefas com suporte a criacao automatica (via eventos) e manual.
