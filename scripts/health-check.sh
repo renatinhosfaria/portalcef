@@ -92,6 +92,7 @@ check_internal "Eventos" "essencia-eventos" "3014" "/eventos"
 check_internal "Loja" "essencia-loja" "3010" "/"
 check_internal "Loja Admin" "essencia-loja-admin" "3011" "/loja-admin"
 check_internal "Tarefas" "essencia-tarefas" "3012" "/tarefas"
+check_internal "Workflows" "essencia-workflows" "3015" "/workflows"
 
 echo ""
 
@@ -121,6 +122,7 @@ if curl -sf --max-time 5 "https://www.portalcef.com.br/" > /dev/null 2>&1; then
     check_external "API Health" "https://www.portalcef.com.br/health"
     check_external "Login" "https://www.portalcef.com.br/login"
     check_external "Planejamento" "https://www.portalcef.com.br/planejamento"
+    check_external "Workflows" "https://www.portalcef.com.br/workflows"
     check_external "Loja" "https://loja.portalcef.com.br/"
 else
     echo -e "  ${YELLOW}⚠ Endpoints externos não acessíveis (verificação local)${NC}"

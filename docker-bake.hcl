@@ -56,7 +56,8 @@ group "apps" {
     "loja",
     "loja-admin",
     "tarefas",
-    "suporte"
+    "suporte",
+    "workflows"
   ]
 }
 
@@ -250,6 +251,20 @@ target "suporte" {
     "${REGISTRY}/suporte:${TAG}",
     "${REGISTRY}/suporte:latest",
     "essencia-suporte:latest"
+  ]
+}
+
+target "workflows" {
+  inherits = ["_nextjs"]
+  args = {
+    APP_NAME     = "workflows"
+    PACKAGE_NAME = "workflows"
+    APP_PORT     = "3015"
+  }
+  tags = [
+    "${REGISTRY}/workflows:${TAG}",
+    "${REGISTRY}/workflows:latest",
+    "essencia-workflows:latest"
   ]
 }
 
