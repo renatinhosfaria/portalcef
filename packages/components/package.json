@@ -16,6 +16,7 @@
   },
   "scripts": {
     "lint": "eslint src/",
+    "test": "vitest run --environment node",
     "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
@@ -40,6 +41,7 @@
     "@types/react-dom": "^19.0.2",
     "react": "19.0.4",
     "react-dom": "19.0.4",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "vitest": "^4.0.16"
   }
 }

@@ -1,0 +1,77 @@
+import {
+  insertWorkflowAnexoSchema,
+  insertWorkflowCategoriaSchema,
+  insertWorkflowEtapaProgressoSchema,
+  insertWorkflowEtapaSchema,
+  insertWorkflowExecucaoSchema,
+  insertWorkflowFaseSchema,
+  insertWorkflowHistoricoSchema,
+  insertWorkflowModeloSchema,
+  insertWorkflowOrientacaoSchema,
+  selectWorkflowAnexoSchema,
+  selectWorkflowCategoriaSchema,
+  selectWorkflowEtapaProgressoSchema,
+  selectWorkflowEtapaSchema,
+  selectWorkflowExecucaoSchema,
+  selectWorkflowFaseSchema,
+  selectWorkflowHistoricoSchema,
+  selectWorkflowModeloSchema,
+  selectWorkflowOrientacaoSchema,
+} from "./workflows.js";
+import type {
+  NewWorkflowAnexo,
+  NewWorkflowCategoria,
+  NewWorkflowEtapa,
+  NewWorkflowEtapaProgresso,
+  NewWorkflowExecucao,
+  NewWorkflowFase,
+  NewWorkflowHistorico,
+  NewWorkflowModelo,
+  NewWorkflowOrientacao,
+} from "./workflows.js";
+
+const inserts: [
+  NewWorkflowCategoria,
+  NewWorkflowModelo,
+  NewWorkflowOrientacao,
+  NewWorkflowFase,
+  NewWorkflowEtapa,
+  NewWorkflowExecucao,
+  NewWorkflowEtapaProgresso,
+  NewWorkflowAnexo,
+  NewWorkflowHistorico,
+] = [] as unknown as [
+  NewWorkflowCategoria,
+  NewWorkflowModelo,
+  NewWorkflowOrientacao,
+  NewWorkflowFase,
+  NewWorkflowEtapa,
+  NewWorkflowExecucao,
+  NewWorkflowEtapaProgresso,
+  NewWorkflowAnexo,
+  NewWorkflowHistorico,
+];
+
+const schemas = [
+  insertWorkflowCategoriaSchema,
+  selectWorkflowCategoriaSchema,
+  insertWorkflowModeloSchema,
+  selectWorkflowModeloSchema,
+  insertWorkflowOrientacaoSchema,
+  selectWorkflowOrientacaoSchema,
+  insertWorkflowFaseSchema,
+  selectWorkflowFaseSchema,
+  insertWorkflowEtapaSchema,
+  selectWorkflowEtapaSchema,
+  insertWorkflowExecucaoSchema,
+  selectWorkflowExecucaoSchema,
+  insertWorkflowEtapaProgressoSchema,
+  selectWorkflowEtapaProgressoSchema,
+  insertWorkflowAnexoSchema,
+  selectWorkflowAnexoSchema,
+  insertWorkflowHistoricoSchema,
+  selectWorkflowHistoricoSchema,
+] as const;
+
+void inserts;
+void schemas;

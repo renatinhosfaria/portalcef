@@ -295,6 +295,20 @@ services:
       api:
         condition: service_healthy
 
+  workflows:
+    image: essencia-workflows:latest
+    container_name: essencia-workflows
+    <<: *common
+    environment:
+      <<: *nextjs-env
+      PORT: 3015
+    healthcheck:
+      <<: *healthcheck
+      test: [ "CMD", "curl", "-f", "http://localhost:3015/workflows" ]
+    depends_on:
+      api:
+        condition: service_healthy
+
   # ===========================================================================
   # LANDING PAGES (ESTÁTICAS)
   # ===========================================================================

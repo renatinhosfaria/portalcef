@@ -37,7 +37,9 @@ O **Portal Digital Colegio Essencia Feliz** e uma plataforma web moderna para ge
 | **Loja**          | 3010  | Loja publica (uniformes)                    |
 | **Loja Admin**    | 3011  | Administracao de produtos, estoque, pedidos |
 | **Tarefas**       | 3012  | Gerenciamento de tarefas                    |
-| **API**           | 3001/3002 | Backend REST centralizado (18 modulos)  |
+| **Suporte**       | 3013  | Atendimento interno e anexos                |
+| **Workflows**     | 3015  | Protocolos operacionais internos com checklist, anexos e historico |
+| **API**           | 3001/3002 | Backend REST centralizado (26 modulos)  |
 
 ### Principais Funcionalidades
 
@@ -100,6 +102,8 @@ pnpm dev
 | Loja           | http://localhost:3010 |
 | Loja Admin     | http://localhost:3011 |
 | Tarefas        | http://localhost:3012 |
+| Suporte        | http://localhost:3013 |
+| Workflows      | http://localhost:3015 |
 | API            | http://localhost:3001 |
 | Drizzle Studio | http://localhost:4983 |
 
@@ -124,7 +128,7 @@ pnpm dev
 ### Estrutura do Projeto
 
 ```portalessencia/
-+-- apps/                           # 10 Aplicacoes Next.js
++-- apps/                           # 13 Aplicacoes Next.js
 |   +-- home/             :3000     # Portal publico
 |   +-- calendario/       :3008     # Calendario escolar
 |   +-- login/            :3003     # Autenticacao
@@ -135,9 +139,12 @@ pnpm dev
 |   +-- eventos/          :3014     # Gestao de inscricoes de eventos
 |   +-- loja/             :3010     # Loja publica
 |   +-- loja-admin/       :3011     # Admin da loja
+|   +-- tarefas/          :3012     # Gerenciamento de tarefas
+|   +-- suporte/          :3013     # Atendimento interno e anexos
+|   +-- workflows/        :3015     # Protocolos operacionais internos
 |
 +-- services/
-|   +-- api/              :3001     # Backend NestJS (18 modulos)
+|   +-- api/              :3001     # Backend NestJS (26 modulos)
 |   +-- worker/           :3100     # Worker de conversao de documentos
 |
 +-- packages/

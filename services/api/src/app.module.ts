@@ -27,6 +27,7 @@ import { UsersModule } from "./modules/users/users.module";
 import { QuinzenaDocumentsModule } from "./modules/quinzena-documents/quinzena-documents.module";
 import { TarefasModule } from "./modules/tarefas/tarefas.module";
 import { SuporteModule } from "./modules/suporte/suporte.module";
+import { WorkflowsModule } from "./modules/workflows/workflows.module";
 import { ProvaCicloModule } from "./modules/prova-ciclo/prova-ciclo.module";
 import { ProvaModule } from "./modules/prova/prova.module";
 import { SecurityModule } from "./modules/security/security.module";
@@ -95,6 +96,8 @@ import { RelatorioModule } from "./modules/relatorio/relatorio.module";
     TarefasModule,
     // Sistema de Suporte (Ordens de Servico)
     SuporteModule,
+    // Workflows operacionais internos
+    WorkflowsModule,
     // Ciclos de Provas
     ProvaCicloModule,
     // Provas (workflow de aprovação)

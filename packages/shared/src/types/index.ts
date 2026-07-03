@@ -275,3 +275,5 @@ export * from "./tarefas";
 
 // Suporte types (Ordem de Servico)
 export * from "./suporte";
+
+export * from "./workflows";
