@@ -67,9 +67,10 @@ describe("WorkflowsPage", () => {
       isLoaded: true,
     });
     render(<WorkflowsPage />);
-    expect(
-      screen.getByRole("button", { name: "Novo workflow" }),
-    ).toBeDisabled();
+    const linkNovoWorkflow = screen.getByRole("link", {
+      name: "Novo workflow",
+    });
+    expect(linkNovoWorkflow).toHaveAttribute("href", "/modelos/novo");
     await waitFor(() =>
       expect(mockListarModelos).toHaveBeenCalledWith("status=PUBLICADO"),
     );

@@ -13,6 +13,7 @@ import {
   TabsTrigger,
 } from "@essencia/ui/components/tabs";
 import { AlertCircle, Plus, RefreshCw } from "lucide-react";
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { ExecucaoCard } from "@/components/execucao-card";
@@ -101,9 +102,11 @@ export default function WorkflowsPage() {
           </p>
         </div>
         {podeCriarModelo ? (
-          <Button className="gap-2" disabled>
-            <Plus className="h-4 w-4" />
-            Novo workflow
+          <Button asChild className="gap-2">
+            <Link href="/modelos/novo">
+              <Plus className="h-4 w-4" />
+              Novo workflow
+            </Link>
           </Button>
         ) : null}
       </div>
