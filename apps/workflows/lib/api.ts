@@ -1,5 +1,6 @@
 import { api } from "@essencia/shared/fetchers/client";
 import type {
+  WorkflowAnexo,
   WorkflowCategoria,
   WorkflowExecucaoDetalhe,
   WorkflowExecucaoResumo,
@@ -94,3 +95,15 @@ export const reabrirExecucao = (execucaoId: string, motivo: string) =>
     `/workflows/execucoes/${execucaoId}/reabrir`,
     { motivo },
   );
+
+export const enviarAnexoExecucao = (
+  execucaoId: string,
+  formData: FormData,
+) =>
+  api.post<WorkflowAnexo>(
+    `/workflows/execucoes/${execucaoId}/anexos`,
+    formData,
+  );
+
+export const removerAnexoExecucao = (execucaoId: string, anexoId: string) =>
+  api.delete<null>(`/workflows/execucoes/${execucaoId}/anexos/${anexoId}`);
