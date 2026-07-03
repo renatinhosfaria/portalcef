@@ -6,6 +6,7 @@ import {
   BookOpen,
   Calendar,
   CheckSquare,
+  ClipboardList,
   GraduationCap,
   HeartHandshake,
   Headset,
@@ -33,6 +34,7 @@ type ActivePage =
   | "calendario"
   | "eventos"
   | "tarefas"
+  | "workflows"
   | "suporte"
   | "loja-admin";
 
@@ -64,6 +66,7 @@ const MODULE_ACCESS_RULES = {
     "professora",
     "auxiliar_sala",
   ],
+  workflows: "ALL",
   suporte: "ALL",
   lojaAdmin: ["master", "diretora_geral", "gerente_unidade", "gerente_financeiro", "auxiliar_administrativo"],
 } as const;
@@ -97,6 +100,7 @@ function getActivePageFromPath(pathname: string): ActivePage | null {
   if (normalizedPath.startsWith("/calendario")) return "calendario";
   if (normalizedPath.startsWith("/eventos")) return "eventos";
   if (normalizedPath.startsWith("/tarefas")) return "tarefas";
+  if (normalizedPath.startsWith("/workflows")) return "workflows";
   if (normalizedPath.startsWith("/suporte")) return "suporte";
   if (normalizedPath.startsWith("/loja-admin")) return "loja-admin";
 
@@ -220,6 +224,13 @@ export function AppSidebar({ tarefasBadge, suporteBadge, collapsed = false, onTo
       activePage: "tarefas" as ActivePage,
     },
     {
+      key: "workflows" as ModuleKey,
+      icon: ClipboardList,
+      label: "Workflows",
+      href: `https://www.portalcef.com.br/workflows?data=${tenantPayload}`,
+      activePage: "workflows" as ActivePage,
+    },
+    {
       key: "suporte" as ModuleKey,
       icon: Headset,
       label: "Suporte",
@@ -261,6 +272,7 @@ export function AppSidebar({ tarefasBadge, suporteBadge, collapsed = false, onTo
     if (port === "3008") return setActivePage("calendario");
     if (port === "3014") return setActivePage("eventos");
     if (port === "3012") return setActivePage("tarefas");
+    if (port === "3015") return setActivePage("workflows");
     if (port === "3013") return setActivePage("suporte");
     if (port === "3011") return setActivePage("loja-admin");
 
