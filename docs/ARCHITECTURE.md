@@ -9,7 +9,7 @@ Este documento descreve a arquitetura tecnica do Portal Digital Colegio Essencia
 O sistema segue uma arquitetura de **monorepo** com separacao clara entre frontend (Next.js apps), backend (NestJS API) e pacotes compartilhados. A comunicacao entre camadas e feita exclusivamente via HTTP/REST.
 
 ```
-Frontend (Next.js 15 - 12 apps)
+Frontend (Next.js 15 - 13 apps)
   - home :3000
   - login :3003
   - usuarios :3004
@@ -21,6 +21,7 @@ Frontend (Next.js 15 - 12 apps)
   - loja :3010
   - loja-admin :3011
   - tarefas :3012
+  - suporte :3013
   - workflows :3015
 
         |
@@ -28,7 +29,7 @@ Frontend (Next.js 15 - 12 apps)
         v
 
 Backend (NestJS + Fastify)
-  - API :3001/3002       (19 modulos)
+  - API :3001/3002       (26 modulos)
   - Worker :3100         (conversao DOCX->PDF)
 
         |
@@ -142,6 +143,9 @@ apps/
 +-- tarefas/            # Sistema de gerenciamento de tarefas (:3012)
 |   +-- app/
 |   +-- package.json
++-- suporte/            # Atendimento interno e anexos (:3013)
+|   +-- app/
+|   +-- package.json
 +-- workflows/          # Protocolos operacionais internos com checklist, anexos e historico (:3015)
     +-- app/
     +-- package.json
@@ -153,7 +157,7 @@ Backend API centralizado e worker de processamento.
 
 ```
 services/
-+-- api/                :3001/3002  # Backend NestJS (19 modulos)
++-- api/                :3001/3002  # Backend NestJS (26 modulos)
 |   +-- src/
 |   |   +-- app.module.ts           # Modulo raiz
 |   |   +-- main.ts                 # Bootstrap Fastify
@@ -167,18 +171,25 @@ services/
 |   |   +-- modules/
 |   |       +-- auth/               # Login, logout, sessoes
 |   |       +-- calendar/           # Calendario escolar
+|   |       +-- evento-inscricoes/  # Inscricoes de eventos
 |   |       +-- health/             # Health check
 |   |       +-- payments/           # Webhooks Stripe
+|   |       +-- planejamento-observabilidade/ # Observabilidade pedagogica
 |   |       +-- plannings/          # Planejamentos (Legacy)
 |   |       +-- plano-aula/         # Plano de aula (Novo workflow)
 |   |       +-- plano-aula-periodo/ # Periodos configuraveis
+|   |       +-- prova/              # Avaliacoes
+|   |       +-- prova-ciclo/        # Ciclos de prova
 |   |       +-- quinzena-documents/ # Documentos de quinzena (Legacy)
+|   |       +-- relatorio/          # Relatorios
 |   |       +-- schools/            # Escolas
 |   |       +-- security/           # CSP reporting e headers
+|   |       +-- semana-relatorio/   # Relatorios semanais
 |   |       +-- setup/              # Bootstrap inicial
 |   |       +-- shop/               # CEF Shop
 |   |       +-- stages/             # Etapas educacionais
 |   |       +-- stats/              # Dashboard stats
+|   |       +-- suporte/            # Atendimento interno
 |   |       +-- tarefas/            # Sistema de tarefas
 |   |       +-- turmas/             # Turmas
 |   |       +-- units/              # Unidades
