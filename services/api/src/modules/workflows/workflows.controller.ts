@@ -16,7 +16,9 @@ import { AuthGuard } from "../../common/guards/auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
 import {
   atualizarCategoriaSchema,
+  atualizarModeloSchema,
   criarCategoriaSchema,
+  criarModeloSchema,
   listarModelosSchema,
 } from "./dto/workflows.dto";
 import {
@@ -113,6 +115,78 @@ export class WorkflowsController {
     return {
       success: true,
       data: await this.modelosService.listar(req.user, dto),
+    };
+  }
+
+  @Post("modelos")
+  @Roles(...WORKFLOW_GESTAO_ROLES)
+  async criarModelo(@Req() req: RequestComUsuario, @Body() body: unknown) {
+    const dto = this.validar(criarModeloSchema, body);
+    return {
+      success: true,
+      data: await this.modelosService.criar(req.user, dto),
+    };
+  }
+
+  @Get("modelos/:modeloId")
+  @Roles(...WORKFLOW_ROLES_ACESSO)
+  async buscarModelo(
+    @Req() req: RequestComUsuario,
+    @Param("modeloId") modeloId: string,
+  ) {
+    return {
+      success: true,
+      data: await this.modelosService.buscarPorId(req.user, modeloId),
+    };
+  }
+
+  @Patch("modelos/:modeloId")
+  @Roles(...WORKFLOW_GESTAO_ROLES)
+  async atualizarModelo(
+    @Req() req: RequestComUsuario,
+    @Param("modeloId") modeloId: string,
+    @Body() body: unknown,
+  ) {
+    const dto = this.validar(atualizarModeloSchema, body);
+    return {
+      success: true,
+      data: await this.modelosService.atualizar(req.user, modeloId, dto),
+    };
+  }
+
+  @Post("modelos/:modeloId/publicar")
+  @Roles(...WORKFLOW_GESTAO_ROLES)
+  async publicarModelo(
+    @Req() req: RequestComUsuario,
+    @Param("modeloId") modeloId: string,
+  ) {
+    return {
+      success: true,
+      data: await this.modelosService.publicar(req.user, modeloId),
+    };
+  }
+
+  @Post("modelos/:modeloId/inativar")
+  @Roles(...WORKFLOW_GESTAO_ROLES)
+  async inativarModelo(
+    @Req() req: RequestComUsuario,
+    @Param("modeloId") modeloId: string,
+  ) {
+    return {
+      success: true,
+      data: await this.modelosService.inativar(req.user, modeloId),
+    };
+  }
+
+  @Post("modelos/:modeloId/duplicar")
+  @Roles(...WORKFLOW_GESTAO_ROLES)
+  async duplicarModelo(
+    @Req() req: RequestComUsuario,
+    @Param("modeloId") modeloId: string,
+  ) {
+    return {
+      success: true,
+      data: await this.modelosService.duplicar(req.user, modeloId),
     };
   }
 }
