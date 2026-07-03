@@ -94,4 +94,8 @@ describe("WorkflowsController", () => {
 
     expect(categoriasService.listar).toHaveBeenCalledWith(usuarioBase);
   });
+
+  it("marca controller para correspondencia exata de roles", () => {
+    expect(Reflect.getMetadata("roles:exact", WorkflowsController)).toBe(true);
+  });
 });

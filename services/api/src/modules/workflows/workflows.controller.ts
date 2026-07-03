@@ -11,7 +11,7 @@ import {
   UseGuards,
 } from "@nestjs/common";
 
-import { Roles } from "../../common/decorators/roles.decorator";
+import { ExactRoles, Roles } from "../../common/decorators/roles.decorator";
 import { AuthGuard } from "../../common/guards/auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
 import {
@@ -38,6 +38,7 @@ type SchemaValidavel<T> = {
 };
 
 @Controller("workflows")
+@ExactRoles()
 @UseGuards(AuthGuard, RolesGuard)
 export class WorkflowsController {
   constructor(

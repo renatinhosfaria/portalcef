@@ -5,17 +5,27 @@ const itemOrdenadoSchema = z.object({
   ordem: z.coerce.number().int().min(1),
 });
 
+const booleanQuerySchema = z.preprocess((value) => {
+  if (value === "true") return true;
+  if (value === "false") return false;
+  return value;
+}, z.boolean());
+
 export const criarCategoriaSchema = z.object({
   nome: z.string().trim().min(2).max(120),
   ordem: z.coerce.number().int().min(0).optional(),
 });
 export type CriarCategoriaDto = z.infer<typeof criarCategoriaSchema>;
 
-export const atualizarCategoriaSchema = z.object({
-  nome: z.string().trim().min(2).max(120).optional(),
-  ativo: z.boolean().optional(),
-  ordem: z.coerce.number().int().min(0).optional(),
-});
+export const atualizarCategoriaSchema = z
+  .object({
+    nome: z.string().trim().min(2).max(120).optional(),
+    ativo: z.boolean().optional(),
+    ordem: z.coerce.number().int().min(0).optional(),
+  })
+  .refine((dto) => Object.keys(dto).length > 0, {
+    message: "Informe ao menos um campo para atualizar",
+  });
 export type AtualizarCategoriaDto = z.infer<typeof atualizarCategoriaSchema>;
 
 export const orientacaoModeloSchema = z.object({
@@ -77,7 +87,7 @@ export const listarExecucoesSchema = z.object({
   status: z
     .enum(["EM_ANDAMENTO", "CONCLUIDA", "CANCELADA", "todos"])
     .default("EM_ANDAMENTO"),
-  teste: z.coerce.boolean().optional(),
+  teste: booleanQuerySchema.optional(),
   busca: z.string().trim().max(120).optional(),
 });
 export type ListarExecucoesDto = z.infer<typeof listarExecucoesSchema>;
