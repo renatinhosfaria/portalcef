@@ -931,21 +931,30 @@ Modulo para protocolos operacionais internos por unidade.
 
 Todos os usuarios autenticados da unidade acessam modelos publicados e proprias execucoes. Gestao (`master`, `diretora_geral`, `gerente_unidade`, `coordenadora_geral`) gerencia modelos, categorias e todas as execucoes da unidade.
 
-### Endpoints principais
+### Endpoints do modulo
 
 - `GET /api/workflows/categorias`
 - `POST /api/workflows/categorias`
+- `PATCH /api/workflows/categorias/:categoriaId`
+- `GET /api/workflows/categorias/:categoriaId/sugestoes`
 - `GET /api/workflows/modelos`
 - `POST /api/workflows/modelos`
+- `GET /api/workflows/modelos/:modeloId`
 - `PATCH /api/workflows/modelos/:modeloId`
+- `POST /api/workflows/modelos/:modeloId/publicar`
+- `POST /api/workflows/modelos/:modeloId/inativar`
+- `POST /api/workflows/modelos/:modeloId/duplicar`
 - `POST /api/workflows/modelos/:modeloId/execucoes`
 - `GET /api/workflows/execucoes`
 - `GET /api/workflows/execucoes/:execucaoId`
+- `PATCH /api/workflows/execucoes/:execucaoId/titulo`
 - `PATCH /api/workflows/execucoes/:execucaoId/etapas/:etapaId`
 - `POST /api/workflows/execucoes/:execucaoId/concluir`
 - `POST /api/workflows/execucoes/:execucaoId/cancelar`
 - `POST /api/workflows/execucoes/:execucaoId/reabrir`
 - `POST /api/workflows/execucoes/:execucaoId/anexos`
+- `DELETE /api/workflows/execucoes/:execucaoId/anexos/:anexoId`
+- `DELETE /api/workflows/execucoes/:execucaoId`
 
 ---
 
