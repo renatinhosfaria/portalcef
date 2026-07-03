@@ -1,6 +1,6 @@
 import type { WorkflowModeloDetalhe } from "@essencia/shared/types/workflows";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { WorkflowEditor } from "./workflow-editor";
 
@@ -56,6 +56,10 @@ const modeloExistente: WorkflowModeloDetalhe = {
 };
 
 describe("WorkflowEditor", () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
   it("permite adicionar fase e etapa sem drag and drop", () => {
     render(
       <WorkflowEditor
@@ -144,5 +148,107 @@ describe("WorkflowEditor", () => {
     expect(await screen.findByDisplayValue("Objetivo")).toBeTruthy();
     expect(screen.getByDisplayValue("Definir data")).toBeTruthy();
     expect(mockObterSugestoes).toHaveBeenCalledWith("categoria-1");
+  });
+
+  it("bloqueia acao secundaria quando ha alteracoes pendentes", async () => {
+    const onPublicar = vi.fn();
+
+    render(
+      <WorkflowEditor
+        categorias={[categoriaEventos]}
+        modelo={modeloExistente}
+        onSalvar={vi.fn()}
+        onPublicar={onPublicar}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Nome"), {
+      target: { value: "Evento Dia dos Pais atualizado" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Publicar" }));
+
+    expect(onPublicar).not.toHaveBeenCalled();
+    expect(
+      screen.getByText("Salve o rascunho antes de executar esta ação."),
+    ).toBeTruthy();
+  });
+
+  it("bloqueia mutacoes concorrentes durante salvamento e acao secundaria", async () => {
+    let resolverSalvar: (() => void) | undefined;
+    let resolverPublicar: (() => void) | undefined;
+    const onSalvar = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolverSalvar = resolve;
+        }),
+    );
+    const onPublicar = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolverPublicar = resolve;
+        }),
+    );
+
+    const { rerender } = render(
+      <WorkflowEditor
+        categorias={[categoriaEventos]}
+        modelo={modeloExistente}
+        onSalvar={onSalvar}
+        onPublicar={onPublicar}
+        onInativar={vi.fn()}
+        onDuplicar={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Salvar rascunho" }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Publicar" })).toBeDisabled(),
+    );
+    expect(screen.getByRole("button", { name: "Inativar" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Duplicar" })).toBeDisabled();
+
+    resolverSalvar?.();
+    await waitFor(() => expect(onSalvar).toHaveBeenCalledTimes(1));
+
+    rerender(
+      <WorkflowEditor
+        categorias={[categoriaEventos]}
+        modelo={modeloExistente}
+        onSalvar={vi.fn()}
+        onPublicar={onPublicar}
+        onInativar={vi.fn()}
+        onDuplicar={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Publicar" }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Salvar rascunho" })).toBeDisabled(),
+    );
+    expect(screen.getByRole("button", { name: "Inativar" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Duplicar" })).toBeDisabled();
+
+    resolverPublicar?.();
+    await waitFor(() => expect(onPublicar).toHaveBeenCalledTimes(1));
+  });
+
+  it("bloqueia alteracoes estruturais em modelo publicado", () => {
+    render(
+      <WorkflowEditor
+        categorias={[categoriaEventos]}
+        modelo={{ ...modeloExistente, status: "PUBLICADO" }}
+        onSalvar={vi.fn()}
+        onInativar={vi.fn()}
+        onDuplicar={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Aplicar sugestões" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Adicionar fase" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Remover fase" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Adicionar etapa" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Remover etapa" })).toBeDisabled();
   });
 });

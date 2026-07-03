@@ -91,14 +91,16 @@ export default function EditarModeloPage() {
   async function publicar() {
     if (!modeloId) return;
 
-    const modeloPublicado = await publicarModelo(modeloId);
+    await publicarModelo(modeloId);
+    const modeloPublicado = await buscarModelo(modeloId);
     setModelo(modeloPublicado);
   }
 
   async function inativar() {
     if (!modeloId) return;
 
-    const modeloInativo = await inativarModelo(modeloId);
+    await inativarModelo(modeloId);
+    const modeloInativo = await buscarModelo(modeloId);
     setModelo(modeloInativo);
   }
 

@@ -208,10 +208,21 @@ export function WorkflowEditor({
   }, [modelo]);
 
   const emEdicao = Boolean(modelo);
+  const modeloPublicado = modelo?.status === "PUBLICADO";
   const categoriaSelecionada = useMemo(
     () => categorias.find((categoria) => categoria.id === estado.categoriaId),
     [categorias, estado.categoriaId],
   );
+  const payloadAtual = useMemo(() => normalizarPayload(estado), [estado]);
+  const payloadBase = useMemo(
+    () => (modelo ? normalizarPayload(criarEstadoDoModelo(modelo)) : null),
+    [modelo],
+  );
+  const temAlteracoesPendentes =
+    emEdicao && payloadBase
+      ? JSON.stringify(payloadAtual) !== JSON.stringify(payloadBase)
+      : false;
+  const mutacaoEmAndamento = salvando || acaoSecundaria !== null;
 
   function atualizarCampo(campo: keyof EditorState, valor: string) {
     setEstado((atual) => ({ ...atual, [campo]: valor }));
@@ -250,6 +261,8 @@ export function WorkflowEditor({
   }
 
   function adicionarFase() {
+    if (modeloPublicado) return;
+
     setEstado((atual) => ({
       ...atual,
       fases: [...atual.fases, { nome: "", ordem: atual.fases.length + 1, etapas: [] }],
@@ -266,6 +279,8 @@ export function WorkflowEditor({
   }
 
   function removerFase(index: number) {
+    if (modeloPublicado) return;
+
     setEstado((atual) => ({
       ...atual,
       fases: reordenar(atual.fases.filter((_, faseIndex) => faseIndex !== index)),
@@ -280,6 +295,8 @@ export function WorkflowEditor({
   }
 
   function adicionarEtapa(faseIndex: number) {
+    if (modeloPublicado) return;
+
     setEstado((atual) => ({
       ...atual,
       fases: atual.fases.map((fase, index) =>
@@ -320,6 +337,8 @@ export function WorkflowEditor({
   }
 
   function removerEtapa(faseIndex: number, etapaIndex: number) {
+    if (modeloPublicado) return;
+
     setEstado((atual) => ({
       ...atual,
       fases: atual.fases.map((fase, index) =>
@@ -349,6 +368,11 @@ export function WorkflowEditor({
   }
 
   async function aplicarSugestoes() {
+    if (modeloPublicado) {
+      setErro("Modelos publicados não permitem alterações estruturais.");
+      return;
+    }
+
     if (!estado.categoriaId) {
       setErro("Selecione uma categoria para aplicar sugestões.");
       return;
@@ -389,7 +413,7 @@ export function WorkflowEditor({
   async function handleSalvar(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    const payload = normalizarPayload(estado);
+    const payload = payloadAtual;
     const erroValidacao = validarPayload(payload);
     if (erroValidacao) {
       setErro(erroValidacao);
@@ -413,6 +437,11 @@ export function WorkflowEditor({
 
   async function executarAcaoSecundaria(nome: string, acao?: () => void | Promise<void>) {
     if (!acao) return;
+    if (mutacaoEmAndamento) return;
+    if (temAlteracoesPendentes) {
+      setErro("Salve o rascunho antes de executar esta ação.");
+      return;
+    }
 
     try {
       setErro(null);
@@ -486,7 +515,12 @@ export function WorkflowEditor({
             variant="outline"
             className="gap-2"
             onClick={() => void aplicarSugestoes()}
-            disabled={aplicandoSugestoes || !estado.categoriaId}
+            disabled={
+              aplicandoSugestoes ||
+              !estado.categoriaId ||
+              modeloPublicado ||
+              mutacaoEmAndamento
+            }
           >
             <Wand2 className="h-4 w-4" />
             {aplicandoSugestoes ? "Aplicando..." : "Aplicar sugestões"}
@@ -581,7 +615,12 @@ export function WorkflowEditor({
               Organize a sequência sem drag and drop.
             </p>
           </div>
-          <Button type="button" variant="outline" onClick={adicionarFase}>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={adicionarFase}
+            disabled={modeloPublicado || mutacaoEmAndamento}
+          >
             <FilePlus2 className="h-4 w-4" />
             Adicionar fase
           </Button>
@@ -641,6 +680,7 @@ export function WorkflowEditor({
                         variant="ghost"
                         size="icon"
                         aria-label="Remover fase"
+                        disabled={modeloPublicado || mutacaoEmAndamento}
                         onClick={() => removerFase(faseIndex)}
                       >
                         <Trash2 className="h-4 w-4" />
@@ -655,6 +695,7 @@ export function WorkflowEditor({
                         type="button"
                         variant="outline"
                         size="sm"
+                        disabled={modeloPublicado || mutacaoEmAndamento}
                         onClick={() => adicionarEtapa(faseIndex)}
                       >
                         <Plus className="h-4 w-4" />
@@ -745,6 +786,7 @@ export function WorkflowEditor({
                                   variant="ghost"
                                   size="icon"
                                   aria-label="Remover etapa"
+                                  disabled={modeloPublicado || mutacaoEmAndamento}
                                   onClick={() => removerEtapa(faseIndex, etapaIndex)}
                                 >
                                   <Trash2 className="h-4 w-4" />
@@ -770,7 +812,7 @@ export function WorkflowEditor({
       ) : null}
 
       <div className="flex flex-wrap gap-2">
-        <Button type="submit" disabled={salvando} className="gap-2">
+        <Button type="submit" disabled={mutacaoEmAndamento} className="gap-2">
           <Save className="h-4 w-4" />
           {salvando ? "Salvando..." : "Salvar rascunho"}
         </Button>
@@ -779,7 +821,7 @@ export function WorkflowEditor({
           <Button
             type="button"
             variant="outline"
-            disabled={acaoSecundaria !== null}
+            disabled={mutacaoEmAndamento}
             onClick={() => void executarAcaoSecundaria("publicar", onPublicar)}
           >
             <Send className="h-4 w-4" />
@@ -791,7 +833,7 @@ export function WorkflowEditor({
           <Button
             type="button"
             variant="outline"
-            disabled={acaoSecundaria !== null}
+            disabled={mutacaoEmAndamento}
             onClick={() => void executarAcaoSecundaria("inativar", onInativar)}
           >
             <EyeOff className="h-4 w-4" />
@@ -803,7 +845,7 @@ export function WorkflowEditor({
           <Button
             type="button"
             variant="outline"
-            disabled={acaoSecundaria !== null}
+            disabled={mutacaoEmAndamento}
             onClick={() => void executarAcaoSecundaria("duplicar", onDuplicar)}
           >
             <Copy className="h-4 w-4" />

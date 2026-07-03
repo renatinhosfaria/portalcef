@@ -3,10 +3,20 @@ import type {
   WorkflowCategoria,
   WorkflowExecucaoDetalhe,
   WorkflowExecucaoResumo,
+  WorkflowModeloStatus,
   WorkflowModeloDetalhe,
   WorkflowModeloResumo,
   WorkflowSugestoesCategoria,
 } from "@essencia/shared/types/workflows";
+
+type WorkflowModeloMutacaoResultado = {
+  id: string;
+  status: WorkflowModeloStatus;
+};
+
+type WorkflowModeloDuplicadoResultado = {
+  id: string;
+};
 
 export const listarCategorias = () =>
   api.get<WorkflowCategoria[]>("/workflows/categorias");
@@ -24,13 +34,19 @@ export const atualizarModelo = (modeloId: string, body: unknown) =>
   api.patch<WorkflowModeloDetalhe>(`/workflows/modelos/${modeloId}`, body);
 
 export const publicarModelo = (modeloId: string) =>
-  api.post<WorkflowModeloDetalhe>(`/workflows/modelos/${modeloId}/publicar`);
+  api.post<WorkflowModeloMutacaoResultado>(
+    `/workflows/modelos/${modeloId}/publicar`,
+  );
 
 export const inativarModelo = (modeloId: string) =>
-  api.post<WorkflowModeloDetalhe>(`/workflows/modelos/${modeloId}/inativar`);
+  api.post<WorkflowModeloMutacaoResultado>(
+    `/workflows/modelos/${modeloId}/inativar`,
+  );
 
 export const duplicarModelo = (modeloId: string) =>
-  api.post<WorkflowModeloDetalhe>(`/workflows/modelos/${modeloId}/duplicar`);
+  api.post<WorkflowModeloDuplicadoResultado>(
+    `/workflows/modelos/${modeloId}/duplicar`,
+  );
 
 export const obterSugestoes = (categoriaId: string) =>
   api.get<WorkflowSugestoesCategoria>(
