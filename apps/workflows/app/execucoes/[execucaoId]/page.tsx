@@ -6,7 +6,7 @@ import { Button } from "@essencia/ui/components/button";
 import { AlertCircle, ArrowLeft, RefreshCw } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { ExecucaoDetalhe } from "@/components/execucao-detalhe";
 import {
@@ -33,6 +33,7 @@ export default function ExecucaoPage() {
   const [carregando, setCarregando] = useState(true);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const mutacaoEmAndamentoRef = useRef(false);
 
   const carregarExecucao = useCallback(async () => {
     if (!execucaoId) {
@@ -64,6 +65,11 @@ export default function ExecucaoPage() {
   }, [carregarExecucao, isLoaded]);
 
   async function executarComRecarregamento(acao: () => Promise<unknown>) {
+    if (mutacaoEmAndamentoRef.current) {
+      throw new Error("Aguarde a alteração em andamento terminar.");
+    }
+
+    mutacaoEmAndamentoRef.current = true;
     try {
       setSalvando(true);
       setErro(null);
@@ -75,7 +81,9 @@ export default function ExecucaoPage() {
           ? error.message
           : "Não foi possível salvar a alteração.",
       );
+      throw error;
     } finally {
+      mutacaoEmAndamentoRef.current = false;
       setSalvando(false);
     }
   }

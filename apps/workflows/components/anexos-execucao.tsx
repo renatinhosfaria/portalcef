@@ -55,9 +55,31 @@ export function AnexosExecucao({
 
     const formData = new FormData();
     formData.append("file", arquivo);
-    await onEnviar(formData);
-    setArquivo(null);
-    if (inputRef.current) inputRef.current.value = "";
+    try {
+      setErro(null);
+      await onEnviar(formData);
+      setArquivo(null);
+      if (inputRef.current) inputRef.current.value = "";
+    } catch (error) {
+      setErro(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível enviar o anexo.",
+      );
+    }
+  }
+
+  async function handleRemover(anexoId: string) {
+    try {
+      setErro(null);
+      await onRemover(anexoId);
+    } catch (error) {
+      setErro(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível remover o anexo.",
+      );
+    }
   }
 
   return (
@@ -129,7 +151,7 @@ export function AnexosExecucao({
                   variant="destructive"
                   size="sm"
                   disabled={carregando}
-                  onClick={() => void onRemover(anexo.id)}
+                  onClick={() => void handleRemover(anexo.id)}
                 >
                   <Trash2 className="h-4 w-4" />
                   Remover

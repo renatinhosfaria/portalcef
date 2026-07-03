@@ -57,7 +57,15 @@ export function CancelarExecucaoDialog({
     }
 
     setErro(null);
-    await onConfirmar(motivoNormalizado);
+    try {
+      await onConfirmar(motivoNormalizado);
+    } catch (error) {
+      setErro(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível concluir a ação.",
+      );
+    }
   }
 
   return (

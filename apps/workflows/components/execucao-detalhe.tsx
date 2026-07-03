@@ -108,6 +108,7 @@ export function ExecucaoDetalhe({
   const [dialogCancelamentoAberto, setDialogCancelamentoAberto] =
     useState(false);
   const [dialogReaberturaAberto, setDialogReaberturaAberto] = useState(false);
+  const [erroInteracao, setErroInteracao] = useState<string | null>(null);
   const mapaProgresso = useMemo(
     () => progressoPorEtapa(execucao.progresso),
     [execucao.progresso],
@@ -127,6 +128,19 @@ export function ExecucaoDetalhe({
   const possuiEtapaPendente = etapasConcluidas < totalEtapas;
   const podeEditarChecklist = execucao.status === "EM_ANDAMENTO";
   const progresso = Math.max(0, Math.min(100, execucao.progressoPercentual));
+
+  async function executarInteracao(acao: () => void | Promise<void>) {
+    try {
+      setErroInteracao(null);
+      await acao();
+    } catch (error) {
+      setErroInteracao(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível salvar a alteração.",
+      );
+    }
+  }
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
@@ -160,7 +174,9 @@ export function ExecucaoDetalhe({
                   type="button"
                   className="gap-2"
                   disabled={carregando || possuiEtapaPendente}
-                  onClick={() => void onConcluir(execucao.id)}
+                  onClick={() =>
+                    void executarInteracao(() => onConcluir(execucao.id))
+                  }
                 >
                   <CheckCircle2 className="h-4 w-4" />
                   Concluir workflow
@@ -208,6 +224,12 @@ export function ExecucaoDetalhe({
         <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
           <AlertTriangle className="mt-0.5 h-4 w-4" />
           <span>{AVISO_MODELO_ATUALIZADO}</span>
+        </div>
+      ) : null}
+
+      {erroInteracao ? (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          {erroInteracao}
         </div>
       ) : null}
 
@@ -268,9 +290,11 @@ export function ExecucaoDetalhe({
                             checked={progressoEtapa.concluida}
                             disabled={!podeEditarChecklist || carregando}
                             onCheckedChange={() =>
-                              void onAtualizarEtapa(execucao.id, etapa.id, {
-                                concluida: !progressoEtapa.concluida,
-                              })
+                              void executarInteracao(() =>
+                                onAtualizarEtapa(execucao.id, etapa.id, {
+                                  concluida: !progressoEtapa.concluida,
+                                }),
+                              )
                             }
                           />
                           <div className="min-w-0 flex-1">
@@ -306,12 +330,22 @@ export function ExecucaoDetalhe({
                             defaultValue={progressoEtapa.observacao ?? ""}
                             placeholder="Registre uma observação sobre esta etapa."
                             disabled={!podeEditarChecklist || carregando}
-                            onBlur={(event) =>
-                              void onAtualizarEtapa(execucao.id, etapa.id, {
-                                observacao:
-                                  event.currentTarget.value.trim() || null,
-                              })
-                            }
+                            onBlur={(event) => {
+                              const observacaoNormalizada =
+                                event.currentTarget.value.trim();
+                              const observacaoAtual =
+                                progressoEtapa.observacao ?? "";
+
+                              if (observacaoNormalizada === observacaoAtual) {
+                                return;
+                              }
+
+                              void executarInteracao(() =>
+                                onAtualizarEtapa(execucao.id, etapa.id, {
+                                  observacao: observacaoNormalizada || null,
+                                }),
+                              );
+                            }}
                           />
                         </div>
                       </div>

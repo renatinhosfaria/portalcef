@@ -1,5 +1,5 @@
 import type { WorkflowExecucaoDetalhe } from "@essencia/shared/types/workflows";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { ExecucaoDetalhe } from "./execucao-detalhe";
@@ -99,5 +99,39 @@ describe("ExecucaoDetalhe", () => {
     expect(screen.getByText("Checklist")).toBeTruthy();
     expect(screen.getByText("Anexos")).toBeTruthy();
     expect(screen.getByText("Historico")).toBeTruthy();
+  });
+
+  it("nao atualiza observacao quando o valor normalizado nao mudou", () => {
+    const onAtualizarEtapa = vi.fn();
+
+    render(
+      <ExecucaoDetalhe
+        execucao={{
+          ...execucao,
+          progresso: [
+            {
+              etapaId: "etapa-1",
+              concluida: false,
+              observacao: "Aguardando agenda",
+              concluidaPor: null,
+              concluidaAt: null,
+              etapaVersao: 1,
+            },
+          ],
+        }}
+        isGestao={false}
+        onAtualizarEtapa={onAtualizarEtapa}
+        onConcluir={vi.fn()}
+        onCancelar={vi.fn()}
+        onReabrir={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Checklist"));
+    fireEvent.blur(screen.getByLabelText("Observação"), {
+      target: { value: "  Aguardando agenda  " },
+    });
+
+    expect(onAtualizarEtapa).not.toHaveBeenCalled();
   });
 });
