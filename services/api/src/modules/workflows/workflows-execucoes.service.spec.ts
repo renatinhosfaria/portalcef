@@ -169,9 +169,24 @@ describe("WorkflowsExecucoesService", () => {
 
   it("inicia execucao real de modelo publicado para usuario comum", async () => {
     db.query.workflowModelos.findFirst.mockResolvedValue(modeloPublicado);
+    db.query.workflowExecucoes.findFirst.mockResolvedValue({
+      id: "execucao-1",
+      status: "EM_ANDAMENTO",
+      iniciadoPor: "prof-1",
+      schoolId: "school-1",
+      unitId: "unit-1",
+      teste: false,
+      modelo: modeloPublicado,
+      progresso: [
+        { etapaId: "etapa-1", concluida: false },
+        { etapaId: "etapa-2", concluida: false },
+      ],
+      anexos: [],
+      historico: [],
+    });
     tx.returning.mockResolvedValue([{ id: "execucao-1", titulo: "Evento" }]);
 
-    await service.iniciar(professora, "modelo-1", {
+    const execucao = await service.iniciar(professora, "modelo-1", {
       titulo: "Evento Dia dos Pais",
       teste: false,
     });
@@ -215,6 +230,15 @@ describe("WorkflowsExecucoesService", () => {
         }),
       }),
       tx,
+    );
+    expect(execucao).toEqual(
+      expect.objectContaining({
+        id: "execucao-1",
+        progresso: expect.arrayContaining([
+          expect.objectContaining({ etapaId: "etapa-1" }),
+        ]),
+        faseAtual: "Preparacao",
+      }),
     );
   });
 
@@ -287,13 +311,13 @@ describe("WorkflowsExecucoesService", () => {
         { etapaId: "etapa-2", concluida: true },
       ],
     });
-    db.returning.mockResolvedValue([{ id: "execucao-1", status: "EM_ANDAMENTO" }]);
+    tx.returning.mockResolvedValue([{ id: "execucao-1", status: "EM_ANDAMENTO" }]);
 
     await service.reabrir(gestao, "execucao-1", {
       motivo: "Ajuste necessario",
     });
 
-    expect(db.set).toHaveBeenCalledWith(
+    expect(tx.set).toHaveBeenCalledWith(
       expect.objectContaining({
         status: "EM_ANDAMENTO",
         concluidoAt: null,
@@ -306,6 +330,7 @@ describe("WorkflowsExecucoesService", () => {
         motivo: "Ajuste necessario",
         autorId: "gestor-1",
       }),
+      tx,
     );
   });
 
@@ -314,7 +339,23 @@ describe("WorkflowsExecucoesService", () => {
 
     await service.listar(professora, { status: "todos" });
 
-    expect(db.query.workflowExecucoes.findMany).toHaveBeenCalled();
+    expect(db.query.workflowExecucoes.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          operador: "and",
+          condicoes: expect.arrayContaining([
+            expect.objectContaining({
+              campo: workflowExecucoes.iniciadoPor,
+              valor: "prof-1",
+            }),
+            expect.objectContaining({
+              campo: workflowExecucoes.teste,
+              valor: false,
+            }),
+          ]),
+        }),
+      }),
+    );
     expect(mockEq).toHaveBeenCalledWith(workflowExecucoes.iniciadoPor, "prof-1");
     expect(mockEq).toHaveBeenCalledWith(workflowExecucoes.teste, false);
   });
@@ -349,7 +390,7 @@ describe("WorkflowsExecucoesService", () => {
         },
       ],
     });
-    db.returning.mockResolvedValue([
+    tx.returning.mockResolvedValue([
       {
         execucaoId: "execucao-1",
         etapaId: "etapa-1",
@@ -363,7 +404,7 @@ describe("WorkflowsExecucoesService", () => {
       observacao: "Feito",
     });
 
-    expect(db.set).toHaveBeenCalledWith(
+    expect(tx.set).toHaveBeenCalledWith(
       expect.objectContaining({
         concluida: true,
         observacao: "Feito",
@@ -378,6 +419,7 @@ describe("WorkflowsExecucoesService", () => {
         autorId: "prof-1",
         metadata: expect.objectContaining({ etapaId: "etapa-1" }),
       }),
+      tx,
     );
     expect(historicoService.registrar).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -386,6 +428,130 @@ describe("WorkflowsExecucoesService", () => {
         autorId: "prof-1",
         metadata: expect.objectContaining({ etapaId: "etapa-1" }),
       }),
+      tx,
+    );
+  });
+
+  it("bloqueia cancelamento de execucao concluida", async () => {
+    db.query.workflowExecucoes.findFirst.mockResolvedValue({
+      id: "execucao-1",
+      status: "CONCLUIDA",
+      iniciadoPor: "prof-1",
+      schoolId: "school-1",
+      unitId: "unit-1",
+      teste: false,
+      modelo: modeloPublicado,
+      progresso: [
+        { etapaId: "etapa-1", concluida: true },
+        { etapaId: "etapa-2", concluida: true },
+      ],
+    });
+
+    await expect(
+      service.cancelar(professora, "execucao-1", {
+        motivo: "Nao sera mais necessario",
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(db.transaction).not.toHaveBeenCalled();
+    expect(db.update).not.toHaveBeenCalled();
+  });
+
+  it("cancela execucao em andamento e registra historico na transacao", async () => {
+    db.query.workflowExecucoes.findFirst.mockResolvedValue({
+      id: "execucao-1",
+      status: "EM_ANDAMENTO",
+      iniciadoPor: "prof-1",
+      schoolId: "school-1",
+      unitId: "unit-1",
+      teste: false,
+      modelo: modeloPublicado,
+      progresso: [],
+    });
+    tx.returning.mockResolvedValue([{ id: "execucao-1", status: "CANCELADA" }]);
+
+    await service.cancelar(professora, "execucao-1", {
+      motivo: "Nao sera mais necessario",
+    });
+
+    expect(tx.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "CANCELADA",
+        motivoCancelamento: "Nao sera mais necessario",
+      }),
+    );
+    expect(historicoService.registrar).toHaveBeenCalledWith(
+      expect.objectContaining({
+        execucaoId: "execucao-1",
+        tipo: "EXECUCAO_CANCELADA",
+        motivo: "Nao sera mais necessario",
+      }),
+      tx,
+    );
+  });
+
+  it("usuario comum nao altera execucao de teste ou de outro usuario", async () => {
+    db.query.workflowExecucoes.findFirst.mockResolvedValue({
+      id: "execucao-1",
+      status: "EM_ANDAMENTO",
+      iniciadoPor: "prof-1",
+      schoolId: "school-1",
+      unitId: "unit-1",
+      teste: true,
+      modelo: modeloPublicado,
+      progresso: [{ etapaId: "etapa-1", concluida: false }],
+    });
+
+    await expect(
+      service.editarTitulo(professora, "execucao-1", {
+        titulo: "Novo titulo",
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    db.query.workflowExecucoes.findFirst.mockResolvedValue({
+      id: "execucao-2",
+      status: "EM_ANDAMENTO",
+      iniciadoPor: "outro-user",
+      schoolId: "school-1",
+      unitId: "unit-1",
+      teste: false,
+      modelo: modeloPublicado,
+      progresso: [{ etapaId: "etapa-1", concluida: false }],
+    });
+
+    await expect(
+      service.atualizarEtapa(professora, "execucao-2", "etapa-1", {
+        concluida: true,
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    expect(db.transaction).not.toHaveBeenCalled();
+  });
+
+  it("descarta teste com historico transacional antes de deletar", async () => {
+    db.query.workflowExecucoes.findFirst.mockResolvedValue({
+      id: "execucao-1",
+      titulo: "Teste de fluxo",
+      status: "EM_ANDAMENTO",
+      iniciadoPor: "gestor-1",
+      schoolId: "school-1",
+      unitId: "unit-1",
+      teste: true,
+      modelo: modeloPublicado,
+      progresso: [],
+    });
+
+    await service.descartarTeste(gestao, "execucao-1");
+
+    expect(tx.delete).toHaveBeenCalledWith(workflowExecucoes);
+    expect(historicoService.registrar).toHaveBeenCalledWith(
+      expect.objectContaining({
+        execucaoId: "execucao-1",
+        tipo: "EXECUCAO_DESCARTADA",
+        autorId: "gestor-1",
+        metadata: expect.objectContaining({ titulo: "Teste de fluxo" }),
+      }),
+      tx,
     );
   });
 });

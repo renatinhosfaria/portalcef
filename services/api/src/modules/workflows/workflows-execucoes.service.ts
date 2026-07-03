@@ -350,7 +350,8 @@ export class WorkflowsExecucoesService {
       );
     }
 
-    return this.database.db.transaction(async (tx: DbTransaction) => {
+    const execucaoCriada = await this.database.db.transaction(
+      async (tx: DbTransaction) => {
       const [execucao] = (await tx
         .insert(workflowExecucoes)
         .values({
@@ -393,7 +394,10 @@ export class WorkflowsExecucoesService {
       );
 
       return execucao;
-    });
+      },
+    );
+
+    return this.buscarPorId(session, execucaoCriada.id);
   }
 
   async listar(session: WorkflowUserContext, dto: ListarExecucoesDto) {
@@ -455,31 +459,36 @@ export class WorkflowsExecucoesService {
     const execucao = await this.buscarExecucaoDaUnidade(session, execucaoId);
     this.exigirPodeAlterarExecucao(session, execucao);
 
-    const [atualizada] = (await this.database.db
-      .update(workflowExecucoes)
-      .set({ titulo: dto.titulo, updatedAt: new Date() })
-      .where(
-        and(
-          eq(workflowExecucoes.id, execucaoId),
-          eq(workflowExecucoes.schoolId, session.schoolId),
-          eq(workflowExecucoes.unitId, session.unitId),
-        ),
-      )
-      .returning()) as Array<{ id: string }>;
+    await this.database.db.transaction(async (tx: DbTransaction) => {
+      const [atualizada] = (await tx
+        .update(workflowExecucoes)
+        .set({ titulo: dto.titulo, updatedAt: new Date() })
+        .where(
+          and(
+            eq(workflowExecucoes.id, execucaoId),
+            eq(workflowExecucoes.schoolId, session.schoolId),
+            eq(workflowExecucoes.unitId, session.unitId),
+          ),
+        )
+        .returning()) as Array<{ id: string }>;
 
-    if (!atualizada) {
-      throw new NotFoundException("Execucao de workflow nao encontrada");
-    }
+      if (!atualizada) {
+        throw new NotFoundException("Execucao de workflow nao encontrada");
+      }
 
-    await this.historicoService.registrar({
-      execucaoId,
-      tipo: "TITULO_EXECUCAO_EDITADO",
-      descricao: "Titulo da execucao editado",
-      autorId: session.userId,
-      metadata: {
-        tituloAnterior: execucao.titulo,
-        tituloNovo: dto.titulo,
-      },
+      await this.historicoService.registrar(
+        {
+          execucaoId,
+          tipo: "TITULO_EXECUCAO_EDITADO",
+          descricao: "Titulo da execucao editado",
+          autorId: session.userId,
+          metadata: {
+            tituloAnterior: execucao.titulo,
+            tituloNovo: dto.titulo,
+          },
+        },
+        tx,
+      );
     });
 
     return this.buscarPorId(session, execucaoId);
@@ -534,52 +543,62 @@ export class WorkflowsExecucoesService {
       dadosAtualizacao.observacao = dto.observacao ?? null;
     }
 
-    const [progressoAtualizado] = (await this.database.db
-      .update(workflowEtapaProgresso)
-      .set(dadosAtualizacao)
-      .where(
-        and(
-          eq(workflowEtapaProgresso.execucaoId, execucaoId),
-          eq(workflowEtapaProgresso.etapaId, etapaId),
-        ),
-      )
-      .returning()) as Array<{ id: string }>;
+    await this.database.db.transaction(async (tx: DbTransaction) => {
+      const [progressoAtualizado] = (await tx
+        .update(workflowEtapaProgresso)
+        .set(dadosAtualizacao)
+        .where(
+          and(
+            eq(workflowEtapaProgresso.execucaoId, execucaoId),
+            eq(workflowEtapaProgresso.etapaId, etapaId),
+          ),
+        )
+        .returning()) as Array<{ id: string }>;
 
-    if (!progressoAtualizado) {
-      throw new NotFoundException("Progresso da etapa nao encontrado");
-    }
+      if (!progressoAtualizado) {
+        throw new NotFoundException("Progresso da etapa nao encontrado");
+      }
 
-    if (
-      dto.concluida !== undefined &&
-      dto.concluida !== progressoAtual.concluida
-    ) {
-      await this.historicoService.registrar({
-        execucaoId,
-        tipo: dto.concluida ? "ETAPA_CONCLUIDA" : "ETAPA_PENDENTE",
-        descricao: dto.concluida ? "Etapa concluida" : "Etapa marcada pendente",
-        autorId: session.userId,
-        metadata: {
-          etapaId,
-          etapaTitulo: etapa.titulo,
-        },
-      });
-    }
+      if (
+        dto.concluida !== undefined &&
+        dto.concluida !== progressoAtual.concluida
+      ) {
+        await this.historicoService.registrar(
+          {
+            execucaoId,
+            tipo: dto.concluida ? "ETAPA_CONCLUIDA" : "ETAPA_PENDENTE",
+            descricao: dto.concluida
+              ? "Etapa concluida"
+              : "Etapa marcada pendente",
+            autorId: session.userId,
+            metadata: {
+              etapaId,
+              etapaTitulo: etapa.titulo,
+            },
+          },
+          tx,
+        );
+      }
 
-    if (
-      dto.observacao !== undefined &&
-      (dto.observacao ?? null) !== (progressoAtual.observacao ?? null)
-    ) {
-      await this.historicoService.registrar({
-        execucaoId,
-        tipo: "OBSERVACAO_ETAPA_ALTERADA",
-        descricao: "Observacao da etapa alterada",
-        autorId: session.userId,
-        metadata: {
-          etapaId,
-          etapaTitulo: etapa.titulo,
-        },
-      });
-    }
+      if (
+        dto.observacao !== undefined &&
+        (dto.observacao ?? null) !== (progressoAtual.observacao ?? null)
+      ) {
+        await this.historicoService.registrar(
+          {
+            execucaoId,
+            tipo: "OBSERVACAO_ETAPA_ALTERADA",
+            descricao: "Observacao da etapa alterada",
+            autorId: session.userId,
+            metadata: {
+              etapaId,
+              etapaTitulo: etapa.titulo,
+            },
+          },
+          tx,
+        );
+      }
+    });
 
     return this.buscarPorId(session, execucaoId);
   }
@@ -604,31 +623,36 @@ export class WorkflowsExecucoesService {
       );
     }
 
-    const [atualizada] = (await this.database.db
-      .update(workflowExecucoes)
-      .set({
-        status: "CONCLUIDA",
-        concluidoAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(workflowExecucoes.id, execucaoId),
-          eq(workflowExecucoes.schoolId, session.schoolId),
-          eq(workflowExecucoes.unitId, session.unitId),
-        ),
-      )
-      .returning()) as Array<{ id: string }>;
+    await this.database.db.transaction(async (tx: DbTransaction) => {
+      const [atualizada] = (await tx
+        .update(workflowExecucoes)
+        .set({
+          status: "CONCLUIDA",
+          concluidoAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(workflowExecucoes.id, execucaoId),
+            eq(workflowExecucoes.schoolId, session.schoolId),
+            eq(workflowExecucoes.unitId, session.unitId),
+          ),
+        )
+        .returning()) as Array<{ id: string }>;
 
-    if (!atualizada) {
-      throw new NotFoundException("Execucao de workflow nao encontrada");
-    }
+      if (!atualizada) {
+        throw new NotFoundException("Execucao de workflow nao encontrada");
+      }
 
-    await this.historicoService.registrar({
-      execucaoId,
-      tipo: "EXECUCAO_CONCLUIDA",
-      descricao: "Execucao concluida",
-      autorId: session.userId,
+      await this.historicoService.registrar(
+        {
+          execucaoId,
+          tipo: "EXECUCAO_CONCLUIDA",
+          descricao: "Execucao concluida",
+          autorId: session.userId,
+        },
+        tx,
+      );
     });
 
     return this.buscarPorId(session, execucaoId);
@@ -643,37 +667,44 @@ export class WorkflowsExecucoesService {
 
     const execucao = await this.buscarExecucaoDaUnidade(session, execucaoId);
     this.exigirPodeAlterarExecucao(session, execucao);
-    if (execucao.status === "CANCELADA") {
-      throw new BadRequestException("Execucao ja esta cancelada");
+    if (execucao.status !== "EM_ANDAMENTO") {
+      throw new BadRequestException(
+        "Somente execucoes em andamento podem ser canceladas",
+      );
     }
 
-    const [atualizada] = (await this.database.db
-      .update(workflowExecucoes)
-      .set({
-        status: "CANCELADA",
-        canceladoAt: new Date(),
-        motivoCancelamento: dto.motivo,
-        updatedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(workflowExecucoes.id, execucaoId),
-          eq(workflowExecucoes.schoolId, session.schoolId),
-          eq(workflowExecucoes.unitId, session.unitId),
-        ),
-      )
-      .returning()) as Array<{ id: string }>;
+    await this.database.db.transaction(async (tx: DbTransaction) => {
+      const [atualizada] = (await tx
+        .update(workflowExecucoes)
+        .set({
+          status: "CANCELADA",
+          canceladoAt: new Date(),
+          motivoCancelamento: dto.motivo,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(workflowExecucoes.id, execucaoId),
+            eq(workflowExecucoes.schoolId, session.schoolId),
+            eq(workflowExecucoes.unitId, session.unitId),
+          ),
+        )
+        .returning()) as Array<{ id: string }>;
 
-    if (!atualizada) {
-      throw new NotFoundException("Execucao de workflow nao encontrada");
-    }
+      if (!atualizada) {
+        throw new NotFoundException("Execucao de workflow nao encontrada");
+      }
 
-    await this.historicoService.registrar({
-      execucaoId,
-      tipo: "EXECUCAO_CANCELADA",
-      descricao: "Execucao cancelada",
-      motivo: dto.motivo,
-      autorId: session.userId,
+      await this.historicoService.registrar(
+        {
+          execucaoId,
+          tipo: "EXECUCAO_CANCELADA",
+          descricao: "Execucao cancelada",
+          motivo: dto.motivo,
+          autorId: session.userId,
+        },
+        tx,
+      );
     });
 
     return this.buscarPorId(session, execucaoId);
@@ -694,32 +725,37 @@ export class WorkflowsExecucoesService {
       );
     }
 
-    const [atualizada] = (await this.database.db
-      .update(workflowExecucoes)
-      .set({
-        status: "EM_ANDAMENTO",
-        concluidoAt: null,
-        updatedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(workflowExecucoes.id, execucaoId),
-          eq(workflowExecucoes.schoolId, session.schoolId),
-          eq(workflowExecucoes.unitId, session.unitId),
-        ),
-      )
-      .returning()) as Array<{ id: string }>;
+    await this.database.db.transaction(async (tx: DbTransaction) => {
+      const [atualizada] = (await tx
+        .update(workflowExecucoes)
+        .set({
+          status: "EM_ANDAMENTO",
+          concluidoAt: null,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(workflowExecucoes.id, execucaoId),
+            eq(workflowExecucoes.schoolId, session.schoolId),
+            eq(workflowExecucoes.unitId, session.unitId),
+          ),
+        )
+        .returning()) as Array<{ id: string }>;
 
-    if (!atualizada) {
-      throw new NotFoundException("Execucao de workflow nao encontrada");
-    }
+      if (!atualizada) {
+        throw new NotFoundException("Execucao de workflow nao encontrada");
+      }
 
-    await this.historicoService.registrar({
-      execucaoId,
-      tipo: "EXECUCAO_REABERTA",
-      descricao: "Execucao reaberta",
-      motivo: dto.motivo,
-      autorId: session.userId,
+      await this.historicoService.registrar(
+        {
+          execucaoId,
+          tipo: "EXECUCAO_REABERTA",
+          descricao: "Execucao reaberta",
+          motivo: dto.motivo,
+          autorId: session.userId,
+        },
+        tx,
+      );
     });
 
     return this.buscarPorId(session, execucaoId);
@@ -736,15 +772,31 @@ export class WorkflowsExecucoesService {
       );
     }
 
-    await this.database.db
-      .delete(workflowExecucoes)
-      .where(
-        and(
-          eq(workflowExecucoes.id, execucaoId),
-          eq(workflowExecucoes.schoolId, session.schoolId),
-          eq(workflowExecucoes.unitId, session.unitId),
-        ),
+    await this.database.db.transaction(async (tx: DbTransaction) => {
+      await this.historicoService.registrar(
+        {
+          execucaoId,
+          tipo: "EXECUCAO_DESCARTADA",
+          descricao: "Execucao de teste descartada",
+          autorId: session.userId,
+          metadata: {
+            titulo: execucao.titulo,
+            modeloId: execucao.modeloId,
+          },
+        },
+        tx,
       );
+
+      await tx
+        .delete(workflowExecucoes)
+        .where(
+          and(
+            eq(workflowExecucoes.id, execucaoId),
+            eq(workflowExecucoes.schoolId, session.schoolId),
+            eq(workflowExecucoes.unitId, session.unitId),
+          ),
+        );
+    });
 
     return undefined;
   }
