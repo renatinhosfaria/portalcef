@@ -67,7 +67,9 @@ describe("WorkflowsPage", () => {
       isLoaded: true,
     });
     render(<WorkflowsPage />);
-    expect(screen.getByText("Novo workflow")).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Novo workflow" }),
+    ).toBeDisabled();
     await waitFor(() =>
       expect(mockListarModelos).toHaveBeenCalledWith("status=PUBLICADO"),
     );

@@ -12,7 +12,7 @@ import {
 import { Input } from "@essencia/ui/components/input";
 import { Play } from "lucide-react";
 import type { FormEvent } from "react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { iniciarExecucao } from "@/lib/api";
 
@@ -34,6 +34,19 @@ export function IniciarExecucaoDialog({
   const [titulo, setTitulo] = useState("");
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+
+  useEffect(() => {
+    setTitulo("");
+    setErro(null);
+  }, [modeloId, open]);
+
+  function handleOpenChange(proximoOpen: boolean) {
+    if (salvando && !proximoOpen) {
+      return;
+    }
+
+    onOpenChange(proximoOpen);
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -65,7 +78,7 @@ export function IniciarExecucaoDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Iniciar execução</DialogTitle>
@@ -100,7 +113,7 @@ export function IniciarExecucaoDialog({
               type="button"
               variant="outline"
               disabled={salvando}
-              onClick={() => onOpenChange(false)}
+              onClick={() => handleOpenChange(false)}
             >
               Cancelar
             </Button>
