@@ -6,6 +6,20 @@ type DrizzleJournal = {
 };
 
 describe('controle de migrations do Drizzle', () => {
+  it('inclui a migration do modulo workflows com tabelas principais', () => {
+    const migration = fs.readFileSync(
+      path.join(process.cwd(), '../../packages/db/drizzle/0036_workflows.sql'),
+      'utf8',
+    );
+
+    expect(migration).toContain('CREATE TABLE "workflow_categorias"');
+    expect(migration).toContain('CREATE TABLE "workflow_modelos"');
+    expect(migration).toContain('CREATE TABLE "workflow_execucoes"');
+    expect(migration).toContain('CREATE TABLE "workflow_historico"');
+    expect(migration).toContain('"school_id" uuid NOT NULL');
+    expect(migration).toContain('"unit_id" uuid NOT NULL');
+  });
+
   it('registra todos os arquivos SQL no journal', () => {
     const migrationsLegadasSemJournal = new Set([
       '0011_add_historico_tarefas',
