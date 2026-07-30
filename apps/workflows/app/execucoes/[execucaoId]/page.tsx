@@ -5,7 +5,7 @@ import type { WorkflowExecucaoDetalhe } from "@essencia/shared/types/workflows";
 import { Button } from "@essencia/ui/components/button";
 import { AlertCircle, ArrowLeft, RefreshCw } from "lucide-react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { ExecucaoDetalhe } from "@/components/execucao-detalhe";
@@ -14,6 +14,8 @@ import {
   buscarExecucao,
   cancelarExecucao,
   concluirExecucao,
+  descartarExecucaoTeste,
+  editarTituloExecucao,
   enviarAnexoExecucao,
   reabrirExecucao,
   removerAnexoExecucao,
@@ -27,7 +29,8 @@ function obterExecucaoId(params: ReturnType<typeof useParams>) {
 
 export default function ExecucaoPage() {
   const params = useParams();
-  const { role, isLoaded } = useTenant();
+  const router = useRouter();
+  const { role, userId, isLoaded } = useTenant();
   const execucaoId = useMemo(() => obterExecucaoId(params), [params]);
   const [execucao, setExecucao] = useState<WorkflowExecucaoDetalhe | null>(null);
   const [carregando, setCarregando] = useState(true);
@@ -88,6 +91,30 @@ export default function ExecucaoPage() {
     }
   }
 
+  async function descartarTeste(id: string) {
+    if (mutacaoEmAndamentoRef.current) {
+      throw new Error("Aguarde a alteração em andamento terminar.");
+    }
+
+    mutacaoEmAndamentoRef.current = true;
+    try {
+      setSalvando(true);
+      setErro(null);
+      await descartarExecucaoTeste(id);
+      router.push("/");
+    } catch (error) {
+      setErro(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível descartar a execução de teste.",
+      );
+      throw error;
+    } finally {
+      mutacaoEmAndamentoRef.current = false;
+      setSalvando(false);
+    }
+  }
+
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -137,7 +164,16 @@ export default function ExecucaoPage() {
         <ExecucaoDetalhe
           execucao={execucao}
           isGestao={isGestaoWorkflow(role ?? "")}
+          podeEditarTitulo={
+            isGestaoWorkflow(role ?? "") || execucao.iniciadoPor === userId
+          }
           carregando={salvando}
+          onEditarTitulo={(id, titulo) =>
+            executarComRecarregamento(() =>
+              editarTituloExecucao(id, { titulo }),
+            )
+          }
+          onDescartarTeste={descartarTeste}
           onAtualizarEtapa={(id, etapaId, body) =>
             executarComRecarregamento(() => atualizarEtapa(id, etapaId, body))
           }

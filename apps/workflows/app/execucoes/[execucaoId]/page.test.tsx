@@ -12,9 +12,13 @@ const mockUseParams = vi.fn();
 const mockUseTenant = vi.fn();
 const mockBuscarExecucao = vi.fn();
 const mockAtualizarEtapa = vi.fn();
+const mockEditarTituloExecucao = vi.fn();
+const mockDescartarExecucaoTeste = vi.fn();
+const mockPush = vi.fn();
 
 vi.mock("next/navigation", () => ({
   useParams: () => mockUseParams(),
+  useRouter: () => ({ push: mockPush }),
 }));
 
 vi.mock("@essencia/shared/providers/tenant", () => ({
@@ -24,6 +28,10 @@ vi.mock("@essencia/shared/providers/tenant", () => ({
 vi.mock("@/lib/api", () => ({
   atualizarEtapa: (...args: unknown[]) => mockAtualizarEtapa(...args),
   buscarExecucao: (...args: unknown[]) => mockBuscarExecucao(...args),
+  editarTituloExecucao: (...args: unknown[]) =>
+    mockEditarTituloExecucao(...args),
+  descartarExecucaoTeste: (...args: unknown[]) =>
+    mockDescartarExecucaoTeste(...args),
   cancelarExecucao: vi.fn(),
   concluirExecucao: vi.fn(),
   enviarAnexoExecucao: vi.fn(),
@@ -33,23 +41,45 @@ vi.mock("@/lib/api", () => ({
 
 vi.mock("@/components/execucao-detalhe", () => ({
   ExecucaoDetalhe: (props: ComponentProps<typeof ExecucaoDetalhe>) => (
-    <button
-      type="button"
-      onClick={() => {
-        void Promise.resolve(
-          props.onAtualizarEtapa("exec-1", "etapa-1", {
-            concluida: true,
-          }),
-        ).catch(() => undefined);
-        void Promise.resolve(
-          props.onAtualizarEtapa("exec-1", "etapa-1", {
-            concluida: false,
-          }),
-        ).catch(() => undefined);
-      }}
-    >
-      Disparar mutações
-    </button>
+    <>
+      <button
+        type="button"
+        onClick={() => {
+          void Promise.resolve(
+            props.onAtualizarEtapa("exec-1", "etapa-1", {
+              concluida: true,
+            }),
+          ).catch(() => undefined);
+          void Promise.resolve(
+            props.onAtualizarEtapa("exec-1", "etapa-1", {
+              concluida: false,
+            }),
+          ).catch(() => undefined);
+        }}
+      >
+        Disparar mutações
+      </button>
+      <button
+        type="button"
+        onClick={() =>
+          void Promise.resolve(
+            props.onEditarTitulo?.("exec-1", "Título atualizado"),
+          ).catch(() => undefined)
+        }
+      >
+        Editar título mock
+      </button>
+      <button
+        type="button"
+        onClick={() =>
+          void Promise.resolve(
+            props.onDescartarTeste?.("exec-1"),
+          ).catch(() => undefined)
+        }
+      >
+        Descartar teste mock
+      </button>
+    </>
   ),
 }));
 
@@ -109,6 +139,8 @@ describe("ExecucaoPage", () => {
     });
     mockBuscarExecucao.mockResolvedValue(execucao);
     mockAtualizarEtapa.mockReturnValue(new Promise(() => undefined));
+    mockEditarTituloExecucao.mockResolvedValue(execucao);
+    mockDescartarExecucaoTeste.mockResolvedValue(null);
   });
 
   afterEach(() => {
@@ -123,5 +155,38 @@ describe("ExecucaoPage", () => {
     await user.click(await screen.findByText("Disparar mutações"));
 
     await waitFor(() => expect(mockAtualizarEtapa).toHaveBeenCalledTimes(1));
+  });
+
+  it("conecta a edição de título ao cliente HTTP", async () => {
+    const user = userEvent.setup();
+
+    render(<ExecucaoPage />);
+
+    await user.click(await screen.findByText("Editar título mock"));
+
+    await waitFor(() =>
+      expect(mockEditarTituloExecucao).toHaveBeenCalledWith("exec-1", {
+        titulo: "Título atualizado",
+      }),
+    );
+  });
+
+  it("descarta o teste e volta para a página principal", async () => {
+    const user = userEvent.setup();
+    mockUseTenant.mockReturnValue({
+      role: "coordenadora_geral",
+      userId: "gestor-1",
+      isLoaded: true,
+    });
+    mockBuscarExecucao.mockResolvedValue({ ...execucao, teste: true });
+
+    render(<ExecucaoPage />);
+
+    await user.click(await screen.findByText("Descartar teste mock"));
+
+    await waitFor(() =>
+      expect(mockDescartarExecucaoTeste).toHaveBeenCalledWith("exec-1"),
+    );
+    expect(mockPush).toHaveBeenCalledWith("/");
   });
 });

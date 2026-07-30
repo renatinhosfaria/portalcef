@@ -142,6 +142,12 @@ export class WorkflowsModelosService {
       throw new NotFoundException("Categoria nao encontrada");
     }
 
+    if (categoria.ativo === false) {
+      throw new BadRequestException(
+        "Categoria inativa não pode ser atribuída ao modelo",
+      );
+    }
+
     return categoria;
   }
 
@@ -640,7 +646,10 @@ export class WorkflowsModelosService {
 
     const modelo = await this.buscarModeloDaUnidade(session, modeloId);
 
-    if (dto.categoriaId) {
+    if (
+      dto.categoriaId !== undefined &&
+      dto.categoriaId !== modelo.categoriaId
+    ) {
       await this.buscarCategoriaDaUnidade(session, dto.categoriaId);
     }
 
@@ -775,6 +784,7 @@ export class WorkflowsModelosService {
     this.exigirGestao(session);
 
     const modelo = await this.buscarModeloDaUnidade(session, modeloId);
+    await this.buscarCategoriaDaUnidade(session, modelo.categoriaId);
 
     return this.database.db.transaction(async (tx: DbTransaction) => {
       const [modeloDuplicado] = await tx

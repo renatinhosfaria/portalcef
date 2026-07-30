@@ -279,6 +279,49 @@ describe("WorkflowsModelosService", () => {
     );
   });
 
+  it("bloqueia criação com categoria inativa", async () => {
+    db.query.workflowCategorias.findFirst.mockResolvedValue({
+      id: "cat-1",
+      ativo: false,
+    });
+
+    await expect(service.criar(gestao, dtoModelo)).rejects.toThrow(
+      "Categoria inativa não pode ser atribuída ao modelo",
+    );
+    expect(db.transaction).not.toHaveBeenCalled();
+  });
+
+  it("bloqueia troca para categoria inativa", async () => {
+    db.query.workflowModelos.findFirst.mockResolvedValue(modeloPublicado);
+    db.query.workflowCategorias.findFirst.mockResolvedValue({
+      id: "cat-inativa",
+      ativo: false,
+    });
+
+    await expect(
+      service.atualizar(gestao, "modelo-1", {
+        categoriaId: "cat-inativa",
+      }),
+    ).rejects.toThrow("Categoria inativa não pode ser atribuída ao modelo");
+    expect(db.transaction).not.toHaveBeenCalled();
+  });
+
+  it("permite editar outros campos mantendo a categoria inativa atual", async () => {
+    db.query.workflowModelos.findFirst.mockResolvedValue(modeloPublicado);
+
+    await expect(
+      service.atualizar(gestao, "modelo-1", {
+        categoriaId: "cat-1",
+        nome: "Evento atualizado",
+      }),
+    ).resolves.toEqual(modeloPublicado);
+
+    expect(
+      db.query.workflowCategorias.findFirst,
+    ).not.toHaveBeenCalled();
+    expect(db.transaction).toHaveBeenCalled();
+  });
+
   it("cria modelo com orientacoes, fases e etapas em transacao", async () => {
     db.query.workflowCategorias.findFirst.mockResolvedValue({ id: "cat-1" });
     tx.returning
@@ -692,6 +735,10 @@ describe("WorkflowsModelosService", () => {
 
   it("duplicar busca modelo completo dentro do tenant", async () => {
     db.query.workflowModelos.findFirst.mockResolvedValue(modeloPublicado);
+    db.query.workflowCategorias.findFirst.mockResolvedValue({
+      id: "cat-1",
+      ativo: true,
+    });
     tx.returning
       .mockResolvedValueOnce([{ id: "modelo-2" }])
       .mockResolvedValueOnce([{ id: "fase-duplicada" }]);
@@ -701,5 +748,19 @@ describe("WorkflowsModelosService", () => {
     expect(mockEq).toHaveBeenCalledWith(workflowModelos.id, "modelo-1");
     expect(mockEq).toHaveBeenCalledWith(workflowModelos.schoolId, "school-1");
     expect(mockEq).toHaveBeenCalledWith(workflowModelos.unitId, "unit-1");
+  });
+
+  it("bloqueia duplicação quando a categoria do modelo está inativa", async () => {
+    db.query.workflowModelos.findFirst.mockResolvedValue(modeloPublicado);
+    db.query.workflowCategorias.findFirst.mockResolvedValue({
+      id: "cat-1",
+      ativo: false,
+    });
+
+    await expect(service.duplicar(gestao, "modelo-1")).rejects.toThrow(
+      "Categoria inativa não pode ser atribuída ao modelo",
+    );
+
+    expect(db.transaction).not.toHaveBeenCalled();
   });
 });

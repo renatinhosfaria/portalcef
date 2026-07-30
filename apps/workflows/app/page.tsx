@@ -12,9 +12,9 @@ import {
   TabsList,
   TabsTrigger,
 } from "@essencia/ui/components/tabs";
-import { AlertCircle, Plus, RefreshCw } from "lucide-react";
+import { AlertCircle, FolderCog, Plus, RefreshCw } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { ExecucaoCard } from "@/components/execucao-card";
 import { IniciarExecucaoDialog } from "@/components/iniciar-execucao-dialog";
@@ -46,12 +46,7 @@ function GridCarregando() {
 export default function WorkflowsPage() {
   const { role, isLoaded } = useTenant();
   const [modelos, setModelos] = useState<WorkflowModeloResumo[]>([]);
-  const [execucoesAndamento, setExecucoesAndamento] = useState<
-    WorkflowExecucaoResumo[]
-  >([]);
-  const [execucoesConcluidas, setExecucoesConcluidas] = useState<
-    WorkflowExecucaoResumo[]
-  >([]);
+  const [execucoes, setExecucoes] = useState<WorkflowExecucaoResumo[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
   const [modeloSelecionado, setModeloSelecionado] =
@@ -64,16 +59,13 @@ export default function WorkflowsPage() {
       setCarregando(true);
       setErro(null);
 
-      const [modelosPublicados, execucoesEmAndamento, execucoesFinalizadas] =
-        await Promise.all([
-          listarModelos("status=PUBLICADO"),
-          listarExecucoes("status=EM_ANDAMENTO"),
-          listarExecucoes("status=CONCLUIDA"),
-        ]);
+      const [modelosPublicados, execucoesResultado] = await Promise.all([
+        listarModelos("status=PUBLICADO"),
+        listarExecucoes("status=todos"),
+      ]);
 
       setModelos(modelosPublicados);
-      setExecucoesAndamento(execucoesEmAndamento);
-      setExecucoesConcluidas(execucoesFinalizadas);
+      setExecucoes(execucoesResultado);
     } catch (error) {
       setErro(
         error instanceof Error
@@ -91,6 +83,19 @@ export default function WorkflowsPage() {
     void carregarDados();
   }, [carregarDados, isLoaded]);
 
+  const execucoesAndamento = useMemo(
+    () => execucoes.filter((execucao) => execucao.status === "EM_ANDAMENTO"),
+    [execucoes],
+  );
+  const execucoesConcluidas = useMemo(
+    () => execucoes.filter((execucao) => execucao.status === "CONCLUIDA"),
+    [execucoes],
+  );
+  const execucoesCanceladas = useMemo(
+    () => execucoes.filter((execucao) => execucao.status === "CANCELADA"),
+    [execucoes],
+  );
+
   return (
     <>
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
@@ -102,12 +107,20 @@ export default function WorkflowsPage() {
           </p>
         </div>
         {podeCriarModelo ? (
-          <Button asChild className="gap-2">
-            <Link href="/modelos/novo">
-              <Plus className="h-4 w-4" />
-              Novo workflow
-            </Link>
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button asChild variant="outline" className="gap-2">
+              <Link href="/modelos">
+                <FolderCog className="h-4 w-4" />
+                Gerenciar modelos
+              </Link>
+            </Button>
+            <Button asChild className="gap-2">
+              <Link href="/modelos/novo">
+                <Plus className="h-4 w-4" />
+                Novo workflow
+              </Link>
+            </Button>
+          </div>
         ) : null}
       </div>
 
@@ -131,10 +144,11 @@ export default function WorkflowsPage() {
       ) : null}
 
       <Tabs defaultValue="biblioteca" className="w-full">
-        <TabsList>
+        <TabsList className="flex h-auto flex-wrap justify-start">
           <TabsTrigger value="biblioteca">Workflows</TabsTrigger>
           <TabsTrigger value="andamento">Em andamento</TabsTrigger>
           <TabsTrigger value="concluidos">Concluídos</TabsTrigger>
+          <TabsTrigger value="canceladas">Canceladas</TabsTrigger>
         </TabsList>
         <TabsContent value="biblioteca" className="pt-4">
           {carregando ? (
@@ -174,6 +188,19 @@ export default function WorkflowsPage() {
           ) : (
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               {execucoesConcluidas.map((execucao) => (
+                <ExecucaoCard key={execucao.id} execucao={execucao} />
+              ))}
+            </div>
+          )}
+        </TabsContent>
+        <TabsContent value="canceladas" className="pt-4">
+          {carregando ? (
+            <GridCarregando />
+          ) : execucoesCanceladas.length === 0 ? (
+            <EstadoVazio mensagem="Nenhuma execução cancelada." />
+          ) : (
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {execucoesCanceladas.map((execucao) => (
                 <ExecucaoCard key={execucao.id} execucao={execucao} />
               ))}
             </div>

@@ -5,8 +5,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { WorkflowEditor } from "./workflow-editor";
 
 const mockObterSugestoes = vi.fn();
+const mockCriarCategoria = vi.fn();
 
 vi.mock("@/lib/api", () => ({
+  criarCategoria: (...args: unknown[]) => mockCriarCategoria(...args),
   obterSugestoes: (...args: unknown[]) => mockObterSugestoes(...args),
 }));
 
@@ -19,6 +21,25 @@ const categoriaEventos = {
   ordem: 1,
   createdAt: "2026-07-03T10:00:00.000Z",
   updatedAt: "2026-07-03T10:00:00.000Z",
+};
+
+const categoriaNova = {
+  id: "categoria-nova",
+  schoolId: "school-1",
+  unitId: "unit-1",
+  nome: "Financeiro",
+  ativo: true,
+  ordem: 2,
+  createdAt: "2026-07-03T10:00:00.000Z",
+  updatedAt: "2026-07-03T10:00:00.000Z",
+};
+
+const categoriaInativa = {
+  ...categoriaEventos,
+  id: "categoria-inativa",
+  nome: "Categoria antiga",
+  ativo: false,
+  ordem: 3,
 };
 
 const modeloExistente: WorkflowModeloDetalhe = {
@@ -192,6 +213,70 @@ describe("WorkflowEditor", () => {
     expect(await screen.findByDisplayValue("Objetivo")).toBeTruthy();
     expect(screen.getByDisplayValue("Definir data")).toBeTruthy();
     expect(mockObterSugestoes).toHaveBeenCalledWith("categoria-1");
+  });
+
+  it("cria categoria inline e seleciona a categoria criada", async () => {
+    mockCriarCategoria.mockResolvedValue(categoriaNova);
+
+    render(
+      <WorkflowEditor
+        categorias={[categoriaEventos]}
+        onSalvar={vi.fn()}
+        onPublicar={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Criar categoria" }));
+    fireEvent.change(screen.getByLabelText("Nova categoria"), {
+      target: { value: "Financeiro" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Salvar categoria" }));
+
+    await waitFor(() =>
+      expect(mockCriarCategoria).toHaveBeenCalledWith({ nome: "Financeiro" }),
+    );
+    await waitFor(() =>
+      expect(
+        (screen.getByLabelText("Categoria") as HTMLSelectElement).value,
+      ).toBe("categoria-nova"),
+    );
+    expect(screen.getByRole("option", { name: "Financeiro" })).toBeTruthy();
+  });
+
+  it("não oferece categoria inativa para um modelo novo", () => {
+    render(
+      <WorkflowEditor
+        categorias={[categoriaEventos, categoriaInativa]}
+        onSalvar={vi.fn()}
+        onPublicar={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.queryByRole("option", { name: "Categoria antiga" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("preserva a categoria inativa já vinculada ao modelo", () => {
+    render(
+      <WorkflowEditor
+        categorias={[categoriaEventos, categoriaInativa]}
+        modelo={{
+          ...modeloExistente,
+          categoriaId: categoriaInativa.id,
+          categoria: categoriaInativa,
+        }}
+        onSalvar={vi.fn()}
+        onPublicar={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByRole("option", { name: "Categoria antiga" }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Categoria")).toHaveValue(
+      categoriaInativa.id,
+    );
   });
 
   it("bloqueia acao secundaria quando ha alteracoes pendentes", async () => {

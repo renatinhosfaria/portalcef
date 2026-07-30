@@ -16,6 +16,7 @@ import {
   CardTitle,
 } from "@essencia/ui/components/card";
 import { Checkbox } from "@essencia/ui/components/checkbox";
+import { Input } from "@essencia/ui/components/input";
 import { Progress } from "@essencia/ui/components/progress";
 import {
   Tabs,
@@ -27,14 +28,19 @@ import { Textarea } from "@essencia/ui/components/textarea";
 import {
   AlertTriangle,
   Ban,
+  Check,
   CheckCircle2,
   History,
+  Pencil,
   RotateCcw,
+  Trash2,
+  X,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { AnexosExecucao } from "./anexos-execucao";
 import { CancelarExecucaoDialog } from "./cancelar-execucao-dialog";
+import { DescartarExecucaoDialog } from "./descartar-execucao-dialog";
 
 const STATUS_LABEL: Record<WorkflowExecucaoStatus, string> = {
   EM_ANDAMENTO: "Em andamento",
@@ -48,7 +54,13 @@ const AVISO_MODELO_ATUALIZADO =
 interface ExecucaoDetalheProps {
   execucao: WorkflowExecucaoDetalheTipo;
   isGestao: boolean;
+  podeEditarTitulo?: boolean;
   carregando?: boolean;
+  onEditarTitulo?: (
+    execucaoId: string,
+    titulo: string,
+  ) => void | Promise<void>;
+  onDescartarTeste?: (execucaoId: string) => void | Promise<void>;
   onAtualizarEtapa: (
     execucaoId: string,
     etapaId: string,
@@ -97,7 +109,10 @@ function ordenarHistorico(historico: WorkflowHistoricoItem[]) {
 export function ExecucaoDetalhe({
   execucao,
   isGestao,
+  podeEditarTitulo = false,
   carregando = false,
+  onEditarTitulo,
+  onDescartarTeste,
   onAtualizarEtapa,
   onConcluir,
   onCancelar,
@@ -108,6 +123,9 @@ export function ExecucaoDetalhe({
   const [dialogCancelamentoAberto, setDialogCancelamentoAberto] =
     useState(false);
   const [dialogReaberturaAberto, setDialogReaberturaAberto] = useState(false);
+  const [dialogDescarteAberto, setDialogDescarteAberto] = useState(false);
+  const [editandoTitulo, setEditandoTitulo] = useState(false);
+  const [titulo, setTitulo] = useState(execucao.titulo);
   const [erroInteracao, setErroInteracao] = useState<string | null>(null);
   const mapaProgresso = useMemo(
     () => progressoPorEtapa(execucao.progresso),
@@ -129,6 +147,10 @@ export function ExecucaoDetalhe({
   const podeEditarChecklist = execucao.status === "EM_ANDAMENTO";
   const progresso = Math.max(0, Math.min(100, execucao.progressoPercentual));
 
+  useEffect(() => {
+    setTitulo(execucao.titulo);
+  }, [execucao.titulo]);
+
   async function executarInteracao(acao: () => void | Promise<void>) {
     try {
       setErroInteracao(null);
@@ -138,6 +160,27 @@ export function ExecucaoDetalhe({
         error instanceof Error
           ? error.message
           : "Não foi possível salvar a alteração.",
+      );
+    }
+  }
+
+  async function salvarTitulo() {
+    const tituloNormalizado = titulo.trim();
+    if (tituloNormalizado.length < 3) {
+      setErroInteracao("Informe um título com pelo menos 3 caracteres.");
+      return;
+    }
+    if (!onEditarTitulo) return;
+
+    try {
+      setErroInteracao(null);
+      await onEditarTitulo(execucao.id, tituloNormalizado);
+      setEditandoTitulo(false);
+    } catch (error) {
+      setErroInteracao(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível editar o título.",
       );
     }
   }
@@ -155,13 +198,70 @@ export function ExecucaoDetalhe({
               >
                 {STATUS_LABEL[execucao.status]}
               </Badge>
+              {execucao.teste ? <Badge variant="outline">Teste</Badge> : null}
               <span className="text-sm text-slate-500">
                 Modelo: {execucao.modelo.nome}
               </span>
             </div>
-            <h1 className="text-2xl font-bold text-slate-950">
-              {execucao.titulo}
-            </h1>
+            {editandoTitulo ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <label htmlFor="titulo-execucao-edicao" className="sr-only">
+                  Título da execução
+                </label>
+                <Input
+                  id="titulo-execucao-edicao"
+                  value={titulo}
+                  disabled={carregando}
+                  className="min-w-64 flex-1"
+                  onChange={(event) => setTitulo(event.target.value)}
+                />
+                <Button
+                  type="button"
+                  size="icon"
+                  aria-label="Salvar título"
+                  disabled={carregando}
+                  onClick={() => void salvarTitulo()}
+                >
+                  <Check className="h-4 w-4" />
+                </Button>
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="outline"
+                  aria-label="Cancelar edição do título"
+                  disabled={carregando}
+                  onClick={() => {
+                    setTitulo(execucao.titulo);
+                    setEditandoTitulo(false);
+                    setErroInteracao(null);
+                  }}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            ) : (
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-2xl font-bold text-slate-950">
+                  {execucao.titulo}
+                </h1>
+                {podeEditarTitulo && onEditarTitulo ? (
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    aria-label="Editar título"
+                    disabled={carregando}
+                    onClick={() => {
+                      setTitulo(execucao.titulo);
+                      setEditandoTitulo(true);
+                      setErroInteracao(null);
+                    }}
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                ) : null}
+              </div>
+            )}
             <p className="text-sm text-slate-600">
               Fase atual: {execucao.faseAtual ?? "Sem fase ativa"}
             </p>
@@ -204,6 +304,19 @@ export function ExecucaoDetalhe({
               >
                 <RotateCcw className="h-4 w-4" />
                 Reabrir
+              </Button>
+            ) : null}
+
+            {isGestao && execucao.teste && onDescartarTeste ? (
+              <Button
+                type="button"
+                variant="destructive"
+                className="gap-2"
+                disabled={carregando}
+                onClick={() => setDialogDescarteAberto(true)}
+              >
+                <Trash2 className="h-4 w-4" />
+                Descartar teste
               </Button>
             ) : null}
           </div>
@@ -439,6 +552,13 @@ export function ExecucaoDetalhe({
           await onReabrir(execucao.id, motivo);
           setDialogReaberturaAberto(false);
         }}
+      />
+
+      <DescartarExecucaoDialog
+        open={dialogDescarteAberto}
+        carregando={carregando}
+        onOpenChange={setDialogDescarteAberto}
+        onConfirmar={() => onDescartarTeste?.(execucao.id)}
       />
     </div>
   );

@@ -28,7 +28,7 @@ function renderDialog(
 
 describe("IniciarExecucaoDialog", () => {
   beforeEach(() => {
-    mockIniciarExecucao.mockResolvedValue({});
+    mockIniciarExecucao.mockResolvedValue({ id: "execucao-1" });
   });
 
   afterEach(() => {
@@ -112,5 +112,39 @@ describe("IniciarExecucaoDialog", () => {
 
     await waitFor(() => expect(onSucesso).toHaveBeenCalledTimes(1));
     expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it("inicia teste de rascunho com sinalizacao explicita", async () => {
+    const user = userEvent.setup();
+    let resolverExecucao: (() => void) | undefined;
+    const onSucesso = vi.fn();
+    mockIniciarExecucao.mockReturnValue(
+      new Promise((resolve) => {
+        resolverExecucao = () => resolve({});
+      }),
+    );
+
+    renderDialog({ teste: true, onSucesso });
+
+    expect(
+      screen.getByRole("heading", { name: "Iniciar teste" }),
+    ).toBeInTheDocument();
+
+    await user.type(
+      screen.getByLabelText("Título"),
+      "  Validação do rascunho  ",
+    );
+    await user.click(screen.getByRole("button", { name: "Iniciar teste" }));
+
+    expect(mockIniciarExecucao).toHaveBeenCalledWith("modelo-1", {
+      titulo: "Validação do rascunho",
+      teste: true,
+    });
+    expect(
+      screen.getByRole("button", { name: "Iniciando teste..." }),
+    ).toBeDisabled();
+
+    resolverExecucao?.();
+    await waitFor(() => expect(onSucesso).toHaveBeenCalledTimes(1));
   });
 });

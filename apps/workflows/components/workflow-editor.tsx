@@ -11,18 +11,20 @@ import {
   ArrowDown,
   ArrowUp,
   Copy,
+  Check,
   EyeOff,
   FilePlus2,
   Plus,
   Save,
   Send,
   Trash2,
+  X,
   Wand2,
 } from "lucide-react";
 import type { FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 
-import { obterSugestoes } from "@/lib/api";
+import { criarCategoria, obterSugestoes } from "@/lib/api";
 
 type EditorOrientacao = {
   id?: string;
@@ -71,6 +73,8 @@ const estadoInicial: EditorState = {
   orientacoes: [],
   fases: [],
 };
+
+const VALOR_CRIAR_CATEGORIA = "__criar_categoria__";
 
 function ordenarPorOrdem<T extends { ordem: number }>(itens: T[]) {
   return [...itens].sort((a, b) => a.ordem - b.ordem);
@@ -201,17 +205,35 @@ export function WorkflowEditor({
   const [salvando, setSalvando] = useState(false);
   const [aplicandoSugestoes, setAplicandoSugestoes] = useState(false);
   const [acaoSecundaria, setAcaoSecundaria] = useState<string | null>(null);
+  const [categoriasLocais, setCategoriasLocais] =
+    useState<WorkflowCategoria[]>(categorias);
+  const [criandoCategoria, setCriandoCategoria] = useState(false);
+  const [formCategoriaAberto, setFormCategoriaAberto] = useState(false);
+  const [novaCategoriaNome, setNovaCategoriaNome] = useState("");
 
   useEffect(() => {
     setEstado(criarEstadoDoModelo(modelo));
     setErro(null);
   }, [modelo]);
 
+  useEffect(() => {
+    setCategoriasLocais(categorias);
+  }, [categorias]);
+
   const emEdicao = Boolean(modelo);
   const modeloPublicado = modelo?.status === "PUBLICADO";
   const categoriaSelecionada = useMemo(
-    () => categorias.find((categoria) => categoria.id === estado.categoriaId),
-    [categorias, estado.categoriaId],
+    () =>
+      categoriasLocais.find((categoria) => categoria.id === estado.categoriaId),
+    [categoriasLocais, estado.categoriaId],
+  );
+  const categoriasSelecionaveis = useMemo(
+    () =>
+      categoriasLocais.filter(
+        (categoria) =>
+          categoria.ativo || categoria.id === modelo?.categoriaId,
+      ),
+    [categoriasLocais, modelo?.categoriaId],
   );
   const payloadAtual = useMemo(() => normalizarPayload(estado), [estado]);
   const payloadBase = useMemo(
@@ -222,10 +244,54 @@ export function WorkflowEditor({
     emEdicao && payloadBase
       ? JSON.stringify(payloadAtual) !== JSON.stringify(payloadBase)
       : false;
-  const mutacaoEmAndamento = salvando || acaoSecundaria !== null;
+  const mutacaoEmAndamento =
+    salvando || acaoSecundaria !== null || criandoCategoria;
 
   function atualizarCampo(campo: keyof EditorState, valor: string) {
     setEstado((atual) => ({ ...atual, [campo]: valor }));
+  }
+
+  function atualizarCategoria(valor: string) {
+    if (valor === VALOR_CRIAR_CATEGORIA) {
+      setFormCategoriaAberto(true);
+      return;
+    }
+
+    atualizarCampo("categoriaId", valor);
+  }
+
+  async function salvarNovaCategoria() {
+    const nome = novaCategoriaNome.trim();
+    if (nome.length < 2) {
+      setErro("Informe uma categoria com pelo menos 2 letras.");
+      return;
+    }
+
+    try {
+      setErro(null);
+      setCriandoCategoria(true);
+      const categoriaCriada = await criarCategoria({ nome });
+      setCategoriasLocais((atuais) => {
+        const semDuplicidade = atuais.filter(
+          (categoria) => categoria.id !== categoriaCriada.id,
+        );
+        return [...semDuplicidade, categoriaCriada].sort((a, b) => {
+          if (a.ordem !== b.ordem) return a.ordem - b.ordem;
+          return a.nome.localeCompare(b.nome, "pt-BR");
+        });
+      });
+      atualizarCampo("categoriaId", categoriaCriada.id);
+      setNovaCategoriaNome("");
+      setFormCategoriaAberto(false);
+    } catch (error) {
+      setErro(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível criar a categoria.",
+      );
+    } finally {
+      setCriandoCategoria(false);
+    }
   }
 
   function adicionarOrientacao() {
@@ -497,19 +563,74 @@ export function WorkflowEditor({
             <label htmlFor="categoria" className="text-sm font-medium text-slate-700">
               Categoria
             </label>
-            <select
-              id="categoria"
-              value={estado.categoriaId}
-              onChange={(event) => atualizarCampo("categoriaId", event.target.value)}
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-            >
-              <option value="">Selecione</option>
-              {categorias.map((categoria) => (
-                <option key={categoria.id} value={categoria.id}>
-                  {categoria.nome}
-                </option>
-              ))}
-            </select>
+            <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+              <select
+                id="categoria"
+                value={estado.categoriaId}
+                onChange={(event) => atualizarCategoria(event.target.value)}
+                disabled={mutacaoEmAndamento}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <option value="">Selecione</option>
+                {categoriasSelecionaveis.map((categoria) => (
+                  <option key={categoria.id} value={categoria.id}>
+                    {categoria.nome}
+                  </option>
+                ))}
+                <option value={VALOR_CRIAR_CATEGORIA}>Criar categoria...</option>
+              </select>
+              <Button
+                type="button"
+                variant="outline"
+                className="gap-2"
+                disabled={mutacaoEmAndamento}
+                onClick={() => setFormCategoriaAberto(true)}
+              >
+                <Plus className="h-4 w-4" />
+                Criar categoria
+              </Button>
+            </div>
+            {formCategoriaAberto ? (
+              <div className="grid gap-2 rounded-md border border-slate-200 bg-slate-50 p-3 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-end">
+                <div className="space-y-2">
+                  <label
+                    htmlFor="nova-categoria"
+                    className="text-sm font-medium text-slate-700"
+                  >
+                    Nova categoria
+                  </label>
+                  <Input
+                    id="nova-categoria"
+                    value={novaCategoriaNome}
+                    onChange={(event) => setNovaCategoriaNome(event.target.value)}
+                    disabled={criandoCategoria}
+                    placeholder="Ex.: Financeiro"
+                  />
+                </div>
+                <Button
+                  type="button"
+                  className="gap-2"
+                  disabled={criandoCategoria}
+                  onClick={() => void salvarNovaCategoria()}
+                >
+                  <Check className="h-4 w-4" />
+                  {criandoCategoria ? "Salvando..." : "Salvar categoria"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="gap-2"
+                  disabled={criandoCategoria}
+                  onClick={() => {
+                    setFormCategoriaAberto(false);
+                    setNovaCategoriaNome("");
+                  }}
+                >
+                  <X className="h-4 w-4" />
+                  Cancelar
+                </Button>
+              </div>
+            ) : null}
           </div>
         </div>
 

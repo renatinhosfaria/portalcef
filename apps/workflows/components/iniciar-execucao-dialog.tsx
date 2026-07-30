@@ -19,14 +19,18 @@ import { iniciarExecucao } from "@/lib/api";
 interface IniciarExecucaoDialogProps {
   modeloId: string | null;
   modeloNome?: string;
+  teste?: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSucesso: () => void | Promise<void>;
+  onSucesso: (
+    execucao: Awaited<ReturnType<typeof iniciarExecucao>>,
+  ) => void | Promise<void>;
 }
 
 export function IniciarExecucaoDialog({
   modeloId,
   modeloNome,
+  teste = false,
   open,
   onOpenChange,
   onSucesso,
@@ -62,9 +66,12 @@ export function IniciarExecucaoDialog({
     try {
       setSalvando(true);
       setErro(null);
-      await iniciarExecucao(modeloId, { titulo: tituloNormalizado });
+      const execucao = await iniciarExecucao(modeloId, {
+        titulo: tituloNormalizado,
+        ...(teste ? { teste: true } : {}),
+      });
       setTitulo("");
-      await onSucesso();
+      await onSucesso(execucao);
       onOpenChange(false);
     } catch (error) {
       setErro(
@@ -81,9 +88,13 @@ export function IniciarExecucaoDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Iniciar execução</DialogTitle>
+          <DialogTitle>
+            {teste ? "Iniciar teste" : "Iniciar execução"}
+          </DialogTitle>
           <DialogDescription>
-            {modeloNome
+            {teste && modeloNome
+              ? `Defina um título para testar ${modeloNome}.`
+              : modeloNome
               ? `Defina um título para ${modeloNome}.`
               : "Defina um título para a execução."}
           </DialogDescription>
@@ -119,7 +130,13 @@ export function IniciarExecucaoDialog({
             </Button>
             <Button type="submit" disabled={salvando} className="gap-2">
               <Play className="h-4 w-4" />
-              {salvando ? "Iniciando..." : "Iniciar"}
+              {salvando
+                ? teste
+                  ? "Iniciando teste..."
+                  : "Iniciando..."
+                : teste
+                  ? "Iniciar teste"
+                  : "Iniciar"}
             </Button>
           </DialogFooter>
         </form>

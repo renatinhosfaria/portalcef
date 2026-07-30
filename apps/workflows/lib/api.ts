@@ -22,6 +22,18 @@ type WorkflowModeloDuplicadoResultado = {
 export const listarCategorias = () =>
   api.get<WorkflowCategoria[]>("/workflows/categorias");
 
+export const criarCategoria = (body: { nome: string }) =>
+  api.post<WorkflowCategoria>("/workflows/categorias", body);
+
+export const atualizarCategoria = (
+  categoriaId: string,
+  body: { nome?: string; ativo?: boolean; ordem?: number },
+) =>
+  api.patch<WorkflowCategoria>(
+    `/workflows/categorias/${categoriaId}`,
+    body,
+  );
+
 export const listarModelos = (params = "status=PUBLICADO") =>
   api.get<WorkflowModeloResumo[]>(`/workflows/modelos?${params}`);
 
@@ -69,6 +81,15 @@ export const listarExecucoes = (params = "status=EM_ANDAMENTO") =>
 export const buscarExecucao = (execucaoId: string) =>
   api.get<WorkflowExecucaoDetalhe>(`/workflows/execucoes/${execucaoId}`);
 
+export const editarTituloExecucao = (
+  execucaoId: string,
+  body: { titulo: string },
+) =>
+  api.patch<WorkflowExecucaoDetalhe>(
+    `/workflows/execucoes/${execucaoId}/titulo`,
+    body,
+  );
+
 export const atualizarEtapa = (
   execucaoId: string,
   etapaId: string,
@@ -107,3 +128,6 @@ export const enviarAnexoExecucao = (
 
 export const removerAnexoExecucao = (execucaoId: string, anexoId: string) =>
   api.delete<null>(`/workflows/execucoes/${execucaoId}/anexos/${anexoId}`);
+
+export const descartarExecucaoTeste = (execucaoId: string) =>
+  api.delete<null>(`/workflows/execucoes/${execucaoId}`);

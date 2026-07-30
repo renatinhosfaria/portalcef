@@ -1,5 +1,6 @@
 import type { WorkflowExecucaoDetalhe } from "@essencia/shared/types/workflows";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { ExecucaoDetalhe } from "./execucao-detalhe";
@@ -133,5 +134,111 @@ describe("ExecucaoDetalhe", () => {
     });
 
     expect(onAtualizarEtapa).not.toHaveBeenCalled();
+  });
+
+  it("edita o título com valor normalizado", async () => {
+    const user = userEvent.setup();
+    const onEditarTitulo = vi.fn();
+
+    render(
+      <ExecucaoDetalhe
+        execucao={execucao}
+        isGestao={false}
+        podeEditarTitulo
+        onEditarTitulo={onEditarTitulo}
+        onAtualizarEtapa={vi.fn()}
+        onConcluir={vi.fn()}
+        onCancelar={vi.fn()}
+        onReabrir={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Editar título" }));
+    const input = screen.getByLabelText("Título da execução");
+    await user.clear(input);
+    await user.type(input, "  Evento atualizado  ");
+    await user.click(screen.getByRole("button", { name: "Salvar título" }));
+
+    await waitFor(() =>
+      expect(onEditarTitulo).toHaveBeenCalledWith(
+        "exec-1",
+        "Evento atualizado",
+      ),
+    );
+  });
+
+  it("valida o tamanho mínimo do título antes de salvar", async () => {
+    const user = userEvent.setup();
+    const onEditarTitulo = vi.fn();
+
+    render(
+      <ExecucaoDetalhe
+        execucao={execucao}
+        isGestao={false}
+        podeEditarTitulo
+        onEditarTitulo={onEditarTitulo}
+        onAtualizarEtapa={vi.fn()}
+        onConcluir={vi.fn()}
+        onCancelar={vi.fn()}
+        onReabrir={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Editar título" }));
+    const input = screen.getByLabelText("Título da execução");
+    await user.clear(input);
+    await user.type(input, "AB");
+    await user.click(screen.getByRole("button", { name: "Salvar título" }));
+
+    expect(
+      screen.getByText("Informe um título com pelo menos 3 caracteres."),
+    ).toBeInTheDocument();
+    expect(onEditarTitulo).not.toHaveBeenCalled();
+  });
+
+  it("permite que a gestão descarte uma execução de teste", async () => {
+    const user = userEvent.setup();
+    const onDescartarTeste = vi.fn();
+
+    render(
+      <ExecucaoDetalhe
+        execucao={{ ...execucao, teste: true }}
+        isGestao
+        onDescartarTeste={onDescartarTeste}
+        onAtualizarEtapa={vi.fn()}
+        onConcluir={vi.fn()}
+        onCancelar={vi.fn()}
+        onReabrir={vi.fn()}
+      />,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "Descartar teste" }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Confirmar descarte" }),
+    );
+
+    await waitFor(() =>
+      expect(onDescartarTeste).toHaveBeenCalledWith("exec-1"),
+    );
+  });
+
+  it("não oferece descarte quando a execução não é de teste", () => {
+    render(
+      <ExecucaoDetalhe
+        execucao={execucao}
+        isGestao
+        onDescartarTeste={vi.fn()}
+        onAtualizarEtapa={vi.fn()}
+        onConcluir={vi.fn()}
+        onCancelar={vi.fn()}
+        onReabrir={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.queryByRole("button", { name: "Descartar teste" }),
+    ).not.toBeInTheDocument();
   });
 });
