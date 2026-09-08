@@ -8,6 +8,7 @@ import {
   registrarEventoObservabilidade,
 } from "../../../lib/observabilidade";
 
+import type { PlanoDocumento } from "../types";
 import { DocumentoList } from "./documento-list";
 
 vi.mock("../../../lib/observabilidade", () => ({
@@ -140,6 +141,71 @@ describe("DocumentoList", () => {
     expect(botao).not.toBeDisabled();
   });
 
+  it("trata YOUTUBE como link e não permite imprimir ou excluir", () => {
+    const onDelete = vi.fn();
+    const onImprimir = vi.fn().mockResolvedValue(undefined);
+    const documentoYoutube: PlanoDocumento = {
+      id: "doc-youtube-legado",
+      planoId: "plano-1",
+      tipo: "YOUTUBE" as const,
+      fileName: null,
+      mimeType: "application/pdf",
+      url: "https://youtu.be/abc123",
+      createdAt: "2026-01-23T10:00:00.000Z",
+      approvedBy: "analista-1",
+      approvedAt: "2026-02-06T15:30:00.000Z",
+    };
+
+    render(
+      <DocumentoList
+        documentos={[documentoYoutube]}
+        canDelete
+        onDelete={onDelete}
+        onImprimir={onImprimir}
+      />,
+    );
+
+    expect(screen.getByText(/video youtube: abc123/i)).toBeInTheDocument();
+    expect(screen.getByText("YouTube")).toBeInTheDocument();
+    expect(screen.getByRole("link")).toHaveAttribute(
+      "href",
+      "https://youtu.be/abc123",
+    );
+    expect(
+      screen.queryByRole("button", { name: /excluir documento/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /imprimir documento/i }),
+    ).not.toBeInTheDocument();
+    expect(document.querySelector("svg.lucide-youtube")).toBeInTheDocument();
+  });
+
+  it("trata UPLOAD como arquivo e permite excluir quando não aprovado", () => {
+    const onDelete = vi.fn();
+    const documentoUpload = {
+      ...mockDocumentoPdf,
+      id: "doc-upload-legado",
+      tipo: "UPLOAD" as const,
+      fileName: "arquivo-legado.pdf",
+    };
+
+    render(
+      <DocumentoList
+        documentos={[documentoUpload]}
+        canDelete
+        onDelete={onDelete}
+      />,
+    );
+
+    expect(screen.getByText("PDF")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /arquivo-legado\.pdf/i }),
+    ).toHaveAttribute("href", "https://cdn/teste.pdf");
+    expect(
+      screen.getByRole("button", { name: /excluir documento/i }),
+    ).toBeInTheDocument();
+  });
+
   it("registra acao ao clicar em Visualizar para documento PDF", async () => {
     const user = userEvent.setup();
     const abrirJanela = vi.spyOn(window, "open").mockImplementation(() => null);
@@ -150,10 +216,7 @@ describe("DocumentoList", () => {
       screen.getByRole("button", { name: /visualizar documento/i }),
     );
 
-    expect(abrirJanela).toHaveBeenCalledWith(
-      "https://cdn/teste.pdf",
-      "_blank",
-    );
+    expect(abrirJanela).toHaveBeenCalledWith("https://cdn/teste.pdf", "_blank");
     expect(registrarEventoObservabilidade).toHaveBeenCalledWith(
       expect.objectContaining({
         evento: "arquivo_acao",
@@ -361,10 +424,14 @@ describe("DocumentoList", () => {
     await user.click(screen.getByRole("button", { name: /imprimir/i }));
 
     // Apos clicar em imprimir, o dialog de confirmacao deve aparecer
-    expect(screen.getByText("O documento foi impresso com sucesso?")).toBeInTheDocument();
+    expect(
+      screen.getByText("O documento foi impresso com sucesso?"),
+    ).toBeInTheDocument();
 
     // Confirmar a impressao
-    await user.click(screen.getByRole("button", { name: /sim, foi impresso/i }));
+    await user.click(
+      screen.getByRole("button", { name: /sim, foi impresso/i }),
+    );
 
     expect(onImprimir).toHaveBeenCalledTimes(1);
     expect(onImprimir).toHaveBeenCalledWith("doc-pdf-aprovado");
@@ -408,7 +475,9 @@ describe("DocumentoList", () => {
       screen.getByRole("button", { name: /^editar no word$/i }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: /editar no word online \(teste\)/i }),
+      screen.queryByRole("button", {
+        name: /editar no word online \(teste\)/i,
+      }),
     ).not.toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /aprovar documento/i }),
@@ -473,12 +542,7 @@ describe("DocumentoList", () => {
       }),
     });
 
-    render(
-      <DocumentoList
-        documentos={[mockDocumentoWord]}
-        canEdit={true}
-      />,
-    );
+    render(<DocumentoList documentos={[mockDocumentoWord]} canEdit={true} />);
 
     await user.click(screen.getByRole("button", { name: /^editar no word$/i }));
 
@@ -501,12 +565,7 @@ describe("DocumentoList", () => {
       }),
     });
 
-    render(
-      <DocumentoList
-        documentos={[mockDocumentoWord]}
-        canEdit={true}
-      />,
-    );
+    render(<DocumentoList documentos={[mockDocumentoWord]} canEdit={true} />);
 
     await user.click(screen.getByRole("button", { name: /^editar no word$/i }));
 
@@ -545,12 +604,7 @@ describe("DocumentoList", () => {
       }),
     });
 
-    render(
-      <DocumentoList
-        documentos={[mockDocumentoWord]}
-        canEdit={true}
-      />,
-    );
+    render(<DocumentoList documentos={[mockDocumentoWord]} canEdit={true} />);
 
     await user.click(screen.getByRole("button", { name: /^editar no word$/i }));
 
@@ -618,7 +672,9 @@ describe("DocumentoList", () => {
     );
 
     await user.click(screen.getByRole("button", { name: /imprimir/i }));
-    await user.click(screen.getByRole("button", { name: /sim, foi impresso/i }));
+    await user.click(
+      screen.getByRole("button", { name: /sim, foi impresso/i }),
+    );
 
     await waitFor(() => {
       expect(registrarEventoObservabilidade).toHaveBeenCalledWith(

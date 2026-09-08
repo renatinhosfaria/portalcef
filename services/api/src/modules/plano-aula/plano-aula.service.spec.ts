@@ -1,7 +1,4 @@
-import {
-  BadRequestException,
-  ForbiddenException,
-} from "@nestjs/common";
+import { BadRequestException, ForbiddenException } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
 
 import { PdfGeneratorService } from "../../common/sharepoint/pdf-generator.service";
@@ -61,7 +58,9 @@ const mockDb = {
   set: jest.fn().mockReturnThis(),
   where: jest.fn().mockReturnThis(),
   returning: jest.fn(),
-  transaction: jest.fn(async (cb: (tx: typeof mockTx) => unknown) => cb(mockTx)),
+  transaction: jest.fn(async (cb: (tx: typeof mockTx) => unknown) =>
+    cb(mockTx),
+  ),
 };
 
 jest.mock("@essencia/db", () => ({
@@ -582,7 +581,9 @@ describe("PlanoAulaService", () => {
     };
 
     beforeEach(() => {
-      jest.spyOn(service, "getPlanoById").mockResolvedValue(planoComAcesso as never);
+      jest
+        .spyOn(service, "getPlanoById")
+        .mockResolvedValue(planoComAcesso as never);
       mockDb.query.planoDocumento.findFirst.mockResolvedValue(documentoUpload);
       mockDb.query.units.findFirst.mockResolvedValue({
         id: "unit-1",
@@ -593,7 +594,9 @@ describe("PlanoAulaService", () => {
         name: "Analista Responsável",
       });
       historicoServiceMock.registrar.mockResolvedValue({});
-      mockDb.transaction.mockImplementation(async (callback) => callback(mockTx));
+      mockDb.transaction.mockImplementation(async (callback) =>
+        callback(mockTx),
+      );
       mockTx.returning.mockResolvedValue([documentoUpload]);
     });
 
@@ -615,12 +618,7 @@ describe("PlanoAulaService", () => {
 
     it("rejeita motivo inválido antes de consultar o documento", async () => {
       await expect(
-        service.removerDocumento(
-          usuarioLogado,
-          "plano-1",
-          "doc-1",
-          "curto",
-        ),
+        service.removerDocumento(usuarioLogado, "plano-1", "doc-1", "curto"),
       ).rejects.toMatchObject({
         response: expect.objectContaining({
           code: "MOTIVO_EXCLUSAO_INVALIDO",
@@ -736,7 +734,9 @@ describe("PlanoAulaService", () => {
       jest
         .spyOn(service, "getPlanoById")
         .mockRejectedValueOnce(
-          new ForbiddenException("Você não tem permissão para acessar este plano"),
+          new ForbiddenException(
+            "Você não tem permissão para acessar este plano",
+          ),
         );
 
       await expect(
@@ -759,13 +759,14 @@ describe("PlanoAulaService", () => {
         userId: "autora-1",
         role: "professora",
       };
-      jest
-        .spyOn(service, "getPlanoById")
-        .mockResolvedValueOnce({
-          ...planoComAcesso,
-          unitId: "unit-2",
-          user: { id: proprietariaForaDaUnidade.userId, name: "Professora Autora" },
-        } as never);
+      jest.spyOn(service, "getPlanoById").mockResolvedValueOnce({
+        ...planoComAcesso,
+        unitId: "unit-2",
+        user: {
+          id: proprietariaForaDaUnidade.userId,
+          name: "Professora Autora",
+        },
+      } as never);
 
       await expect(
         service.removerDocumento(
@@ -986,14 +987,8 @@ describe("PlanoAulaService", () => {
       });
 
       expect(mockTx.returning).toHaveBeenCalledTimes(1);
-      expect(isNull).toHaveBeenNthCalledWith(
-        1,
-        "planoDocumento.approvedBy",
-      );
-      expect(isNull).toHaveBeenNthCalledWith(
-        2,
-        "planoDocumento.approvedAt",
-      );
+      expect(isNull).toHaveBeenNthCalledWith(1, "planoDocumento.approvedBy");
+      expect(isNull).toHaveBeenNthCalledWith(2, "planoDocumento.approvedAt");
       // O histórico é tentado antes do DELETE, mas a transação é revertida
       // quando a aprovação concorrente é detectada.
       expect(historicoServiceMock.registrar).toHaveBeenCalled();
@@ -1024,7 +1019,9 @@ describe("PlanoAulaService", () => {
       });
       expect(erro).not.toHaveProperty(
         "message",
-        expect.stringContaining("detalhe interno que não deve chegar ao usuário"),
+        expect.stringContaining(
+          "detalhe interno que não deve chegar ao usuário",
+        ),
       );
     });
 
@@ -1077,6 +1074,86 @@ describe("PlanoAulaService", () => {
 
       expect(mockDb.transaction).toHaveBeenCalledTimes(1);
       expect(mockTx.delete).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe("acesso ao plano por escopo", () => {
+    const planoDeOutraUnidade = {
+      id: "plano-outra-unidade",
+      userId: "professora-outra",
+      turmaId: "turma-outra",
+      unitId: "unit-2",
+      status: "RASCUNHO",
+      user: { id: "professora-outra", name: "Professora de outra unidade" },
+      turma: {
+        id: "turma-outra",
+        name: "Turma da outra unidade",
+        code: "T2",
+        stageId: "stage-2",
+      },
+      documentos: [],
+    };
+
+    it("permite que master consulte plano de qualquer escola sem unidade na sessão", async () => {
+      mockDb.query.planoAula.findFirst.mockResolvedValue(planoDeOutraUnidade);
+
+      await expect(
+        service.getPlanoById(
+          {
+            userId: "master-1",
+            role: "master",
+            schoolId: null,
+            unitId: null,
+            stageId: null,
+          },
+          planoDeOutraUnidade.id,
+        ),
+      ).resolves.toEqual(
+        expect.objectContaining({ id: planoDeOutraUnidade.id }),
+      );
+
+      expect(mockDb.query.units.findFirst).not.toHaveBeenCalled();
+    });
+
+    it("permite que diretora geral consulte plano de outra unidade da mesma escola", async () => {
+      mockDb.query.planoAula.findFirst.mockResolvedValue(planoDeOutraUnidade);
+      mockDb.query.units.findFirst.mockResolvedValue({
+        id: "unit-2",
+        schoolId: "school-1",
+      });
+
+      await expect(
+        service.getPlanoById(
+          {
+            userId: "diretora-1",
+            role: "diretora_geral",
+            schoolId: "school-1",
+            unitId: null,
+            stageId: null,
+          },
+          planoDeOutraUnidade.id,
+        ),
+      ).resolves.toEqual(
+        expect.objectContaining({ id: planoDeOutraUnidade.id }),
+      );
+    });
+
+    it("bloqueia diretora geral ao consultar plano de escola diferente", async () => {
+      mockDb.query.planoAula.findFirst.mockResolvedValue(planoDeOutraUnidade);
+      mockDb.query.units.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.getPlanoById(
+          {
+            userId: "diretora-1",
+            role: "diretora_geral",
+            schoolId: "school-diferente",
+            unitId: null,
+            stageId: null,
+          },
+          planoDeOutraUnidade.id,
+        ),
+      ).rejects.toThrow(ForbiddenException);
     });
   });
 

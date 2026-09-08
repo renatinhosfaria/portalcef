@@ -19,7 +19,24 @@ export type PlanoAulaStatus =
 /**
  * Tipo do documento anexado ao plano
  */
-export type DocumentoTipo = "ARQUIVO" | "LINK_YOUTUBE";
+export type DocumentoTipo = "ARQUIVO" | "UPLOAD" | "LINK_YOUTUBE" | "YOUTUBE";
+
+export const DOCUMENTO_TIPOS_LINK: readonly DocumentoTipo[] = [
+  "LINK_YOUTUBE",
+  "YOUTUBE",
+];
+export const DOCUMENTO_TIPOS_UPLOAD: readonly DocumentoTipo[] = [
+  "ARQUIVO",
+  "UPLOAD",
+];
+
+export function isDocumentoLinkYoutube(tipo: DocumentoTipo): boolean {
+  return DOCUMENTO_TIPOS_LINK.includes(tipo);
+}
+
+export function isDocumentoUpload(tipo: DocumentoTipo): boolean {
+  return DOCUMENTO_TIPOS_UPLOAD.includes(tipo);
+}
 
 /**
  * Status de geração do PDF usado para impressão.

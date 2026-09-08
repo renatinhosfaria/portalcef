@@ -14,7 +14,15 @@ export type {
   ListagemPlanosResponse,
 } from "./types";
 
-export { STATUS_LABELS, STATUS_COLORS, STATUS_FILTER_OPTIONS } from "./types";
+export {
+  DOCUMENTO_TIPOS_LINK,
+  DOCUMENTO_TIPOS_UPLOAD,
+  isDocumentoLinkYoutube,
+  isDocumentoUpload,
+  STATUS_LABELS,
+  STATUS_COLORS,
+  STATUS_FILTER_OPTIONS,
+} from "./types";
 
 // Hooks
 export {

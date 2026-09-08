@@ -6,7 +6,6 @@
  * Task 3.2: Criar componentes de upload e lista de documentos
  */
 
-
 import {
   formatarDataHora,
   formatarDataHoraCurta,
@@ -51,7 +50,11 @@ import {
   enviarEventosPendentes,
   registrarEventoObservabilidade,
 } from "../../../lib/observabilidade";
-import type { PlanoDocumento } from "../types";
+import {
+  isDocumentoLinkYoutube,
+  isDocumentoUpload,
+  type PlanoDocumento,
+} from "../types";
 
 import { DocumentoEditorModal } from "./documento-editor";
 
@@ -86,7 +89,7 @@ function formatFileSize(bytes: number | null | undefined): string {
 
 function getFileIcon(documento: PlanoDocumento) {
   // Link do YouTube
-  if (documento.tipo === "LINK_YOUTUBE") {
+  if (isDocumentoLinkYoutube(documento.tipo)) {
     return Youtube;
   }
 
@@ -113,7 +116,7 @@ function getFileIcon(documento: PlanoDocumento) {
 }
 
 function getFileTypeLabel(documento: PlanoDocumento): string {
-  if (documento.tipo === "LINK_YOUTUBE") {
+  if (isDocumentoLinkYoutube(documento.tipo)) {
     return "YouTube";
   }
 
@@ -135,14 +138,23 @@ function getFileTypeLabel(documento: PlanoDocumento): string {
 }
 
 function getDocumentUrl(documento: PlanoDocumento): string | undefined {
-  if (documento.tipo === "LINK_YOUTUBE") {
+  if (isDocumentoLinkYoutube(documento.tipo)) {
     return documento.url;
   }
-  // Para arquivos, a URL seria construida a partir do storageKey
-  return documento.url;
+
+  if (isDocumentoUpload(documento.tipo)) {
+    // A API já entrega a URL assinada ou pública do arquivo enviado.
+    return documento.url;
+  }
+
+  return undefined;
 }
 
 function getUrlParaImpressao(documento: PlanoDocumento): string | null {
+  if (isDocumentoLinkYoutube(documento.tipo)) {
+    return null;
+  }
+
   if (isWordDocument(documento)) {
     return documento.pdfStatus === "PRONTO" && documento.pdfUrl
       ? documento.pdfUrl
@@ -207,7 +219,12 @@ function getPdfStatusInfo(documento: PlanoDocumento): {
   icon: typeof RefreshCw;
   animate?: boolean;
 } | null {
-  if (!isWordDocument(documento) || !documento.approvedBy) return null;
+  if (
+    !isDocumentoUpload(documento.tipo) ||
+    !isWordDocument(documento) ||
+    !documento.approvedBy
+  )
+    return null;
 
   switch (documento.pdfStatus) {
     case "PENDENTE":
@@ -241,7 +258,7 @@ function getPdfStatusInfo(documento: PlanoDocumento): {
 }
 
 function getDocumentName(documento: PlanoDocumento): string {
-  if (documento.tipo === "LINK_YOUTUBE" && documento.url) {
+  if (isDocumentoLinkYoutube(documento.tipo) && documento.url) {
     // Extrair ID do video do YouTube para exibicao
     const match = documento.url.match(
       /(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]+)/,
@@ -294,7 +311,9 @@ export function DocumentoList({
   const [sincronizandoId, setSincronizandoId] = useState<string | null>(null);
   const [regerandoPdfId, setRegerandoPdfId] = useState<string | null>(null);
   const [showConfirmarImpressao, setShowConfirmarImpressao] = useState(false);
-  const [documentoParaImprimir, setDocumentoParaImprimir] = useState<string | null>(null);
+  const [documentoParaImprimir, setDocumentoParaImprimir] = useState<
+    string | null
+  >(null);
 
   const registrarEventoDocumento = (
     documento: PlanoDocumento,
@@ -398,7 +417,9 @@ export function DocumentoList({
   const handleConfirmarImpressao = async () => {
     if (!onImprimir || !documentoParaImprimir) return;
 
-    const documento = documentos.find((doc) => doc.id === documentoParaImprimir);
+    const documento = documentos.find(
+      (doc) => doc.id === documentoParaImprimir,
+    );
 
     try {
       setImprimindoId(documentoParaImprimir);
@@ -466,10 +487,13 @@ export function DocumentoList({
             ? urlParaImpressao
             : null;
         const urlLinkDocumento = urlPdfProva ?? url;
-        const urlVisualizacaoAcao = urlPdfProva ?? (documentoWord ? undefined : url);
+        const urlVisualizacaoAcao =
+          urlPdfProva ?? (documentoWord ? undefined : url);
         const name = getDocumentName(documento);
         const podeVisualizar = documentoWord || !!urlVisualizacaoAcao;
-        const podeEditar = canEdit && documentoWord;
+        const ehUpload = isDocumentoUpload(documento.tipo);
+        const ehLinkYoutube = isDocumentoLinkYoutube(documento.tipo);
+        const podeEditar = canEdit && ehUpload && documentoWord;
         const podeAprovar = canAprovar && !!onAprovar && !documento.approvedBy;
         const podeDesaprovar =
           canAprovar && !!onDesaprovar && !!documento.approvedBy;
@@ -477,15 +501,21 @@ export function DocumentoList({
           canAprovar &&
           !!onRegerarPdf &&
           !!documento.approvedBy &&
+          ehUpload &&
           documentoWord &&
           documento.pdfStatus === "ERRO";
         const podeImprimir =
-          documento.tipo !== "LINK_YOUTUBE" &&
+          !ehLinkYoutube &&
           !!urlParaImpressao &&
           (permitirImpressaoSemAprovacao ||
             (!!documento.approvedAt && !!documento.approvedBy)) &&
           !!onImprimir;
-        const podeExcluir = canDelete && !!onDelete;
+        const podeExcluir =
+          canDelete &&
+          !!onDelete &&
+          ehUpload &&
+          !documento.approvedBy &&
+          !documento.approvedAt;
         const temAcoesVisiveis =
           podeVisualizar ||
           podeEditar ||
@@ -508,17 +538,13 @@ export function DocumentoList({
                 <div
                   className={cn(
                     "flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg mt-0.5",
-                    documento.tipo === "LINK_YOUTUBE"
-                      ? "bg-red-100"
-                      : "bg-primary/10",
+                    ehLinkYoutube ? "bg-red-100" : "bg-primary/10",
                   )}
                 >
                   <Icon
                     className={cn(
                       "h-5 w-5",
-                      documento.tipo === "LINK_YOUTUBE"
-                        ? "text-red-600"
-                        : "text-primary",
+                      ehLinkYoutube ? "text-red-600" : "text-primary",
                     )}
                   />
                 </div>
@@ -550,13 +576,17 @@ export function DocumentoList({
                     </span>
                     {documento.fileSize && (
                       <>
-                        <span className="text-muted-foreground/40">&middot;</span>
+                        <span className="text-muted-foreground/40">
+                          &middot;
+                        </span>
                         <span>{formatFileSize(documento.fileSize)}</span>
                       </>
                     )}
                     {(documento.updatedAt || documento.createdAt) && (
                       <>
-                        <span className="text-muted-foreground/40">&middot;</span>
+                        <span className="text-muted-foreground/40">
+                          &middot;
+                        </span>
                         <span title="Última atualização">
                           {formatarDataHora(
                             documento.updatedAt || documento.createdAt,
@@ -603,8 +633,7 @@ export function DocumentoList({
                           className="text-[10px] px-1.5 py-0 h-5 border-indigo-200 bg-indigo-50 text-indigo-700 font-medium"
                         >
                           <Printer className="h-3 w-3 mr-1" />
-                          Impresso{" "}
-                          {formatarDataHoraCurta(documento.printedAt)}
+                          Impresso {formatarDataHoraCurta(documento.printedAt)}
                         </Badge>
                       )}
                       {documento.temComentarios && (
@@ -712,75 +741,82 @@ export function DocumentoList({
                     </Button>
                   )}
 
-                  {podeEditar && documento.sharepointItemId && documento.sharepointEditUrl && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-purple-600 hover:bg-purple-50 hover:text-purple-700"
-                      onClick={async () => {
-                        try {
-                          setSincronizandoId(documento.id);
-                          registrarEventoDocumento(documento, {
-                            evento: "sharepoint_word",
-                            nivel: "info",
-                            detalhes: {
-                              acao: "sincronizar",
-                              status: "inicio",
-                            },
-                          });
-                          const res = await fetch(
-                            `/api/${modulo}/${documento.planoId}/documentos/${documento.id}/sincronizar-word`,
-                            { method: "POST", credentials: "include" },
-                          );
-                          if (!res.ok) {
-                            const mensagem = await obterMensagemErroDaRespostaHttp(
-                              res,
-                              "Não foi possível sincronizar o documento. Salve o arquivo no Word e tente novamente.",
+                  {podeEditar &&
+                    documento.sharepointItemId &&
+                    documento.sharepointEditUrl && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-purple-600 hover:bg-purple-50 hover:text-purple-700"
+                        onClick={async () => {
+                          try {
+                            setSincronizandoId(documento.id);
+                            registrarEventoDocumento(documento, {
+                              evento: "sharepoint_word",
+                              nivel: "info",
+                              detalhes: {
+                                acao: "sincronizar",
+                                status: "inicio",
+                              },
+                            });
+                            const res = await fetch(
+                              `/api/${modulo}/${documento.planoId}/documentos/${documento.id}/sincronizar-word`,
+                              { method: "POST", credentials: "include" },
                             );
-                            throw new Error(mensagem);
+                            if (!res.ok) {
+                              const mensagem =
+                                await obterMensagemErroDaRespostaHttp(
+                                  res,
+                                  "Não foi possível sincronizar o documento. Salve o arquivo no Word e tente novamente.",
+                                );
+                              throw new Error(mensagem);
+                            }
+                            registrarEventoDocumento(documento, {
+                              evento: "sharepoint_word",
+                              nivel: "info",
+                              detalhes: {
+                                acao: "sincronizar",
+                                status: "sucesso",
+                              },
+                            });
+                            toast.success(
+                              "Documento sincronizado com sucesso!",
+                            );
+                            window.location.reload();
+                          } catch (error) {
+                            registrarEventoDocumento(documento, {
+                              evento: "sharepoint_word",
+                              nivel: "error",
+                              erro: {
+                                mensagem: obterMensagemObservabilidade(error),
+                              },
+                              detalhes: {
+                                acao: "sincronizar",
+                                status: "erro",
+                              },
+                            });
+                            toast.error(
+                              obterMensagemErro(
+                                error,
+                                "Não foi possível sincronizar o documento. Salve o arquivo no Word e tente novamente.",
+                              ),
+                            );
+                          } finally {
+                            setSincronizandoId(null);
                           }
-                          registrarEventoDocumento(documento, {
-                            evento: "sharepoint_word",
-                            nivel: "info",
-                            detalhes: {
-                              acao: "sincronizar",
-                              status: "sucesso",
-                            },
-                          });
-                          toast.success("Documento sincronizado com sucesso!");
-                          window.location.reload();
-                        } catch (error) {
-                          registrarEventoDocumento(documento, {
-                            evento: "sharepoint_word",
-                            nivel: "error",
-                            erro: {
-                              mensagem: obterMensagemObservabilidade(error),
-                            },
-                            detalhes: {
-                              acao: "sincronizar",
-                              status: "erro",
-                            },
-                          });
-                          toast.error(
-                            obterMensagemErro(
-                              error,
-                              "Não foi possível sincronizar o documento. Salve o arquivo no Word e tente novamente.",
-                            ),
-                          );
-                        } finally {
-                          setSincronizandoId(null);
-                        }
-                      }}
-                      disabled={sincronizandoId === documento.id}
-                      title="Sincronizar alterações do Word"
-                      aria-label="Sincronizar alterações do Word"
-                    >
-                      <RefreshCw className={cn(
-                        "h-4 w-4",
-                        sincronizandoId === documento.id && "animate-spin",
-                      )} />
-                    </Button>
-                  )}
+                        }}
+                        disabled={sincronizandoId === documento.id}
+                        title="Sincronizar alterações do Word"
+                        aria-label="Sincronizar alterações do Word"
+                      >
+                        <RefreshCw
+                          className={cn(
+                            "h-4 w-4",
+                            sincronizandoId === documento.id && "animate-spin",
+                          )}
+                        />
+                      </Button>
+                    )}
 
                   {podeAprovar && (
                     <Button

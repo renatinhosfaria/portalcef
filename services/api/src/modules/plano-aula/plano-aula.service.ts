@@ -239,7 +239,10 @@ export class PlanoAulaService {
               },
             },
           },
-          orderBy: [desc(planoDocumento.updatedAt), desc(planoDocumento.createdAt)],
+          orderBy: [
+            desc(planoDocumento.updatedAt),
+            desc(planoDocumento.createdAt),
+          ],
         },
       },
     });
@@ -254,6 +257,24 @@ export class PlanoAulaService {
     const isAnalistaUser = isAnalista(user.role);
     const isCoordenadoraUser = isCoordenadora(user.role);
     const isSameUnit = plano.unitId === user.unitId;
+
+    // Master possui escopo global, mesmo sem unidade ou escola na sessão.
+    if (user.role === "master") {
+      return this.formatPlanoResponse(plano);
+    }
+
+    // Diretora geral possui escopo de toda a escola, incluindo outras
+    // unidades. A validação usa a unidade vinculada ao plano, nunca dados do
+    // corpo da requisição.
+    if (user.role === "diretora_geral") {
+      if (await this.planoPertenceAoEscopoDaSessao(user, plano)) {
+        return this.formatPlanoResponse(plano);
+      }
+
+      throw new ForbiddenException(
+        "Você não tem permissão para acessar este plano",
+      );
+    }
 
     // Owner sempre pode ver
     if (isOwner) {
@@ -366,10 +387,7 @@ export class PlanoAulaService {
    * Recupera plano submetido (AGUARDANDO_ANALISTA -> RECUPERADO)
    * Permite que a professora recupere o plano antes da analista iniciar a análise
    */
-  async recuperarPlano(
-    user: UserContext,
-    planoId: string,
-  ): Promise<PlanoAula> {
+  async recuperarPlano(user: UserContext, planoId: string): Promise<PlanoAula> {
     const db = getDb();
 
     const plano = await db.query.planoAula.findFirst({
@@ -1179,7 +1197,9 @@ export class PlanoAulaService {
   /**
    * Busca status do plano por ID (para uso no callback)
    */
-  async getPlanoStatusById(planoId: string): Promise<{ status: string } | null> {
+  async getPlanoStatusById(
+    planoId: string,
+  ): Promise<{ status: string } | null> {
     const db = getDb();
     const plano = await db.query.planoAula.findFirst({
       where: eq(planoAula.id, planoId),
@@ -1338,10 +1358,7 @@ export class PlanoAulaService {
       .where(eq(planoDocumento.id, documentoId));
   }
 
-  async marcarPdfPronto(
-    documentoId: string,
-    pdf: PdfGerado,
-  ): Promise<void> {
+  async marcarPdfPronto(documentoId: string, pdf: PdfGerado): Promise<void> {
     const db = getDb();
     await db
       .update(planoDocumento)
@@ -1810,7 +1827,8 @@ export class PlanoAulaService {
           try {
             await this.storageService.deleteFile(chave);
           } catch (error) {
-            const mensagem = error instanceof Error ? error.message : String(error);
+            const mensagem =
+              error instanceof Error ? error.message : String(error);
             this.logger.warn(
               `[removerDocumento] Falha ao remover ${chave} do storage: ${mensagem}`,
             );
@@ -1823,9 +1841,12 @@ export class PlanoAulaService {
         // best-effort: falhas externas são apenas registradas e não impedem
         // a remoção local do documento.
         try {
-          await this.sharePointService.removerArquivo(documento.sharepointItemId);
+          await this.sharePointService.removerArquivo(
+            documento.sharepointItemId,
+          );
         } catch (error) {
-          const mensagem = error instanceof Error ? error.message : String(error);
+          const mensagem =
+            error instanceof Error ? error.message : String(error);
           this.logger.warn(
             `[removerDocumento] Falha ao remover ${documento.sharepointItemId} do SharePoint: ${mensagem}`,
           );
@@ -1852,18 +1873,31 @@ export class PlanoAulaService {
     user: UserContext,
     plano: PlanoComDocumentos,
   ): Promise<void> {
+    if (!(await this.planoPertenceAoEscopoDaSessao(user, plano))) {
+      throw criarErroPermissaoExclusaoDocumento();
+    }
+  }
+
+  /**
+   * Valida o escopo da unidade do plano usando somente a sessão e a relação
+   * persistida entre unidade e escola.
+   */
+  private async planoPertenceAoEscopoDaSessao(
+    user: UserContext,
+    plano: PlanoComDocumentos,
+  ): Promise<boolean> {
     if (user.role === "master") {
-      return;
+      return true;
     }
 
     if (!user.schoolId) {
-      throw criarErroPermissaoExclusaoDocumento();
+      return false;
     }
 
-    // Diretora geral tem escopo de escola; os demais perfis ficam limitados à
-    // unidade da sessão, inclusive quando são proprietários do plano.
+    // Diretora geral pode acessar qualquer unidade da própria escola; os
+    // demais perfis continuam restritos à unidade da sessão.
     if (user.role !== "diretora_geral" && plano.unitId !== user.unitId) {
-      throw criarErroPermissaoExclusaoDocumento();
+      return false;
     }
 
     const db = getDb();
@@ -1871,9 +1905,7 @@ export class PlanoAulaService {
       where: and(eq(units.id, plano.unitId), eq(units.schoolId, user.schoolId)),
     });
 
-    if (!unidade) {
-      throw criarErroPermissaoExclusaoDocumento();
-    }
+    return Boolean(unidade);
   }
 
   /**
