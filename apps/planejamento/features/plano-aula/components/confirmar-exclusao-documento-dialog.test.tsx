@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { ConfirmarExclusaoDocumentoDialog } from "./confirmar-exclusao-documento-dialog";
 
 describe("ConfirmarExclusaoDocumentoDialog", () => {
-  it("exibe o nome do arquivo e exige motivo com pelo menos 10 caracteres", async () => {
+  it("desabilita a confirmação enquanto o motivo tiver menos de 10 caracteres", async () => {
     const user = userEvent.setup();
     const onConfirmar = vi.fn().mockResolvedValue(undefined);
 
@@ -13,6 +13,7 @@ describe("ConfirmarExclusaoDocumentoDialog", () => {
       <ConfirmarExclusaoDocumentoDialog
         open
         onOpenChange={vi.fn()}
+        documentoId="doc-1"
         nomeArquivo="planejamento.pdf"
         onConfirmar={onConfirmar}
       />,
@@ -22,17 +23,19 @@ describe("ConfirmarExclusaoDocumentoDialog", () => {
       "planejamento.pdf",
     );
 
+    const botaoConfirmar = screen.getByRole("button", {
+      name: /excluir arquivo/i,
+    });
     const motivo = screen.getByRole("textbox", {
       name: /motivo da exclusão/i,
     });
-    await user.type(motivo, "curto");
-    await user.click(screen.getByRole("button", { name: /excluir arquivo/i }));
 
-    expect(
-      screen.getByText(
-        "Informe o motivo da exclusão com pelo menos 10 caracteres.",
-      ),
-    ).toBeInTheDocument();
+    expect(botaoConfirmar).toBeDisabled();
+    await user.type(motivo, "curto");
+    expect(botaoConfirmar).toBeDisabled();
+
+    await user.type(motivo, "12345");
+    expect(botaoConfirmar).not.toBeDisabled();
     expect(onConfirmar).not.toHaveBeenCalled();
   });
 
@@ -46,6 +49,7 @@ describe("ConfirmarExclusaoDocumentoDialog", () => {
       <ConfirmarExclusaoDocumentoDialog
         open
         onOpenChange={onOpenChange}
+        documentoId="doc-1"
         nomeArquivo="planejamento.pdf"
         onConfirmar={onConfirmar}
       />,
@@ -58,24 +62,23 @@ describe("ConfirmarExclusaoDocumentoDialog", () => {
     await user.click(screen.getByRole("button", { name: /excluir arquivo/i }));
 
     await waitFor(() => {
-      expect(onConfirmar).toHaveBeenCalledWith(motivo);
+      expect(onConfirmar).toHaveBeenCalledWith("doc-1", motivo);
       expect(onOpenChange).toHaveBeenCalledWith(false);
     });
   });
 
-  it("mantém o motivo e exibe erro amigável quando a exclusão falha", async () => {
+  it("oculta erro técnico em inglês e mantém o motivo quando a exclusão falha", async () => {
     const user = userEvent.setup();
     const onConfirmar = vi
       .fn()
-      .mockRejectedValue(
-        new Error("Este arquivo já foi aprovado e não pode ser excluído."),
-      );
+      .mockRejectedValue(new Error("Failed to delete document"));
     const motivo = "Arquivo duplicado no planejamento";
 
     render(
       <ConfirmarExclusaoDocumentoDialog
         open
         onOpenChange={vi.fn()}
+        documentoId="doc-1"
         nomeArquivo="planejamento.pdf"
         onConfirmar={onConfirmar}
       />,
@@ -90,10 +93,13 @@ describe("ConfirmarExclusaoDocumentoDialog", () => {
     await waitFor(() => {
       expect(
         screen.getByText(
-          "Este arquivo já foi aprovado e não pode ser excluído.",
+          "Não foi possível excluir o arquivo agora. Tente novamente.",
         ),
       ).toBeInTheDocument();
     });
+    expect(
+      screen.queryByText("Failed to delete document"),
+    ).not.toBeInTheDocument();
     expect(campoMotivo).toHaveValue(motivo);
     expect(screen.getByRole("alertdialog")).toBeInTheDocument();
   });
@@ -112,6 +118,7 @@ describe("ConfirmarExclusaoDocumentoDialog", () => {
       <ConfirmarExclusaoDocumentoDialog
         open
         onOpenChange={vi.fn()}
+        documentoId="doc-1"
         nomeArquivo="planejamento.pdf"
         onConfirmar={onConfirmar}
       />,

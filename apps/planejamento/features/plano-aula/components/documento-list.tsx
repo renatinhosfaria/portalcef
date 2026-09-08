@@ -989,11 +989,12 @@ export function DocumentoList({
       {documentoParaExcluir && onDelete && (
         <ConfirmarExclusaoDocumentoDialog
           open
+          documentoId={documentoParaExcluir.id}
           nomeArquivo={getDocumentName(documentoParaExcluir)}
           onOpenChange={(open) => {
             if (!open) setDocumentoParaExcluir(null);
           }}
-          onConfirmar={(motivo) => onDelete(documentoParaExcluir.id, motivo)}
+          onConfirmar={onDelete}
         />
       )}
     </div>

@@ -14,6 +14,8 @@ import { Textarea } from "@essencia/ui/components/textarea";
 import { AlertCircle, Trash2 } from "lucide-react";
 import { useEffect, useState, type MouseEvent } from "react";
 
+import { obterMensagemErro } from "../../../lib/mensagens-erro";
+
 const MINIMO_MOTIVO_EXCLUSAO = 10;
 const MENSAGEM_MOTIVO_INVALIDO =
   "Informe o motivo da exclusão com pelo menos 10 caracteres.";
@@ -23,13 +25,15 @@ const MENSAGEM_FALHA_EXCLUSAO =
 interface ConfirmarExclusaoDocumentoDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  documentoId: string;
   nomeArquivo: string;
-  onConfirmar: (motivo: string) => Promise<void>;
+  onConfirmar: (documentoId: string, motivo: string) => Promise<void>;
 }
 
 export function ConfirmarExclusaoDocumentoDialog({
   open,
   onOpenChange,
+  documentoId,
   nomeArquivo,
   onConfirmar,
 }: ConfirmarExclusaoDocumentoDialogProps) {
@@ -58,14 +62,10 @@ export function ConfirmarExclusaoDocumentoDialog({
     setCarregando(true);
 
     try {
-      await onConfirmar(motivoNormalizado);
+      await onConfirmar(documentoId, motivoNormalizado);
       onOpenChange(false);
     } catch (error) {
-      const mensagem =
-        error instanceof Error && error.message.trim()
-          ? error.message
-          : MENSAGEM_FALHA_EXCLUSAO;
-      setErro(mensagem);
+      setErro(obterMensagemErro(error, MENSAGEM_FALHA_EXCLUSAO));
     } finally {
       setCarregando(false);
     }
@@ -136,7 +136,9 @@ export function ConfirmarExclusaoDocumentoDialog({
           <AlertDialogAction
             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             onClick={handleConfirmar}
-            disabled={carregando}
+            disabled={
+              carregando || motivo.trim().length < MINIMO_MOTIVO_EXCLUSAO
+            }
           >
             <Trash2 className="h-4 w-4" aria-hidden="true" />
             {carregando ? "Excluindo arquivo..." : "Excluir arquivo"}
