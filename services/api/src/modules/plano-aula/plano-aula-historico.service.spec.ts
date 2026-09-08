@@ -14,6 +14,12 @@ const mockDb = {
   },
 };
 
+const mockTx = {
+  insert: jest.fn().mockReturnThis(),
+  values: jest.fn().mockReturnThis(),
+  returning: jest.fn(),
+};
+
 jest.mock("@essencia/db", () => ({
   getDb: jest.fn(() => mockDb),
   planoAulaHistorico: {},
@@ -40,6 +46,40 @@ describe("PlanoAulaHistoricoService", () => {
   });
 
   describe("registrar", () => {
+    it("usa o executor transacional informado", async () => {
+      const entrada = {
+        id: "historico-uuid-tx",
+        planoId: "plano-uuid-1",
+        userId: "user-uuid-1",
+        userName: "Analista Teste",
+        userRole: "analista_pedagogico",
+        acao: "DOCUMENTO_EXCLUIDO" as const,
+        statusAnterior: null,
+        statusNovo: "RASCUNHO",
+        detalhes: {
+          documentoId: "doc-1",
+          documentoNome: "Plano.docx",
+          documentoTipo: "ARQUIVO",
+          tamanhoBytes: 1024,
+          motivo: "Arquivo enviado com conteúdo incorreto",
+        },
+        createdAt: new Date("2026-05-20T10:00:00Z"),
+      };
+      mockTx.returning.mockResolvedValue([entrada]);
+
+      const resultado = await service.registrar(entrada, mockTx);
+
+      expect(resultado.id).toBe("historico-uuid-tx");
+      expect(mockTx.insert).toHaveBeenCalledWith(expect.anything());
+      expect(mockTx.values).toHaveBeenCalledWith(
+        expect.objectContaining({
+          acao: "DOCUMENTO_EXCLUIDO",
+          detalhes: entrada.detalhes,
+        }),
+      );
+      expect(mockDb.insert).not.toHaveBeenCalled();
+    });
+
     it("deve inserir uma entrada de histórico", async () => {
       const mockHistoricoEntry = {
         id: "historico-uuid-1",

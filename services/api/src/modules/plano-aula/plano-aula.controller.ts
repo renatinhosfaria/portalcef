@@ -19,6 +19,7 @@ import { FastifyReply, FastifyRequest } from "fastify";
 import { Roles } from "../../common/decorators/roles.decorator";
 import { AuthGuard } from "../../common/guards/auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
+import { ExcluirDocumentoDto } from "../../common/dto/excluir-documento.dto";
 import { SharePointService } from "../../common/sharepoint/sharepoint.service";
 import { StorageService } from "../../common/storage/storage.service";
 import {
@@ -968,22 +969,21 @@ export class PlanoAulaController {
   /**
    * DELETE /plano-aula/:id/documentos/:docId
    * Remove documento do plano
-   * NOTA: Apenas gestão e analista podem excluir documentos.
-   * Professoras NÃO têm permissão para excluir documentos após o upload.
    */
   @Delete(":id/documentos/:docId")
-  @Roles(...GESTAO_ACCESS, ...ANALISTA_ACCESS)
+  @Roles(...VISUALIZAR_ACCESS)
   async deletarDocumento(
     @Param("id") planoId: string,
     @Param("docId") docId: string,
     @Req() req: { user: UserContext },
+    @Body() body: ExcluirDocumentoDto,
   ) {
-    const user = req.user;
-
-    // Verificar se plano existe e usuário tem acesso
-    await this.planoAulaService.getPlanoById(user, planoId);
-
-    await this.planoAulaService.removerDocumento(planoId, docId);
+    await this.planoAulaService.removerDocumento(
+      req.user,
+      planoId,
+      docId,
+      body.motivo,
+    );
 
     return {
       success: true,

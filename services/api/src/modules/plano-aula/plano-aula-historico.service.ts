@@ -8,6 +8,14 @@ import {
 } from "@essencia/db";
 import type { HistoricoEntry } from "@essencia/shared/types";
 
+type Db = ReturnType<typeof getDb>;
+type DbTransaction = Parameters<Db["transaction"]>[0] extends (
+  tx: infer T,
+) => Promise<unknown>
+  ? T
+  : never;
+type DbExecutor = Db | DbTransaction;
+
 /**
  * PlanoAulaHistoricoService
  *
@@ -31,8 +39,8 @@ export class PlanoAulaHistoricoService {
     statusAnterior: string | null;
     statusNovo: string;
     detalhes?: Record<string, unknown> | null;
-  }): Promise<HistoricoEntry> {
-    const db = getDb();
+  }, executor?: DbExecutor): Promise<HistoricoEntry> {
+    const db = executor ?? getDb();
 
     const [entry] = await db
       .insert(planoAulaHistorico)

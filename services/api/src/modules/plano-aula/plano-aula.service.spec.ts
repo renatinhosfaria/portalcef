@@ -1,4 +1,7 @@
-import { BadRequestException, ForbiddenException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ForbiddenException,
+} from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
 
 import { PdfGeneratorService } from "../../common/sharepoint/pdf-generator.service";
@@ -22,6 +25,7 @@ const mockTx = {
   returning: jest.fn(),
   insert: jest.fn().mockReturnThis(),
   values: jest.fn().mockReturnThis(),
+  delete: jest.fn().mockReturnThis(),
 };
 
 const mockDb = {
@@ -93,7 +97,9 @@ describe("PlanoAulaService", () => {
   const planoAulaPdfQueueServiceMock = {
     adicionar: jest.fn(),
   };
-  const storageServiceMock = {};
+  const storageServiceMock = {
+    deleteFile: jest.fn().mockResolvedValue(undefined),
+  };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -529,6 +535,211 @@ describe("PlanoAulaService", () => {
           pdfError: null,
         }),
       );
+    });
+  });
+
+  describe("removerDocumento", () => {
+    const documentoUpload = {
+      id: "doc-1",
+      planoId: "plano-1",
+      tipo: "ARQUIVO",
+      storageKey: "planos/doc-1.docx",
+      pdfStorageKey: "planos/doc-1.pdf",
+      fileName: "Plano semanal.docx",
+      fileSize: 4096,
+      mimeType:
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      approvedBy: null,
+      approvedAt: null,
+    };
+    const planoComAcesso = {
+      id: "plano-1",
+      status: "RASCUNHO",
+      user: { id: "autora-1", name: "Professora Autora" },
+      turma: { id: "turma-1", name: "Turma 1", code: "T1", stageId: "stage-1" },
+      documentos: [],
+    };
+
+    beforeEach(() => {
+      jest.spyOn(service, "getPlanoById").mockResolvedValue(planoComAcesso as never);
+      mockDb.query.planoDocumento.findFirst.mockResolvedValue(documentoUpload);
+      mockDb.query.users.findFirst.mockResolvedValue({
+        id: usuarioLogado.userId,
+        name: "Analista Responsável",
+      });
+      historicoServiceMock.registrar.mockResolvedValue({});
+      mockDb.transaction.mockImplementation(async (callback) => callback(mockTx));
+    });
+
+    it("rejeita motivo inválido antes de consultar o documento", async () => {
+      await expect(
+        service.removerDocumento(
+          usuarioLogado,
+          "plano-1",
+          "doc-1",
+          "curto",
+        ),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: "MOTIVO_EXCLUSAO_INVALIDO",
+        }),
+      });
+
+      expect(service.getPlanoById).not.toHaveBeenCalled();
+      expect(mockDb.query.planoDocumento.findFirst).not.toHaveBeenCalled();
+    });
+
+    it("bloqueia documento aprovado e não altera banco nem storage", async () => {
+      mockDb.query.planoDocumento.findFirst.mockResolvedValue({
+        ...documentoUpload,
+        approvedBy: "analista-1",
+        approvedAt: new Date("2026-05-20T10:00:00.000Z"),
+      });
+
+      await expect(
+        service.removerDocumento(
+          usuarioLogado,
+          "plano-1",
+          "doc-1",
+          "Arquivo enviado incorretamente",
+        ),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: "DOCUMENTO_APROVADO",
+          message: "Este arquivo já foi aprovado e não pode ser excluído.",
+        }),
+      });
+
+      expect(mockDb.transaction).not.toHaveBeenCalled();
+      expect(storageServiceMock.deleteFile).not.toHaveBeenCalled();
+    });
+
+    it("bloqueia link do YouTube e não altera banco nem storage", async () => {
+      mockDb.query.planoDocumento.findFirst.mockResolvedValue({
+        ...documentoUpload,
+        tipo: "LINK_YOUTUBE",
+        storageKey: null,
+        pdfStorageKey: null,
+        fileName: "Vídeo da aula",
+        fileSize: null,
+        mimeType: null,
+      });
+
+      await expect(
+        service.removerDocumento(
+          usuarioLogado,
+          "plano-1",
+          "doc-1",
+          "Link não é arquivo enviado",
+        ),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: "DOCUMENTO_LINK",
+          message: "Links do YouTube não podem ser excluídos por esta opção.",
+        }),
+      });
+
+      expect(mockDb.transaction).not.toHaveBeenCalled();
+      expect(storageServiceMock.deleteFile).not.toHaveBeenCalled();
+    });
+
+    it("retorna erro claro quando documento não pertence ao plano", async () => {
+      mockDb.query.planoDocumento.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.removerDocumento(
+          usuarioLogado,
+          "plano-1",
+          "doc-fora-do-plano",
+          "Documento foi anexado no plano errado",
+        ),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: "DOCUMENTO_NAO_ENCONTRADO",
+          message:
+            "Este arquivo não foi encontrado. Atualize a página e tente novamente.",
+        }),
+      });
+
+      expect(mockDb.transaction).not.toHaveBeenCalled();
+      expect(storageServiceMock.deleteFile).not.toHaveBeenCalled();
+    });
+
+    it("bloqueia usuário sem acesso antes de localizar ou excluir o documento", async () => {
+      jest
+        .spyOn(service, "getPlanoById")
+        .mockRejectedValueOnce(
+          new ForbiddenException("Você não tem permissão para acessar este plano"),
+        );
+
+      await expect(
+        service.removerDocumento(
+          usuarioLogado,
+          "plano-fora-da-unidade",
+          "doc-1",
+          "Tentativa de exclusão sem acesso",
+        ),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+
+      expect(mockDb.query.planoDocumento.findFirst).not.toHaveBeenCalled();
+      expect(mockDb.transaction).not.toHaveBeenCalled();
+      expect(storageServiceMock.deleteFile).not.toHaveBeenCalled();
+    });
+
+    it("remove documento, comentários e arquivos, registrando histórico com metadados", async () => {
+      const resultado = await service.removerDocumento(
+        usuarioLogado,
+        "plano-1",
+        "doc-1",
+        "Arquivo enviado com conteúdo incorreto",
+      );
+
+      expect(resultado).toBeUndefined();
+      expect(mockDb.transaction).toHaveBeenCalledTimes(1);
+      expect(mockTx.delete).toHaveBeenCalledTimes(2);
+      expect(historicoServiceMock.registrar).toHaveBeenCalledWith(
+        expect.objectContaining({
+          planoId: "plano-1",
+          userId: usuarioLogado.userId,
+          userName: "Analista Responsável",
+          userRole: usuarioLogado.role,
+          acao: "DOCUMENTO_EXCLUIDO",
+          statusAnterior: null,
+          statusNovo: "RASCUNHO",
+          detalhes: {
+            documentoId: "doc-1",
+            documentoNome: "Plano semanal.docx",
+            documentoTipo: "ARQUIVO",
+            tamanhoBytes: 4096,
+            motivo: "Arquivo enviado com conteúdo incorreto",
+          },
+        }),
+        mockTx,
+      );
+      expect(storageServiceMock.deleteFile).toHaveBeenCalledWith(
+        "planos/doc-1.docx",
+      );
+      expect(storageServiceMock.deleteFile).toHaveBeenCalledWith(
+        "planos/doc-1.pdf",
+      );
+    });
+
+    it("conclui a exclusão mesmo quando a remoção no storage falha", async () => {
+      storageServiceMock.deleteFile.mockRejectedValue(
+        new Error("Storage indisponível"),
+      );
+
+      await expect(
+        service.removerDocumento(
+          usuarioLogado,
+          "plano-1",
+          "doc-1",
+          "Arquivo não deve mais ser utilizado",
+        ),
+      ).resolves.toBeUndefined();
+
+      expect(mockDb.transaction).toHaveBeenCalledTimes(1);
+      expect(mockTx.delete).toHaveBeenCalledTimes(2);
     });
   });
 

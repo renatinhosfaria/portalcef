@@ -1,5 +1,6 @@
 import {
   Injectable,
+  Logger,
   NotFoundException,
   BadRequestException,
   ForbiddenException,
@@ -32,6 +33,13 @@ import {
 
 import type { PdfGerado } from "../../common/sharepoint/pdf-generator.service";
 import { StorageService } from "../../common/storage/storage.service";
+import {
+  criarErroDocumentoAprovado,
+  criarErroDocumentoLink,
+  criarErroDocumentoNaoEncontrado,
+  criarErroPermissaoExclusaoDocumento,
+  lancarMotivoExclusaoInvalido,
+} from "../../common/documento-exclusao";
 import { PlanoAulaHistoricoService } from "./plano-aula-historico.service";
 import { PlanoAulaPdfQueueService } from "./plano-aula-pdf-queue.service";
 
@@ -80,6 +88,7 @@ export interface UserContext {
  * Plano com documentos e comentários (resposta completa)
  */
 export interface PlanoComDocumentos extends PlanoAula {
+  status: PlanoAulaStatus;
   documentos: Array<
     PlanoDocumento & {
       comentarios: Array<
@@ -117,6 +126,8 @@ export interface DashboardItem {
  */
 @Injectable()
 export class PlanoAulaService {
+  private readonly logger = new Logger(PlanoAulaService.name);
+
   constructor(
     private readonly historicoService: PlanoAulaHistoricoService,
     private readonly planoAulaPdfQueueService: PlanoAulaPdfQueueService,
@@ -1657,8 +1668,30 @@ export class PlanoAulaService {
   /**
    * Remove documento de um plano
    */
-  async removerDocumento(planoId: string, documentoId: string): Promise<void> {
+  async removerDocumento(
+    user: UserContext,
+    planoId: string,
+    documentoId: string,
+    motivo: string,
+  ): Promise<void> {
+    if (typeof motivo !== "string" || motivo.trim().length < 10) {
+      lancarMotivoExclusaoInvalido();
+    }
+
     const db = getDb();
+
+    let plano: PlanoComDocumentos;
+    try {
+      plano = await this.getPlanoById(user, planoId);
+    } catch (error) {
+      if (error instanceof ForbiddenException) {
+        throw criarErroPermissaoExclusaoDocumento();
+      }
+      if (error instanceof NotFoundException) {
+        throw criarErroDocumentoNaoEncontrado();
+      }
+      throw error;
+    }
 
     // Verificar se documento existe e pertence ao plano
     const documento = await db.query.planoDocumento.findFirst({
@@ -1669,18 +1702,71 @@ export class PlanoAulaService {
     });
 
     if (!documento) {
-      throw new NotFoundException(
-        "Documento não encontrado ou não pertence ao plano",
-      );
+      throw criarErroDocumentoNaoEncontrado();
     }
 
-    // Deletar comentários do documento primeiro
-    await db
-      .delete(documentoComentario)
-      .where(eq(documentoComentario.documentoId, documentoId));
+    if (documento.approvedBy || documento.approvedAt) {
+      throw criarErroDocumentoAprovado();
+    }
 
-    // Deletar documento
-    await db.delete(planoDocumento).where(eq(planoDocumento.id, documentoId));
+    const tipoDocumento = String(documento.tipo);
+    const ehLink =
+      tipoDocumento === "LINK_YOUTUBE" ||
+      tipoDocumento === "YOUTUBE" ||
+      !documento.storageKey;
+
+    if (ehLink) {
+      throw criarErroDocumentoLink();
+    }
+
+    const userName = await this.getUserName(user.userId);
+    const detalhes = {
+      documentoId: documento.id,
+      documentoNome: documento.fileName || "Documento sem nome",
+      documentoTipo: documento.tipo,
+      tamanhoBytes: documento.fileSize,
+      motivo: motivo.trim(),
+    };
+
+    await db.transaction(async (tx: DbTransaction) => {
+      await this.historicoService.registrar(
+        {
+          planoId,
+          userId: user.userId,
+          userName,
+          userRole: user.role,
+          acao: "DOCUMENTO_EXCLUIDO",
+          statusAnterior: null,
+          statusNovo: plano.status,
+          detalhes,
+        },
+        tx,
+      );
+
+      await tx
+        .delete(documentoComentario)
+        .where(eq(documentoComentario.documentoId, documentoId));
+
+      await tx.delete(planoDocumento).where(eq(planoDocumento.id, documentoId));
+    });
+
+    const chaves = [documento.storageKey, documento.pdfStorageKey].filter(
+      (chave, indice, todas): chave is string =>
+        Boolean(chave) && todas.indexOf(chave) === indice,
+    );
+
+    await Promise.all(
+      chaves.map(async (chave) => {
+        try {
+          await this.storageService.deleteFile(chave);
+        } catch (error) {
+          const mensagem = error instanceof Error ? error.message : String(error);
+          this.logger.warn(
+            `[removerDocumento] Falha ao remover ${chave} do storage: ${mensagem}`,
+          );
+        }
+      }),
+    );
   }
 
   /**

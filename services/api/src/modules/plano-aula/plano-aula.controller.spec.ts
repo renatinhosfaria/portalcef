@@ -19,6 +19,12 @@ jest.mock("@essencia/db", () => ({
 }));
 
 import { ROLES_KEY } from "../../common/decorators/roles.decorator";
+import {
+  ANALISTA_ROLES,
+  COORDENADORA_ROLES,
+  GESTAO_ROLES,
+  PROFESSORA_ROLES,
+} from "./dto/plano-aula.dto";
 import { PlanoAulaController } from "./plano-aula.controller";
 import type { UserContext } from "./plano-aula.service";
 
@@ -58,6 +64,7 @@ describe("PlanoAulaController", () => {
         user: { id: usuario.userId },
       }),
       getDocumentoById: jest.fn().mockResolvedValue(documentoWord),
+      removerDocumento: jest.fn().mockResolvedValue(undefined),
       adicionarDocumentoUpload: jest.fn().mockResolvedValue(documentoWord),
       atualizarDocumento: jest.fn().mockResolvedValue(undefined),
       regerarPdfDocumento: jest.fn().mockResolvedValue({
@@ -439,6 +446,45 @@ describe("PlanoAulaController", () => {
           pdfStatus: "PENDENTE",
           pdfError: null,
         }),
+      });
+    });
+  });
+
+  describe("deletarDocumento", () => {
+    it("autoriza todos os perfis que podem visualizar o planejamento", () => {
+      const roles = Reflect.getMetadata(
+        ROLES_KEY,
+        PlanoAulaController.prototype.deletarDocumento,
+      );
+
+      expect(roles).toEqual([
+        ...PROFESSORA_ROLES,
+        ...ANALISTA_ROLES,
+        ...COORDENADORA_ROLES,
+        ...GESTAO_ROLES,
+      ]);
+    });
+
+    it("recebe o motivo e repassa sessão, identificadores e corpo ao service", async () => {
+      const { controller, planoAulaService } = criarController();
+      const body = { motivo: "Arquivo enviado com conteúdo incorreto" };
+
+      const resultado = await controller.deletarDocumento(
+        "plano-1",
+        "doc-1",
+        reqComUsuario,
+        body,
+      );
+
+      expect(planoAulaService.removerDocumento).toHaveBeenCalledWith(
+        usuario,
+        "plano-1",
+        "doc-1",
+        body.motivo,
+      );
+      expect(resultado).toEqual({
+        success: true,
+        message: "Documento removido com sucesso",
       });
     });
   });
