@@ -159,4 +159,3 @@
 7. Solicitar revisão de código usando `requesting-code-review` antes de integrar a branch.
 
 **Commit final, se necessário:** somente correções de revisão, em commits separados e com mensagem em Português.
-

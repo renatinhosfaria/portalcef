@@ -114,11 +114,46 @@ describe("ProvaService", () => {
     mockTx.returning.mockResolvedValue([
       {
         id: "doc-1",
+        storageKey: "provas/doc-1.docx",
+        pdfStorageKey: "provas/doc-1.pdf",
+        sharepointItemId: null,
       },
     ]);
   });
 
   describe("enviarParaImpressao", () => {
+    it("remove PDF gerado quando o documento desaparece antes da atualização", async () => {
+      const documento = {
+        id: "doc-1",
+        storageKey: "provas/doc-1.docx",
+        url: "https://cdn/doc-1.docx",
+        fileName: "Prova.docx",
+        mimeType:
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        pdfStorageKey: null,
+        pdfUrl: null,
+        tipo: "ARQUIVO" as const,
+      };
+      pdfGeneratorServiceMock.gerarParaImpressao.mockResolvedValueOnce({
+        pdfStorageKey: "pdf/doc-1-gerado-na-corrida.pdf",
+        pdfUrl: "https://cdn/doc-1-gerado-na-corrida.pdf",
+      });
+      mockDb.returning.mockResolvedValue([]);
+
+      await (
+        service as unknown as {
+          prepararPdfsParaImpressao(
+            documentos: (typeof documento)[],
+          ): Promise<void>;
+        }
+      ).prepararPdfsParaImpressao([documento]);
+
+      expect(storageServiceMock.deleteFile).toHaveBeenCalledWith(
+        "pdf/doc-1-gerado-na-corrida.pdf",
+      );
+      mockDb.returning.mockReset();
+    });
+
     it("gera PDF dos documentos antes de liberar a prova para impressão", async () => {
       const user = {
         userId: "prof-1",
@@ -151,12 +186,20 @@ describe("ProvaService", () => {
         pdfUrl: "https://cdn/doc-1.pdf",
       });
       mockDb.query.users.findFirst.mockResolvedValue({ name: "Professora" });
-      mockDb.returning.mockResolvedValueOnce([
-        {
-          id: "prova-1",
-          status: "AGUARDANDO_IMPRESSAO",
-        },
-      ]);
+      mockDb.returning
+        .mockResolvedValueOnce([
+          {
+            id: "doc-1",
+            pdfStorageKey: "pdf/doc-1.pdf",
+            pdfUrl: "https://cdn/doc-1.pdf",
+          },
+        ])
+        .mockResolvedValueOnce([
+          {
+            id: "prova-1",
+            status: "AGUARDANDO_IMPRESSAO",
+          },
+        ]);
 
       const resultado = await service.enviarParaImpressao(user, "prova-1");
 
@@ -575,6 +618,48 @@ describe("ProvaService", () => {
       );
     });
 
+    it("remove as chaves retornadas pela exclusão quando o documento foi atualizado em paralelo", async () => {
+      mockDb.query.provaDocumento.findFirst.mockResolvedValue({
+        ...documentoUpload,
+        storageKey: "provas/doc-1-antigo.docx",
+        pdfStorageKey: "provas/doc-1-antigo.pdf",
+        sharepointItemId: "item-sharepoint-antigo",
+      });
+      mockTx.returning.mockResolvedValueOnce([
+        {
+          ...documentoUpload,
+          storageKey: "provas/doc-1-atualizado.docx",
+          pdfStorageKey: "provas/doc-1-atualizado.pdf",
+          sharepointItemId: "item-sharepoint-atualizado",
+        },
+      ]);
+
+      await expect(
+        executarRemocao(
+          usuarioAnalista,
+          "prova-1",
+          "doc-1",
+          "Arquivo atualizado durante a exclusão",
+        ),
+      ).resolves.toBeUndefined();
+
+      expect(storageServiceMock.deleteFile).toHaveBeenCalledWith(
+        "provas/doc-1-atualizado.docx",
+      );
+      expect(storageServiceMock.deleteFile).toHaveBeenCalledWith(
+        "provas/doc-1-atualizado.pdf",
+      );
+      expect(storageServiceMock.deleteFile).not.toHaveBeenCalledWith(
+        "provas/doc-1-antigo.docx",
+      );
+      expect(storageServiceMock.deleteFile).not.toHaveBeenCalledWith(
+        "provas/doc-1-antigo.pdf",
+      );
+      expect(sharePointServiceMock.removerArquivo).toHaveBeenCalledWith(
+        "item-sharepoint-atualizado",
+      );
+    });
+
     it("retorna erro claro para documento fora da prova", async () => {
       mockDb.query.provaDocumento.findFirst.mockResolvedValue(null);
 
@@ -692,6 +777,12 @@ describe("ProvaService", () => {
         ...documentoUpload,
         sharepointItemId: "item-sharepoint-1",
       });
+      mockTx.returning.mockResolvedValueOnce([
+        {
+          ...documentoUpload,
+          sharepointItemId: "item-sharepoint-1",
+        },
+      ]);
       sharePointServiceMock.removerArquivo.mockRejectedValueOnce(
         new Error("SharePoint indisponível"),
       );

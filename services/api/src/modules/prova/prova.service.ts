@@ -144,6 +144,20 @@ export class ProvaService {
     );
   }
 
+  private async removerPdfGeradoSemFalhar(
+    pdfStorageKey: string,
+    documentoId: string,
+  ): Promise<void> {
+    try {
+      await this.storageService.deleteFile(pdfStorageKey);
+    } catch (error) {
+      const mensagem = error instanceof Error ? error.message : String(error);
+      this.logger.warn(
+        `[prepararPdfsParaImpressao] Falha ao remover PDF órfão ${pdfStorageKey} do documento ${documentoId}: ${mensagem}`,
+      );
+    }
+  }
+
   private async prepararPdfsParaImpressao(
     documentos: ProvaDocumento[],
   ): Promise<void> {
@@ -177,14 +191,19 @@ export class ProvaService {
         continue;
       }
 
-      await db
+      const [documentoAtualizado] = await db
         .update(provaDocumento)
         .set({
           pdfStorageKey: pdf.pdfStorageKey,
           pdfUrl: pdf.pdfUrl,
           updatedAt: new Date(),
         })
-        .where(eq(provaDocumento.id, documento.id));
+        .where(eq(provaDocumento.id, documento.id))
+        .returning();
+
+      if (!documentoAtualizado) {
+        await this.removerPdfGeradoSemFalhar(pdf.pdfStorageKey, documento.id);
+      }
     }
   }
 
@@ -1296,46 +1315,53 @@ export class ProvaService {
         motivo: motivo.trim(),
       };
 
-      await db.transaction(async (tx: DbTransaction) => {
-        await this.historicoService.registrar(
-          {
-            provaId,
-            userId: user.userId,
-            userName,
-            userRole: user.role,
-            acao: "DOCUMENTO_EXCLUIDO",
-            statusAnterior: provaEncontrada.status,
-            statusNovo: provaEncontrada.status,
-            detalhes,
-          },
-          tx,
-        );
+      const documentoExcluido = await db.transaction(
+        async (tx: DbTransaction) => {
+          await this.historicoService.registrar(
+            {
+              provaId,
+              userId: user.userId,
+              userName,
+              userRole: user.role,
+              acao: "DOCUMENTO_EXCLUIDO",
+              statusAnterior: provaEncontrada.status,
+              statusNovo: provaEncontrada.status,
+              detalhes,
+            },
+            tx,
+          );
 
-        const [documentoExcluido] = await tx
-          .delete(provaDocumento)
-          .where(
-            and(
-              filtroDocumento,
-              isNull(provaDocumento.approvedBy),
-              isNull(provaDocumento.approvedAt),
-            ),
-          )
-          .returning();
+          const [documentoExcluido] = await tx
+            .delete(provaDocumento)
+            .where(
+              and(
+                filtroDocumento,
+                isNull(provaDocumento.approvedBy),
+                isNull(provaDocumento.approvedAt),
+              ),
+            )
+            .returning();
 
-        if (!documentoExcluido) {
-          const documentoAtual = await tx.query.provaDocumento.findFirst({
-            where: filtroDocumento,
-          });
+          if (!documentoExcluido) {
+            const documentoAtual = await tx.query.provaDocumento.findFirst({
+              where: filtroDocumento,
+            });
 
-          if (documentoAtual?.approvedBy || documentoAtual?.approvedAt) {
-            throw criarErroDocumentoAprovado();
+            if (documentoAtual?.approvedBy || documentoAtual?.approvedAt) {
+              throw criarErroDocumentoAprovado();
+            }
+
+            throw criarErroDocumentoNaoEncontrado();
           }
 
-          throw criarErroDocumentoNaoEncontrado();
-        }
-      });
+          return documentoExcluido;
+        },
+      );
 
-      const chaves = [documento.storageKey, documento.pdfStorageKey].filter(
+      const chaves = [
+        documentoExcluido.storageKey,
+        documentoExcluido.pdfStorageKey,
+      ].filter(
         (chave, indice, todas): chave is string =>
           Boolean(chave) && todas.indexOf(chave) === indice,
       );
@@ -1354,16 +1380,16 @@ export class ProvaService {
         }),
       );
 
-      if (documento.sharepointItemId) {
+      if (documentoExcluido.sharepointItemId) {
         try {
           await this.sharePointService.removerArquivo(
-            documento.sharepointItemId,
+            documentoExcluido.sharepointItemId,
           );
         } catch (error) {
           const mensagem =
             error instanceof Error ? error.message : String(error);
           this.logger.warn(
-            `[removerDocumento] Falha ao remover ${documento.sharepointItemId} do SharePoint: ${mensagem}`,
+            `[removerDocumento] Falha ao remover ${documentoExcluido.sharepointItemId} do SharePoint: ${mensagem}`,
           );
         }
       }
