@@ -16,8 +16,22 @@ jest.mock("@essencia/db", () => ({
   users: {},
 }));
 
+import { ForbiddenException } from "@nestjs/common";
+import { Reflector } from "@nestjs/core";
+
+import {
+  EXACT_ROLES_KEY,
+  ROLES_KEY,
+} from "../../common/decorators/roles.decorator";
+import { RolesGuard } from "../../common/guards/roles.guard";
 import { ProvaController } from "./prova.controller";
 import type { UserContext } from "./prova.service";
+import {
+  ANALISTA_ROLES,
+  COORDENADORA_ROLES,
+  GESTAO_ROLES,
+  PROFESSORA_ROLES,
+} from "./dto/prova.dto";
 
 describe("ProvaController", () => {
   const usuario: UserContext = {
@@ -331,5 +345,31 @@ describe("ProvaController", () => {
       "doc-prova-1",
       "Arquivo enviado com conteúdo incorreto",
     );
+  });
+
+  it("bloqueia auxiliar administrativo na rota DELETE por meio do guard real", () => {
+    const rota = ProvaController.prototype.deletarDocumento;
+    const contexto = {
+      getHandler: () => rota,
+      getClass: () => ProvaController,
+      switchToHttp: () => ({
+        getRequest: () => ({
+          user: {
+            ...usuario,
+            role: "auxiliar_administrativo",
+          },
+        }),
+      }),
+    } as never;
+    const guard = new RolesGuard(new Reflector());
+
+    expect(Reflect.getMetadata(EXACT_ROLES_KEY, rota)).toBe(true);
+    expect(Reflect.getMetadata(ROLES_KEY, rota)).toEqual([
+      ...PROFESSORA_ROLES,
+      ...ANALISTA_ROLES,
+      ...COORDENADORA_ROLES,
+      ...GESTAO_ROLES,
+    ]);
+    expect(() => guard.canActivate(contexto)).toThrow(ForbiddenException);
   });
 });

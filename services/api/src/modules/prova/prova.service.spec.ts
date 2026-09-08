@@ -33,6 +33,9 @@ const mockDb = {
     units: {
       findFirst: jest.fn(),
     },
+    turmas: {
+      findFirst: jest.fn(),
+    },
   },
   update: jest.fn().mockReturnThis(),
   delete: jest.fn().mockReturnThis(),
@@ -470,6 +473,58 @@ describe("ProvaService", () => {
       },
     );
 
+    it("bloqueia tipo de documento desconhecido com mensagem clara", async () => {
+      mockDb.query.provaDocumento.findFirst.mockResolvedValue({
+        ...documentoUpload,
+        tipo: "ANEXO_LEGADO",
+      });
+
+      await expect(
+        executarRemocao(
+          usuarioAnalista,
+          "prova-1",
+          "doc-1",
+          "Tipo de documento não é compatível",
+        ),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: "TIPO_DOCUMENTO_NAO_PERMITIDO",
+          message:
+            "Este item não é um arquivo enviado e não pode ser excluído por esta opção.",
+        }),
+      });
+
+      expect(mockDb.transaction).not.toHaveBeenCalled();
+      expect(storageServiceMock.deleteFile).not.toHaveBeenCalled();
+    });
+
+    it("permite excluir upload do tipo ARQUIVO", async () => {
+      mockDb.query.provaDocumento.findFirst.mockResolvedValue({
+        ...documentoUpload,
+        tipo: "ARQUIVO",
+      });
+
+      await expect(
+        executarRemocao(
+          usuarioAnalista,
+          "prova-1",
+          "doc-1",
+          "Arquivo enviado com conteúdo incorreto",
+        ),
+      ).resolves.toBeUndefined();
+
+      expect(historicoServiceMock.registrar).toHaveBeenCalledWith(
+        expect.objectContaining({
+          acao: "DOCUMENTO_EXCLUIDO",
+          detalhes: expect.objectContaining({ documentoTipo: "ARQUIVO" }),
+        }),
+        mockTx,
+      );
+      expect(storageServiceMock.deleteFile).toHaveBeenCalledWith(
+        "provas/doc-1.docx",
+      );
+    });
+
     it("retorna erro claro para documento fora da prova", async () => {
       mockDb.query.provaDocumento.findFirst.mockResolvedValue(null);
 
@@ -674,6 +729,155 @@ describe("ProvaService", () => {
       ).resolves.toBeUndefined();
 
       expect(mockDb.query.units.findFirst).toHaveBeenCalled();
+    });
+
+    it("bloqueia coordenadora quando a turma está fora do seu segmento", async () => {
+      mockDb.query.turmas.findFirst.mockResolvedValue({
+        id: "turma-1",
+        stage: { code: "FUNDAMENTAL_I" },
+      });
+
+      await expect(
+        executarRemocao(
+          {
+            userId: "coordenadora-1",
+            role: "coordenadora_infantil",
+            schoolId: "school-1",
+            unitId: "unit-1",
+            stageId: "stage-infantil",
+          },
+          "prova-1",
+          "doc-1",
+          "Documento fora do segmento da coordenadora",
+        ),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: "PERMISSAO_EXCLUSAO_DOCUMENTO",
+          message: "Você não tem permissão para excluir este arquivo.",
+        }),
+      });
+
+      expect(mockDb.query.provaDocumento.findFirst).not.toHaveBeenCalled();
+      expect(mockDb.transaction).not.toHaveBeenCalled();
+    });
+
+    it("permite coordenadora quando a turma está no seu segmento", async () => {
+      mockDb.query.turmas.findFirst.mockResolvedValue({
+        id: "turma-1",
+        stage: { code: "INFANTIL" },
+      });
+
+      await expect(
+        executarRemocao(
+          {
+            userId: "coordenadora-1",
+            role: "coordenadora_infantil",
+            schoolId: "school-1",
+            unitId: "unit-1",
+            stageId: "stage-infantil",
+          },
+          "prova-1",
+          "doc-1",
+          "Arquivo precisa ser substituído",
+        ),
+      ).resolves.toBeUndefined();
+
+      expect(mockDb.query.turmas.findFirst).toHaveBeenCalled();
+      expect(mockDb.transaction).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+      ["professora", "prof-1"],
+      ["auxiliar_sala", "prof-1"],
+    ])("permite %s autora na própria unidade", async (role, userId) => {
+      await expect(
+        executarRemocao(
+          {
+            userId,
+            role,
+            schoolId: "school-1",
+            unitId: "unit-1",
+            stageId: null,
+          },
+          "prova-1",
+          "doc-1",
+          "Arquivo precisa ser substituído",
+        ),
+      ).resolves.toBeUndefined();
+
+      expect(mockDb.transaction).toHaveBeenCalledTimes(1);
+    });
+
+    it.each(["gerente_unidade", "gerente_financeiro", "coordenadora_geral"])(
+      "permite %s na própria unidade",
+      async (role) => {
+        await expect(
+          executarRemocao(
+            {
+              userId: `${role}-1`,
+              role,
+              schoolId: "school-1",
+              unitId: "unit-1",
+              stageId: null,
+            },
+            "prova-1",
+            "doc-1",
+            "Arquivo precisa ser substituído",
+          ),
+        ).resolves.toBeUndefined();
+
+        expect(mockDb.transaction).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    it("bloqueia autora que mudou para outra unidade", async () => {
+      await expect(
+        executarRemocao(
+          {
+            userId: "prof-1",
+            role: "professora",
+            schoolId: "school-1",
+            unitId: "unit-2",
+            stageId: null,
+          },
+          "prova-1",
+          "doc-1",
+          "Tentativa de exclusão fora da unidade",
+        ),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: "PERMISSAO_EXCLUSAO_DOCUMENTO",
+        }),
+      });
+
+      expect(mockDb.query.provaDocumento.findFirst).not.toHaveBeenCalled();
+      expect(mockDb.transaction).not.toHaveBeenCalled();
+    });
+
+    it("bloqueia diretora de outra escola", async () => {
+      mockDb.query.units.findFirst.mockResolvedValue(null);
+
+      await expect(
+        executarRemocao(
+          {
+            userId: "diretora-2",
+            role: "diretora_geral",
+            schoolId: "school-2",
+            unitId: null,
+            stageId: null,
+          },
+          "prova-1",
+          "doc-1",
+          "Tentativa de exclusão em outra escola",
+        ),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: "PERMISSAO_EXCLUSAO_DOCUMENTO",
+        }),
+      });
+
+      expect(mockDb.query.provaDocumento.findFirst).not.toHaveBeenCalled();
+      expect(mockDb.transaction).not.toHaveBeenCalled();
     });
   });
 
