@@ -1,7 +1,6 @@
 import { closeDb } from "@essencia/db";
 import fastifyCookie, { FastifyCookieOptions } from "@fastify/cookie";
 import fastifyMultipart from "@fastify/multipart";
-import { ValidationPipe } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import {
   FastifyAdapter,
@@ -16,6 +15,7 @@ import {
   LIMITE_UPLOAD_ARQUIVO_BYTES,
   LIMITE_UPLOAD_REQUISICAO_BYTES,
 } from "./common/upload-limits";
+import { criarValidationPipe } from "./common/validation/validation.pipe";
 import { obterOrigensCors } from "./config/cors";
 
 async function bootstrap() {
@@ -31,16 +31,7 @@ async function bootstrap() {
   app.useGlobalFilters(new ApiExceptionFilter());
 
   // Enable global validation pipe
-  app.useGlobalPipes(
-    new ValidationPipe({
-      whitelist: true, // Remove propriedades não declaradas no DTO
-      forbidNonWhitelisted: true, // Lança erro se propriedades extras forem enviadas
-      transform: true, // Transforma payloads em instâncias de DTO
-      transformOptions: {
-        enableImplicitConversion: true, // Converte tipos automaticamente
-      },
-    }),
-  );
+  app.useGlobalPipes(criarValidationPipe());
 
   // Enable global logging interceptor
   app.useGlobalInterceptors(new LoggingInterceptor());
