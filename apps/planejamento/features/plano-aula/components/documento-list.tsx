@@ -56,11 +56,12 @@ import {
   type PlanoDocumento,
 } from "../types";
 
+import { ConfirmarExclusaoDocumentoDialog } from "./confirmar-exclusao-documento-dialog";
 import { DocumentoEditorModal } from "./documento-editor";
 
 interface DocumentoListProps {
   documentos: PlanoDocumento[];
-  onDelete?: (docId: string) => void;
+  onDelete?: (docId: string, motivo: string) => Promise<void>;
   onAprovar?: (docId: string) => Promise<void>;
   onDesaprovar?: (docId: string) => Promise<void>;
   onImprimir?: (docId: string) => Promise<void>;
@@ -314,6 +315,8 @@ export function DocumentoList({
   const [documentoParaImprimir, setDocumentoParaImprimir] = useState<
     string | null
   >(null);
+  const [documentoParaExcluir, setDocumentoParaExcluir] =
+    useState<PlanoDocumento | null>(null);
 
   const registrarEventoDocumento = (
     documento: PlanoDocumento,
@@ -928,7 +931,7 @@ export function DocumentoList({
                       variant="ghost"
                       size="icon"
                       className="h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                      onClick={() => onDelete(documento.id)}
+                      onClick={() => setDocumentoParaExcluir(documento)}
                       title="Excluir documento"
                       aria-label="Excluir documento"
                     >
@@ -982,6 +985,17 @@ export function DocumentoList({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {documentoParaExcluir && onDelete && (
+        <ConfirmarExclusaoDocumentoDialog
+          open
+          nomeArquivo={getDocumentName(documentoParaExcluir)}
+          onOpenChange={(open) => {
+            if (!open) setDocumentoParaExcluir(null);
+          }}
+          onConfirmar={(motivo) => onDelete(documentoParaExcluir.id, motivo)}
+        />
+      )}
     </div>
   );
 }

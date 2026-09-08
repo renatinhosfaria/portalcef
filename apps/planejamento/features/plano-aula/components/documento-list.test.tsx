@@ -181,7 +181,7 @@ describe("DocumentoList", () => {
   });
 
   it("trata UPLOAD como arquivo e permite excluir quando não aprovado", () => {
-    const onDelete = vi.fn();
+    const onDelete = vi.fn().mockResolvedValue(undefined);
     const documentoUpload = {
       ...mockDocumentoPdf,
       id: "doc-upload-legado",
@@ -204,6 +204,86 @@ describe("DocumentoList", () => {
     expect(
       screen.getByRole("button", { name: /excluir documento/i }),
     ).toBeInTheDocument();
+  });
+
+  it("não mostra exclusão para upload aprovado", () => {
+    const onDelete = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <DocumentoList
+        documentos={[mockDocumentoAprovado]}
+        canDelete
+        onDelete={onDelete}
+      />,
+    );
+
+    expect(
+      screen.queryByRole("button", { name: /excluir documento/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("não mostra exclusão para link do YouTube ainda não aprovado", () => {
+    const onDelete = vi.fn().mockResolvedValue(undefined);
+    const documentoLink = {
+      ...mockDocumentoWord,
+      id: "doc-link-pendente",
+      tipo: "LINK_YOUTUBE" as const,
+      fileName: null,
+      mimeType: null,
+      url: "https://youtu.be/abc123",
+      approvedBy: undefined,
+      approvedAt: undefined,
+    };
+
+    render(
+      <DocumentoList
+        documentos={[documentoLink]}
+        canDelete
+        onDelete={onDelete}
+      />,
+    );
+
+    expect(
+      screen.queryByRole("button", { name: /excluir documento/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("abre a confirmação e só exclui o arquivo após informar o motivo", async () => {
+    const user = userEvent.setup();
+    const onDelete = vi.fn().mockResolvedValue(undefined);
+    const documentoUpload = {
+      ...mockDocumentoPdf,
+      id: "doc-upload-confirmacao",
+      tipo: "UPLOAD" as const,
+      fileName: "arquivo-legado.pdf",
+    };
+    const motivo = "Arquivo duplicado no planejamento";
+
+    render(
+      <DocumentoList
+        documentos={[documentoUpload]}
+        canDelete
+        onDelete={onDelete}
+      />,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: /excluir documento/i }),
+    );
+    expect(
+      screen.getByText(/confirma a exclusão do arquivo/i),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText("arquivo-legado.pdf")).toHaveLength(2);
+
+    await user.type(
+      screen.getByRole("textbox", { name: /motivo da exclusão/i }),
+      motivo,
+    );
+    await user.click(screen.getByRole("button", { name: /excluir arquivo/i }));
+
+    await waitFor(() => {
+      expect(onDelete).toHaveBeenCalledWith("doc-upload-confirmacao", motivo);
+    });
   });
 
   it("registra acao ao clicar em Visualizar para documento PDF", async () => {
