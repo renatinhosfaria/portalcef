@@ -159,4 +159,39 @@ describe("PlanoContent", () => {
     );
     expect(mockGetPlano).toHaveBeenCalledTimes(2);
   });
+
+  it("informa erro claro quando a lista do plano não pode ser atualizada após a exclusão", async () => {
+    mockGetPlano.mockReset();
+    mockGetPlano
+      .mockResolvedValueOnce(criarPlanoAguardandoAnalista([]))
+      .mockRejectedValueOnce(new Error("Failed to fetch"));
+
+    render(
+      <PlanoContent
+        periodoId="periodo-1"
+        turmaId="turma-1"
+        userId="usuario-1"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(documentoListProps?.onDelete).toEqual(expect.any(Function));
+    });
+
+    await act(async () => {
+      await expect(
+        documentoListProps?.onDelete?.(
+          "documento-1",
+          "Arquivo removido por estar desatualizado",
+        ),
+      ).rejects.toThrow("Failed to fetch");
+    });
+
+    expect(
+      await screen.findByText(
+        "Não conseguimos conectar ao portal agora. Verifique sua internet e tente novamente.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Arquivo excluído com sucesso.")).toBeNull();
+  });
 });

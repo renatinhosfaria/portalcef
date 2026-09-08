@@ -8,7 +8,7 @@ export type RelatorioStatus =
   | "APROVADO"
   | "RECUPERADO";
 
-export type DocumentoTipo = "ARQUIVO" | "LINK_YOUTUBE";
+export type DocumentoTipo = "ARQUIVO" | "UPLOAD" | "LINK_YOUTUBE";
 export type PdfStatus =
   | "NAO_APLICAVEL"
   | "PENDENTE"

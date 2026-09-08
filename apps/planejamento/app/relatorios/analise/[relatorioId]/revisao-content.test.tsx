@@ -32,10 +32,6 @@ let historicoTimelineProps: {
   modulo?: "plano-aula" | "prova" | "relatorio";
 } | null = null;
 
-let dialogProps: {
-  onConfirmar: (documentoId: string, motivo: string) => Promise<void>;
-} | null = null;
-
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: routerPush }),
 }));
@@ -85,35 +81,25 @@ vi.mock("../../../../features/relatorio", () => ({
   }),
 }));
 
-vi.mock("../../../../features/plano-aula", () => ({
-  HistoricoTimeline: (props: typeof historicoTimelineProps) => {
-    historicoTimelineProps = props;
-    return <div>Histórico do relatório</div>;
-  },
-  ConfirmarExclusaoDocumentoDialog: (props: typeof dialogProps) => {
-    dialogProps = props;
-    return (
-      <button
-        type="button"
-        onClick={() =>
-          void props?.onConfirmar?.(
-            "documento-1",
-            "Arquivo duplicado no relatório",
-          )
-        }
-      >
-        Excluir documento
-      </button>
-    );
-  },
-}));
+vi.mock("../../../../features/plano-aula", async () => {
+  const original = await vi.importActual<Record<string, unknown>>(
+    "../../../../features/plano-aula",
+  );
+
+  return {
+    ...original,
+    HistoricoTimeline: (props: typeof historicoTimelineProps) => {
+      historicoTimelineProps = props;
+      return <div>Histórico do relatório</div>;
+    },
+  };
+});
 
 describe("RevisaoRelatorioContent", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     relatorioHeaderProps = null;
     historicoTimelineProps = null;
-    dialogProps = null;
     deleteDocumento.mockResolvedValue(undefined);
     getRelatorio.mockResolvedValue({
       id: "relatorio-1",
@@ -207,15 +193,16 @@ describe("RevisaoRelatorioContent", () => {
     });
     fireEvent.click(botaoExcluir);
 
-    await waitFor(() => {
-      expect(dialogProps).toEqual(
-        expect.objectContaining({ onConfirmar: expect.any(Function) }),
-      );
-      expect(
-        screen.getByRole("button", { name: /excluir documento/i }),
-      ).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", {
+        name: /confirmar exclusão do arquivo/i,
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText("relatorio.docx")).toHaveLength(2);
+    fireEvent.change(screen.getByRole("textbox"), {
+      target: { value: "Arquivo duplicado no relatório" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /excluir documento/i }));
+    fireEvent.click(screen.getByRole("button", { name: /excluir arquivo/i }));
 
     await waitFor(() => {
       expect(deleteDocumento).toHaveBeenCalledWith(
@@ -225,5 +212,57 @@ describe("RevisaoRelatorioContent", () => {
       );
     });
     expect(getRelatorio).toHaveBeenCalledTimes(2);
+  });
+
+  it("exibe o diálogo compartilhado e permite excluir o upload legado não aprovado", async () => {
+    getRelatorio.mockResolvedValue({
+      id: "relatorio-1",
+      userId: "prof-1",
+      turmaId: "turma-1",
+      unitId: "unidade-1",
+      semestreId: "semestre-1",
+      status: "AGUARDANDO_ANALISTA",
+      createdAt: "2026-06-29T09:44:00.000Z",
+      updatedAt: "2026-06-30T09:44:00.000Z",
+      documentos: [
+        {
+          id: "documento-upload",
+          relatorioId: "relatorio-1",
+          tipo: "UPLOAD",
+          fileName: "relatorio-legado.pdf",
+          pdfStatus: "NAO_APLICAVEL",
+          temComentarios: false,
+          createdAt: "2026-06-30T09:44:00.000Z",
+          updatedAt: "2026-06-30T09:44:00.000Z",
+        },
+      ],
+    });
+
+    render(<RevisaoRelatorioContent relatorioId="relatorio-1" />);
+
+    const botaoExcluir = await screen.findByRole("button", {
+      name: /excluir arquivo/i,
+    });
+    fireEvent.click(botaoExcluir);
+
+    expect(
+      await screen.findByRole("heading", {
+        name: /confirmar exclusão do arquivo/i,
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText("relatorio-legado.pdf")).toHaveLength(2);
+    fireEvent.change(screen.getByRole("textbox"), {
+      target: { value: "Arquivo duplicado no relatório" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /excluir arquivo/i }));
+
+    await waitFor(() => {
+      expect(deleteDocumento).toHaveBeenCalledWith(
+        "relatorio-1",
+        "documento-upload",
+        "Arquivo duplicado no relatório",
+      );
+    });
   });
 });

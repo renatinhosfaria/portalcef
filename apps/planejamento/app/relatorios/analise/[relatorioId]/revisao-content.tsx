@@ -407,7 +407,8 @@ export function RevisaoRelatorioContent({
                           Aprovar
                         </Button>
                       )}
-                      {documento.tipo === "ARQUIVO" &&
+                      {(documento.tipo === "ARQUIVO" ||
+                        documento.tipo === "UPLOAD") &&
                         !documento.approvedBy &&
                         !documento.approvedAt && (
                           <Button

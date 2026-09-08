@@ -187,6 +187,7 @@ export function PlanoContent({
       setPlano(planoAtualizado);
     } catch (err) {
       console.error("Erro ao recarregar plano:", err);
+      throw err;
     }
   }, [plano?.id, getPlano]);
 
@@ -248,6 +249,7 @@ export function PlanoContent({
         setHistoricoVersao((versao) => versao + 1);
         setSuccessMessage("Arquivo excluído com sucesso.");
       } catch (err) {
+        setSuccessMessage(null);
         setError(
           obterMensagemErro(
             err,

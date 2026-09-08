@@ -144,6 +144,7 @@ export function ProvaDetailContent({
       setProva(provaAtualizada);
     } catch (err) {
       console.error("Erro ao recarregar prova:", err);
+      throw err;
     }
   }, [prova?.id, getProva]);
 
@@ -210,6 +211,7 @@ export function ProvaDetailContent({
         setHistoricoVersao((versao) => versao + 1);
         setSuccessMessage("Arquivo excluído com sucesso.");
       } catch (err) {
+        setSuccessMessage(null);
         setError(
           obterMensagemErro(
             err,
