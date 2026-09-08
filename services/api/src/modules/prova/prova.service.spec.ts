@@ -442,6 +442,56 @@ describe("ProvaService", () => {
       expect(storageServiceMock.deleteFile).not.toHaveBeenCalled();
     });
 
+    it("bloqueia documento com apenas approvedBy preenchido", async () => {
+      mockDb.query.provaDocumento.findFirst.mockResolvedValue({
+        ...documentoUpload,
+        approvedBy: "analista-2",
+        approvedAt: null,
+      });
+
+      await expect(
+        executarRemocao(
+          usuarioAnalista,
+          "prova-1",
+          "doc-1",
+          "Arquivo já possui aprovação registrada",
+        ),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: "DOCUMENTO_APROVADO",
+          message: "Este arquivo já foi aprovado e não pode ser excluído.",
+        }),
+      });
+
+      expect(mockDb.transaction).not.toHaveBeenCalled();
+      expect(storageServiceMock.deleteFile).not.toHaveBeenCalled();
+    });
+
+    it("bloqueia documento com apenas approvedAt preenchido", async () => {
+      mockDb.query.provaDocumento.findFirst.mockResolvedValue({
+        ...documentoUpload,
+        approvedBy: null,
+        approvedAt: new Date("2026-06-18T11:00:00.000Z"),
+      });
+
+      await expect(
+        executarRemocao(
+          usuarioAnalista,
+          "prova-1",
+          "doc-1",
+          "Arquivo já possui aprovação registrada",
+        ),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: "DOCUMENTO_APROVADO",
+          message: "Este arquivo já foi aprovado e não pode ser excluído.",
+        }),
+      });
+
+      expect(mockDb.transaction).not.toHaveBeenCalled();
+      expect(storageServiceMock.deleteFile).not.toHaveBeenCalled();
+    });
+
     it.each(["LINK_YOUTUBE", "YOUTUBE"])(
       "bloqueia link do YouTube do tipo %s",
       async (tipo) => {
@@ -590,7 +640,7 @@ describe("ProvaService", () => {
           userName: "Analista Responsável",
           userRole: "analista_pedagogico",
           acao: "DOCUMENTO_EXCLUIDO",
-          statusAnterior: null,
+          statusAnterior: "RASCUNHO",
           statusNovo: "RASCUNHO",
           detalhes: {
             documentoId: "doc-1",
@@ -608,6 +658,33 @@ describe("ProvaService", () => {
       expect(storageServiceMock.deleteFile).toHaveBeenCalledWith(
         "provas/doc-1.pdf",
       );
+    });
+
+    it("mantém a exclusão local concluída quando o storage rejeita a remoção", async () => {
+      storageServiceMock.deleteFile.mockRejectedValue(
+        new Error("Storage indisponível"),
+      );
+
+      await expect(
+        executarRemocao(
+          usuarioAnalista,
+          "prova-1",
+          "doc-1",
+          "Arquivo não deve mais ser utilizado",
+        ),
+      ).resolves.toBeUndefined();
+
+      expect(mockDb.transaction).toHaveBeenCalledTimes(1);
+      expect(historicoServiceMock.registrar).toHaveBeenCalledWith(
+        expect.objectContaining({
+          acao: "DOCUMENTO_EXCLUIDO",
+          statusAnterior: "RASCUNHO",
+          statusNovo: "RASCUNHO",
+        }),
+        mockTx,
+      );
+      expect(mockTx.delete).toHaveBeenCalledWith(expect.anything());
+      expect(storageServiceMock.deleteFile).toHaveBeenCalledTimes(2);
     });
 
     it("remove item do SharePoint sem impedir a exclusão local", async () => {

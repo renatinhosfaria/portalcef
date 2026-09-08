@@ -1304,7 +1304,7 @@ export class ProvaService {
             userName,
             userRole: user.role,
             acao: "DOCUMENTO_EXCLUIDO",
-            statusAnterior: null,
+            statusAnterior: provaEncontrada.status,
             statusNovo: provaEncontrada.status,
             detalhes,
           },
