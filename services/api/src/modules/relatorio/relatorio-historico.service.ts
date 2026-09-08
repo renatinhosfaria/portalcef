@@ -3,6 +3,14 @@ import { Injectable } from "@nestjs/common";
 import { desc, eq, getDb, relatorioHistorico } from "@essencia/db";
 import type { RelatorioHistoricoAcao, RelatorioHistorico } from "@essencia/db";
 
+type Db = ReturnType<typeof getDb>;
+type DbTransaction = Parameters<Db["transaction"]>[0] extends (
+  tx: infer T,
+) => Promise<unknown>
+  ? T
+  : never;
+type DbExecutor = Db | DbTransaction;
+
 export interface RelatorioHistoricoEntry {
   id: string;
   relatorioId: string;
@@ -18,17 +26,20 @@ export interface RelatorioHistoricoEntry {
 
 @Injectable()
 export class RelatorioHistoricoService {
-  async registrar(params: {
-    relatorioId: string;
-    userId: string;
-    userName: string;
-    userRole: string;
-    acao: RelatorioHistoricoAcao;
-    statusAnterior: string | null;
-    statusNovo: string;
-    detalhes?: Record<string, unknown> | null;
-  }): Promise<RelatorioHistoricoEntry> {
-    const db = getDb();
+  async registrar(
+    params: {
+      relatorioId: string;
+      userId: string;
+      userName: string;
+      userRole: string;
+      acao: RelatorioHistoricoAcao;
+      statusAnterior: string | null;
+      statusNovo: string;
+      detalhes?: Record<string, unknown> | null;
+    },
+    executor?: DbExecutor,
+  ): Promise<RelatorioHistoricoEntry> {
+    const db = executor ?? getDb();
     const [entry] = await db
       .insert(relatorioHistorico)
       .values({

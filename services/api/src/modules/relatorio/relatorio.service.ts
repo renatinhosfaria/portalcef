@@ -1,5 +1,7 @@
 import {
   Injectable,
+  HttpException,
+  Logger,
   NotFoundException,
   BadRequestException,
   ForbiddenException,
@@ -9,6 +11,7 @@ import {
   getDb,
   and,
   eq,
+  isNull,
   or,
   desc,
   inArray,
@@ -18,6 +21,7 @@ import {
   turmas,
   users,
   educationStages,
+  units,
   type Relatorio,
   type RelatorioDocumento,
   type RelatorioStatus,
@@ -29,7 +33,17 @@ import type {
   PdfGerado,
   PdfGeneratorService,
 } from "../../common/sharepoint/pdf-generator.service";
+import { SharePointService } from "../../common/sharepoint/sharepoint.service";
 import { StorageService } from "../../common/storage/storage.service";
+import {
+  criarErroDocumentoAprovado,
+  criarErroDocumentoLink,
+  criarErroDocumentoNaoEncontrado,
+  criarErroFalhaExclusaoDocumento,
+  criarErroPermissaoExclusaoDocumento,
+  criarErroTipoDocumentoNaoPermitido,
+  lancarMotivoExclusaoInvalido,
+} from "../../common/documento-exclusao";
 import { RelatorioHistoricoService } from "./relatorio-historico.service";
 import { RelatorioPdfQueueService } from "./relatorio-pdf-queue.service";
 
@@ -53,6 +67,31 @@ const PDF_MIME = "application/pdf";
 
 const ETAPAS_PERMITIDAS: EducationStageCode[] = ["BERCARIO", "INFANTIL"];
 
+const PERFIS_COM_ACESSO_A_DOCUMENTOS = [
+  "professora",
+  "auxiliar_sala",
+  "analista_pedagogico",
+  "coordenadora_bercario",
+  "coordenadora_infantil",
+  "coordenadora_geral",
+  "gerente_unidade",
+  "gerente_financeiro",
+  "diretora_geral",
+  "master",
+] as const;
+
+const PERFIS_COORDENADORA_POR_SEGMENTO = [
+  "coordenadora_bercario",
+  "coordenadora_infantil",
+] as const;
+
+type DbInstance = ReturnType<typeof getDb>;
+type DbTransaction = Parameters<DbInstance["transaction"]>[0] extends (
+  tx: infer T,
+) => Promise<unknown>
+  ? T
+  : never;
+
 // ============================================
 // Types
 // ============================================
@@ -72,6 +111,7 @@ export interface UserContext {
  * Relatório com documentos (resposta completa)
  */
 export interface RelatorioComDocumentos extends Relatorio {
+  status: RelatorioStatus;
   documentos: RelatorioDocumento[];
   user: { id: string; name: string };
   turma: { id: string; name: string; code: string; stageId: string };
@@ -102,10 +142,13 @@ export interface DashboardItem {
  */
 @Injectable()
 export class RelatorioService {
+  private readonly logger = new Logger(RelatorioService.name);
+
   constructor(
     private readonly historicoService: RelatorioHistoricoService,
     private readonly storageService: StorageService,
     private readonly pdfQueueService: RelatorioPdfQueueService,
+    private readonly sharePointService: SharePointService,
   ) {}
 
   // ============================================
@@ -976,53 +1019,215 @@ export class RelatorioService {
   }
 
   /**
-   * Remove documento de um relatório.
+   * Remove um documento enviado ao relatório, desde que ainda não aprovado.
+   * O histórico e a exclusão local usam a mesma transação; os arquivos
+   * externos são removidos somente depois do commit, de forma tolerante a
+   * falhas.
    */
   async removerDocumento(
+    session: UserContext,
     relatorioId: string,
     documentoId: string,
-    session: UserContext,
+    motivo: string,
   ): Promise<void> {
-    const db = getDb();
+    try {
+      if (typeof motivo !== "string" || motivo.trim().length < 10) {
+        lancarMotivoExclusaoInvalido();
+      }
 
+      const db = getDb();
+      const encontrado = await this.buscarRelatorioParaExclusao(
+        relatorioId,
+        session,
+      );
+      const filtroDocumento = and(
+        eq(relatorioDocumento.id, documentoId),
+        eq(relatorioDocumento.relatorioId, relatorioId),
+      );
+      const documento = await db.query.relatorioDocumento.findFirst({
+        where: filtroDocumento,
+      });
+
+      if (!documento) {
+        throw criarErroDocumentoNaoEncontrado();
+      }
+
+      if (documento.approvedBy || documento.approvedAt) {
+        throw criarErroDocumentoAprovado();
+      }
+
+      const tipoDocumento = String(documento.tipo);
+      if (tipoDocumento === "LINK_YOUTUBE" || tipoDocumento === "YOUTUBE") {
+        throw criarErroDocumentoLink();
+      }
+
+      if (tipoDocumento !== "ARQUIVO" && tipoDocumento !== "UPLOAD") {
+        throw criarErroTipoDocumentoNaoPermitido();
+      }
+
+      const userName = await this.getUserName(session.userId);
+      const detalhes = {
+        documentoId: documento.id,
+        documentoNome: documento.fileName || "Documento sem nome",
+        documentoTipo: documento.tipo,
+        tamanhoBytes: documento.fileSize,
+        motivo: motivo.trim(),
+      };
+
+      await db.transaction(async (tx: DbTransaction) => {
+        await this.historicoService.registrar(
+          {
+            relatorioId,
+            userId: session.userId,
+            userName,
+            userRole: session.role,
+            acao: "DOCUMENTO_EXCLUIDO",
+            statusAnterior: encontrado.status,
+            statusNovo: encontrado.status,
+            detalhes,
+          },
+          tx,
+        );
+
+        const [documentoExcluido] = await tx
+          .delete(relatorioDocumento)
+          .where(
+            and(
+              filtroDocumento,
+              isNull(relatorioDocumento.approvedBy),
+              isNull(relatorioDocumento.approvedAt),
+            ),
+          )
+          .returning();
+
+        if (!documentoExcluido) {
+          const documentoAtual = await tx.query.relatorioDocumento.findFirst({
+            where: filtroDocumento,
+          });
+
+          if (documentoAtual?.approvedBy || documentoAtual?.approvedAt) {
+            throw criarErroDocumentoAprovado();
+          }
+
+          throw criarErroDocumentoNaoEncontrado();
+        }
+      });
+
+      const chaves = [documento.storageKey, documento.pdfStorageKey].filter(
+        (chave, indice, todas): chave is string =>
+          Boolean(chave) && todas.indexOf(chave) === indice,
+      );
+
+      await Promise.all(
+        chaves.map(async (chave) => {
+          try {
+            await this.storageService.deleteFile(chave);
+          } catch (error) {
+            const mensagem =
+              error instanceof Error ? error.message : String(error);
+            this.logger.warn(
+              `[removerDocumento] Falha ao remover ${chave} do storage: ${mensagem}`,
+            );
+          }
+        }),
+      );
+
+      if (documento.sharepointItemId) {
+        try {
+          await this.sharePointService.removerArquivo(
+            documento.sharepointItemId,
+          );
+        } catch (error) {
+          const mensagem =
+            error instanceof Error ? error.message : String(error);
+          this.logger.warn(
+            `[removerDocumento] Falha ao remover ${documento.sharepointItemId} do SharePoint: ${mensagem}`,
+          );
+        }
+      }
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+
+      const mensagem = error instanceof Error ? error.message : String(error);
+      this.logger.error(
+        `[removerDocumento] Falha inesperada ao excluir documento: ${mensagem}`,
+      );
+      throw criarErroFalhaExclusaoDocumento();
+    }
+  }
+
+  /**
+   * Busca o relatório e aplica o escopo efetivo da exclusão.
+   * A busca é separada de buscarPorId para que a regra de proprietário não
+   * permita acesso fora da unidade ou escola da sessão.
+   */
+  private async buscarRelatorioParaExclusao(
+    relatorioId: string,
+    user: UserContext,
+  ): Promise<RelatorioComDocumentos> {
+    if (
+      !PERFIS_COM_ACESSO_A_DOCUMENTOS.includes(
+        user.role as (typeof PERFIS_COM_ACESSO_A_DOCUMENTOS)[number],
+      )
+    ) {
+      throw criarErroPermissaoExclusaoDocumento();
+    }
+
+    const db = getDb();
     const encontrado = await db.query.relatorio.findFirst({
       where: eq(relatorio.id, relatorioId),
+      with: {
+        user: true,
+        turma: true,
+        documentos: true,
+      },
     });
 
     if (!encontrado) {
-      throw new NotFoundException("Relatório não encontrado");
+      throw criarErroDocumentoNaoEncontrado();
     }
 
-    if (encontrado.userId !== session.userId) {
-      throw new ForbiddenException(
-        "Apenas o autor pode remover documentos do relatório",
-      );
+    if (user.role === "master") {
+      return this.formatResponse(encontrado);
     }
 
-    const documento = await db.query.relatorioDocumento.findFirst({
+    if (!user.schoolId) {
+      throw criarErroPermissaoExclusaoDocumento();
+    }
+
+    const unidade = await db.query.units.findFirst({
       where: and(
-        eq(relatorioDocumento.id, documentoId),
-        eq(relatorioDocumento.relatorioId, relatorioId),
+        eq(units.id, encontrado.unitId),
+        eq(units.schoolId, user.schoolId),
       ),
     });
 
-    if (!documento) {
-      throw new NotFoundException(
-        "Documento não encontrado ou não pertence ao relatório",
-      );
+    if (!unidade) {
+      throw criarErroPermissaoExclusaoDocumento();
+    }
+
+    if (user.role === "diretora_geral") {
+      return this.formatResponse(encontrado);
+    }
+
+    if (encontrado.unitId !== user.unitId) {
+      throw criarErroPermissaoExclusaoDocumento();
     }
 
     if (
-      documento.storageKey &&
-      documento.pdfStorageKey &&
-      documento.pdfStorageKey !== documento.storageKey
+      PERFIS_COORDENADORA_POR_SEGMENTO.includes(
+        user.role as (typeof PERFIS_COORDENADORA_POR_SEGMENTO)[number],
+      )
     ) {
-      await this.storageService.deleteFile(documento.pdfStorageKey);
+      const etapa = await this.buscarEtapaDaTurma(encontrado.turmaId);
+      if (!this.coordenadoraPodeVerEtapa(user.role, etapa ?? "")) {
+        throw criarErroPermissaoExclusaoDocumento();
+      }
     }
 
-    await db
-      .delete(relatorioDocumento)
-      .where(eq(relatorioDocumento.id, documentoId));
+    return this.formatResponse(encontrado);
   }
 
   /**
@@ -1080,14 +1285,10 @@ export class RelatorioService {
     const documento = await this.getDocumentoById(relatorioId, documentoId);
 
     if (!documento.storageKey) {
-      throw new BadRequestException(
-        "Documento não possui arquivo armazenado",
-      );
+      throw new BadRequestException("Documento não possui arquivo armazenado");
     }
 
-    const url = await this.storageService.getPresignedUrl(
-      documento.storageKey,
-    );
+    const url = await this.storageService.getPresignedUrl(documento.storageKey);
     return { url };
   }
 
@@ -1514,10 +1715,7 @@ export class RelatorioService {
       return;
     }
 
-    if (
-      documento.pdfStatus !== "PENDENTE" &&
-      documento.pdfStatus !== "ERRO"
-    ) {
+    if (documento.pdfStatus !== "PENDENTE" && documento.pdfStatus !== "ERRO") {
       return;
     }
 
@@ -1574,10 +1772,7 @@ export class RelatorioService {
       .where(eq(relatorioDocumento.id, documentoId));
   }
 
-  async marcarPdfPronto(
-    documentoId: string,
-    pdf: PdfGerado,
-  ): Promise<void> {
+  async marcarPdfPronto(documentoId: string, pdf: PdfGerado): Promise<void> {
     const db = getDb();
     await db
       .update(relatorioDocumento)
@@ -1670,9 +1865,7 @@ export class RelatorioService {
   /**
    * Busca apenas o código da etapa da turma.
    */
-  private async buscarEtapaDaTurma(
-    turmaId: string,
-  ): Promise<string | null> {
+  private async buscarEtapaDaTurma(turmaId: string): Promise<string | null> {
     const db = getDb();
     const linhas = await db
       .select({ etapaCode: educationStages.code })

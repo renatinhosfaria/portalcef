@@ -1,6 +1,10 @@
 // services/api/src/modules/relatorio/relatorio.service.spec.ts
 
-import { BadRequestException, ForbiddenException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from "@nestjs/common";
 
 const mockTurmaQueryBuilder = (etapaCode: string) => ({
   from: jest.fn().mockReturnThis(),
@@ -25,6 +29,7 @@ const mockDb = {
   where: jest.fn().mockReturnThis(),
   returning: jest.fn(),
   delete: jest.fn().mockReturnThis(),
+  transaction: jest.fn(),
   query: {
     relatorio: {
       findFirst: jest.fn(),
@@ -40,6 +45,22 @@ const mockDb = {
     users: {
       findFirst: jest.fn(),
     },
+    units: {
+      findFirst: jest.fn(),
+    },
+  },
+};
+
+const mockTx = {
+  insert: jest.fn().mockReturnThis(),
+  values: jest.fn().mockReturnThis(),
+  returning: jest.fn(),
+  delete: jest.fn().mockReturnThis(),
+  where: jest.fn().mockReturnThis(),
+  query: {
+    relatorioDocumento: {
+      findFirst: jest.fn(),
+    },
   },
 };
 
@@ -52,6 +73,7 @@ jest.mock("@essencia/db", () => ({
   ne: jest.fn(),
   inArray: jest.fn(),
   isNotNull: jest.fn(),
+  isNull: jest.fn(),
   relatorio: {
     id: "id",
     userId: "userId",
@@ -79,18 +101,29 @@ jest.mock("@essencia/db", () => ({
     code: "code",
   },
   users: { id: "id", name: "name" },
+  units: { id: "id", schoolId: "schoolId" },
 }));
 
 import { RelatorioService } from "./relatorio.service";
 import type { RelatorioHistoricoService } from "./relatorio-historico.service";
 import type { StorageService } from "../../common/storage/storage.service";
 import type { RelatorioPdfQueueService } from "./relatorio-pdf-queue.service";
+import type { SharePointService } from "../../common/sharepoint/sharepoint.service";
 
 describe("RelatorioService", () => {
+  type SessaoTeste = {
+    userId: string;
+    role: string;
+    unitId: string | null;
+    schoolId: string | null;
+    stageId: string | null;
+  };
+
   let service: RelatorioService;
   let mockHistorico: jest.Mocked<RelatorioHistoricoService>;
   let mockStorage: jest.Mocked<StorageService>;
   let mockQueue: jest.Mocked<RelatorioPdfQueueService>;
+  let mockSharePoint: jest.Mocked<SharePointService>;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -104,6 +137,10 @@ describe("RelatorioService", () => {
       uploadFile: jest.fn(),
       getPresignedUrl: jest.fn(),
     } as unknown as jest.Mocked<StorageService>;
+
+    mockSharePoint = {
+      removerArquivo: jest.fn().mockResolvedValue(undefined),
+    } as unknown as jest.Mocked<SharePointService>;
 
     mockQueue = {
       adicionar: jest.fn().mockResolvedValue(undefined),
@@ -123,16 +160,33 @@ describe("RelatorioService", () => {
     mockDb.query.relatorioDocumento.findMany.mockReset();
     mockDb.query.turmas.findFirst.mockReset();
     mockDb.query.users.findFirst.mockReset();
+    mockDb.query.units.findFirst.mockReset();
+    mockTx.returning.mockReset();
+    mockTx.returning.mockResolvedValue([{ id: "doc-1" }]);
+    mockTx.query.relatorioDocumento.findFirst.mockReset();
+    mockTx.query.relatorioDocumento.findFirst.mockResolvedValue(null);
+    mockDb.transaction = jest.fn(
+      async (callback: (tx: typeof mockTx) => Promise<unknown>) =>
+        callback(mockTx),
+    );
 
-    service = new RelatorioService(mockHistorico, mockStorage, mockQueue);
+    const RelatorioServiceComArgs = RelatorioService as unknown as new (
+      ...args: unknown[]
+    ) => RelatorioService;
+    service = new RelatorioServiceComArgs(
+      mockHistorico,
+      mockStorage,
+      mockQueue,
+      mockSharePoint,
+    );
   });
 
   describe("criar", () => {
-    const session = {
+    const session: SessaoTeste = {
       userId: "u-1",
       role: "professora",
       unitId: "unit-1",
-      schoolId: null,
+      schoolId: "school-1",
       stageId: null,
     };
 
@@ -140,10 +194,7 @@ describe("RelatorioService", () => {
       mockDb.select.mockReturnValueOnce(mockTurmaQueryBuilder("FUNDAMENTAL_I"));
 
       await expect(
-        service.criar(
-          { turmaId: "t-1", semestreId: "s-1" },
-          session,
-        ),
+        service.criar({ turmaId: "t-1", semestreId: "s-1" }, session),
       ).rejects.toThrow(BadRequestException);
     });
 
@@ -160,10 +211,7 @@ describe("RelatorioService", () => {
       mockDb.select.mockReturnValueOnce(mockEmptyTurmaQuery());
 
       await expect(
-        service.criar(
-          { turmaId: "t-1", semestreId: "s-1" },
-          session,
-        ),
+        service.criar({ turmaId: "t-1", semestreId: "s-1" }, session),
       ).rejects.toThrow();
     });
 
@@ -180,7 +228,9 @@ describe("RelatorioService", () => {
           status: "RASCUNHO",
         },
       ]);
-      mockDb.query.users.findFirst.mockResolvedValueOnce({ name: "Professora" });
+      mockDb.query.users.findFirst.mockResolvedValueOnce({
+        name: "Professora",
+      });
 
       const result = await service.criar(
         { turmaId: "t-1", semestreId: "s-1" },
@@ -420,63 +470,383 @@ describe("RelatorioService", () => {
   });
 
   describe("removerDocumento", () => {
-    const session = {
+    const session: SessaoTeste = {
       userId: "u-1",
       role: "professora",
       unitId: "unit-1",
-      schoolId: null,
+      schoolId: "school-1",
       stageId: null,
     };
+
+    const relatorioBase = {
+      id: "r-1",
+      userId: "outro",
+      turmaId: "t-1",
+      unitId: "unit-1",
+      schoolId: "school-1",
+      status: "RASCUNHO",
+      user: { id: "outro", name: "Outra" },
+      turma: { id: "t-1", name: "Berçário 1", code: "B1", stageId: "s-1" },
+      documentos: [],
+    };
+
+    const documentoBase = {
+      id: "doc-1",
+      relatorioId: "r-1",
+      tipo: "ARQUIVO",
+      fileName: "relatorio.docx",
+      fileSize: 2048,
+      storageKey: "relatorios/original.docx",
+      pdfStorageKey: "relatorios/impresso.pdf",
+      approvedBy: null,
+      approvedAt: null,
+      sharepointItemId: "sharepoint-1",
+    };
+
+    const removerDocumento = (...args: [SessaoTeste, string, string, string]) =>
+      (
+        service.removerDocumento as unknown as (
+          session: SessaoTeste,
+          relatorioId: string,
+          documentoId: string,
+          motivo: string,
+        ) => Promise<void>
+      )(...args);
+
+    const prepararExclusao = (
+      relatorioSobTeste = relatorioBase,
+      documento: Record<string, unknown> = documentoBase,
+    ) => {
+      mockDb.query.relatorio.findFirst.mockResolvedValueOnce(relatorioSobTeste);
+      mockDb.query.relatorioDocumento.findFirst.mockResolvedValueOnce(
+        documento,
+      );
+      mockDb.query.users.findFirst.mockResolvedValueOnce({
+        id: session.userId,
+        name: "Usuária da Sessão",
+      });
+      mockDb.query.units.findFirst.mockResolvedValue({ id: "unit-1" });
+    };
+
+    it("rejeita motivo inválido antes de consultar o banco", async () => {
+      await expect(
+        removerDocumento(session, "r-1", "doc-1", "curto"),
+      ).rejects.toThrow(BadRequestException);
+      expect(mockDb.query.relatorio.findFirst).not.toHaveBeenCalled();
+    });
 
     it("rejeita quando relatório não encontrado", async () => {
       mockDb.query.relatorio.findFirst.mockResolvedValueOnce(null);
 
       await expect(
-        service.removerDocumento("r-1", "doc-1", session),
-      ).rejects.toThrow("Relatório não encontrado");
+        removerDocumento(
+          session,
+          "r-1",
+          "doc-1",
+          "motivo válido para exclusão",
+        ),
+      ).rejects.toThrow(NotFoundException);
     });
 
-    it("rejeita quando o usuário não é o autor do relatório", async () => {
-      mockDb.query.relatorio.findFirst.mockResolvedValueOnce({
-        id: "r-1",
-        userId: "outro",
-        status: "RASCUNHO",
-      });
+    it("não limita a exclusão à autora quando a professora tem acesso ao tenant", async () => {
+      prepararExclusao();
 
       await expect(
-        service.removerDocumento("r-1", "doc-1", session),
-      ).rejects.toThrow(ForbiddenException);
+        removerDocumento(
+          session,
+          "r-1",
+          "doc-1",
+          "arquivo anexado por outra professora",
+        ),
+      ).resolves.toBeUndefined();
+    });
+
+    it.each([
+      ["approvedBy", { approvedBy: "analista-1", approvedAt: null }],
+      ["approvedAt", { approvedBy: null, approvedAt: new Date() }],
+    ])("rejeita documento aprovado por %s", async (_campo, aprovacao) => {
+      prepararExclusao(relatorioBase, { ...documentoBase, ...aprovacao });
+
+      await expect(
+        removerDocumento(
+          session,
+          "r-1",
+          "doc-1",
+          "arquivo aprovado não deve sair",
+        ),
+      ).rejects.toThrow(BadRequestException);
+      expect(mockDb.transaction).not.toHaveBeenCalled();
+    });
+
+    it.each(["LINK_YOUTUBE", "YOUTUBE"])(
+      "rejeita documento do tipo %s",
+      async (tipo) => {
+        prepararExclusao(relatorioBase, { ...documentoBase, tipo });
+
+        await expect(
+          removerDocumento(
+            session,
+            "r-1",
+            "doc-1",
+            "não excluir links do relatório",
+          ),
+        ).rejects.toThrow(BadRequestException);
+      },
+    );
+
+    it("rejeita tipo de documento desconhecido", async () => {
+      prepararExclusao(relatorioBase, { ...documentoBase, tipo: "PLANILHA" });
+
+      await expect(
+        removerDocumento(
+          session,
+          "r-1",
+          "doc-1",
+          "tipo não permitido para exclusão",
+        ),
+      ).rejects.toThrow(BadRequestException);
     });
 
     it("rejeita quando documento não encontrado", async () => {
-      mockDb.query.relatorio.findFirst.mockResolvedValueOnce({
-        id: "r-1",
-        userId: "u-1",
-        status: "RASCUNHO",
-      });
+      mockDb.query.relatorio.findFirst.mockResolvedValueOnce(relatorioBase);
       mockDb.query.relatorioDocumento.findFirst.mockResolvedValueOnce(null);
+      mockDb.query.units.findFirst.mockResolvedValue({ id: "unit-1" });
 
       await expect(
-        service.removerDocumento("r-1", "doc-1", session),
-      ).rejects.toThrow("Documento não encontrado");
+        removerDocumento(
+          session,
+          "r-1",
+          "doc-1",
+          "documento ausente no relatório",
+        ),
+      ).rejects.toThrow(NotFoundException);
     });
 
-    it("remove documento com sucesso quando autor e documento existem", async () => {
-      mockDb.query.relatorio.findFirst.mockResolvedValueOnce({
-        id: "r-1",
-        userId: "u-1",
-        status: "RASCUNHO",
+    it("remove original, PDF, SharePoint e registra histórico em uma exclusão bem-sucedida", async () => {
+      prepararExclusao();
+
+      await expect(
+        removerDocumento(
+          session,
+          "r-1",
+          "doc-1",
+          "arquivo duplicado no relatório",
+        ),
+      ).resolves.toBeUndefined();
+
+      expect(mockHistorico.registrar).toHaveBeenCalledWith(
+        expect.objectContaining({
+          relatorioId: "r-1",
+          userId: "u-1",
+          userName: "Usuária da Sessão",
+          userRole: "professora",
+          acao: "DOCUMENTO_EXCLUIDO",
+          statusAnterior: "RASCUNHO",
+          statusNovo: "RASCUNHO",
+          detalhes: {
+            documentoId: "doc-1",
+            documentoNome: "relatorio.docx",
+            documentoTipo: "ARQUIVO",
+            tamanhoBytes: 2048,
+            motivo: "arquivo duplicado no relatório",
+          },
+        }),
+        mockTx,
+      );
+      expect(mockStorage.deleteFile).toHaveBeenCalledWith(
+        "relatorios/original.docx",
+      );
+      expect(mockStorage.deleteFile).toHaveBeenCalledWith(
+        "relatorios/impresso.pdf",
+      );
+      expect(mockSharePoint.removerArquivo).toHaveBeenCalledWith(
+        "sharepoint-1",
+      );
+    });
+
+    it("permite a exclusão para todos os perfis autorizados do módulo", async () => {
+      const perfis = [
+        "professora",
+        "auxiliar_sala",
+        "analista_pedagogico",
+        "coordenadora_bercario",
+        "coordenadora_infantil",
+        "coordenadora_geral",
+        "gerente_unidade",
+        "gerente_financeiro",
+        "diretora_geral",
+        "master",
+      ];
+
+      for (const role of perfis) {
+        jest.clearAllMocks();
+        mockTx.returning.mockResolvedValue([{ id: "doc-1" }]);
+        mockDb.query.relatorio.findFirst.mockResolvedValueOnce({
+          ...relatorioBase,
+          unitId: role === "diretora_geral" ? "unit-2" : "unit-1",
+        });
+        mockDb.query.relatorioDocumento.findFirst.mockResolvedValueOnce(
+          documentoBase,
+        );
+        mockDb.query.users.findFirst.mockResolvedValueOnce({ name: "Usuária" });
+        mockDb.query.units.findFirst.mockResolvedValue({ id: "unit-1" });
+        if (
+          role === "coordenadora_bercario" ||
+          role === "coordenadora_infantil"
+        ) {
+          mockDb.select.mockReturnValueOnce({
+            from: jest.fn().mockReturnThis(),
+            innerJoin: jest.fn().mockReturnThis(),
+            where: jest.fn().mockResolvedValue([
+              {
+                etapaCode:
+                  role === "coordenadora_bercario" ? "BERCARIO" : "INFANTIL",
+              },
+            ]),
+          });
+        }
+
+        await expect(
+          removerDocumento(
+            {
+              ...session,
+              role,
+              schoolId: role === "master" ? null : "school-1",
+              unitId:
+                role === "master" || role === "diretora_geral"
+                  ? null
+                  : "unit-1",
+            },
+            "r-1",
+            "doc-1",
+            "remoção autorizada pelo perfil",
+          ),
+        ).resolves.toBeUndefined();
+      }
+    });
+
+    it("rejeita auxiliar administrativo mesmo que seja proprietário", async () => {
+      prepararExclusao({ ...relatorioBase, userId: session.userId });
+
+      await expect(
+        removerDocumento(
+          { ...session, role: "auxiliar_administrativo" },
+          "r-1",
+          "doc-1",
+          "tentativa de exclusão não autorizada",
+        ),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it("não permite proprietário fora da unidade", async () => {
+      prepararExclusao({
+        ...relatorioBase,
+        userId: session.userId,
+        unitId: "unit-2",
       });
-      mockDb.query.relatorioDocumento.findFirst.mockResolvedValueOnce({
-        id: "doc-1",
-        relatorioId: "r-1",
-        storageKey: null,
-        pdfStorageKey: null,
+      mockDb.query.units.findFirst.mockResolvedValue({ id: "unit-2" });
+
+      await expect(
+        removerDocumento(session, "r-1", "doc-1", "documento fora da unidade"),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it("permite diretora geral em outra unidade da mesma escola", async () => {
+      prepararExclusao({ ...relatorioBase, unitId: "unit-2" });
+      mockDb.query.units.findFirst.mockResolvedValue({ id: "unit-2" });
+
+      await expect(
+        removerDocumento(
+          { ...session, role: "diretora_geral", unitId: "unit-1" },
+          "r-1",
+          "doc-1",
+          "ajuste solicitado pela direção",
+        ),
+      ).resolves.toBeUndefined();
+    });
+
+    it("permite master global sem escola ou unidade", async () => {
+      prepararExclusao({ ...relatorioBase, unitId: "unit-remota" });
+
+      await expect(
+        removerDocumento(
+          { ...session, role: "master", schoolId: null, unitId: null },
+          "r-1",
+          "doc-1",
+          "remoção global solicitada pelo master",
+        ),
+      ).resolves.toBeUndefined();
+    });
+
+    it("rejeita coordenadora quando a etapa do relatório não pertence ao seu segmento", async () => {
+      prepararExclusao();
+      mockDb.select.mockReturnValueOnce({
+        from: jest.fn().mockReturnThis(),
+        innerJoin: jest.fn().mockReturnThis(),
+        where: jest.fn().mockResolvedValue([{ etapaCode: "INFANTIL" }]),
       });
 
       await expect(
-        service.removerDocumento("r-1", "doc-1", session),
+        removerDocumento(
+          { ...session, role: "coordenadora_bercario" },
+          "r-1",
+          "doc-1",
+          "segmento incompatível para exclusão",
+        ),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it("não interrompe a remoção local quando Storage ou SharePoint falham", async () => {
+      prepararExclusao();
+      mockStorage.deleteFile.mockRejectedValue(
+        new Error("storage indisponível"),
+      );
+      mockSharePoint.removerArquivo.mockRejectedValue(
+        new Error("SharePoint indisponível"),
+      );
+
+      await expect(
+        removerDocumento(
+          session,
+          "r-1",
+          "doc-1",
+          "limpeza externa pode falhar",
+        ),
       ).resolves.toBeUndefined();
+      expect(mockHistorico.registrar).toHaveBeenCalled();
+    });
+
+    it("bloqueia aprovação concorrente dentro da transação", async () => {
+      prepararExclusao();
+      mockTx.returning.mockResolvedValueOnce([]);
+      mockTx.query.relatorioDocumento.findFirst.mockResolvedValueOnce({
+        ...documentoBase,
+        approvedAt: new Date(),
+      });
+
+      await expect(
+        removerDocumento(
+          session,
+          "r-1",
+          "doc-1",
+          "documento aprovado durante operação",
+        ),
+      ).rejects.toThrow(BadRequestException);
+      expect(mockStorage.deleteFile).not.toHaveBeenCalled();
+    });
+
+    it("converte falhas técnicas em mensagem genérica", async () => {
+      mockDb.query.relatorio.findFirst.mockRejectedValueOnce(
+        new Error("SQL secreto"),
+      );
+
+      await expect(
+        removerDocumento(session, "r-1", "doc-1", "falha técnica do relatório"),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: "FALHA_EXCLUSAO_DOCUMENTO",
+        }),
+      });
     });
   });
 

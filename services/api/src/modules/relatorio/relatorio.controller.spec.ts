@@ -4,7 +4,9 @@ jest.mock("./relatorio-historico.service", () => ({
 }));
 jest.mock("../../common/guards/auth.guard", () => ({ AuthGuard: jest.fn() }));
 jest.mock("../../common/guards/roles.guard", () => ({ RolesGuard: jest.fn() }));
-jest.mock("../../common/guards/tenant.guard", () => ({ TenantGuard: jest.fn() }));
+jest.mock("../../common/guards/tenant.guard", () => ({
+  TenantGuard: jest.fn(),
+}));
 jest.mock("../../common/sharepoint/sharepoint.service", () => ({
   SharePointService: jest.fn(),
 }));
@@ -13,10 +15,15 @@ jest.mock("../../common/storage/storage.service", () => ({
 }));
 
 import { GUARDS_METADATA } from "@nestjs/common/constants";
+import {
+  EXACT_ROLES_KEY,
+  ROLES_KEY,
+} from "../../common/decorators/roles.decorator";
 
 import { AuthGuard } from "../../common/guards/auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
 import { TenantGuard } from "../../common/guards/tenant.guard";
+import { ExcluirDocumentoDto } from "../../common/dto/excluir-documento.dto";
 import { CreateRelatorioDto } from "./dto/relatorio.dto";
 import { RelatorioController } from "./relatorio.controller";
 
@@ -53,6 +60,7 @@ describe("RelatorioController", () => {
       editarWord: jest.fn().mockResolvedValue(undefined),
       getDocumentoById: jest.fn().mockResolvedValue(documentoWord),
       atualizarDocumento: jest.fn().mockResolvedValue(undefined),
+      removerDocumento: jest.fn().mockResolvedValue(undefined),
     };
     const storageService = {
       uploadFile: jest.fn().mockResolvedValue({
@@ -107,8 +115,7 @@ describe("RelatorioController", () => {
 
   const criarArquivoMultipart = (
     tamanho: number,
-    mimetype =
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    mimetype = "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   ) => ({
     mimetype,
     filename: "Relatorio.docx",
@@ -145,6 +152,74 @@ describe("RelatorioController", () => {
     );
 
     expect(paramTypes?.[1]).toBe(CreateRelatorioDto);
+  });
+
+  it("autoriza todos os perfis do módulo com roles exatas, incluindo gerente financeiro", () => {
+    const roles = Reflect.getMetadata(
+      ROLES_KEY,
+      RelatorioController.prototype.removerDocumento,
+    );
+
+    expect(roles).toEqual(
+      expect.arrayContaining([
+        "professora",
+        "auxiliar_sala",
+        "analista_pedagogico",
+        "coordenadora_bercario",
+        "coordenadora_infantil",
+        "coordenadora_geral",
+        "gerente_unidade",
+        "gerente_financeiro",
+        "diretora_geral",
+        "master",
+      ]),
+    );
+    expect(roles).not.toContain("auxiliar_administrativo");
+    expect(
+      Reflect.getMetadata(
+        EXACT_ROLES_KEY,
+        RelatorioController.prototype.removerDocumento,
+      ),
+    ).toBe(true);
+  });
+
+  it("recebe o motivo e repassa a sessão ao serviço", async () => {
+    const { controller, relatorioService } = criarController();
+    const body: ExcluirDocumentoDto = {
+      motivo: "arquivo duplicado no relatório",
+    };
+
+    const removerDocumento = controller.removerDocumento as unknown as (
+      relatorioId: string,
+      docId: string,
+      req: { user: typeof usuarioSessao },
+      body: ExcluirDocumentoDto,
+    ) => Promise<unknown>;
+
+    await removerDocumento.call(
+      controller,
+      "relatorio-1",
+      "documento-1",
+      { user: usuarioSessao },
+      body,
+    );
+
+    expect(relatorioService.removerDocumento).toHaveBeenCalledWith(
+      usuarioSessao,
+      "relatorio-1",
+      "documento-1",
+      body.motivo,
+    );
+  });
+
+  it("preserva o DTO de exclusão no metadado do Body para validação", () => {
+    const paramTypes = Reflect.getMetadata(
+      "design:paramtypes",
+      RelatorioController.prototype,
+      "removerDocumento",
+    );
+
+    expect(paramTypes?.[3]).toBe(ExcluirDocumentoDto);
   });
 
   it("devolve relatório da analista sem repassar corpo de motivo", async () => {
@@ -213,7 +288,10 @@ describe("RelatorioController", () => {
 
   it("aceita upload de relatório com tamanho máximo de 500 MB", async () => {
     const { controller, relatorioService, storageService } = criarController();
-    const arquivo = criarArquivoMultipart(LIMITE_UPLOAD_BYTES, "application/pdf");
+    const arquivo = criarArquivoMultipart(
+      LIMITE_UPLOAD_BYTES,
+      "application/pdf",
+    );
 
     const resultado = await controller.adicionarDocumentoUpload(
       "relatorio-1",

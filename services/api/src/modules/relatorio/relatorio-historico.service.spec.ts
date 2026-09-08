@@ -14,10 +14,11 @@ const mockHistoricoEntry = {
 };
 
 const mockFindMany = jest.fn().mockResolvedValue([]);
+const mockInsert = jest.fn();
 
 jest.mock("@essencia/db", () => ({
   getDb: jest.fn().mockReturnValue({
-    insert: jest.fn().mockReturnValue({
+    insert: mockInsert.mockReturnValue({
       values: jest.fn().mockReturnValue({
         returning: jest.fn().mockResolvedValue([mockHistoricoEntry]),
       }),
@@ -55,6 +56,45 @@ describe("RelatorioHistoricoService", () => {
       expect(entry.relatorioId).toBe("r-1");
       expect(entry.acao).toBe("SUBMETIDO");
       expect(typeof entry.createdAt).toBe("string"); // ISO string
+    });
+
+    it("aceita executor transacional para registrar a ação no mesmo commit", async () => {
+      const executor = {
+        insert: jest.fn().mockReturnValue({
+          values: jest.fn().mockReturnValue({
+            returning: jest.fn().mockResolvedValue([mockHistoricoEntry]),
+          }),
+        }),
+      };
+
+      const registrar = service.registrar as unknown as (
+        params: Parameters<RelatorioHistoricoService["registrar"]>[0],
+        executor: unknown,
+      ) => Promise<unknown>;
+
+      await registrar.call(
+        service,
+        {
+          relatorioId: "r-1",
+          userId: "u-1",
+          userName: "Ana",
+          userRole: "professora",
+          acao: "DOCUMENTO_EXCLUIDO",
+          statusAnterior: "RASCUNHO",
+          statusNovo: "RASCUNHO",
+          detalhes: {
+            documentoId: "doc-1",
+            documentoNome: "relatorio.docx",
+            documentoTipo: "ARQUIVO",
+            tamanhoBytes: 10,
+            motivo: "arquivo duplicado",
+          },
+        },
+        executor as never,
+      );
+
+      expect(executor.insert).toHaveBeenCalled();
+      expect(mockInsert).not.toHaveBeenCalled();
     });
   });
 

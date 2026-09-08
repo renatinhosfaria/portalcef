@@ -17,10 +17,11 @@ import {
 } from "@nestjs/common";
 import { FastifyReply, FastifyRequest } from "fastify";
 
-import { Roles } from "../../common/decorators/roles.decorator";
+import { ExactRoles, Roles } from "../../common/decorators/roles.decorator";
 import { AuthGuard } from "../../common/guards/auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
 import { TenantGuard } from "../../common/guards/tenant.guard";
+import { ExcluirDocumentoDto } from "../../common/dto/excluir-documento.dto";
 import { SharePointService } from "../../common/sharepoint/sharepoint.service";
 import { StorageService } from "../../common/storage/storage.service";
 import {
@@ -104,6 +105,9 @@ const WORD_ACCESS = [
   ...PROFESSORA_ACCESS,
   ...ANALISTA_ACCESS,
 ] as const;
+
+/** Todos os perfis que podem acessar o módulo de relatórios. */
+const DOCUMENTO_ACCESS = [...PROFESSORA_ACCESS, ...GESTAO_ACCESS] as const;
 
 // ============================================
 // Controller
@@ -597,13 +601,20 @@ export class RelatorioController {
    * Remove documento do relatório
    */
   @Delete(":id/documento/:docId")
-  @Roles(...PROFESSORA_ACCESS)
+  @Roles(...DOCUMENTO_ACCESS)
+  @ExactRoles()
   async removerDocumento(
     @Param("id") relatorioId: string,
     @Param("docId") docId: string,
     @Req() req: { user: UserContext },
+    @Body() body: ExcluirDocumentoDto,
   ) {
-    await this.relatorioService.removerDocumento(relatorioId, docId, req.user);
+    await this.relatorioService.removerDocumento(
+      req.user,
+      relatorioId,
+      docId,
+      body.motivo,
+    );
 
     return {
       success: true,
