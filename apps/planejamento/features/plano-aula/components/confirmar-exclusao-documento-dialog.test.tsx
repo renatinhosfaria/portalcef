@@ -164,7 +164,9 @@ describe("ConfirmarExclusaoDocumentoDialog", () => {
 
     await waitFor(() => {
       expect(
-        screen.getByText("Este arquivo já foi aprovado e não pode ser excluído."),
+        screen.getByText(
+          "Este arquivo já foi aprovado e não pode ser excluído.",
+        ),
       ).toBeInTheDocument();
     });
     expect(

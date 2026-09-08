@@ -92,10 +92,7 @@ export function ConfirmarExclusaoDocumentoDialog({
         </AlertDialogHeader>
 
         <div className="grid gap-2 py-2">
-          <label
-            htmlFor={motivoId}
-            className="text-sm font-medium"
-          >
+          <label htmlFor={motivoId} className="text-sm font-medium">
             Motivo da exclusão <span className="text-destructive">*</span>
           </label>
           <Textarea
@@ -112,14 +109,9 @@ export function ConfirmarExclusaoDocumentoDialog({
             required
             aria-required="true"
             aria-invalid={!!erro}
-            aria-describedby={
-              erro ? erroId : ajudaId
-            }
+            aria-describedby={erro ? erroId : ajudaId}
           />
-          <p
-            id={ajudaId}
-            className="text-xs text-muted-foreground"
-          >
+          <p id={ajudaId} className="text-xs text-muted-foreground">
             Informe pelo menos 10 caracteres para registrar o motivo.
           </p>
           {erro && (
