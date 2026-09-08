@@ -32,7 +32,11 @@ interface UseRelatorioReturn {
     docId: string,
     dados: { fileSize?: number },
   ) => Promise<void>;
-  deleteDocumento: (relatorioId: string, docId: string) => Promise<void>;
+  deleteDocumento: (
+    relatorioId: string,
+    docId: string,
+    motivo: string,
+  ) => Promise<void>;
   downloadDocumento: (relatorioId: string, docId: string) => Promise<string>;
   editarWord: (
     relatorioId: string,
@@ -161,10 +165,12 @@ export function useRelatorio(): UseRelatorioReturn {
   );
 
   const deleteDocumento = useCallback(
-    (relatorioId: string, docId: string) =>
+    (relatorioId: string, docId: string, motivo: string) =>
       executar(
         async () => {
-          await api.delete(`/relatorio/${relatorioId}/documento/${docId}`);
+          await api.delete(`/relatorio/${relatorioId}/documento/${docId}`, {
+            body: { motivo },
+          });
         },
         "Não foi possível excluir o documento. Tente novamente.",
       ),

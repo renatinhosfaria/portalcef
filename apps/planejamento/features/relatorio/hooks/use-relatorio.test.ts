@@ -5,11 +5,13 @@ import { useRelatorio } from "./use-relatorio";
 
 const mockApiGet = vi.fn();
 const mockApiPost = vi.fn();
+const mockApiDelete = vi.fn();
 
 vi.mock("@essencia/shared/fetchers/client", () => ({
   api: {
     get: (...args: unknown[]) => mockApiGet(...args),
     post: (...args: unknown[]) => mockApiPost(...args),
+    delete: (...args: unknown[]) => mockApiDelete(...args),
   },
 }));
 
@@ -18,6 +20,7 @@ describe("useRelatorio", () => {
     vi.clearAllMocks();
     mockApiGet.mockResolvedValue([]);
     mockApiPost.mockResolvedValue({ id: "relatorio-1" });
+    mockApiDelete.mockResolvedValue(undefined);
   });
 
   it("cria relatório usando turma, semestre e configuração semestral", async () => {
@@ -46,5 +49,22 @@ describe("useRelatorio", () => {
     });
 
     expect(mockApiGet).toHaveBeenCalledWith("/relatorio/relatorio-1");
+  });
+
+  it("exclui documento enviando o motivo no corpo da requisição", async () => {
+    const { result } = renderHook(() => useRelatorio());
+
+    await act(async () => {
+      await result.current.deleteDocumento(
+        "relatorio-1",
+        "documento-1",
+        "arquivo duplicado no relatório",
+      );
+    });
+
+    expect(mockApiDelete).toHaveBeenCalledWith(
+      "/relatorio/relatorio-1/documento/documento-1",
+      { body: { motivo: "arquivo duplicado no relatório" } },
+    );
   });
 });

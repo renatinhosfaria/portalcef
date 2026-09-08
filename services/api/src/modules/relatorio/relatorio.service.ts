@@ -85,6 +85,11 @@ const PERFIS_COORDENADORA_POR_SEGMENTO = [
   "coordenadora_infantil",
 ] as const;
 
+const PERFIS_COM_RESTRICAO_DE_AUTORIA = [
+  "professora",
+  "auxiliar_sala",
+] as const;
+
 type DbInstance = ReturnType<typeof getDb>;
 type DbTransaction = Parameters<DbInstance["transaction"]>[0] extends (
   tx: infer T,
@@ -1213,6 +1218,15 @@ export class RelatorioService {
     }
 
     if (encontrado.unitId !== user.unitId) {
+      throw criarErroPermissaoExclusaoDocumento();
+    }
+
+    if (
+      PERFIS_COM_RESTRICAO_DE_AUTORIA.includes(
+        user.role as (typeof PERFIS_COM_RESTRICAO_DE_AUTORIA)[number],
+      ) &&
+      encontrado.userId !== user.userId
+    ) {
       throw criarErroPermissaoExclusaoDocumento();
     }
 

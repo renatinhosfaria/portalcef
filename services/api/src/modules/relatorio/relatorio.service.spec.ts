@@ -480,7 +480,7 @@ describe("RelatorioService", () => {
 
     const relatorioBase = {
       id: "r-1",
-      userId: "outro",
+      userId: "u-1",
       turmaId: "t-1",
       unitId: "unit-1",
       schoolId: "school-1",
@@ -548,18 +548,22 @@ describe("RelatorioService", () => {
       ).rejects.toThrow(NotFoundException);
     });
 
-    it("não limita a exclusão à autora quando a professora tem acesso ao tenant", async () => {
-      prepararExclusao();
+    it.each(["professora", "auxiliar_sala"])(
+      "rejeita exclusão de relatório de terceiro para o perfil %s",
+      async (role) => {
+        prepararExclusao({ ...relatorioBase, userId: "outro" });
 
-      await expect(
-        removerDocumento(
-          session,
-          "r-1",
-          "doc-1",
-          "arquivo anexado por outra professora",
-        ),
-      ).resolves.toBeUndefined();
-    });
+        await expect(
+          removerDocumento(
+            { ...session, role },
+            "r-1",
+            "doc-1",
+            "arquivo anexado por outra professora",
+          ),
+        ).rejects.toThrow(ForbiddenException);
+        expect(mockDb.transaction).not.toHaveBeenCalled();
+      },
+    );
 
     it.each([
       ["approvedBy", { approvedBy: "analista-1", approvedAt: null }],
@@ -623,7 +627,7 @@ describe("RelatorioService", () => {
     });
 
     it("remove original, PDF, SharePoint e registra histórico em uma exclusão bem-sucedida", async () => {
-      prepararExclusao();
+      prepararExclusao({ ...relatorioBase, userId: session.userId });
 
       await expect(
         removerDocumento(
@@ -664,6 +668,49 @@ describe("RelatorioService", () => {
       );
     });
 
+    it.each([
+      [
+        "chaves iguais",
+        "relatorios/mesmo-arquivo.docx",
+        "relatorios/mesmo-arquivo.docx",
+        1,
+      ],
+      ["ambas nulas", null, null, 0],
+      ["somente chave original", "relatorios/original.docx", null, 1],
+      ["somente chave do PDF", null, "relatorios/impresso.pdf", 1],
+    ])(
+      "remove storage corretamente quando há %s",
+      async (_descricao, storageKey, pdfStorageKey, quantidadeChamadas) => {
+        prepararExclusao(
+          { ...relatorioBase, userId: session.userId },
+          {
+            ...documentoBase,
+            storageKey,
+            pdfStorageKey,
+            sharepointItemId: null,
+          },
+        );
+
+        await expect(
+          removerDocumento(
+            session,
+            "r-1",
+            "doc-1",
+            "limpeza de arquivos associados",
+          ),
+        ).resolves.toBeUndefined();
+
+        expect(mockStorage.deleteFile).toHaveBeenCalledTimes(
+          quantidadeChamadas,
+        );
+        for (const chave of [storageKey, pdfStorageKey]) {
+          if (chave) {
+            expect(mockStorage.deleteFile).toHaveBeenCalledWith(chave);
+          }
+        }
+      },
+    );
+
     it("permite a exclusão para todos os perfis autorizados do módulo", async () => {
       const perfis = [
         "professora",
@@ -683,6 +730,10 @@ describe("RelatorioService", () => {
         mockTx.returning.mockResolvedValue([{ id: "doc-1" }]);
         mockDb.query.relatorio.findFirst.mockResolvedValueOnce({
           ...relatorioBase,
+          userId:
+            role === "professora" || role === "auxiliar_sala"
+              ? session.userId
+              : relatorioBase.userId,
           unitId: role === "diretora_geral" ? "unit-2" : "unit-1",
         });
         mockDb.query.relatorioDocumento.findFirst.mockResolvedValueOnce(
