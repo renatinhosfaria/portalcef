@@ -2,9 +2,21 @@ import { BadRequestException, ForbiddenException } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
 
 import { PdfGeneratorService } from "../../common/sharepoint/pdf-generator.service";
+import { SharePointService } from "../../common/sharepoint/sharepoint.service";
 import { StorageService } from "../../common/storage/storage.service";
 import { ProvaHistoricoService } from "./prova-historico.service";
 import { ProvaService } from "./prova.service";
+
+const mockTx = {
+  query: {
+    provaDocumento: {
+      findFirst: jest.fn(),
+    },
+  },
+  delete: jest.fn().mockReturnThis(),
+  where: jest.fn().mockReturnThis(),
+  returning: jest.fn(),
+};
 
 const mockDb = {
   query: {
@@ -18,17 +30,23 @@ const mockDb = {
     users: {
       findFirst: jest.fn(),
     },
+    units: {
+      findFirst: jest.fn(),
+    },
   },
   update: jest.fn().mockReturnThis(),
+  delete: jest.fn().mockReturnThis(),
   set: jest.fn().mockReturnThis(),
   where: jest.fn().mockReturnThis(),
   returning: jest.fn(),
+  transaction: jest.fn(),
 };
 
 jest.mock("@essencia/db", () => ({
   getDb: jest.fn(() => mockDb),
   and: jest.fn(),
   eq: jest.fn(),
+  isNull: jest.fn(),
   desc: jest.fn(),
   gte: jest.fn(),
   lte: jest.fn(),
@@ -38,6 +56,7 @@ jest.mock("@essencia/db", () => ({
   provaDocumento: {},
   provaCiclo: {},
   turmas: {},
+  units: {},
   users: {},
 }));
 
@@ -49,7 +68,12 @@ describe("ProvaService", () => {
   const pdfGeneratorServiceMock = {
     gerarParaImpressao: jest.fn(),
   };
-  const storageServiceMock = {};
+  const storageServiceMock = {
+    deleteFile: jest.fn(),
+  };
+  const sharePointServiceMock = {
+    removerArquivo: jest.fn(),
+  };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -67,11 +91,28 @@ describe("ProvaService", () => {
           provide: StorageService,
           useValue: storageServiceMock,
         },
+        {
+          provide: SharePointService,
+          useValue: sharePointServiceMock,
+        },
       ],
     }).compile();
 
     service = module.get<ProvaService>(ProvaService);
     jest.clearAllMocks();
+    mockDb.transaction.mockImplementation(
+      async (callback: (tx: typeof mockTx) => Promise<unknown>) =>
+        callback(mockTx),
+    );
+    mockDb.query.units.findFirst.mockResolvedValue({
+      id: "unit-1",
+      schoolId: "school-1",
+    });
+    mockTx.returning.mockResolvedValue([
+      {
+        id: "doc-1",
+      },
+    ]);
   });
 
   describe("enviarParaImpressao", () => {
@@ -281,6 +322,358 @@ describe("ProvaService", () => {
         }),
       );
       expect(resultado.pdfUrl).toBe("https://cdn/doc-1.pdf");
+    });
+  });
+
+  describe("removerDocumento", () => {
+    const usuarioAnalista = {
+      userId: "analista-1",
+      role: "analista_pedagogico",
+      schoolId: "school-1",
+      unitId: "unit-1",
+      stageId: null,
+    };
+
+    const provaComAcesso = {
+      id: "prova-1",
+      userId: "prof-1",
+      turmaId: "turma-1",
+      unitId: "unit-1",
+      status: "RASCUNHO",
+      user: { id: "prof-1", name: "Professora" },
+      turma: { id: "turma-1", name: "Turma 1", code: "T1" },
+      documentos: [],
+    };
+
+    const documentoUpload = {
+      id: "doc-1",
+      provaId: "prova-1",
+      tipo: "UPLOAD",
+      storageKey: "provas/doc-1.docx",
+      pdfStorageKey: "provas/doc-1.pdf",
+      fileName: "Prova.docx",
+      fileSize: 4096,
+      mimeType:
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      sharepointItemId: null,
+      approvedBy: null,
+      approvedAt: null,
+    };
+
+    beforeEach(() => {
+      mockDb.query.prova.findFirst.mockResolvedValue(provaComAcesso);
+      mockDb.query.provaDocumento.findFirst.mockResolvedValue(documentoUpload);
+      mockDb.query.users.findFirst.mockResolvedValue({
+        name: "Analista Responsável",
+      });
+      historicoServiceMock.registrar.mockResolvedValue(undefined);
+    });
+
+    const executarRemocao = (
+      user: {
+        userId: string;
+        role: string;
+        schoolId: string | null;
+        unitId: string | null;
+        stageId: string | null;
+      },
+      provaId: string,
+      documentoId: string,
+      motivo: string,
+    ) =>
+      (service.removerDocumento as unknown as (
+        user: {
+          userId: string;
+          role: string;
+          schoolId: string | null;
+          unitId: string | null;
+          stageId: string | null;
+        },
+        provaId: string,
+        documentoId: string,
+        motivo: string,
+      ) => Promise<void>)(user, provaId, documentoId, motivo);
+
+    it("rejeita motivo inválido antes de consultar a prova", async () => {
+      const removerDocumento = service.removerDocumento.bind(service) as unknown as (
+        user: typeof usuarioAnalista,
+        provaId: string,
+        documentoId: string,
+        motivo: string,
+      ) => Promise<void>;
+
+      await expect(
+        removerDocumento(usuarioAnalista, "prova-1", "doc-1", "curto"),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: "MOTIVO_EXCLUSAO_INVALIDO",
+          message: "Informe o motivo da exclusão com pelo menos 10 caracteres.",
+        }),
+      });
+
+      expect(mockDb.query.prova.findFirst).not.toHaveBeenCalled();
+    });
+
+    it("bloqueia documento aprovado", async () => {
+      mockDb.query.provaDocumento.findFirst.mockResolvedValue({
+        ...documentoUpload,
+        approvedBy: "analista-2",
+        approvedAt: new Date("2026-06-18T11:00:00.000Z"),
+      });
+
+      await expect(
+        executarRemocao(
+          usuarioAnalista,
+          "prova-1",
+          "doc-1",
+          "Arquivo já foi aprovado",
+        ),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: "DOCUMENTO_APROVADO",
+          message: "Este arquivo já foi aprovado e não pode ser excluído.",
+        }),
+      });
+
+      expect(mockDb.transaction).not.toHaveBeenCalled();
+      expect(storageServiceMock.deleteFile).not.toHaveBeenCalled();
+    });
+
+    it.each(["LINK_YOUTUBE", "YOUTUBE"])(
+      "bloqueia link do YouTube do tipo %s",
+      async (tipo) => {
+        mockDb.query.provaDocumento.findFirst.mockResolvedValue({
+          ...documentoUpload,
+          tipo,
+          storageKey: null,
+          pdfStorageKey: null,
+          fileName: "Vídeo da prova",
+          fileSize: null,
+        });
+
+        await expect(
+          executarRemocao(
+            usuarioAnalista,
+            "prova-1",
+            "doc-1",
+            "Link não é arquivo enviado",
+          ),
+        ).rejects.toMatchObject({
+          response: expect.objectContaining({
+            code: "DOCUMENTO_LINK",
+            message: "Links do YouTube não podem ser excluídos por esta opção.",
+          }),
+        });
+
+        expect(mockDb.transaction).not.toHaveBeenCalled();
+        expect(storageServiceMock.deleteFile).not.toHaveBeenCalled();
+      },
+    );
+
+    it("retorna erro claro para documento fora da prova", async () => {
+      mockDb.query.provaDocumento.findFirst.mockResolvedValue(null);
+
+      await expect(
+        executarRemocao(
+          usuarioAnalista,
+          "prova-1",
+          "doc-fora-da-prova",
+          "Documento está em outra prova",
+        ),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: "DOCUMENTO_NAO_ENCONTRADO",
+          message:
+            "Este arquivo não foi encontrado. Atualize a página e tente novamente.",
+        }),
+      });
+
+      expect(mockDb.transaction).not.toHaveBeenCalled();
+      expect(storageServiceMock.deleteFile).not.toHaveBeenCalled();
+    });
+
+    it("bloqueia usuário sem acesso à prova", async () => {
+      mockDb.query.prova.findFirst.mockResolvedValue({
+        ...provaComAcesso,
+        unitId: "unit-2",
+      });
+
+      await expect(
+        executarRemocao(
+          usuarioAnalista,
+          "prova-fora-da-unidade",
+          "doc-1",
+          "Tentativa de exclusão sem acesso",
+        ),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: "PERMISSAO_EXCLUSAO_DOCUMENTO",
+          message: "Você não tem permissão para excluir este arquivo.",
+        }),
+      });
+
+      expect(mockDb.query.provaDocumento.findFirst).not.toHaveBeenCalled();
+      expect(mockDb.transaction).not.toHaveBeenCalled();
+    });
+
+    it("remove documento e registra histórico com ator e motivo", async () => {
+      await expect(
+        executarRemocao(
+          usuarioAnalista,
+          "prova-1",
+          "doc-1",
+          "Arquivo enviado com conteúdo incorreto",
+        ),
+      ).resolves.toBeUndefined();
+
+      expect(mockDb.transaction).toHaveBeenCalledTimes(1);
+      expect(mockTx.delete).toHaveBeenCalledWith(expect.anything());
+      expect(historicoServiceMock.registrar).toHaveBeenCalledWith(
+        {
+          provaId: "prova-1",
+          userId: "analista-1",
+          userName: "Analista Responsável",
+          userRole: "analista_pedagogico",
+          acao: "DOCUMENTO_EXCLUIDO",
+          statusAnterior: null,
+          statusNovo: "RASCUNHO",
+          detalhes: {
+            documentoId: "doc-1",
+            documentoNome: "Prova.docx",
+            documentoTipo: "UPLOAD",
+            tamanhoBytes: 4096,
+            motivo: "Arquivo enviado com conteúdo incorreto",
+          },
+        },
+        mockTx,
+      );
+      expect(storageServiceMock.deleteFile).toHaveBeenCalledWith(
+        "provas/doc-1.docx",
+      );
+      expect(storageServiceMock.deleteFile).toHaveBeenCalledWith(
+        "provas/doc-1.pdf",
+      );
+    });
+
+    it("remove item do SharePoint sem impedir a exclusão local", async () => {
+      mockDb.query.provaDocumento.findFirst.mockResolvedValue({
+        ...documentoUpload,
+        sharepointItemId: "item-sharepoint-1",
+      });
+      sharePointServiceMock.removerArquivo.mockRejectedValueOnce(
+        new Error("SharePoint indisponível"),
+      );
+
+      await expect(
+        executarRemocao(
+          usuarioAnalista,
+          "prova-1",
+          "doc-1",
+          "Arquivo não deve mais ser utilizado",
+        ),
+      ).resolves.toBeUndefined();
+
+      expect(sharePointServiceMock.removerArquivo).toHaveBeenCalledWith(
+        "item-sharepoint-1",
+      );
+      expect(mockDb.transaction).toHaveBeenCalledTimes(1);
+    });
+
+    it("impede aprovação concorrente durante a transação", async () => {
+      mockTx.returning.mockResolvedValueOnce([]);
+      mockTx.query.provaDocumento.findFirst.mockResolvedValue({
+        ...documentoUpload,
+        approvedBy: "analista-2",
+        approvedAt: new Date("2026-06-18T11:00:00.000Z"),
+      });
+
+      await expect(
+        executarRemocao(
+          usuarioAnalista,
+          "prova-1",
+          "doc-1",
+          "Arquivo aprovado durante a tentativa",
+        ),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({ code: "DOCUMENTO_APROVADO" }),
+      });
+
+      expect(storageServiceMock.deleteFile).not.toHaveBeenCalled();
+    });
+
+    it("não expõe detalhes técnicos quando a transação falha", async () => {
+      mockDb.transaction.mockRejectedValueOnce(
+        new Error("detalhe interno que não deve chegar ao usuário"),
+      );
+
+      const erro = await executarRemocao(
+          usuarioAnalista,
+          "prova-1",
+          "doc-1",
+          "Falha inesperada durante a exclusão",
+        )
+        .catch((erro: unknown) => erro);
+
+      expect(erro).toMatchObject({
+        response: expect.objectContaining({
+          code: "FALHA_EXCLUSAO_DOCUMENTO",
+          message:
+            "Não foi possível excluir o arquivo agora. Tente novamente. Se o problema continuar, procure o suporte.",
+        }),
+      });
+      expect(storageServiceMock.deleteFile).not.toHaveBeenCalled();
+    });
+
+    it("permite master global e diretora geral na mesma escola", async () => {
+      const master = {
+        userId: "master-1",
+        role: "master",
+        schoolId: null,
+        unitId: null,
+        stageId: null,
+      };
+      await expect(
+        executarRemocao(
+          master,
+          "prova-1",
+          "doc-1",
+          "Arquivo removido pela administração global",
+        ),
+      ).resolves.toBeUndefined();
+
+      jest.clearAllMocks();
+      mockDb.transaction.mockImplementation(
+        async (callback: (tx: typeof mockTx) => Promise<unknown>) =>
+          callback(mockTx),
+      );
+      mockDb.query.prova.findFirst.mockResolvedValue({
+        ...provaComAcesso,
+        unitId: "unit-2",
+      });
+      mockDb.query.provaDocumento.findFirst.mockResolvedValue(documentoUpload);
+      mockDb.query.users.findFirst.mockResolvedValue({ name: "Diretora" });
+      mockDb.query.units.findFirst.mockResolvedValue({
+        id: "unit-2",
+        schoolId: "school-1",
+      });
+      mockTx.returning.mockResolvedValue([{ id: "doc-1" }]);
+
+      await expect(
+        executarRemocao(
+          {
+            userId: "diretora-1",
+            role: "diretora_geral",
+            schoolId: "school-1",
+            unitId: null,
+            stageId: null,
+          },
+          "prova-1",
+          "doc-1",
+          "Arquivo removido pela diretora da escola",
+        ),
+      ).resolves.toBeUndefined();
+
+      expect(mockDb.query.units.findFirst).toHaveBeenCalled();
     });
   });
 

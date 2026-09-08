@@ -1,14 +1,17 @@
 import {
   Injectable,
+  HttpException,
   NotFoundException,
   BadRequestException,
   ForbiddenException,
   ConflictException,
+  Logger,
 } from "@nestjs/common";
 import {
   getDb,
   and,
   eq,
+  isNull,
   desc,
   gte,
   lte,
@@ -18,6 +21,7 @@ import {
   provaDocumento,
   provaCiclo,
   turmas,
+  units,
   users,
   type Prova,
   type ProvaDocumento,
@@ -25,7 +29,17 @@ import {
 } from "@essencia/db";
 
 import { PdfGeneratorService } from "../../common/sharepoint/pdf-generator.service";
+import { SharePointService } from "../../common/sharepoint/sharepoint.service";
 import { StorageService } from "../../common/storage/storage.service";
+import {
+  criarErroDocumentoAprovado,
+  criarErroDocumentoLink,
+  criarErroDocumentoNaoEncontrado,
+  criarErroFalhaExclusaoDocumento,
+  criarErroPermissaoExclusaoDocumento,
+  criarErroTipoDocumentoNaoPermitido,
+  lancarMotivoExclusaoInvalido,
+} from "../../common/documento-exclusao";
 import { ProvaHistoricoService } from "./prova-historico.service";
 
 import {
@@ -35,6 +49,7 @@ import {
   isAnalista,
   isCoordenadora,
   isGestao,
+  isProfessora,
   getSegmentosPermitidos,
 } from "./dto/prova.dto";
 
@@ -53,10 +68,18 @@ export interface UserContext {
   stageId: string | null;
 }
 
+type DbInstance = ReturnType<typeof getDb>;
+type DbTransaction = Parameters<DbInstance["transaction"]>[0] extends (
+  tx: infer T,
+) => Promise<unknown>
+  ? T
+  : never;
+
 /**
  * Prova com documentos (resposta completa)
  */
 export interface ProvaComDocumentos extends Prova {
+  status: ProvaStatus;
   documentos: ProvaDocumento[];
   user: { id: string; name: string };
   turma: { id: string; name: string; code: string };
@@ -86,10 +109,13 @@ export interface DashboardItem {
  */
 @Injectable()
 export class ProvaService {
+  private readonly logger = new Logger(ProvaService.name);
+
   constructor(
     private readonly historicoService: ProvaHistoricoService,
     private readonly pdfGeneratorService: PdfGeneratorService,
     private readonly storageService: StorageService,
+    private readonly sharePointService: SharePointService,
   ) {}
 
   // ============================================
@@ -1220,27 +1246,218 @@ export class ProvaService {
   /**
    * Remove documento de uma prova
    */
-  async removerDocumento(provaId: string, documentoId: string): Promise<void> {
-    const db = getDb();
+  async removerDocumento(
+    user: UserContext,
+    provaId: string,
+    documentoId: string,
+    motivo: string,
+  ): Promise<void> {
+    try {
+      if (typeof motivo !== "string" || motivo.trim().length < 10) {
+        lancarMotivoExclusaoInvalido();
+      }
 
-    // Verificar se documento existe e pertence à prova
-    const documento = await db.query.provaDocumento.findFirst({
-      where: and(
+      const db = getDb();
+      const provaEncontrada = await this.buscarProvaParaExclusao(
+        user,
+        provaId,
+      );
+      const filtroDocumento = and(
         eq(provaDocumento.id, documentoId),
         eq(provaDocumento.provaId, provaId),
+      );
+      const documento = await db.query.provaDocumento.findFirst({
+        where: filtroDocumento,
+      });
+
+      if (!documento) {
+        throw criarErroDocumentoNaoEncontrado();
+      }
+
+      if (documento.approvedBy || documento.approvedAt) {
+        throw criarErroDocumentoAprovado();
+      }
+
+      const tipoDocumento = String(documento.tipo);
+      if (tipoDocumento === "LINK_YOUTUBE" || tipoDocumento === "YOUTUBE") {
+        throw criarErroDocumentoLink();
+      }
+
+      if (tipoDocumento !== "ARQUIVO" && tipoDocumento !== "UPLOAD") {
+        throw criarErroTipoDocumentoNaoPermitido();
+      }
+
+      const userName = await this.getUserName(user.userId);
+      const detalhes = {
+        documentoId: documento.id,
+        documentoNome: documento.fileName || "Documento sem nome",
+        documentoTipo: documento.tipo,
+        tamanhoBytes: documento.fileSize,
+        motivo: motivo.trim(),
+      };
+
+      await db.transaction(async (tx: DbTransaction) => {
+        await this.historicoService.registrar(
+          {
+            provaId,
+            userId: user.userId,
+            userName,
+            userRole: user.role,
+            acao: "DOCUMENTO_EXCLUIDO",
+            statusAnterior: null,
+            statusNovo: provaEncontrada.status,
+            detalhes,
+          },
+          tx,
+        );
+
+        const [documentoExcluido] = await tx
+          .delete(provaDocumento)
+          .where(
+            and(
+              filtroDocumento,
+              isNull(provaDocumento.approvedBy),
+              isNull(provaDocumento.approvedAt),
+            ),
+          )
+          .returning();
+
+        if (!documentoExcluido) {
+          const documentoAtual = await tx.query.provaDocumento.findFirst({
+            where: filtroDocumento,
+          });
+
+          if (documentoAtual?.approvedBy || documentoAtual?.approvedAt) {
+            throw criarErroDocumentoAprovado();
+          }
+
+          throw criarErroDocumentoNaoEncontrado();
+        }
+      });
+
+      const chaves = [documento.storageKey, documento.pdfStorageKey].filter(
+        (chave, indice, todas): chave is string =>
+          Boolean(chave) && todas.indexOf(chave) === indice,
+      );
+
+      await Promise.all(
+        chaves.map(async (chave) => {
+          try {
+            await this.storageService.deleteFile(chave);
+          } catch (error) {
+            const mensagem =
+              error instanceof Error ? error.message : String(error);
+            this.logger.warn(
+              `[removerDocumento] Falha ao remover ${chave} do storage: ${mensagem}`,
+            );
+          }
+        }),
+      );
+
+      if (documento.sharepointItemId) {
+        try {
+          await this.sharePointService.removerArquivo(
+            documento.sharepointItemId,
+          );
+        } catch (error) {
+          const mensagem =
+            error instanceof Error ? error.message : String(error);
+          this.logger.warn(
+            `[removerDocumento] Falha ao remover ${documento.sharepointItemId} do SharePoint: ${mensagem}`,
+          );
+        }
+      }
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+
+      const mensagem = error instanceof Error ? error.message : String(error);
+      this.logger.error(
+        `[removerDocumento] Falha inesperada ao excluir documento: ${mensagem}`,
+      );
+      throw criarErroFalhaExclusaoDocumento();
+    }
+  }
+
+  /**
+   * Busca a prova e valida o escopo efetivo da sessão para a exclusão.
+   * A validação é separada de getProvaById porque a visualização do próprio
+   * registro não pode ampliar a permissão de exclusão para fora do tenant.
+   */
+  private async buscarProvaParaExclusao(
+    user: UserContext,
+    provaId: string,
+  ): Promise<ProvaComDocumentos> {
+    const db = getDb();
+    const provaEncontrada = await db.query.prova.findFirst({
+      where: eq(prova.id, provaId),
+      with: {
+        user: true,
+        turma: true,
+        documentos: true,
+      },
+    });
+
+    if (!provaEncontrada) {
+      throw criarErroDocumentoNaoEncontrado();
+    }
+
+    if (user.role === "master") {
+      return this.formatProvaResponse(provaEncontrada);
+    }
+
+    if (!user.schoolId) {
+      throw criarErroPermissaoExclusaoDocumento();
+    }
+
+    const unidade = await db.query.units.findFirst({
+      where: and(
+        eq(units.id, provaEncontrada.unitId),
+        eq(units.schoolId, user.schoolId),
       ),
     });
 
-    if (!documento) {
-      throw new NotFoundException(
-        "Documento não encontrado ou não pertence à prova",
-      );
+    if (!unidade) {
+      throw criarErroPermissaoExclusaoDocumento();
     }
 
-    // Deletar documento
-    await db
-      .delete(provaDocumento)
-      .where(eq(provaDocumento.id, documentoId));
+    if (user.role === "diretora_geral") {
+      return this.formatProvaResponse(provaEncontrada);
+    }
+
+    if (provaEncontrada.unitId !== user.unitId) {
+      throw criarErroPermissaoExclusaoDocumento();
+    }
+
+    if (isCoordenadora(user.role)) {
+      const segmentosPermitidos = getSegmentosPermitidos(user.role);
+      if (segmentosPermitidos === null) {
+        return this.formatProvaResponse(provaEncontrada);
+      }
+
+      const turma = await db.query.turmas.findFirst({
+        where: eq(turmas.id, provaEncontrada.turmaId),
+        with: { stage: true },
+      });
+      const segmentoDaTurma = turma?.stage?.code ?? "";
+
+      if (!segmentosPermitidos.includes(segmentoDaTurma)) {
+        throw criarErroPermissaoExclusaoDocumento();
+      }
+
+      return this.formatProvaResponse(provaEncontrada);
+    }
+
+    if (isGestao(user.role) || isAnalista(user.role)) {
+      return this.formatProvaResponse(provaEncontrada);
+    }
+
+    if (isProfessora(user.role) && provaEncontrada.userId === user.userId) {
+      return this.formatProvaResponse(provaEncontrada);
+    }
+
+    throw criarErroPermissaoExclusaoDocumento();
   }
 
   /**

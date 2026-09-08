@@ -16,9 +16,10 @@ import {
 } from "@nestjs/common";
 import { FastifyReply, FastifyRequest } from "fastify";
 
-import { Roles } from "../../common/decorators/roles.decorator";
+import { ExactRoles, Roles } from "../../common/decorators/roles.decorator";
 import { AuthGuard } from "../../common/guards/auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
+import { ExcluirDocumentoDto } from "../../common/dto/excluir-documento.dto";
 import { SharePointService } from "../../common/sharepoint/sharepoint.service";
 import { StorageService } from "../../common/storage/storage.service";
 import {
@@ -992,18 +993,20 @@ export class ProvaController {
    * Remove documento da prova
    */
   @Delete(":id/documentos/:docId")
-  @Roles(...GESTAO_ACCESS, ...ANALISTA_ACCESS)
+  @ExactRoles()
+  @Roles(...VISUALIZAR_ACCESS)
   async deletarDocumento(
     @Param("id") provaId: string,
     @Param("docId") docId: string,
     @Req() req: { user: UserContext },
+    @Body() body: ExcluirDocumentoDto,
   ) {
-    const user = req.user;
-
-    // Verificar se prova existe e usuário tem acesso
-    await this.provaService.getProvaById(user, provaId);
-
-    await this.provaService.removerDocumento(provaId, docId);
+    await this.provaService.removerDocumento(
+      req.user,
+      provaId,
+      docId,
+      body.motivo,
+    );
 
     return {
       success: true,

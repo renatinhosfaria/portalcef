@@ -55,6 +55,7 @@ describe("ProvaController", () => {
         user: { id: usuario.userId },
       }),
       getDocumentoById: jest.fn().mockResolvedValue(documentoWord),
+      removerDocumento: jest.fn().mockResolvedValue(undefined),
       adicionarDocumentoUpload: jest.fn().mockResolvedValue(documentoWord),
       atualizarDocumento: jest.fn().mockResolvedValue(undefined),
       regerarPdfDocumento: jest.fn().mockResolvedValue({
@@ -307,5 +308,28 @@ describe("ProvaController", () => {
         pdfUrl: "https://cdn/doc-prova-1.pdf",
       }),
     });
+  });
+
+  it("deve repassar usuário e motivo ao excluir documento", async () => {
+    const { controller, provaService } = criarController();
+
+    await (controller.deletarDocumento as unknown as (
+      provaId: string,
+      docId: string,
+      req: typeof reqComUsuario,
+      body: { motivo: string },
+    ) => Promise<unknown>)(
+      "prova-1",
+      "doc-prova-1",
+      reqComUsuario,
+      { motivo: "Arquivo enviado com conteúdo incorreto" },
+    );
+
+    expect(provaService.removerDocumento).toHaveBeenCalledWith(
+      usuario,
+      "prova-1",
+      "doc-prova-1",
+      "Arquivo enviado com conteúdo incorreto",
+    );
   });
 });
