@@ -18,7 +18,13 @@ jest.mock("@essencia/db", () => ({
   users: {},
 }));
 
-import { ROLES_KEY } from "../../common/decorators/roles.decorator";
+import { ForbiddenException } from "@nestjs/common";
+import { Reflector } from "@nestjs/core";
+import {
+  EXACT_ROLES_KEY,
+  ROLES_KEY,
+} from "../../common/decorators/roles.decorator";
+import { RolesGuard } from "../../common/guards/roles.guard";
 import {
   ANALISTA_ROLES,
   COORDENADORA_ROLES,
@@ -463,6 +469,26 @@ describe("PlanoAulaController", () => {
         ...COORDENADORA_ROLES,
         ...GESTAO_ROLES,
       ]);
+    });
+
+    it("bloqueia auxiliar administrativo no guard da rota", () => {
+      const rota = PlanoAulaController.prototype.deletarDocumento;
+      const contexto = {
+        getHandler: () => rota,
+        getClass: () => PlanoAulaController,
+        switchToHttp: () => ({
+          getRequest: () => ({
+            user: {
+              ...usuario,
+              role: "auxiliar_administrativo",
+            },
+          }),
+        }),
+      } as never;
+      const guard = new RolesGuard(new Reflector());
+
+      expect(Reflect.getMetadata(EXACT_ROLES_KEY, rota)).toBe(true);
+      expect(() => guard.canActivate(contexto)).toThrow(ForbiddenException);
     });
 
     it("recebe o motivo e repassa sessão, identificadores e corpo ao service", async () => {

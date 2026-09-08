@@ -16,7 +16,7 @@ import {
 } from "@nestjs/common";
 import { FastifyReply, FastifyRequest } from "fastify";
 
-import { Roles } from "../../common/decorators/roles.decorator";
+import { ExactRoles, Roles } from "../../common/decorators/roles.decorator";
 import { AuthGuard } from "../../common/guards/auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
 import { ExcluirDocumentoDto } from "../../common/dto/excluir-documento.dto";
@@ -972,6 +972,7 @@ export class PlanoAulaController {
    */
   @Delete(":id/documentos/:docId")
   @Roles(...VISUALIZAR_ACCESS)
+  @ExactRoles()
   async deletarDocumento(
     @Param("id") planoId: string,
     @Param("docId") docId: string,

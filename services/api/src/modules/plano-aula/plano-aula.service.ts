@@ -1876,6 +1876,22 @@ export class PlanoAulaService {
     if (!(await this.planoPertenceAoEscopoDaSessao(user, plano))) {
       throw criarErroPermissaoExclusaoDocumento();
     }
+
+    const segmentosPermitidos = getSegmentosPermitidos(user.role);
+    if (!isCoordenadora(user.role) || segmentosPermitidos === null) {
+      return;
+    }
+
+    const db = getDb();
+    const turma = await db.query.turmas.findFirst({
+      where: eq(turmas.id, plano.turma.id),
+      with: { stage: true },
+    });
+
+    const segmentoDaTurma = turma?.stage?.code ?? "";
+    if (!segmentosPermitidos.includes(segmentoDaTurma)) {
+      throw criarErroPermissaoExclusaoDocumento();
+    }
   }
 
   /**

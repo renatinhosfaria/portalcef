@@ -1075,6 +1075,110 @@ describe("PlanoAulaService", () => {
       expect(mockDb.transaction).toHaveBeenCalledTimes(1);
       expect(mockTx.delete).toHaveBeenCalledTimes(2);
     });
+
+    it("bloqueia coordenadora ao excluir plano fora do seu segmento", async () => {
+      const coordenadoraInfantil = {
+        ...usuarioLogado,
+        role: "coordenadora_infantil",
+        stageId: "stage-infantil",
+      };
+      mockDb.query.turmas.findFirst.mockResolvedValue({
+        id: "turma-1",
+        stage: { code: "FUNDAMENTAL_I" },
+      });
+
+      await expect(
+        service.removerDocumento(
+          coordenadoraInfantil,
+          "plano-1",
+          "doc-1",
+          "Arquivo não pertence ao segmento da coordenadora",
+        ),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: "PERMISSAO_EXCLUSAO_DOCUMENTO",
+        }),
+      });
+
+      expect(mockDb.query.planoDocumento.findFirst).not.toHaveBeenCalled();
+      expect(mockDb.transaction).not.toHaveBeenCalled();
+    });
+
+    it("permite coordenadora ao excluir plano do seu segmento", async () => {
+      const coordenadoraInfantil = {
+        ...usuarioLogado,
+        role: "coordenadora_infantil",
+        stageId: "stage-infantil",
+      };
+      mockDb.query.turmas.findFirst.mockResolvedValue({
+        id: "turma-1",
+        stage: { code: "INFANTIL" },
+      });
+
+      await expect(
+        service.removerDocumento(
+          coordenadoraInfantil,
+          "plano-1",
+          "doc-1",
+          "Arquivo precisa ser substituído",
+        ),
+      ).resolves.toBeUndefined();
+
+      expect(mockDb.query.turmas.findFirst).toHaveBeenCalled();
+      expect(mockDb.transaction).toHaveBeenCalledTimes(1);
+    });
+
+    it("permite master global ao excluir documento", async () => {
+      const master = {
+        userId: "master-1",
+        role: "master",
+        schoolId: null,
+        unitId: null,
+        stageId: null,
+      };
+
+      await expect(
+        service.removerDocumento(
+          master,
+          "plano-1",
+          "doc-1",
+          "Arquivo removido pela administração global",
+        ),
+      ).resolves.toBeUndefined();
+
+      expect(mockDb.query.units.findFirst).not.toHaveBeenCalled();
+      expect(mockDb.transaction).toHaveBeenCalledTimes(1);
+    });
+
+    it("permite diretora geral ao excluir documento de outra unidade da mesma escola", async () => {
+      const diretora = {
+        userId: "diretora-1",
+        role: "diretora_geral",
+        schoolId: "school-1",
+        unitId: null,
+        stageId: null,
+      };
+      jest.spyOn(service, "getPlanoById").mockResolvedValueOnce({
+        ...planoComAcesso,
+        unitId: "unit-2",
+      } as never);
+      mockDb.query.units.findFirst.mockResolvedValue({
+        id: "unit-2",
+        schoolId: "school-1",
+      });
+
+      await expect(
+        service.removerDocumento(
+          diretora,
+          "plano-1",
+          "doc-1",
+          "Arquivo removido pela direção da escola",
+        ),
+      ).resolves.toBeUndefined();
+
+      expect(mockDb.query.units.findFirst).toHaveBeenCalled();
+      expect(mockDb.transaction).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe("acesso ao plano por escopo", () => {
