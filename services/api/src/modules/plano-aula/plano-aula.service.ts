@@ -1,5 +1,6 @@
 import {
   Injectable,
+  HttpException,
   Logger,
   NotFoundException,
   BadRequestException,
@@ -10,6 +11,7 @@ import {
   getDb,
   and,
   eq,
+  isNull,
   or,
   ne,
   desc,
@@ -37,6 +39,7 @@ import {
   criarErroDocumentoAprovado,
   criarErroDocumentoLink,
   criarErroDocumentoNaoEncontrado,
+  criarErroFalhaExclusaoDocumento,
   criarErroPermissaoExclusaoDocumento,
   lancarMotivoExclusaoInvalido,
 } from "../../common/documento-exclusao";
@@ -1693,12 +1696,14 @@ export class PlanoAulaService {
       throw error;
     }
 
+    const filtroDocumento = and(
+      eq(planoDocumento.id, documentoId),
+      eq(planoDocumento.planoId, planoId),
+    );
+
     // Verificar se documento existe e pertence ao plano
     const documento = await db.query.planoDocumento.findFirst({
-      where: and(
-        eq(planoDocumento.id, documentoId),
-        eq(planoDocumento.planoId, planoId),
-      ),
+      where: filtroDocumento,
     });
 
     if (!documento) {
@@ -1710,10 +1715,7 @@ export class PlanoAulaService {
     }
 
     const tipoDocumento = String(documento.tipo);
-    const ehLink =
-      tipoDocumento === "LINK_YOUTUBE" ||
-      tipoDocumento === "YOUTUBE" ||
-      !documento.storageKey;
+    const ehLink = tipoDocumento === "LINK_YOUTUBE" || tipoDocumento === "YOUTUBE";
 
     if (ehLink) {
       throw criarErroDocumentoLink();
@@ -1728,27 +1730,60 @@ export class PlanoAulaService {
       motivo: motivo.trim(),
     };
 
-    await db.transaction(async (tx: DbTransaction) => {
-      await this.historicoService.registrar(
-        {
-          planoId,
-          userId: user.userId,
-          userName,
-          userRole: user.role,
-          acao: "DOCUMENTO_EXCLUIDO",
-          statusAnterior: null,
-          statusNovo: plano.status,
-          detalhes,
-        },
-        tx,
+    try {
+      await db.transaction(async (tx: DbTransaction) => {
+        const [documentoExcluido] = await tx
+          .delete(planoDocumento)
+          .where(
+            and(
+              filtroDocumento,
+              isNull(planoDocumento.approvedBy),
+              isNull(planoDocumento.approvedAt),
+            ),
+          )
+          .returning();
+
+        if (!documentoExcluido) {
+          const documentoAtual = await tx.query.planoDocumento.findFirst({
+            where: filtroDocumento,
+          });
+
+          if (documentoAtual?.approvedBy || documentoAtual?.approvedAt) {
+            throw criarErroDocumentoAprovado();
+          }
+
+          throw criarErroDocumentoNaoEncontrado();
+        }
+
+        await tx
+          .delete(documentoComentario)
+          .where(eq(documentoComentario.documentoId, documentoId));
+
+        await this.historicoService.registrar(
+          {
+            planoId,
+            userId: user.userId,
+            userName,
+            userRole: user.role,
+            acao: "DOCUMENTO_EXCLUIDO",
+            statusAnterior: null,
+            statusNovo: plano.status,
+            detalhes,
+          },
+          tx,
+        );
+      });
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+
+      const mensagem = error instanceof Error ? error.message : String(error);
+      this.logger.error(
+        `[removerDocumento] Falha na transação de exclusão: ${mensagem}`,
       );
-
-      await tx
-        .delete(documentoComentario)
-        .where(eq(documentoComentario.documentoId, documentoId));
-
-      await tx.delete(planoDocumento).where(eq(planoDocumento.id, documentoId));
-    });
+      throw criarErroFalhaExclusaoDocumento();
+    }
 
     const chaves = [documento.storageKey, documento.pdfStorageKey].filter(
       (chave, indice, todas): chave is string =>

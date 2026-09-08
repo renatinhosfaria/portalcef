@@ -6,12 +6,16 @@ import { Test, TestingModule } from "@nestjs/testing";
 
 import { PdfGeneratorService } from "../../common/sharepoint/pdf-generator.service";
 import { StorageService } from "../../common/storage/storage.service";
+import { isNull } from "@essencia/db";
 import { PlanoAulaHistoricoService } from "./plano-aula-historico.service";
 import { PlanoAulaPdfQueueService } from "./plano-aula-pdf-queue.service";
 import { PlanoAulaService } from "./plano-aula.service";
 
 const mockTx = {
   query: {
+    planoDocumento: {
+      findFirst: jest.fn(),
+    },
     planoAula: {
       findMany: jest.fn(),
     },
@@ -66,11 +70,15 @@ jest.mock("@essencia/db", () => ({
   lte: jest.fn(),
   inArray: jest.fn(),
   isNotNull: jest.fn(),
+  isNull: jest.fn(),
   ne: jest.fn(),
   planoAula: {},
   planoAulaPeriodo: {},
   planoAulaHistorico: {},
-  planoDocumento: {},
+  planoDocumento: {
+    approvedBy: "planoDocumento.approvedBy",
+    approvedAt: "planoDocumento.approvedAt",
+  },
   documentoComentario: {},
   quinzenaConfig: {},
   turmas: {},
@@ -569,6 +577,7 @@ describe("PlanoAulaService", () => {
       });
       historicoServiceMock.registrar.mockResolvedValue({});
       mockDb.transaction.mockImplementation(async (callback) => callback(mockTx));
+      mockTx.returning.mockResolvedValue([documentoUpload]);
     });
 
     it("rejeita motivo inválido antes de consultar o documento", async () => {
@@ -721,6 +730,101 @@ describe("PlanoAulaService", () => {
       );
       expect(storageServiceMock.deleteFile).toHaveBeenCalledWith(
         "planos/doc-1.pdf",
+      );
+    });
+
+    it.each(["ARQUIVO", "UPLOAD"] as const)(
+      "remove upload %s mesmo sem storageKey quando existe PDF derivado",
+      async (tipo) => {
+        mockDb.query.planoDocumento.findFirst.mockResolvedValue({
+          ...documentoUpload,
+          tipo,
+          storageKey: null,
+          pdfStorageKey: "planos/doc-1.pdf",
+        });
+
+        await expect(
+          service.removerDocumento(
+            usuarioLogado,
+            "plano-1",
+            "doc-1",
+            "Arquivo original indisponível, remover registro",
+          ),
+        ).resolves.toBeUndefined();
+
+        expect(storageServiceMock.deleteFile).toHaveBeenCalledTimes(1);
+        expect(storageServiceMock.deleteFile).toHaveBeenCalledWith(
+          "planos/doc-1.pdf",
+        );
+        expect(historicoServiceMock.registrar).toHaveBeenCalledWith(
+          expect.objectContaining({
+            detalhes: expect.objectContaining({ documentoTipo: tipo }),
+          }),
+          mockTx,
+        );
+      },
+    );
+
+    it("retorna erro de documento aprovado quando a aprovação ocorre antes do DELETE", async () => {
+      mockTx.returning.mockResolvedValueOnce([]);
+      mockTx.query.planoDocumento.findFirst.mockResolvedValue({
+        ...documentoUpload,
+        approvedBy: "analista-2",
+        approvedAt: new Date("2026-06-01T12:00:00.000Z"),
+      });
+
+      await expect(
+        service.removerDocumento(
+          usuarioLogado,
+          "plano-1",
+          "doc-1",
+          "Arquivo aprovado durante a tentativa de exclusão",
+        ),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: "DOCUMENTO_APROVADO",
+          message: "Este arquivo já foi aprovado e não pode ser excluído.",
+        }),
+      });
+
+      expect(mockTx.returning).toHaveBeenCalledTimes(1);
+      expect(isNull).toHaveBeenNthCalledWith(
+        1,
+        "planoDocumento.approvedBy",
+      );
+      expect(isNull).toHaveBeenNthCalledWith(
+        2,
+        "planoDocumento.approvedAt",
+      );
+      expect(historicoServiceMock.registrar).not.toHaveBeenCalled();
+      expect(mockTx.delete).toHaveBeenCalledTimes(1);
+      expect(storageServiceMock.deleteFile).not.toHaveBeenCalled();
+    });
+
+    it("não expõe detalhes quando a transação falha inesperadamente", async () => {
+      mockDb.transaction.mockRejectedValueOnce(
+        new Error("detalhe interno que não deve chegar ao usuário"),
+      );
+
+      const erro = await service
+        .removerDocumento(
+          usuarioLogado,
+          "plano-1",
+          "doc-1",
+          "Falha inesperada durante a exclusão",
+        )
+        .catch((erro: unknown) => erro);
+
+      expect(erro).toMatchObject({
+        response: expect.objectContaining({
+          code: "FALHA_EXCLUSAO_DOCUMENTO",
+          message:
+            "Não foi possível excluir o arquivo agora. Tente novamente. Se o problema continuar, procure o suporte.",
+        }),
+      });
+      expect(erro).not.toHaveProperty(
+        "message",
+        expect.stringContaining("detalhe interno que não deve chegar ao usuário"),
       );
     });
 

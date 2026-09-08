@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ForbiddenException,
+  InternalServerErrorException,
   NotFoundException,
 } from "@nestjs/common";
 
@@ -26,6 +27,8 @@ export const MENSAGEM_PERMISSAO_EXCLUSAO_DOCUMENTO =
   "Você não tem permissão para excluir este arquivo.";
 export const MENSAGEM_DOCUMENTO_NAO_ENCONTRADO =
   "Este arquivo não foi encontrado. Atualize a página e tente novamente.";
+export const MENSAGEM_FALHA_EXCLUSAO_DOCUMENTO =
+  "Não foi possível excluir o arquivo agora. Tente novamente. Se o problema continuar, procure o suporte.";
 
 export function criarErroMotivoExclusaoInvalido(): BadRequestException {
   return new BadRequestException({
@@ -63,5 +66,12 @@ export function criarErroDocumentoNaoEncontrado(): NotFoundException {
   return new NotFoundException({
     code: CODIGOS_ERRO_EXCLUSAO_DOCUMENTO.DOCUMENTO_NAO_ENCONTRADO,
     message: MENSAGEM_DOCUMENTO_NAO_ENCONTRADO,
+  });
+}
+
+export function criarErroFalhaExclusaoDocumento(): InternalServerErrorException {
+  return new InternalServerErrorException({
+    code: CODIGOS_ERRO_EXCLUSAO_DOCUMENTO.FALHA,
+    message: MENSAGEM_FALHA_EXCLUSAO_DOCUMENTO,
   });
 }
