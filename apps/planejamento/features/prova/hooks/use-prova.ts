@@ -27,7 +27,11 @@ interface UseProvaReturn {
   getProva: (id: string) => Promise<Prova>;
   uploadDocumento: (provaId: string, file: File) => Promise<ProvaDocumento>;
   addLink: (provaId: string, url: string) => Promise<ProvaDocumento>;
-  deleteDocumento: (provaId: string, docId: string) => Promise<void>;
+  deleteDocumento: (
+    provaId: string,
+    docId: string,
+    motivo: string,
+  ) => Promise<void>;
   aprovarDocumento: (documentoId: string) => Promise<ProvaDocumento>;
   desaprovarDocumento: (documentoId: string) => Promise<ProvaDocumento>;
   regerarPdfDocumento: (documentoId: string) => Promise<ProvaDocumento>;
@@ -145,11 +149,17 @@ export function useProva(): UseProvaReturn {
   );
 
   const deleteDocumento = useCallback(
-    async (provaId: string, docId: string): Promise<void> => {
+    async (
+      provaId: string,
+      docId: string,
+      motivo: string,
+    ): Promise<void> => {
       setLoading(true);
       setError(null);
       try {
-        await api.delete(`/prova/${provaId}/documentos/${docId}`);
+        await api.delete(`/prova/${provaId}/documentos/${docId}`, {
+          body: { motivo },
+        });
       } catch (err) {
         const message = obterMensagemErro(
           err,
