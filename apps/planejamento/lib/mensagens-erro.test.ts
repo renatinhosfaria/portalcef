@@ -66,4 +66,38 @@ describe("mensagens de erro amigáveis", () => {
       ),
     ).toBe("Selecione pelo menos um documento antes de enviar.");
   });
+
+  it.each([
+    [
+      "MOTIVO_EXCLUSAO_INVALIDO",
+      "Informe o motivo da exclusão com pelo menos 10 caracteres.",
+    ],
+    [
+      "DOCUMENTO_APROVADO",
+      "Este arquivo já foi aprovado e não pode ser excluído.",
+    ],
+    [
+      "DOCUMENTO_LINK",
+      "Links do YouTube não podem ser excluídos por esta opção.",
+    ],
+    [
+      "PERMISSAO_EXCLUSAO_DOCUMENTO",
+      "Você não tem permissão para excluir este arquivo.",
+    ],
+    [
+      "DOCUMENTO_NAO_ENCONTRADO",
+      "Este arquivo não foi encontrado. Atualize a página e tente novamente.",
+    ],
+    [
+      "FALHA_EXCLUSAO_DOCUMENTO",
+      "Não foi possível excluir o arquivo agora. Tente novamente. Se o problema continuar, procure o suporte.",
+    ],
+  ])("converte %s em mensagem clara", (codigo, mensagemEsperada) => {
+    expect(
+      obterMensagemErro({
+        status: 400,
+        error: { code: codigo, message: "Mensagem técnica interna" },
+      }),
+    ).toBe(mensagemEsperada);
+  });
 });

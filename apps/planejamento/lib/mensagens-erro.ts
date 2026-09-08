@@ -3,6 +3,18 @@ type ObjetoErro = Record<string, unknown>;
 const MENSAGEM_DOCUMENTO_INDISPONIVEL =
   "Não conseguimos abrir esse documento agora. Tente abrir novamente em alguns instantes.";
 const LIMITE_UPLOAD_ARQUIVO_MB = 500;
+const MENSAGENS_ERRO_EXCLUSAO_DOCUMENTO: Record<string, string> = {
+  motivo_exclusao_invalido:
+    "Informe o motivo da exclusão com pelo menos 10 caracteres.",
+  documento_aprovado: "Este arquivo já foi aprovado e não pode ser excluído.",
+  documento_link: "Links do YouTube não podem ser excluídos por esta opção.",
+  permissao_exclusao_documento:
+    "Você não tem permissão para excluir este arquivo.",
+  documento_nao_encontrado:
+    "Este arquivo não foi encontrado. Atualize a página e tente novamente.",
+  falha_exclusao_documento:
+    "Não foi possível excluir o arquivo agora. Tente novamente. Se o problema continuar, procure o suporte.",
+};
 
 function isObjeto(valor: unknown): valor is ObjetoErro {
   return typeof valor === "object" && valor !== null;
@@ -104,6 +116,9 @@ export function obterMensagemErro(
   const { status, codigo, mensagem } = extrairDadosErro(erro);
   const codigoNormalizado = codigo?.toLowerCase() ?? "";
   const mensagemNormalizada = mensagem?.toLowerCase() ?? "";
+
+  const mensagemExclusao = MENSAGENS_ERRO_EXCLUSAO_DOCUMENTO[codigoNormalizado];
+  if (mensagemExclusao) return mensagemExclusao;
 
   if (
     codigoNormalizado === "itemnotfound" ||

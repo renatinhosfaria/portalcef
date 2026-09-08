@@ -22,6 +22,7 @@ export const provaHistoricoAcaoEnum = [
   "APROVADO_ANALISTA",
   "DEVOLVIDO_ANALISTA",
   "DOCUMENTO_IMPRESSO",
+  "DOCUMENTO_EXCLUIDO",
   "RECUPERADO",
   "COMENTARIO_ADICIONADO",
 ] as const;
