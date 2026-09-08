@@ -25,6 +25,7 @@ import {
   documentoComentario,
   planoAulaPeriodo,
   turmas,
+  units,
   users,
   type PlanoAula,
   type PlanoDocumento,
@@ -93,6 +94,7 @@ export interface UserContext {
  * Plano com documentos e comentários (resposta completa)
  */
 export interface PlanoComDocumentos extends PlanoAula {
+  unitId: string;
   status: PlanoAulaStatus;
   documentos: Array<
     PlanoDocumento & {
@@ -1700,6 +1702,8 @@ export class PlanoAulaService {
         throw error;
       }
 
+      await this.validarEscopoExclusao(user, plano);
+
       const filtroDocumento = and(
         eq(planoDocumento.id, documentoId),
         eq(planoDocumento.planoId, planoId),
@@ -1743,6 +1747,20 @@ export class PlanoAulaService {
 
       try {
         await db.transaction(async (tx: DbTransaction) => {
+          await this.historicoService.registrar(
+            {
+              planoId,
+              userId: user.userId,
+              userName,
+              userRole: user.role,
+              acao: "DOCUMENTO_EXCLUIDO",
+              statusAnterior: null,
+              statusNovo: plano.status,
+              detalhes,
+            },
+            tx,
+          );
+
           const [documentoExcluido] = await tx
             .delete(planoDocumento)
             .where(
@@ -1769,20 +1787,6 @@ export class PlanoAulaService {
           await tx
             .delete(documentoComentario)
             .where(eq(documentoComentario.documentoId, documentoId));
-
-          await this.historicoService.registrar(
-            {
-              planoId,
-              userId: user.userId,
-              userName,
-              userRole: user.role,
-              acao: "DOCUMENTO_EXCLUIDO",
-              statusAnterior: null,
-              statusNovo: plano.status,
-              detalhes,
-            },
-            tx,
-          );
         });
       } catch (error) {
         if (error instanceof HttpException) {
@@ -1815,6 +1819,9 @@ export class PlanoAulaService {
       );
 
       if (documento.sharepointItemId) {
+        // A transação local já foi confirmada. A limpeza no SharePoint é
+        // best-effort: falhas externas são apenas registradas e não impedem
+        // a remoção local do documento.
         try {
           await this.sharePointService.removerArquivo(documento.sharepointItemId);
         } catch (error) {
@@ -1834,6 +1841,38 @@ export class PlanoAulaService {
         `[removerDocumento] Falha inesperada ao excluir documento: ${mensagem}`,
       );
       throw criarErroFalhaExclusaoDocumento();
+    }
+  }
+
+  /**
+   * Valida o tenant específico da exclusão sem alterar as regras gerais de
+   * visualização, que permitem ao proprietário consultar o próprio plano.
+   */
+  private async validarEscopoExclusao(
+    user: UserContext,
+    plano: PlanoComDocumentos,
+  ): Promise<void> {
+    if (user.role === "master") {
+      return;
+    }
+
+    if (!user.schoolId) {
+      throw criarErroPermissaoExclusaoDocumento();
+    }
+
+    // Diretora geral tem escopo de escola; os demais perfis ficam limitados à
+    // unidade da sessão, inclusive quando são proprietários do plano.
+    if (user.role !== "diretora_geral" && plano.unitId !== user.unitId) {
+      throw criarErroPermissaoExclusaoDocumento();
+    }
+
+    const db = getDb();
+    const unidade = await db.query.units.findFirst({
+      where: and(eq(units.id, plano.unitId), eq(units.schoolId, user.schoolId)),
+    });
+
+    if (!unidade) {
+      throw criarErroPermissaoExclusaoDocumento();
     }
   }
 

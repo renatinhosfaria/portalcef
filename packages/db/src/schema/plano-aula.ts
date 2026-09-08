@@ -35,7 +35,12 @@ export type PlanoAulaStatus = (typeof planoAulaStatusEnum)[number];
 // ============================================
 // Documento Tipo Enum
 // ============================================
-export const documentoTipoEnum = ["ARQUIVO", "LINK_YOUTUBE"] as const;
+export const documentoTipoEnum = [
+  "ARQUIVO",
+  "UPLOAD",
+  "LINK_YOUTUBE",
+  "YOUTUBE",
+] as const;
 export type DocumentoTipo = (typeof documentoTipoEnum)[number];
 
 // ============================================
@@ -135,8 +140,8 @@ export const planoDocumento = pgTable(
     tipo: text("tipo", { enum: documentoTipoEnum }).notNull(),
 
     // Dados do arquivo/link
-    storageKey: varchar("storage_key", { length: 500 }), // Key no storage (para ARQUIVO)
-    url: varchar("url", { length: 1000 }), // URL completa (para LINK_YOUTUBE ou URL pública do arquivo)
+    storageKey: varchar("storage_key", { length: 500 }), // Key no storage (para ARQUIVO/UPLOAD)
+    url: varchar("url", { length: 1000 }), // URL completa (para LINK_YOUTUBE/YOUTUBE ou URL pública do arquivo)
     fileName: varchar("file_name", { length: 255 }), // Nome original do arquivo
     fileSize: integer("file_size"), // Tamanho em bytes
     mimeType: varchar("mime_type", { length: 100 }), // Tipo MIME do arquivo

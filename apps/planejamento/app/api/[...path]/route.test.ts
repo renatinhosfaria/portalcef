@@ -112,6 +112,41 @@ describe("proxy da API do planejamento", () => {
     expect(opcoes?.body).toBeDefined();
   });
 
+  it("encaminha integralmente o conteúdo multipart de uma exclusão DELETE", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      Response.json({ success: true }, { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const formulario = new FormData();
+    formulario.append(
+      "arquivo",
+      new File(["conteudo-delete"], "arquivo.txt", {
+        type: "text/plain",
+      }),
+    );
+    const request = new NextRequest(
+      "http://localhost/api/plano-aula/plano-1/documentos/doc-1",
+      {
+        method: "DELETE",
+        body: formulario,
+      },
+    );
+
+    await DELETE(request);
+
+    const opcoes = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    const corpoEncaminhado = await new Response(
+      opcoes?.body as ReadableStream<Uint8Array>,
+    ).text();
+
+    expect(corpoEncaminhado).toContain('name="arquivo"');
+    expect(corpoEncaminhado).toContain("conteudo-delete");
+    expect(
+      (opcoes?.headers as Record<string, string> | undefined)?.["Content-Type"],
+    ).toMatch(/^multipart\/form-data; boundary=/);
+  });
+
   it("preserva respostas binarias do backend sem converter para JSON", async () => {
     const conteudo = new Uint8Array([80, 75, 3, 4, 20, 0]);
     const fetchMock = vi.fn().mockResolvedValue(

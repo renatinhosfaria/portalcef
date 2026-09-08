@@ -7,7 +7,7 @@ import { Test, TestingModule } from "@nestjs/testing";
 import { PdfGeneratorService } from "../../common/sharepoint/pdf-generator.service";
 import { SharePointService } from "../../common/sharepoint/sharepoint.service";
 import { StorageService } from "../../common/storage/storage.service";
-import { isNull } from "@essencia/db";
+import { isNull, type DocumentoTipo } from "@essencia/db";
 import { PlanoAulaHistoricoService } from "./plano-aula-historico.service";
 import { PlanoAulaPdfQueueService } from "./plano-aula-pdf-queue.service";
 import { PlanoAulaService } from "./plano-aula.service";
@@ -45,6 +45,9 @@ const mockDb = {
       findFirst: jest.fn(),
       findMany: jest.fn(),
     },
+    units: {
+      findFirst: jest.fn(),
+    },
     planoAulaPeriodo: {
       findFirst: jest.fn(),
     },
@@ -81,6 +84,7 @@ jest.mock("@essencia/db", () => ({
     approvedAt: "planoDocumento.approvedAt",
   },
   documentoComentario: {},
+  units: {},
   quinzenaConfig: {},
   turmas: {},
   users: {},
@@ -570,6 +574,7 @@ describe("PlanoAulaService", () => {
     };
     const planoComAcesso = {
       id: "plano-1",
+      unitId: "unit-1",
       status: "RASCUNHO",
       user: { id: "autora-1", name: "Professora Autora" },
       turma: { id: "turma-1", name: "Turma 1", code: "T1", stageId: "stage-1" },
@@ -579,6 +584,10 @@ describe("PlanoAulaService", () => {
     beforeEach(() => {
       jest.spyOn(service, "getPlanoById").mockResolvedValue(planoComAcesso as never);
       mockDb.query.planoDocumento.findFirst.mockResolvedValue(documentoUpload);
+      mockDb.query.units.findFirst.mockResolvedValue({
+        id: "unit-1",
+        schoolId: "school-1",
+      });
       mockDb.query.users.findFirst.mockResolvedValue({
         id: usuarioLogado.userId,
         name: "Analista Responsável",
@@ -586,6 +595,22 @@ describe("PlanoAulaService", () => {
       historicoServiceMock.registrar.mockResolvedValue({});
       mockDb.transaction.mockImplementation(async (callback) => callback(mockTx));
       mockTx.returning.mockResolvedValue([documentoUpload]);
+    });
+
+    it("mantém no contrato os tipos legados e canônicos de documento", () => {
+      const tiposAceitosPeloBanco: DocumentoTipo[] = [
+        "ARQUIVO",
+        "UPLOAD",
+        "LINK_YOUTUBE",
+        "YOUTUBE",
+      ];
+
+      expect(tiposAceitosPeloBanco).toEqual([
+        "ARQUIVO",
+        "UPLOAD",
+        "LINK_YOUTUBE",
+        "YOUTUBE",
+      ]);
     });
 
     it("rejeita motivo inválido antes de consultar o documento", async () => {
@@ -722,6 +747,39 @@ describe("PlanoAulaService", () => {
           "Tentativa de exclusão sem acesso",
         ),
       ).rejects.toBeInstanceOf(ForbiddenException);
+
+      expect(mockDb.query.planoDocumento.findFirst).not.toHaveBeenCalled();
+      expect(mockDb.transaction).not.toHaveBeenCalled();
+      expect(storageServiceMock.deleteFile).not.toHaveBeenCalled();
+    });
+
+    it("bloqueia proprietário que está fora da unidade da sessão", async () => {
+      const proprietariaForaDaUnidade = {
+        ...usuarioLogado,
+        userId: "autora-1",
+        role: "professora",
+      };
+      jest
+        .spyOn(service, "getPlanoById")
+        .mockResolvedValueOnce({
+          ...planoComAcesso,
+          unitId: "unit-2",
+          user: { id: proprietariaForaDaUnidade.userId, name: "Professora Autora" },
+        } as never);
+
+      await expect(
+        service.removerDocumento(
+          proprietariaForaDaUnidade,
+          "plano-fora-da-unidade",
+          "doc-1",
+          "Tentativa de exclusão fora da unidade",
+        ),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: "PERMISSAO_EXCLUSAO_DOCUMENTO",
+          message: "Você não tem permissão para excluir este arquivo.",
+        }),
+      });
 
       expect(mockDb.query.planoDocumento.findFirst).not.toHaveBeenCalled();
       expect(mockDb.transaction).not.toHaveBeenCalled();
@@ -936,7 +994,9 @@ describe("PlanoAulaService", () => {
         2,
         "planoDocumento.approvedAt",
       );
-      expect(historicoServiceMock.registrar).not.toHaveBeenCalled();
+      // O histórico é tentado antes do DELETE, mas a transação é revertida
+      // quando a aprovação concorrente é detectada.
+      expect(historicoServiceMock.registrar).toHaveBeenCalled();
       expect(mockTx.delete).toHaveBeenCalledTimes(1);
       expect(storageServiceMock.deleteFile).not.toHaveBeenCalled();
     });
@@ -992,6 +1052,11 @@ describe("PlanoAulaService", () => {
 
       expect(mockDb.transaction).toHaveBeenCalledTimes(1);
       expect(historicoServiceMock.registrar).toHaveBeenCalled();
+      const transacao = mockDb.transaction.mock.results[0]?.value as
+        | Promise<unknown>
+        | undefined;
+      await expect(transacao).rejects.toThrow("falha ao registrar histórico");
+      expect(mockTx.delete).not.toHaveBeenCalled();
       expect(storageServiceMock.deleteFile).not.toHaveBeenCalled();
       expect(sharePointServiceMock.removerArquivo).not.toHaveBeenCalled();
     });
