@@ -695,6 +695,87 @@ describe("PlanoAulaService", () => {
       expect(storageServiceMock.deleteFile).not.toHaveBeenCalled();
     });
 
+    it("não expõe detalhes técnicos quando a validação de acesso falha inesperadamente", async () => {
+      jest
+        .spyOn(service, "getPlanoById")
+        .mockRejectedValueOnce(new Error("falha técnica ao consultar o plano"));
+
+      const erro = await service
+        .removerDocumento(
+          usuarioLogado,
+          "plano-1",
+          "doc-1",
+          "Falha inesperada durante a validação",
+        )
+        .catch((erro: unknown) => erro);
+
+      expect(erro).toMatchObject({
+        response: expect.objectContaining({
+          code: "FALHA_EXCLUSAO_DOCUMENTO",
+          message:
+            "Não foi possível excluir o arquivo agora. Tente novamente. Se o problema continuar, procure o suporte.",
+        }),
+      });
+      expect(erro).not.toHaveProperty(
+        "message",
+        expect.stringContaining("falha técnica ao consultar o plano"),
+      );
+    });
+
+    it("não expõe detalhes técnicos quando a busca do documento falha inesperadamente", async () => {
+      mockDb.query.planoDocumento.findFirst.mockRejectedValueOnce(
+        new Error("falha técnica ao consultar o documento"),
+      );
+
+      const erro = await service
+        .removerDocumento(
+          usuarioLogado,
+          "plano-1",
+          "doc-1",
+          "Falha inesperada durante a busca",
+        )
+        .catch((erro: unknown) => erro);
+
+      expect(erro).toMatchObject({
+        response: expect.objectContaining({
+          code: "FALHA_EXCLUSAO_DOCUMENTO",
+          message:
+            "Não foi possível excluir o arquivo agora. Tente novamente. Se o problema continuar, procure o suporte.",
+        }),
+      });
+      expect(erro).not.toHaveProperty(
+        "message",
+        expect.stringContaining("falha técnica ao consultar o documento"),
+      );
+    });
+
+    it("não expõe detalhes técnicos quando a identificação do usuário falha inesperadamente", async () => {
+      mockDb.query.users.findFirst.mockRejectedValueOnce(
+        new Error("falha técnica ao consultar o usuário"),
+      );
+
+      const erro = await service
+        .removerDocumento(
+          usuarioLogado,
+          "plano-1",
+          "doc-1",
+          "Falha inesperada durante a identificação",
+        )
+        .catch((erro: unknown) => erro);
+
+      expect(erro).toMatchObject({
+        response: expect.objectContaining({
+          code: "FALHA_EXCLUSAO_DOCUMENTO",
+          message:
+            "Não foi possível excluir o arquivo agora. Tente novamente. Se o problema continuar, procure o suporte.",
+        }),
+      });
+      expect(erro).not.toHaveProperty(
+        "message",
+        expect.stringContaining("falha técnica ao consultar o usuário"),
+      );
+    });
+
     it("remove documento, comentários e arquivos, registrando histórico com metadados", async () => {
       const resultado = await service.removerDocumento(
         usuarioLogado,

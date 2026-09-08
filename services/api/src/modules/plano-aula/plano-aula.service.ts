@@ -1677,102 +1677,133 @@ export class PlanoAulaService {
     documentoId: string,
     motivo: string,
   ): Promise<void> {
-    if (typeof motivo !== "string" || motivo.trim().length < 10) {
-      lancarMotivoExclusaoInvalido();
-    }
-
-    const db = getDb();
-
-    let plano: PlanoComDocumentos;
     try {
-      plano = await this.getPlanoById(user, planoId);
-    } catch (error) {
-      if (error instanceof ForbiddenException) {
-        throw criarErroPermissaoExclusaoDocumento();
+      if (typeof motivo !== "string" || motivo.trim().length < 10) {
+        lancarMotivoExclusaoInvalido();
       }
-      if (error instanceof NotFoundException) {
-        throw criarErroDocumentoNaoEncontrado();
-      }
-      throw error;
-    }
 
-    const filtroDocumento = and(
-      eq(planoDocumento.id, documentoId),
-      eq(planoDocumento.planoId, planoId),
-    );
+      const db = getDb();
 
-    // Verificar se documento existe e pertence ao plano
-    const documento = await db.query.planoDocumento.findFirst({
-      where: filtroDocumento,
-    });
-
-    if (!documento) {
-      throw criarErroDocumentoNaoEncontrado();
-    }
-
-    if (documento.approvedBy || documento.approvedAt) {
-      throw criarErroDocumentoAprovado();
-    }
-
-    const tipoDocumento = String(documento.tipo);
-    const ehLink = tipoDocumento === "LINK_YOUTUBE" || tipoDocumento === "YOUTUBE";
-
-    if (ehLink) {
-      throw criarErroDocumentoLink();
-    }
-
-    const userName = await this.getUserName(user.userId);
-    const detalhes = {
-      documentoId: documento.id,
-      documentoNome: documento.fileName || "Documento sem nome",
-      documentoTipo: documento.tipo,
-      tamanhoBytes: documento.fileSize,
-      motivo: motivo.trim(),
-    };
-
-    try {
-      await db.transaction(async (tx: DbTransaction) => {
-        const [documentoExcluido] = await tx
-          .delete(planoDocumento)
-          .where(
-            and(
-              filtroDocumento,
-              isNull(planoDocumento.approvedBy),
-              isNull(planoDocumento.approvedAt),
-            ),
-          )
-          .returning();
-
-        if (!documentoExcluido) {
-          const documentoAtual = await tx.query.planoDocumento.findFirst({
-            where: filtroDocumento,
-          });
-
-          if (documentoAtual?.approvedBy || documentoAtual?.approvedAt) {
-            throw criarErroDocumentoAprovado();
-          }
-
+      let plano: PlanoComDocumentos;
+      try {
+        plano = await this.getPlanoById(user, planoId);
+      } catch (error) {
+        if (error instanceof ForbiddenException) {
+          throw criarErroPermissaoExclusaoDocumento();
+        }
+        if (error instanceof NotFoundException) {
           throw criarErroDocumentoNaoEncontrado();
         }
+        throw error;
+      }
 
-        await tx
-          .delete(documentoComentario)
-          .where(eq(documentoComentario.documentoId, documentoId));
+      const filtroDocumento = and(
+        eq(planoDocumento.id, documentoId),
+        eq(planoDocumento.planoId, planoId),
+      );
 
-        await this.historicoService.registrar(
-          {
-            planoId,
-            userId: user.userId,
-            userName,
-            userRole: user.role,
-            acao: "DOCUMENTO_EXCLUIDO",
-            statusAnterior: null,
-            statusNovo: plano.status,
-            detalhes,
-          },
-          tx,
-        );
+      // Verificar se documento existe e pertence ao plano
+      const documento = await db.query.planoDocumento.findFirst({
+        where: filtroDocumento,
       });
+
+      if (!documento) {
+        throw criarErroDocumentoNaoEncontrado();
+      }
+
+      if (documento.approvedBy || documento.approvedAt) {
+        throw criarErroDocumentoAprovado();
+      }
+
+      const tipoDocumento = String(documento.tipo);
+      const ehLink =
+        tipoDocumento === "LINK_YOUTUBE" || tipoDocumento === "YOUTUBE";
+
+      if (ehLink) {
+        throw criarErroDocumentoLink();
+      }
+
+      const userName = await this.getUserName(user.userId);
+      const detalhes = {
+        documentoId: documento.id,
+        documentoNome: documento.fileName || "Documento sem nome",
+        documentoTipo: documento.tipo,
+        tamanhoBytes: documento.fileSize,
+        motivo: motivo.trim(),
+      };
+
+      try {
+        await db.transaction(async (tx: DbTransaction) => {
+          const [documentoExcluido] = await tx
+            .delete(planoDocumento)
+            .where(
+              and(
+                filtroDocumento,
+                isNull(planoDocumento.approvedBy),
+                isNull(planoDocumento.approvedAt),
+              ),
+            )
+            .returning();
+
+          if (!documentoExcluido) {
+            const documentoAtual = await tx.query.planoDocumento.findFirst({
+              where: filtroDocumento,
+            });
+
+            if (documentoAtual?.approvedBy || documentoAtual?.approvedAt) {
+              throw criarErroDocumentoAprovado();
+            }
+
+            throw criarErroDocumentoNaoEncontrado();
+          }
+
+          await tx
+            .delete(documentoComentario)
+            .where(eq(documentoComentario.documentoId, documentoId));
+
+          await this.historicoService.registrar(
+            {
+              planoId,
+              userId: user.userId,
+              userName,
+              userRole: user.role,
+              acao: "DOCUMENTO_EXCLUIDO",
+              statusAnterior: null,
+              statusNovo: plano.status,
+              detalhes,
+            },
+            tx,
+          );
+        });
+      } catch (error) {
+        if (error instanceof HttpException) {
+          throw error;
+        }
+
+        const mensagem = error instanceof Error ? error.message : String(error);
+        this.logger.error(
+          `[removerDocumento] Falha na transação de exclusão: ${mensagem}`,
+        );
+        throw criarErroFalhaExclusaoDocumento();
+      }
+
+      const chaves = [documento.storageKey, documento.pdfStorageKey].filter(
+        (chave, indice, todas): chave is string =>
+          Boolean(chave) && todas.indexOf(chave) === indice,
+      );
+
+      await Promise.all(
+        chaves.map(async (chave) => {
+          try {
+            await this.storageService.deleteFile(chave);
+          } catch (error) {
+            const mensagem = error instanceof Error ? error.message : String(error);
+            this.logger.warn(
+              `[removerDocumento] Falha ao remover ${chave} do storage: ${mensagem}`,
+            );
+          }
+        }),
+      );
     } catch (error) {
       if (error instanceof HttpException) {
         throw error;
@@ -1780,28 +1811,10 @@ export class PlanoAulaService {
 
       const mensagem = error instanceof Error ? error.message : String(error);
       this.logger.error(
-        `[removerDocumento] Falha na transação de exclusão: ${mensagem}`,
+        `[removerDocumento] Falha inesperada ao excluir documento: ${mensagem}`,
       );
       throw criarErroFalhaExclusaoDocumento();
     }
-
-    const chaves = [documento.storageKey, documento.pdfStorageKey].filter(
-      (chave, indice, todas): chave is string =>
-        Boolean(chave) && todas.indexOf(chave) === indice,
-    );
-
-    await Promise.all(
-      chaves.map(async (chave) => {
-        try {
-          await this.storageService.deleteFile(chave);
-        } catch (error) {
-          const mensagem = error instanceof Error ? error.message : String(error);
-          this.logger.warn(
-            `[removerDocumento] Falha ao remover ${chave} do storage: ${mensagem}`,
-          );
-        }
-      }),
-    );
   }
 
   /**
