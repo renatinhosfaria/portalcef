@@ -124,4 +124,38 @@ describe("HistoricoTimeline", () => {
       screen.queryByText(/documento-1|ARQUIVO|12345/),
     ).not.toBeInTheDocument();
   });
+
+  it.each([
+    ["plano-aula", "Documento do plano excluído"],
+    ["prova", "Documento da prova excluído"],
+    ["relatorio", "Documento do relatório excluído"],
+  ] as const)(
+    "renderiza o label de exclusão para o módulo %s",
+    (modulo, labelEsperado) => {
+      const historico: HistoricoEntry[] = [
+        {
+          id: `historico-exclusao-${modulo}`,
+          planoId: `${modulo}-1`,
+          userId: "gestora-1",
+          userName: "Gestora",
+          userRole: "gerente_unidade",
+          acao: "DOCUMENTO_EXCLUIDO",
+          statusAnterior: "RASCUNHO",
+          statusNovo: "RASCUNHO",
+          detalhes: null,
+          createdAt: "2026-09-08T12:00:00.000Z",
+        },
+      ];
+
+      mockUseHistorico.mockReturnValue({
+        historico,
+        isLoading: false,
+        error: null,
+      });
+
+      render(<HistoricoTimeline planoId={`${modulo}-1`} modulo={modulo} />);
+
+      expect(screen.getByText(labelEsperado)).toBeInTheDocument();
+    },
+  );
 });
