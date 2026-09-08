@@ -86,6 +86,8 @@ export function ProvaDetailContent({
   const [initialLoading, setInitialLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [historicoVersao, setHistoricoVersao] = useState(0);
 
   const [showRecuperarDialog, setShowRecuperarDialog] = useState(false);
   const [recuperando, setRecuperando] = useState(false);
@@ -97,6 +99,7 @@ export function ProvaDetailContent({
     uploadDocumento,
     addLink,
     imprimirDocumento,
+    deleteDocumento,
     enviarParaImpressao,
     recuperarProva,
     enviarParaAnalise,
@@ -153,7 +156,10 @@ export function ProvaDetailContent({
       if (!prova?.id) throw new Error("Prova não encontrada");
 
       const result = await uploadDocumento(prova.id, file);
-      return { ...result, planoId: result.provaId } as unknown as PlanoDocumento;
+      return {
+        ...result,
+        planoId: result.provaId,
+      } as unknown as PlanoDocumento;
     },
     [prova?.id, uploadDocumento],
   );
@@ -190,6 +196,30 @@ export function ProvaDetailContent({
       }
     },
     [imprimirDocumento, refetchProva],
+  );
+
+  const handleExcluirDocumento = useCallback(
+    async (documentoId: string, motivo: string) => {
+      if (!prova?.id) return;
+
+      setError(null);
+      setSuccessMessage(null);
+      try {
+        await deleteDocumento(prova.id, documentoId, motivo);
+        await refetchProva();
+        setHistoricoVersao((versao) => versao + 1);
+        setSuccessMessage("Arquivo excluído com sucesso.");
+      } catch (err) {
+        setError(
+          obterMensagemErro(
+            err,
+            "Não foi possível excluir o arquivo. Tente novamente.",
+          ),
+        );
+        throw err;
+      }
+    },
+    [deleteDocumento, prova?.id, refetchProva],
   );
 
   const handleEnviarImpressao = useCallback(async () => {
@@ -341,6 +371,24 @@ export function ProvaDetailContent({
 
   return (
     <div className="space-y-6">
+      {successMessage && (
+        <Alert className="border-green-400 bg-green-50">
+          <CheckCircle2 className="h-4 w-4 text-green-600" />
+          <AlertTitle className="text-green-800">Sucesso</AlertTitle>
+          <AlertDescription className="text-green-700">
+            {successMessage}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {error && prova && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Não foi possível concluir a ação</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
       {/* Status Section */}
       <Card>
         <CardHeader className="pb-4">
@@ -349,7 +397,9 @@ export function ProvaDetailContent({
               <ClipboardCheck className="h-5 w-5" />
               Status da Prova
             </CardTitle>
-            <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${PROVA_STATUS_COLORS[prova.status]}`}>
+            <span
+              className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${PROVA_STATUS_COLORS[prova.status]}`}
+            >
               {PROVA_STATUS_LABELS[prova.status]}
             </span>
           </div>
@@ -360,9 +410,12 @@ export function ProvaDetailContent({
           <CardContent className="pt-0">
             <Alert variant="default" className="border-orange-400 bg-orange-50">
               <Loader2 className="h-4 w-4 animate-spin text-orange-600" />
-              <AlertTitle className="text-orange-800">Aguardando Impressao</AlertTitle>
+              <AlertTitle className="text-orange-800">
+                Aguardando Impressao
+              </AlertTitle>
               <AlertDescription className="text-orange-700">
-                Sua prova foi enviada para impressao pela gestao. Aguarde a impressao.
+                Sua prova foi enviada para impressao pela gestao. Aguarde a
+                impressao.
               </AlertDescription>
             </Alert>
             {prova.user?.id === userId && (
@@ -395,9 +448,12 @@ export function ProvaDetailContent({
           <CardContent className="pt-0">
             <Alert variant="default" className="border-purple-400 bg-purple-50">
               <ClipboardCheck className="h-4 w-4 text-purple-600" />
-              <AlertTitle className="text-purple-800">Prova Impressa</AlertTitle>
+              <AlertTitle className="text-purple-800">
+                Prova Impressa
+              </AlertTitle>
               <AlertDescription className="text-purple-700">
-                Sua prova foi impressa. Responda as questoes no documento fisico e clique em &quot;Enviar para Analise&quot; quando terminar.
+                Sua prova foi impressa. Responda as questoes no documento fisico
+                e clique em &quot;Enviar para Analise&quot; quando terminar.
               </AlertDescription>
             </Alert>
           </CardContent>
@@ -421,9 +477,12 @@ export function ProvaDetailContent({
           <CardContent className="pt-0">
             <Alert variant="default" className="border-yellow-400 bg-yellow-50">
               <MessageSquare className="h-4 w-4 text-yellow-600" />
-              <AlertTitle className="text-yellow-800">Ajustes Solicitados</AlertTitle>
+              <AlertTitle className="text-yellow-800">
+                Ajustes Solicitados
+              </AlertTitle>
               <AlertDescription className="text-yellow-700">
-                Sua prova foi devolvida pela Analista Pedagogica. Corrija no documento fisico e reenvie para analise.
+                Sua prova foi devolvida pela Analista Pedagogica. Corrija no
+                documento fisico e reenvie para analise.
               </AlertDescription>
             </Alert>
           </CardContent>
@@ -483,29 +542,29 @@ export function ProvaDetailContent({
               <DocumentoList
                 documentos={documentosAdaptados}
                 onImprimir={handleImprimirDocumento}
-                canDelete={false}
+                onDelete={handleExcluirDocumento}
+                canDelete={true}
                 modulo="prova"
               />
             </TabsContent>
 
             <TabsContent value="historico">
-              <HistoricoTimeline planoId={prova.id} modulo="prova" />
+              <HistoricoTimeline
+                key={historicoVersao}
+                planoId={prova.id}
+                modulo="prova"
+              />
             </TabsContent>
           </Tabs>
         </CardContent>
       </Card>
 
       {/* Action Buttons */}
-      {(canEdit(prova.status) || prova.status === "AGUARDANDO_RESPOSTA" || prova.status === "DEVOLVIDO_ANALISTA") && (
+      {(canEdit(prova.status) ||
+        prova.status === "AGUARDANDO_RESPOSTA" ||
+        prova.status === "DEVOLVIDO_ANALISTA") && (
         <Card>
           <CardContent className="flex flex-col gap-4 py-6 sm:flex-row sm:items-center sm:justify-end">
-            {error && (
-              <Alert variant="destructive" className="mb-0 flex-1">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
-
             <div className="flex gap-3">
               {/* RASCUNHO/RECUPERADO: Enviar para Impressao */}
               {canEdit(prova.status) && (
@@ -580,7 +639,10 @@ export function ProvaDetailContent({
         </Card>
       )}
 
-      <AlertDialog open={showRecuperarDialog} onOpenChange={setShowRecuperarDialog}>
+      <AlertDialog
+        open={showRecuperarDialog}
+        onOpenChange={setShowRecuperarDialog}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Recuperar Prova?</AlertDialogTitle>

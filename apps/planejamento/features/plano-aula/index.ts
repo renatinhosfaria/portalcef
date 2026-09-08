@@ -39,6 +39,7 @@ export {
 export {
   DocumentoUpload,
   DocumentoList,
+  ConfirmarExclusaoDocumentoDialog,
   PlanoStatusBadge,
   HistoricoTimeline,
   PlanoHeader,

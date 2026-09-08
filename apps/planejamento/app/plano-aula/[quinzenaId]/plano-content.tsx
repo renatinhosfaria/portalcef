@@ -67,9 +67,12 @@ interface PlanoContentProps {
  * Verifica se o status permite edicao (upload/delete de documentos)
  */
 function canEdit(status: PlanoAulaStatus): boolean {
-  return ["RASCUNHO", "RECUPERADO", "DEVOLVIDO_ANALISTA", "DEVOLVIDO_COORDENADORA"].includes(
-    status,
-  );
+  return [
+    "RASCUNHO",
+    "RECUPERADO",
+    "DEVOLVIDO_ANALISTA",
+    "DEVOLVIDO_COORDENADORA",
+  ].includes(status);
 }
 
 /**
@@ -95,8 +98,8 @@ function planoPodeSerRecuperado(
     const doc = documento as DocumentoComComentarios;
     return Boolean(
       doc.approvedBy ||
-        doc.temComentarios ||
-        (Array.isArray(doc.comentarios) && doc.comentarios.length > 0),
+      doc.temComentarios ||
+      (Array.isArray(doc.comentarios) && doc.comentarios.length > 0),
     );
   });
 }
@@ -124,6 +127,8 @@ export function PlanoContent({
   const [initialLoading, setInitialLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [historicoVersao, setHistoricoVersao] = useState(0);
 
   const [showRecuperarDialog, setShowRecuperarDialog] = useState(false);
   const [recuperando, setRecuperando] = useState(false);
@@ -135,6 +140,7 @@ export function PlanoContent({
     uploadDocumento,
     addLink,
     imprimirDocumento,
+    deleteDocumento,
     submeterPlano,
     recuperarPlano,
   } = usePlanoAula();
@@ -228,6 +234,30 @@ export function PlanoContent({
       }
     },
     [imprimirDocumento, refetchPlano],
+  );
+
+  const handleExcluirDocumento = useCallback(
+    async (documentoId: string, motivo: string) => {
+      if (!plano?.id) return;
+
+      setError(null);
+      setSuccessMessage(null);
+      try {
+        await deleteDocumento(plano.id, documentoId, motivo);
+        await refetchPlano();
+        setHistoricoVersao((versao) => versao + 1);
+        setSuccessMessage("Arquivo excluído com sucesso.");
+      } catch (err) {
+        setError(
+          obterMensagemErro(
+            err,
+            "Não foi possível excluir o arquivo. Tente novamente.",
+          ),
+        );
+        throw err;
+      }
+    },
+    [deleteDocumento, plano?.id, refetchPlano],
   );
 
   /**
@@ -430,6 +460,24 @@ export function PlanoContent({
         )}
       </Card>
 
+      {successMessage && (
+        <Alert className="border-green-400 bg-green-50">
+          <CheckCircle2 className="h-4 w-4 text-green-600" />
+          <AlertTitle className="text-green-800">Sucesso</AlertTitle>
+          <AlertDescription className="text-green-700">
+            {successMessage}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {error && plano && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Não foi possível concluir a ação</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
       {/* Documents and History Section */}
       <Card>
         <CardHeader>
@@ -462,17 +510,16 @@ export function PlanoContent({
                 />
               )}
 
-              {/* Lista de Documentos */}
-              {/* NOTA: Professoras NÃO podem excluir documentos após o upload */}
               <DocumentoList
                 documentos={plano.documentos}
                 onImprimir={handleImprimirDocumento}
-                canDelete={false}
+                onDelete={handleExcluirDocumento}
+                canDelete={true}
               />
             </TabsContent>
 
             <TabsContent value="historico">
-              <HistoricoTimeline planoId={plano.id} />
+              <HistoricoTimeline key={historicoVersao} planoId={plano.id} />
             </TabsContent>
           </Tabs>
         </CardContent>
@@ -482,14 +529,6 @@ export function PlanoContent({
       {isEditable && (
         <Card>
           <CardContent className="flex flex-col gap-4 py-6 sm:flex-row sm:items-center sm:justify-end">
-            {/* Erro de submissao */}
-            {error && (
-              <Alert variant="destructive" className="mb-0 flex-1">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
-
             <div className="flex gap-3">
               {/* Botao Enviar para Analise */}
               <Button
@@ -523,7 +562,10 @@ export function PlanoContent({
         </Card>
       )}
 
-      <AlertDialog open={showRecuperarDialog} onOpenChange={setShowRecuperarDialog}>
+      <AlertDialog
+        open={showRecuperarDialog}
+        onOpenChange={setShowRecuperarDialog}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Recuperar Plano de Aula?</AlertDialogTitle>

@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Prova } from "../../../../../features/prova";
@@ -8,6 +14,7 @@ import { ProvaGestaoContent } from "./prova-gestao-content";
 const fetchProva = vi.fn();
 const refetch = vi.fn();
 const imprimirDocumento = vi.fn();
+const deleteDocumento = vi.fn();
 const enviarParaAnalise = vi.fn();
 
 const provaBase: Prova = {
@@ -40,6 +47,10 @@ const provaBase: Prova = {
 };
 
 let provaMock: Prova = provaBase;
+let documentoListProps: {
+  canDelete?: boolean;
+  onDelete?: (documentoId: string, motivo: string) => Promise<void>;
+} | null = null;
 
 vi.mock("../../../../../features/prova", () => ({
   PROVA_STATUS_COLORS: {
@@ -63,6 +74,7 @@ vi.mock("../../../../../features/prova", () => ({
   }),
   useProva: () => ({
     imprimirDocumento,
+    deleteDocumento,
   }),
   useProvaDetalhe: () => ({
     loading: false,
@@ -74,22 +86,26 @@ vi.mock("../../../../../features/prova", () => ({
 }));
 
 vi.mock("../../../../../features/plano-aula", () => ({
-  DocumentoList: ({
-    documentos,
-    permitirImpressaoSemAprovacao,
-  }: {
+  DocumentoList: (props: {
     documentos: Array<{ pdfStatus?: string }>;
     permitirImpressaoSemAprovacao?: boolean;
-  }) => (
-    <div>
-      <span>Documentos: {documentos.length}</span>
-      <span>PDF status: {documentos[0]?.pdfStatus ?? "sem status"}</span>
-      <span>
-        Impressao sem aprovacao:{" "}
-        {permitirImpressaoSemAprovacao ? "sim" : "nao"}
-      </span>
-    </div>
-  ),
+    canDelete?: boolean;
+    onDelete?: (documentoId: string, motivo: string) => Promise<void>;
+  }) => {
+    documentoListProps = props;
+    return (
+      <div>
+        <span>Documentos: {props.documentos.length}</span>
+        <span>
+          PDF status: {props.documentos[0]?.pdfStatus ?? "sem status"}
+        </span>
+        <span>
+          Impressao sem aprovacao:{" "}
+          {props.permitirImpressaoSemAprovacao ? "sim" : "nao"}
+        </span>
+      </div>
+    );
+  },
 }));
 
 describe("ProvaGestaoContent", () => {
@@ -98,8 +114,10 @@ describe("ProvaGestaoContent", () => {
     fetchProva.mockResolvedValue(undefined);
     refetch.mockResolvedValue(undefined);
     imprimirDocumento.mockResolvedValue(undefined);
+    deleteDocumento.mockResolvedValue(undefined);
     enviarParaAnalise.mockResolvedValue(undefined);
     provaMock = provaBase;
+    documentoListProps = null;
   });
 
   it("carrega o detalhe de gestão e envia prova impressa para análise", async () => {
@@ -110,7 +128,9 @@ describe("ProvaGestaoContent", () => {
     });
 
     expect(screen.getByText("Cabecalho da prova")).toBeInTheDocument();
-    expect(screen.getByText("Impressao sem aprovacao: sim")).toBeInTheDocument();
+    expect(
+      screen.getByText("Impressao sem aprovacao: sim"),
+    ).toBeInTheDocument();
     expect(screen.getByText("PDF status: PRONTO")).toBeInTheDocument();
 
     const botao = screen.getByRole("button", { name: /enviar para análise/i });
@@ -128,7 +148,8 @@ describe("ProvaGestaoContent", () => {
     if (!documentoImpresso) {
       throw new Error("Mock precisa ter um documento");
     }
-    const { printedAt: _printedAt, ...documentoSemImpressao } = documentoImpresso;
+    const { printedAt: _printedAt, ...documentoSemImpressao } =
+      documentoImpresso;
 
     provaMock = {
       ...provaBase,
@@ -143,5 +164,28 @@ describe("ProvaGestaoContent", () => {
     expect(
       screen.getByRole("button", { name: /enviar para análise/i }),
     ).toBeDisabled();
+  });
+
+  it("permite excluir documento não aprovado com motivo e atualiza a prova", async () => {
+    render(<ProvaGestaoContent provaId="prova-1" />);
+
+    await waitFor(() => {
+      expect(documentoListProps?.canDelete).toBe(true);
+      expect(documentoListProps?.onDelete).toEqual(expect.any(Function));
+    });
+
+    await act(async () => {
+      await documentoListProps?.onDelete?.(
+        "doc-1",
+        "Arquivo duplicado enviado pela professora",
+      );
+    });
+
+    expect(deleteDocumento).toHaveBeenCalledWith(
+      "prova-1",
+      "doc-1",
+      "Arquivo duplicado enviado pela professora",
+    );
+    expect(refetch).toHaveBeenCalled();
   });
 });

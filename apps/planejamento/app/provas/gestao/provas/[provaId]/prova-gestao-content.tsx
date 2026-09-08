@@ -42,11 +42,8 @@ export function ProvaGestaoContent({ provaId }: ProvaGestaoContentProps) {
     fetchProva,
     refetch,
   } = useProvaDetalhe();
-  const { imprimirDocumento } = useProva();
-  const {
-    loading: loadingGestao,
-    enviarParaAnalise,
-  } = useGestaoImpressao();
+  const { imprimirDocumento, deleteDocumento } = useProva();
+  const { loading: loadingGestao, enviarParaAnalise } = useGestaoImpressao();
 
   const [actionError, setActionError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -74,6 +71,30 @@ export function ProvaGestaoContent({ provaId }: ProvaGestaoContentProps) {
       }
     },
     [imprimirDocumento, refetch],
+  );
+
+  const handleExcluirDocumento = useCallback(
+    async (documentoId: string, motivo: string) => {
+      if (!prova?.id) return;
+
+      setActionError(null);
+      setSuccessMessage(null);
+
+      try {
+        await deleteDocumento(prova.id, documentoId, motivo);
+        await refetch();
+        setSuccessMessage("Arquivo excluído com sucesso.");
+      } catch (err) {
+        setActionError(
+          obterMensagemErro(
+            err,
+            "Não foi possível excluir o arquivo. Tente novamente.",
+          ),
+        );
+        throw err;
+      }
+    },
+    [deleteDocumento, prova?.id, refetch],
   );
 
   const handleEnviarParaAnalise = useCallback(async () => {
@@ -128,8 +149,8 @@ export function ProvaGestaoContent({ provaId }: ProvaGestaoContentProps) {
           <AlertCircle className="h-4 w-4" />
           <AlertTitle>Prova nao encontrada</AlertTitle>
           <AlertDescription>
-            A prova solicitada nao foi encontrada ou voce nao tem permissao
-            para acessa-la.
+            A prova solicitada nao foi encontrada ou voce nao tem permissao para
+            acessa-la.
           </AlertDescription>
         </Alert>
       </div>
@@ -210,7 +231,8 @@ export function ProvaGestaoContent({ provaId }: ProvaGestaoContentProps) {
               <DocumentoList
                 documentos={documentosAdaptados}
                 onImprimir={handleImprimirDocumento}
-                canDelete={false}
+                onDelete={handleExcluirDocumento}
+                canDelete={true}
                 canAprovar={false}
                 canEdit={false}
                 canComentar={false}

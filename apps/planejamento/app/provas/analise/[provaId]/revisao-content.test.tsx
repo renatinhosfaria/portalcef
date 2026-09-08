@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { RevisaoProvaContent } from "./revisao-content";
@@ -14,12 +14,15 @@ const aprovarDocumento = vi.fn();
 const desaprovarDocumento = vi.fn();
 const imprimirDocumento = vi.fn();
 const regerarPdfDocumento = vi.fn();
+const deleteDocumento = vi.fn();
 
 let documentoListProps: {
   onRegerarPdf?: (documentoId: string) => Promise<void>;
   canAprovar?: boolean;
   canEdit?: boolean;
   canComentar?: boolean;
+  canDelete?: boolean;
+  onDelete?: (documentoId: string, motivo: string) => Promise<void>;
 } | null = null;
 
 let historicoTimelineProps: {
@@ -53,6 +56,7 @@ vi.mock("../../../../features/prova", () => ({
     desaprovarDocumento,
     imprimirDocumento,
     regerarPdfDocumento,
+    deleteDocumento,
   }),
   useProvaDetalhe: () => ({
     loading: false,
@@ -98,6 +102,8 @@ vi.mock("../../../../features/plano-aula", () => ({
     canAprovar?: boolean;
     canEdit?: boolean;
     canComentar?: boolean;
+    canDelete?: boolean;
+    onDelete?: (documentoId: string, motivo: string) => Promise<void>;
   }) => {
     documentoListProps = props;
     return <div>Lista de documentos</div>;
@@ -113,9 +119,11 @@ vi.mock("../../../../features/plano-aula", () => ({
 }));
 
 vi.mock("../../../analise/[planoId]/tarefa-form", () => ({
-  TarefaForm: ({ initialContexts }: { initialContexts?: { provaId?: string } }) => (
-    <div>Formulario tarefa prova: {initialContexts?.provaId}</div>
-  ),
+  TarefaForm: ({
+    initialContexts,
+  }: {
+    initialContexts?: { provaId?: string };
+  }) => <div>Formulario tarefa prova: {initialContexts?.provaId}</div>,
 }));
 
 describe("RevisaoProvaContent", () => {
@@ -126,6 +134,7 @@ describe("RevisaoProvaContent", () => {
     fetchProva.mockResolvedValue(undefined);
     refetch.mockResolvedValue(undefined);
     regerarPdfDocumento.mockResolvedValue(undefined);
+    deleteDocumento.mockResolvedValue(undefined);
   });
 
   it("espelha a análise de plano com tarefa vinculada e regeração de PDF", async () => {
@@ -146,14 +155,32 @@ describe("RevisaoProvaContent", () => {
     expect(
       screen.getByRole("button", { name: /criar tarefa vinculada à prova/i }),
     ).toBeInTheDocument();
-    expect(screen.getByText(/Formulario tarefa prova: prova-1/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Formulario tarefa prova: prova-1/i),
+    ).toBeInTheDocument();
     expect(documentoListProps).toEqual(
       expect.objectContaining({
         canAprovar: true,
         canEdit: true,
         canComentar: true,
+        canDelete: true,
         onRegerarPdf: expect.any(Function),
+        onDelete: expect.any(Function),
       }),
     );
+
+    await act(async () => {
+      await documentoListProps?.onDelete?.(
+        "doc-1",
+        "Arquivo enviado com conteúdo incorreto",
+      );
+    });
+
+    expect(deleteDocumento).toHaveBeenCalledWith(
+      "prova-1",
+      "doc-1",
+      "Arquivo enviado com conteúdo incorreto",
+    );
+    expect(refetch).toHaveBeenCalled();
   });
 });

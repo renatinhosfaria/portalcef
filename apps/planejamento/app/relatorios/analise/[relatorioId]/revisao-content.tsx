@@ -23,12 +23,16 @@ import {
   Pencil,
   RotateCcw,
   Send,
+  Trash2,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
-import { HistoricoTimeline } from "../../../../features/plano-aula";
+import {
+  ConfirmarExclusaoDocumentoDialog,
+  HistoricoTimeline,
+} from "../../../../features/plano-aula";
 import {
   RelatorioHeader,
   type Relatorio,
@@ -68,8 +72,12 @@ export function RevisaoRelatorioContent({
   const [isLoading, setIsLoading] = useState(true);
   const [actionError, setActionError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [documentoParaExcluir, setDocumentoParaExcluir] =
+    useState<RelatorioDocumento | null>(null);
+  const [historicoVersao, setHistoricoVersao] = useState(0);
 
-  const { getRelatorio, editarWord, sincronizarWord } = useRelatorio();
+  const { getRelatorio, editarWord, sincronizarWord, deleteDocumento } =
+    useRelatorio();
   const { semestres, isLoading: isLoadingSemestre } = useSemestreRelatorio();
   const {
     loading: loadingAction,
@@ -168,6 +176,26 @@ export function RevisaoRelatorioContent({
       }
     },
     [desaprovarDocumento, carregarRelatorio, relatorioId],
+  );
+
+  const handleExcluirDocumento = useCallback(
+    async (documentoId: string, motivo: string) => {
+      try {
+        await deleteDocumento(relatorioId, documentoId, motivo);
+        await carregarRelatorio();
+        setHistoricoVersao((versao) => versao + 1);
+        setSuccessMessage("Arquivo excluído com sucesso!");
+      } catch (err) {
+        setActionError(
+          obterMensagemErro(
+            err,
+            "Não foi possível excluir o arquivo. Tente novamente.",
+          ),
+        );
+        throw err;
+      }
+    },
+    [carregarRelatorio, deleteDocumento, relatorioId],
   );
 
   const handleEditarWord = useCallback(
@@ -353,9 +381,7 @@ export function RevisaoRelatorioContent({
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() =>
-                              handleSincronizarWord(documento.id)
-                            }
+                            onClick={() => handleSincronizarWord(documento.id)}
                           >
                             <RotateCcw className="mr-2 h-4 w-4" />
                             Sincronizar Word
@@ -366,7 +392,9 @@ export function RevisaoRelatorioContent({
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => handleDesaprovarDocumento(documento.id)}
+                          onClick={() =>
+                            handleDesaprovarDocumento(documento.id)
+                          }
                         >
                           Desaprovar
                         </Button>
@@ -379,6 +407,19 @@ export function RevisaoRelatorioContent({
                           Aprovar
                         </Button>
                       )}
+                      {documento.tipo === "ARQUIVO" &&
+                        !documento.approvedBy &&
+                        !documento.approvedAt && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="text-destructive hover:text-destructive"
+                            onClick={() => setDocumentoParaExcluir(documento)}
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Excluir arquivo
+                          </Button>
+                        )}
                     </div>
                   </div>
                 ))
@@ -388,7 +429,11 @@ export function RevisaoRelatorioContent({
         </div>
 
         <div className="space-y-6">
-          <HistoricoTimeline planoId={relatorioId} modulo="relatorio" />
+          <HistoricoTimeline
+            key={historicoVersao}
+            planoId={relatorioId}
+            modulo="relatorio"
+          />
 
           <Card>
             <CardHeader>
@@ -421,6 +466,18 @@ export function RevisaoRelatorioContent({
           </Card>
         </div>
       </div>
+
+      {documentoParaExcluir && (
+        <ConfirmarExclusaoDocumentoDialog
+          open
+          documentoId={documentoParaExcluir.id}
+          nomeArquivo={documentoParaExcluir.fileName || "Documento"}
+          onOpenChange={(open: boolean) => {
+            if (!open) setDocumentoParaExcluir(null);
+          }}
+          onConfirmar={handleExcluirDocumento}
+        />
+      )}
     </div>
   );
 }

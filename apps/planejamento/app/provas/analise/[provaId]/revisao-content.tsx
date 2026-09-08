@@ -63,12 +63,17 @@ export function RevisaoProvaContent({ provaId }: RevisaoProvaContentProps) {
     fetchProva,
     refetch,
   } = useProvaDetalhe();
-  const { loading: loadingAction, aprovar, devolver } = useAnalistaProvaActions();
+  const {
+    loading: loadingAction,
+    aprovar,
+    devolver,
+  } = useAnalistaProvaActions();
   const {
     uploadDocumento,
     addLink,
     aprovarDocumento,
     desaprovarDocumento,
+    deleteDocumento,
     regerarPdfDocumento,
     imprimirDocumento,
   } = useProva();
@@ -76,6 +81,7 @@ export function RevisaoProvaContent({ provaId }: RevisaoProvaContentProps) {
   const [actionError, setActionError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isTarefaFormOpen, setIsTarefaFormOpen] = useState(false);
+  const [historicoVersao, setHistoricoVersao] = useState(0);
 
   // Carrega a prova na montagem
   useEffect(() => {
@@ -122,6 +128,27 @@ export function RevisaoProvaContent({ provaId }: RevisaoProvaContentProps) {
       }
     },
     [desaprovarDocumento, refetch],
+  );
+
+  const handleExcluirDocumento = useCallback(
+    async (documentoId: string, motivo: string) => {
+      try {
+        await deleteDocumento(provaId, documentoId, motivo);
+        await refetch();
+        setHistoricoVersao((versao) => versao + 1);
+        setSuccessMessage("Arquivo excluído com sucesso!");
+        setTimeout(() => setSuccessMessage(null), 3000);
+      } catch (err) {
+        setActionError(
+          obterMensagemErro(
+            err,
+            "Não foi possível excluir o arquivo. Tente novamente.",
+          ),
+        );
+        throw err;
+      }
+    },
+    [deleteDocumento, provaId, refetch],
   );
 
   /**
@@ -175,7 +202,10 @@ export function RevisaoProvaContent({ provaId }: RevisaoProvaContentProps) {
       if (!prova) throw new Error("Prova não encontrada");
 
       const result = await uploadDocumento(prova.id, file);
-      return { ...result, planoId: result.provaId } as unknown as PlanoDocumento;
+      return {
+        ...result,
+        planoId: result.provaId,
+      } as unknown as PlanoDocumento;
     },
     [prova, uploadDocumento],
   );
@@ -308,8 +338,8 @@ export function RevisaoProvaContent({ provaId }: RevisaoProvaContentProps) {
           <ClipboardCheck className="h-16 w-16 text-muted-foreground/40 mb-4" />
           <h1 className="text-2xl font-bold mb-2">Prova nao encontrada</h1>
           <p className="text-muted-foreground">
-            A prova solicitada nao foi encontrada ou voce nao tem
-            permissao para acessa-la.
+            A prova solicitada nao foi encontrada ou voce nao tem permissao para
+            acessa-la.
           </p>
         </div>
       </div>
@@ -390,12 +420,13 @@ export function RevisaoProvaContent({ provaId }: RevisaoProvaContentProps) {
             <CardContent>
               <DocumentoList
                 documentos={documentosAdaptados}
-                canDelete={false}
+                canDelete={true}
                 canAprovar={true}
                 canEdit={true}
                 canComentar={true}
                 onAprovar={handleAprovarDocumento}
                 onDesaprovar={handleDesaprovarDocumento}
+                onDelete={handleExcluirDocumento}
                 onRegerarPdf={handleRegerarPdfDocumento}
                 onImprimir={handleImprimirDocumento}
                 modulo="prova"
@@ -407,7 +438,11 @@ export function RevisaoProvaContent({ provaId }: RevisaoProvaContentProps) {
         {/* Sidebar - 1 coluna */}
         <div className="space-y-6">
           {/* Historico */}
-          <HistoricoTimeline planoId={provaId} modulo="prova" />
+          <HistoricoTimeline
+            key={historicoVersao}
+            planoId={provaId}
+            modulo="prova"
+          />
 
           {/* Acoes */}
           <Card>

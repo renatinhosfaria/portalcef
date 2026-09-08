@@ -1,14 +1,23 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PlanoContent } from "./plano-content";
 
 const mockCriarPlano = vi.fn();
 const mockGetPlano = vi.fn();
+const mockDeleteDocumento = vi.fn();
+
+let documentoListProps: {
+  canDelete?: boolean;
+  onDelete?: (documentoId: string, motivo: string) => Promise<void>;
+} | null = null;
 
 vi.mock("../../../features/plano-aula", () => ({
   DocumentoUpload: () => <div data-testid="documento-upload" />,
-  DocumentoList: () => <div data-testid="documento-list" />,
+  DocumentoList: (props: typeof documentoListProps) => {
+    documentoListProps = props;
+    return <div data-testid="documento-list" />;
+  },
   HistoricoTimeline: () => <div data-testid="historico-timeline" />,
   PlanoStatusBadge: ({ status }: { status: string }) => <span>{status}</span>,
   usePlanoAula: () => ({
@@ -20,6 +29,7 @@ vi.mock("../../../features/plano-aula", () => ({
     imprimirDocumento: vi.fn(),
     submeterPlano: vi.fn(),
     recuperarPlano: vi.fn(),
+    deleteDocumento: mockDeleteDocumento,
   }),
 }));
 
@@ -42,7 +52,9 @@ function criarPlanoAguardandoAnalista(documentos: unknown[] = []) {
 describe("PlanoContent", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    documentoListProps = null;
     mockCriarPlano.mockResolvedValue({ id: "plano-1" });
+    mockDeleteDocumento.mockResolvedValue(undefined);
   });
 
   it("não mostra Recuperar Plano quando já existe documento aprovado", async () => {
@@ -105,5 +117,46 @@ describe("PlanoContent", () => {
     expect(
       screen.queryByRole("button", { name: /recuperar plano/i }),
     ).toBeNull();
+  });
+
+  it("exclui documento com motivo e atualiza o plano sem recarregar a página", async () => {
+    mockGetPlano.mockResolvedValue(
+      criarPlanoAguardandoAnalista([
+        {
+          id: "documento-1",
+          planoId: "plano-1",
+          tipo: "ARQUIVO",
+          fileName: "plano.docx",
+          createdAt: "2026-05-28T00:00:00.000Z",
+        },
+      ]),
+    );
+
+    render(
+      <PlanoContent
+        periodoId="periodo-1"
+        turmaId="turma-1"
+        userId="usuario-1"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(documentoListProps?.canDelete).toBe(true);
+      expect(documentoListProps?.onDelete).toEqual(expect.any(Function));
+    });
+
+    await act(async () => {
+      await documentoListProps?.onDelete?.(
+        "documento-1",
+        "Arquivo enviado com conteúdo incorreto",
+      );
+    });
+
+    expect(mockDeleteDocumento).toHaveBeenCalledWith(
+      "plano-1",
+      "documento-1",
+      "Arquivo enviado com conteúdo incorreto",
+    );
+    expect(mockGetPlano).toHaveBeenCalledTimes(2);
   });
 });

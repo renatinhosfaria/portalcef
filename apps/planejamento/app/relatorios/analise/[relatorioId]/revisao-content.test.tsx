@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { RevisaoRelatorioContent } from "./revisao-content";
@@ -11,6 +11,7 @@ const aprovar = vi.fn();
 const devolver = vi.fn();
 const aprovarDocumento = vi.fn();
 const desaprovarDocumento = vi.fn();
+const deleteDocumento = vi.fn();
 
 let relatorioHeaderProps: {
   professorName: string;
@@ -29,6 +30,10 @@ let relatorioHeaderProps: {
 let historicoTimelineProps: {
   planoId: string;
   modulo?: "plano-aula" | "prova" | "relatorio";
+} | null = null;
+
+let dialogProps: {
+  onConfirmar: (documentoId: string, motivo: string) => Promise<void>;
 } | null = null;
 
 vi.mock("next/navigation", () => ({
@@ -54,6 +59,7 @@ vi.mock("../../../../features/relatorio", () => ({
     getRelatorio,
     editarWord,
     sincronizarWord,
+    deleteDocumento,
   }),
   useSemestreRelatorio: () => ({
     semestres: [
@@ -84,6 +90,22 @@ vi.mock("../../../../features/plano-aula", () => ({
     historicoTimelineProps = props;
     return <div>Histórico do relatório</div>;
   },
+  ConfirmarExclusaoDocumentoDialog: (props: typeof dialogProps) => {
+    dialogProps = props;
+    return (
+      <button
+        type="button"
+        onClick={() =>
+          void props?.onConfirmar?.(
+            "documento-1",
+            "Arquivo duplicado no relatório",
+          )
+        }
+      >
+        Excluir documento
+      </button>
+    );
+  },
 }));
 
 describe("RevisaoRelatorioContent", () => {
@@ -91,6 +113,8 @@ describe("RevisaoRelatorioContent", () => {
     vi.clearAllMocks();
     relatorioHeaderProps = null;
     historicoTimelineProps = null;
+    dialogProps = null;
+    deleteDocumento.mockResolvedValue(undefined);
     getRelatorio.mockResolvedValue({
       id: "relatorio-1",
       userId: "prof-1",
@@ -125,7 +149,9 @@ describe("RevisaoRelatorioContent", () => {
       expect(getRelatorio).toHaveBeenCalledWith("relatorio-1");
     });
 
-    expect(screen.getByText("Capa do relatório: Relatório Infantil")).toBeInTheDocument();
+    expect(
+      screen.getByText("Capa do relatório: Relatório Infantil"),
+    ).toBeInTheDocument();
     expect(screen.getByText("Histórico do relatório")).toBeInTheDocument();
     expect(relatorioHeaderProps).toEqual(
       expect.objectContaining({
@@ -148,5 +174,56 @@ describe("RevisaoRelatorioContent", () => {
         modulo: "relatorio",
       }),
     );
+  });
+
+  it("exclui upload não aprovado com motivo e recarrega o relatório", async () => {
+    getRelatorio.mockResolvedValue({
+      id: "relatorio-1",
+      userId: "prof-1",
+      turmaId: "turma-1",
+      unitId: "unidade-1",
+      semestreId: "semestre-1",
+      status: "AGUARDANDO_ANALISTA",
+      createdAt: "2026-06-29T09:44:00.000Z",
+      updatedAt: "2026-06-30T09:44:00.000Z",
+      documentos: [
+        {
+          id: "documento-1",
+          relatorioId: "relatorio-1",
+          tipo: "ARQUIVO",
+          fileName: "relatorio.docx",
+          pdfStatus: "NAO_APLICAVEL",
+          temComentarios: false,
+          createdAt: "2026-06-30T09:44:00.000Z",
+          updatedAt: "2026-06-30T09:44:00.000Z",
+        },
+      ],
+    });
+
+    render(<RevisaoRelatorioContent relatorioId="relatorio-1" />);
+
+    const botaoExcluir = await screen.findByRole("button", {
+      name: /excluir arquivo/i,
+    });
+    fireEvent.click(botaoExcluir);
+
+    await waitFor(() => {
+      expect(dialogProps).toEqual(
+        expect.objectContaining({ onConfirmar: expect.any(Function) }),
+      );
+      expect(
+        screen.getByRole("button", { name: /excluir documento/i }),
+      ).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole("button", { name: /excluir documento/i }));
+
+    await waitFor(() => {
+      expect(deleteDocumento).toHaveBeenCalledWith(
+        "relatorio-1",
+        "documento-1",
+        "Arquivo duplicado no relatório",
+      );
+    });
+    expect(getRelatorio).toHaveBeenCalledTimes(2);
   });
 });

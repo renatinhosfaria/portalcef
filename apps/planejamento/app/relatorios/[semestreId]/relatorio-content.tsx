@@ -87,11 +87,7 @@ function adaptarDocumento(documento: RelatorioDocumento): PlanoDocumento {
   };
 }
 
-function HistoricoRelatorio({
-  historico,
-}: {
-  historico: HistoricoEntry[];
-}) {
+function HistoricoRelatorio({ historico }: { historico: HistoricoEntry[] }) {
   if (historico.length === 0) {
     return (
       <p className="text-sm text-muted-foreground">
@@ -114,13 +110,17 @@ function HistoricoRelatorio({
   );
 }
 
-export function RelatorioContent({ semestreId, turmaId }: RelatorioContentProps) {
+export function RelatorioContent({
+  semestreId,
+  turmaId,
+}: RelatorioContentProps) {
   const [relatorio, setRelatorio] = useState<Relatorio | null>(null);
   const [historico, setHistorico] = useState<HistoricoEntry[]>([]);
   const [initialLoading, setInitialLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [recuperando, setRecuperando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const {
     loading: actionLoading,
@@ -129,6 +129,7 @@ export function RelatorioContent({ semestreId, turmaId }: RelatorioContentProps)
     getHistorico,
     uploadDocumento,
     addLink,
+    deleteDocumento,
     submeterRelatorio,
     recuperarRelatorio,
   } = useRelatorio();
@@ -196,6 +197,29 @@ export function RelatorioContent({ semestreId, turmaId }: RelatorioContentProps)
       await refetchRelatorio();
     },
     [addLink, refetchRelatorio, relatorio?.id],
+  );
+
+  const handleExcluirDocumento = useCallback(
+    async (documentoId: string, motivo: string) => {
+      if (!relatorio?.id) return;
+
+      setError(null);
+      setSuccessMessage(null);
+      try {
+        await deleteDocumento(relatorio.id, documentoId, motivo);
+        await refetchRelatorio();
+        setSuccessMessage("Arquivo excluído com sucesso.");
+      } catch (err) {
+        setError(
+          obterMensagemErro(
+            err,
+            "Não foi possível excluir o arquivo. Tente novamente.",
+          ),
+        );
+        throw err;
+      }
+    },
+    [deleteDocumento, refetchRelatorio, relatorio?.id],
   );
 
   const handleSubmit = useCallback(async () => {
@@ -283,6 +307,24 @@ export function RelatorioContent({ semestreId, turmaId }: RelatorioContentProps)
 
   return (
     <div className="container mx-auto max-w-5xl space-y-6 px-4 py-8">
+      {successMessage && (
+        <Alert className="border-green-400 bg-green-50">
+          <CheckCircle2 className="h-4 w-4 text-green-600" />
+          <AlertTitle className="text-green-800">Sucesso</AlertTitle>
+          <AlertDescription className="text-green-700">
+            {successMessage}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {error && relatorio && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Não foi possível concluir a ação</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
       <div>
         <h1 className="text-2xl font-bold tracking-tight">
           Relatório Semestral
@@ -374,7 +416,9 @@ export function RelatorioContent({ semestreId, turmaId }: RelatorioContentProps)
 
               <DocumentoList
                 documentos={relatorio.documentos.map(adaptarDocumento)}
-                canDelete={false}
+                onDelete={handleExcluirDocumento}
+                canDelete={true}
+                modulo="plano-aula"
               />
             </TabsContent>
 
@@ -388,13 +432,6 @@ export function RelatorioContent({ semestreId, turmaId }: RelatorioContentProps)
       {isEditable && (
         <Card>
           <CardContent className="flex flex-col gap-4 py-6 sm:flex-row sm:items-center sm:justify-end">
-            {error && (
-              <Alert variant="destructive" className="mb-0 flex-1">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
-
             {!hasDocuments && (
               <p className="text-sm text-muted-foreground">
                 Anexe pelo menos um documento para enviar o relatório.

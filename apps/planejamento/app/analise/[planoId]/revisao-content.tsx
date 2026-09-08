@@ -54,8 +54,7 @@ interface RevisaoContentProps {
 
 function isDocumentoWord(mimeType?: string | null): boolean {
   return (
-    mimeType?.includes("word") === true ||
-    mimeType?.includes("msword") === true
+    mimeType?.includes("word") === true || mimeType?.includes("msword") === true
   );
 }
 
@@ -74,16 +73,22 @@ export function RevisaoContent({ planoId }: RevisaoContentProps) {
     addLink,
     aprovarDocumento,
     desaprovarDocumento,
+    deleteDocumento,
     regerarPdfDocumento,
     imprimirDocumento,
   } = usePlanoAula();
 
   // Buscar dados do período para exibir no header
-  const { periodo: periodoData, etapaNome, isLoading: isLoadingPeriodo } = usePeriodoData(plano?.quinzenaId);
+  const {
+    periodo: periodoData,
+    etapaNome,
+    isLoading: isLoadingPeriodo,
+  } = usePeriodoData(plano?.quinzenaId);
 
   const [actionError, setActionError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isTarefaFormOpen, setIsTarefaFormOpen] = useState(false);
+  const [historicoVersao, setHistoricoVersao] = useState(0);
 
   // Carrega o plano na montagem
   useEffect(() => {
@@ -150,6 +155,27 @@ export function RevisaoContent({ planoId }: RevisaoContentProps) {
       }
     },
     [desaprovarDocumento, refetch],
+  );
+
+  const handleExcluirDocumento = useCallback(
+    async (documentoId: string, motivo: string) => {
+      try {
+        await deleteDocumento(planoId, documentoId, motivo);
+        await refetch();
+        setHistoricoVersao((versao) => versao + 1);
+        setSuccessMessage("Arquivo excluído com sucesso!");
+        setTimeout(() => setSuccessMessage(null), 3000);
+      } catch (err) {
+        setActionError(
+          obterMensagemErro(
+            err,
+            "Não foi possível excluir o arquivo. Tente novamente.",
+          ),
+        );
+        throw err;
+      }
+    },
+    [deleteDocumento, planoId, refetch],
   );
 
   /**
@@ -416,12 +442,13 @@ export function RevisaoContent({ planoId }: RevisaoContentProps) {
             <CardContent>
               <DocumentoList
                 documentos={plano.documentos}
-                canDelete={false}
+                canDelete={true}
                 canAprovar={true}
                 canEdit={true}
                 canComentar={true}
                 onAprovar={handleAprovarDocumento}
                 onDesaprovar={handleDesaprovarDocumento}
+                onDelete={handleExcluirDocumento}
                 onRegerarPdf={handleRegerarPdfDocumento}
                 onImprimir={handleImprimirDocumento}
               />
@@ -432,7 +459,7 @@ export function RevisaoContent({ planoId }: RevisaoContentProps) {
         {/* Sidebar - 1 coluna */}
         <div className="space-y-6">
           {/* Historico */}
-          <HistoricoTimeline planoId={planoId} />
+          <HistoricoTimeline key={historicoVersao} planoId={planoId} />
 
           {/* Acoes */}
           <Card>
