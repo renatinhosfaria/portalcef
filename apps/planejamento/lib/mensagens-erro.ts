@@ -3,7 +3,9 @@ type ObjetoErro = Record<string, unknown>;
 const MENSAGEM_DOCUMENTO_INDISPONIVEL =
   "Não conseguimos abrir esse documento agora. Tente abrir novamente em alguns instantes.";
 const LIMITE_UPLOAD_ARQUIVO_MB = 500;
-const MENSAGENS_ERRO_EXCLUSAO_DOCUMENTO: Record<string, string> = {
+const MENSAGEM_FALHA_EXCLUSAO_DOCUMENTO =
+  "Não foi possível excluir o arquivo agora. Tente novamente. Se o problema continuar, procure o suporte.";
+export const MENSAGENS_ERRO_EXCLUSAO_DOCUMENTO: Record<string, string> = {
   motivo_exclusao_invalido:
     "Informe o motivo da exclusão com pelo menos 10 caracteres.",
   documento_aprovado: "Este arquivo já foi aprovado e não pode ser excluído.",
@@ -14,8 +16,7 @@ const MENSAGENS_ERRO_EXCLUSAO_DOCUMENTO: Record<string, string> = {
     "Você não tem permissão para excluir este arquivo.",
   documento_nao_encontrado:
     "Este arquivo não foi encontrado. Atualize a página e tente novamente.",
-  falha_exclusao_documento:
-    "Não foi possível excluir o arquivo agora. Tente novamente. Se o problema continuar, procure o suporte.",
+  falha_exclusao_documento: MENSAGEM_FALHA_EXCLUSAO_DOCUMENTO,
 };
 
 function isObjeto(valor: unknown): valor is ObjetoErro {
@@ -196,6 +197,19 @@ export function obterMensagemErro(
   }
 
   return fallback;
+}
+
+export function obterMensagemErroExclusao(
+  erro: unknown,
+  fallback = MENSAGEM_FALHA_EXCLUSAO_DOCUMENTO,
+): string {
+  const mensagem = obterMensagemErro(erro, fallback).trim();
+  const mensagensConhecidas = new Set([
+    ...Object.values(MENSAGENS_ERRO_EXCLUSAO_DOCUMENTO),
+    fallback.trim(),
+  ]);
+
+  return mensagensConhecidas.has(mensagem) ? mensagem : fallback;
 }
 
 export function obterMensagemErroDaRespostaApi(

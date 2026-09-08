@@ -12,9 +12,9 @@ import {
 } from "@essencia/ui/components/alert-dialog";
 import { Textarea } from "@essencia/ui/components/textarea";
 import { AlertCircle, Trash2 } from "lucide-react";
-import { useEffect, useState, type MouseEvent } from "react";
+import { useEffect, useId, useState, type MouseEvent } from "react";
 
-import { obterMensagemErro } from "../../../lib/mensagens-erro";
+import { obterMensagemErroExclusao } from "../../../lib/mensagens-erro";
 
 const MINIMO_MOTIVO_EXCLUSAO = 10;
 const MENSAGEM_MOTIVO_INVALIDO =
@@ -37,6 +37,10 @@ export function ConfirmarExclusaoDocumentoDialog({
   nomeArquivo,
   onConfirmar,
 }: ConfirmarExclusaoDocumentoDialogProps) {
+  const id = useId().replace(/:/g, "");
+  const motivoId = `motivo-exclusao-documento-${id}`;
+  const ajudaId = `${motivoId}-ajuda`;
+  const erroId = `${motivoId}-erro`;
   const [motivo, setMotivo] = useState("");
   const [erro, setErro] = useState<string | null>(null);
   const [carregando, setCarregando] = useState(false);
@@ -65,7 +69,7 @@ export function ConfirmarExclusaoDocumentoDialog({
       await onConfirmar(documentoId, motivoNormalizado);
       onOpenChange(false);
     } catch (error) {
-      setErro(obterMensagemErro(error, MENSAGEM_FALHA_EXCLUSAO));
+      setErro(obterMensagemErroExclusao(error, MENSAGEM_FALHA_EXCLUSAO));
     } finally {
       setCarregando(false);
     }
@@ -89,13 +93,13 @@ export function ConfirmarExclusaoDocumentoDialog({
 
         <div className="grid gap-2 py-2">
           <label
-            htmlFor="motivo-exclusao-documento"
+            htmlFor={motivoId}
             className="text-sm font-medium"
           >
             Motivo da exclusão <span className="text-destructive">*</span>
           </label>
           <Textarea
-            id="motivo-exclusao-documento"
+            id={motivoId}
             value={motivo}
             onChange={(event) => {
               setMotivo(event.target.value);
@@ -105,20 +109,22 @@ export function ConfirmarExclusaoDocumentoDialog({
             disabled={carregando}
             minLength={MINIMO_MOTIVO_EXCLUSAO}
             rows={4}
+            required
+            aria-required="true"
             aria-invalid={!!erro}
             aria-describedby={
-              erro ? "motivo-exclusao-erro" : "motivo-exclusao-ajuda"
+              erro ? erroId : ajudaId
             }
           />
           <p
-            id="motivo-exclusao-ajuda"
+            id={ajudaId}
             className="text-xs text-muted-foreground"
           >
             Informe pelo menos 10 caracteres para registrar o motivo.
           </p>
           {erro && (
             <p
-              id="motivo-exclusao-erro"
+              id={erroId}
               role="alert"
               className="flex items-start gap-2 text-sm text-destructive"
             >

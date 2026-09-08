@@ -104,9 +104,99 @@ describe("ConfirmarExclusaoDocumentoDialog", () => {
     expect(screen.getByRole("alertdialog")).toBeInTheDocument();
   });
 
+  it("oculta detalhes técnicos desconhecidos retornados pela exclusão", async () => {
+    const user = userEvent.setup();
+    const onConfirmar = vi
+      .fn()
+      .mockRejectedValue(new Error("Database connection reset by peer"));
+
+    render(
+      <ConfirmarExclusaoDocumentoDialog
+        open
+        onOpenChange={vi.fn()}
+        documentoId="doc-1"
+        nomeArquivo="planejamento.pdf"
+        onConfirmar={onConfirmar}
+      />,
+    );
+
+    await user.type(
+      screen.getByRole("textbox", { name: /motivo da exclusão/i }),
+      "Arquivo duplicado no planejamento",
+    );
+    await user.click(screen.getByRole("button", { name: /excluir arquivo/i }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          "Não foi possível excluir o arquivo agora. Tente novamente.",
+        ),
+      ).toBeInTheDocument();
+    });
+    expect(
+      screen.queryByText("Database connection reset by peer"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("converte erro de domínio de documento aprovado em mensagem amigável", async () => {
+    const user = userEvent.setup();
+    const onConfirmar = vi.fn().mockRejectedValue(
+      Object.assign(new Error("Regra interna de aprovação"), {
+        code: "DOCUMENTO_APROVADO",
+      }),
+    );
+
+    render(
+      <ConfirmarExclusaoDocumentoDialog
+        open
+        onOpenChange={vi.fn()}
+        documentoId="doc-1"
+        nomeArquivo="planejamento.pdf"
+        onConfirmar={onConfirmar}
+      />,
+    );
+
+    await user.type(
+      screen.getByRole("textbox", { name: /motivo da exclusão/i }),
+      "Arquivo duplicado no planejamento",
+    );
+    await user.click(screen.getByRole("button", { name: /excluir arquivo/i }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("Este arquivo já foi aprovado e não pode ser excluído."),
+      ).toBeInTheDocument();
+    });
+    expect(
+      screen.queryByText("Regra interna de aprovação"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("cancela sem confirmar a exclusão", async () => {
+    const user = userEvent.setup();
+    const onConfirmar = vi.fn().mockResolvedValue(undefined);
+    const onOpenChange = vi.fn();
+
+    render(
+      <ConfirmarExclusaoDocumentoDialog
+        open
+        onOpenChange={onOpenChange}
+        documentoId="doc-1"
+        nomeArquivo="planejamento.pdf"
+        onConfirmar={onConfirmar}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Cancelar" }));
+
+    expect(onConfirmar).not.toHaveBeenCalled();
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
   it("sinaliza carregamento enquanto aguarda a confirmação", async () => {
     const user = userEvent.setup();
     let liberarConfirmacao: (() => void) | undefined;
+    const onOpenChange = vi.fn();
     const onConfirmar = vi.fn(
       () =>
         new Promise<void>((resolve) => {
@@ -117,7 +207,7 @@ describe("ConfirmarExclusaoDocumentoDialog", () => {
     render(
       <ConfirmarExclusaoDocumentoDialog
         open
-        onOpenChange={vi.fn()}
+        onOpenChange={onOpenChange}
         documentoId="doc-1"
         nomeArquivo="planejamento.pdf"
         onConfirmar={onConfirmar}
@@ -137,9 +227,46 @@ describe("ConfirmarExclusaoDocumentoDialog", () => {
       screen.getByRole("textbox", { name: /motivo da exclusão/i }),
     ).toBeDisabled();
 
+    await user.keyboard("{Escape}");
+    expect(onConfirmar).toHaveBeenCalledTimes(1);
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
+
     liberarConfirmacao?.();
     await waitFor(() => {
       expect(onConfirmar).toHaveBeenCalledTimes(1);
     });
+  });
+
+  it("marca o motivo como obrigatório e usa IDs únicos em múltiplas instâncias", () => {
+    render(
+      <>
+        <ConfirmarExclusaoDocumentoDialog
+          open
+          onOpenChange={vi.fn()}
+          documentoId="doc-1"
+          nomeArquivo="primeiro.pdf"
+          onConfirmar={vi.fn().mockResolvedValue(undefined)}
+        />
+        <ConfirmarExclusaoDocumentoDialog
+          open
+          onOpenChange={vi.fn()}
+          documentoId="doc-2"
+          nomeArquivo="segundo.pdf"
+          onConfirmar={vi.fn().mockResolvedValue(undefined)}
+        />
+      </>,
+    );
+
+    const camposMotivo = screen.getAllByRole("textbox", {
+      name: /motivo da exclusão/i,
+      hidden: true,
+    });
+    const ids = camposMotivo.map((campo) => campo.getAttribute("id"));
+
+    expect(camposMotivo[0]).toBeRequired();
+    expect(camposMotivo[0]).toHaveAttribute("aria-required", "true");
+    expect(ids[0]).toBeTruthy();
+    expect(ids[1]).toBeTruthy();
+    expect(ids[0]).not.toBe(ids[1]);
   });
 });
