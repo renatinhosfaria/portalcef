@@ -265,4 +265,57 @@ describe("RevisaoRelatorioContent", () => {
       );
     });
   });
+
+  it("não exibe sucesso quando o relatório falha ao recarregar após a exclusão", async () => {
+    const relatorioComDocumento = {
+      id: "relatorio-1",
+      userId: "prof-1",
+      turmaId: "turma-1",
+      unitId: "unidade-1",
+      semestreId: "semestre-1",
+      status: "AGUARDANDO_ANALISTA",
+      createdAt: "2026-06-29T09:44:00.000Z",
+      updatedAt: "2026-06-30T09:44:00.000Z",
+      documentos: [
+        {
+          id: "documento-1",
+          relatorioId: "relatorio-1",
+          tipo: "ARQUIVO",
+          fileName: "relatorio.docx",
+          pdfStatus: "NAO_APLICAVEL",
+          temComentarios: false,
+          createdAt: "2026-06-30T09:44:00.000Z",
+          updatedAt: "2026-06-30T09:44:00.000Z",
+        },
+      ],
+    };
+    getRelatorio
+      .mockResolvedValueOnce(relatorioComDocumento)
+      .mockRejectedValueOnce(new Error("Falha de conexão"));
+
+    render(<RevisaoRelatorioContent relatorioId="relatorio-1" />);
+
+    const botaoExcluir = await screen.findByRole("button", {
+      name: /excluir arquivo/i,
+    });
+    fireEvent.click(botaoExcluir);
+    fireEvent.change(screen.getByRole("textbox"), {
+      target: { value: "Arquivo duplicado no relatório" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /excluir arquivo/i }));
+
+    await waitFor(() => {
+      expect(deleteDocumento).toHaveBeenCalledWith(
+        "relatorio-1",
+        "documento-1",
+        "Arquivo duplicado no relatório",
+      );
+      expect(
+        screen.getByText(
+          "O arquivo foi excluído, mas não foi possível atualizar o relatório agora. Atualize a página para conferir.",
+        ),
+      ).toBeInTheDocument();
+    });
+    expect(screen.queryByText("Arquivo excluído com sucesso!")).toBeNull();
+  });
 });

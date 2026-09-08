@@ -51,6 +51,7 @@ let documentoListProps: {
   canDelete?: boolean;
   onDelete?: (documentoId: string, motivo: string) => Promise<void>;
 } | null = null;
+let historicoRenderCount = 0;
 
 vi.mock("../../../../../features/prova", () => ({
   PROVA_STATUS_COLORS: {
@@ -86,6 +87,10 @@ vi.mock("../../../../../features/prova", () => ({
 }));
 
 vi.mock("../../../../../features/plano-aula", () => ({
+  HistoricoTimeline: () => {
+    historicoRenderCount += 1;
+    return <div>Histórico da prova</div>;
+  },
   DocumentoList: (props: {
     documentos: Array<{ pdfStatus?: string }>;
     permitirImpressaoSemAprovacao?: boolean;
@@ -118,6 +123,7 @@ describe("ProvaGestaoContent", () => {
     enviarParaAnalise.mockResolvedValue(undefined);
     provaMock = provaBase;
     documentoListProps = null;
+    historicoRenderCount = 0;
   });
 
   it("carrega o detalhe de gestão e envia prova impressa para análise", async () => {
@@ -187,5 +193,6 @@ describe("ProvaGestaoContent", () => {
       "Arquivo duplicado enviado pela professora",
     );
     expect(refetch).toHaveBeenCalled();
+    expect(historicoRenderCount).toBeGreaterThanOrEqual(2);
   });
 });

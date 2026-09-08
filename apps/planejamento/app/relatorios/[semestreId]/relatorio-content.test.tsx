@@ -107,4 +107,32 @@ describe("RelatorioContent", () => {
       await screen.findByText("Você não tem permissão para fazer essa ação."),
     ).toBeInTheDocument();
   });
+
+  it("não exibe sucesso quando o histórico falha ao recarregar após a exclusão", async () => {
+    getHistorico
+      .mockResolvedValueOnce([])
+      .mockRejectedValueOnce(new Error("Falha de conexão"));
+
+    render(<RelatorioContent semestreId="semestre-1" turmaId="turma-1" />);
+
+    await waitFor(() => {
+      expect(documentoListProps?.onDelete).toEqual(expect.any(Function));
+    });
+
+    await act(async () => {
+      await expect(
+        documentoListProps?.onDelete?.(
+          "documento-1",
+          "Arquivo enviado com conteúdo incorreto",
+        ),
+      ).rejects.toBeInstanceOf(Error);
+    });
+
+    expect(
+      await screen.findByText(
+        "O arquivo foi excluído, mas não foi possível atualizar o relatório e o histórico agora. Atualize a página para conferir.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Arquivo excluído com sucesso.")).toBeNull();
+  });
 });

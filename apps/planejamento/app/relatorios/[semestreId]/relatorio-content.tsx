@@ -50,6 +50,9 @@ interface RelatorioContentProps {
   turmaId: string | null;
 }
 
+const MENSAGEM_ERRO_ATUALIZAR_RELATORIO_APOS_EXCLUSAO =
+  "O arquivo foi excluído, mas não foi possível atualizar o relatório e o histórico agora. Atualize a página para conferir.";
+
 function canEdit(status: RelatorioStatus): boolean {
   return [
     "RASCUNHO",
@@ -135,21 +138,26 @@ export function RelatorioContent({
   } = useRelatorio();
 
   const carregarHistorico = useCallback(
-    async (relatorioId: string) => {
+    async (relatorioId: string, propagarErro = false) => {
       try {
         setHistorico(await getHistorico(relatorioId));
-      } catch {
+      } catch (err) {
         setHistorico([]);
+        if (propagarErro) {
+          throw new Error(MENSAGEM_ERRO_ATUALIZAR_RELATORIO_APOS_EXCLUSAO, {
+            cause: err,
+          });
+        }
       }
     },
     [getHistorico],
   );
 
-  const refetchRelatorio = useCallback(async () => {
+  const refetchRelatorio = useCallback(async (propagarErroHistorico = false) => {
     if (!relatorio?.id) return;
     const atualizado = await getRelatorio(relatorio.id);
     setRelatorio(atualizado);
-    await carregarHistorico(atualizado.id);
+    await carregarHistorico(atualizado.id, propagarErroHistorico);
   }, [carregarHistorico, getRelatorio, relatorio?.id]);
 
   const carregarOuCriarRelatorio = useCallback(async () => {
@@ -207,13 +215,13 @@ export function RelatorioContent({
       setSuccessMessage(null);
       try {
         await deleteDocumento(relatorio.id, documentoId, motivo);
-        await refetchRelatorio();
+        await refetchRelatorio(true);
         setSuccessMessage("Arquivo excluído com sucesso.");
       } catch (err) {
         setError(
           obterMensagemErro(
             err,
-            "Não foi possível excluir o arquivo. Tente novamente.",
+            MENSAGEM_ERRO_ATUALIZAR_RELATORIO_APOS_EXCLUSAO,
           ),
         );
         throw err;

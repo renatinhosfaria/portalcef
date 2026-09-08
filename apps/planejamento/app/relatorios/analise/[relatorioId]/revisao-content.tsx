@@ -47,6 +47,9 @@ interface RevisaoRelatorioContentProps {
   relatorioId: string;
 }
 
+const MENSAGEM_ERRO_ATUALIZAR_RELATORIO_APOS_EXCLUSAO =
+  "O arquivo foi excluído, mas não foi possível atualizar o relatório agora. Atualize a página para conferir.";
+
 function isDocumentoWord(documento: RelatorioDocumento): boolean {
   return (
     documento.mimeType?.includes("word") === true ||
@@ -87,18 +90,20 @@ export function RevisaoRelatorioContent({
     desaprovarDocumento,
   } = useAnalistaRelatorio();
 
-  const carregarRelatorio = useCallback(async () => {
+  const carregarRelatorio = useCallback(async (propagarErro = false) => {
     setIsLoading(true);
     setActionError(null);
     try {
       setRelatorio(await getRelatorio(relatorioId));
     } catch (err) {
-      setActionError(
-        obterMensagemErro(
-          err,
-          "Não foi possível carregar o relatório. Tente novamente.",
-        ),
+      const mensagem = obterMensagemErro(
+        err,
+        "Não foi possível carregar o relatório. Tente novamente.",
       );
+      setActionError(mensagem);
+      if (propagarErro) {
+        throw new Error(MENSAGEM_ERRO_ATUALIZAR_RELATORIO_APOS_EXCLUSAO);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -182,14 +187,14 @@ export function RevisaoRelatorioContent({
     async (documentoId: string, motivo: string) => {
       try {
         await deleteDocumento(relatorioId, documentoId, motivo);
-        await carregarRelatorio();
+        await carregarRelatorio(true);
         setHistoricoVersao((versao) => versao + 1);
         setSuccessMessage("Arquivo excluído com sucesso!");
       } catch (err) {
         setActionError(
           obterMensagemErro(
             err,
-            "Não foi possível excluir o arquivo. Tente novamente.",
+            MENSAGEM_ERRO_ATUALIZAR_RELATORIO_APOS_EXCLUSAO,
           ),
         );
         throw err;

@@ -19,6 +19,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import {
   DocumentoList,
+  HistoricoTimeline,
   type PlanoDocumento,
 } from "../../../../../features/plano-aula";
 import {
@@ -47,6 +48,7 @@ export function ProvaGestaoContent({ provaId }: ProvaGestaoContentProps) {
 
   const [actionError, setActionError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [historicoVersao, setHistoricoVersao] = useState(0);
 
   useEffect(() => {
     fetchProva(provaId).catch(() => undefined);
@@ -83,6 +85,7 @@ export function ProvaGestaoContent({ provaId }: ProvaGestaoContentProps) {
       try {
         await deleteDocumento(prova.id, documentoId, motivo);
         await refetch();
+        setHistoricoVersao((versao) => versao + 1);
         setSuccessMessage("Arquivo excluído com sucesso.");
       } catch (err) {
         setActionError(
@@ -292,6 +295,19 @@ export function ProvaGestaoContent({ provaId }: ProvaGestaoContentProps) {
                   </AlertDescription>
                 </Alert>
               )}
+            </CardContent>
+          </Card>
+
+          <Card className="mt-6">
+            <CardHeader>
+              <CardTitle className="text-lg">Histórico da prova</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <HistoricoTimeline
+                key={historicoVersao}
+                planoId={prova.id}
+                modulo="prova"
+              />
             </CardContent>
           </Card>
         </div>
