@@ -62,9 +62,9 @@ deverão ocorrer em uma transação do banco. A limpeza do storage ocorre fora d
 transação e seguirá o comportamento tolerante a falhas já adotado pelo
 `StorageService`, com registro de aviso nos logs.
 
-O cliente HTTP será ampliado para permitir corpo em requisições `DELETE`, sem
-alterar chamadas existentes. Os hooks de plano, prova e relatório passarão a
-receber o motivo e enviá-lo à API.
+O cliente HTTP atual já permite corpo em requisições `DELETE` por meio de
+`api.delete(endpoint, { body })`, sem alterar chamadas existentes. Os hooks de
+plano, prova e relatório passarão a receber o motivo e enviá-lo à API.
 
 ## Histórico e auditoria
 
