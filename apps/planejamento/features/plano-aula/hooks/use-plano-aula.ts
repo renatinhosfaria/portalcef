@@ -30,7 +30,11 @@ interface UsePlanoAulaReturn {
   getPlano: (id: string) => Promise<PlanoAula>;
   uploadDocumento: (planoId: string, file: File) => Promise<PlanoDocumento>;
   addLink: (planoId: string, url: string) => Promise<PlanoDocumento>;
-  deleteDocumento: (planoId: string, docId: string) => Promise<void>;
+  deleteDocumento: (
+    planoId: string,
+    docId: string,
+    motivo: string,
+  ) => Promise<void>;
   aprovarDocumento: (documentoId: string) => Promise<PlanoDocumento>;
   desaprovarDocumento: (documentoId: string) => Promise<PlanoDocumento>;
   regerarPdfDocumento: (documentoId: string) => Promise<PlanoDocumento>;
@@ -145,11 +149,13 @@ export function usePlanoAula(): UsePlanoAulaReturn {
   );
 
   const deleteDocumento = useCallback(
-    async (planoId: string, docId: string): Promise<void> => {
+    async (planoId: string, docId: string, motivo: string): Promise<void> => {
       setLoading(true);
       setError(null);
       try {
-        await api.delete(`/plano-aula/${planoId}/documentos/${docId}`);
+        await api.delete(`/plano-aula/${planoId}/documentos/${docId}`, {
+          body: { motivo },
+        });
       } catch (err) {
         const message = obterMensagemErro(
           err,

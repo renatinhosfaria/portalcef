@@ -8,6 +8,8 @@ const MENSAGENS_ERRO_EXCLUSAO_DOCUMENTO: Record<string, string> = {
     "Informe o motivo da exclusão com pelo menos 10 caracteres.",
   documento_aprovado: "Este arquivo já foi aprovado e não pode ser excluído.",
   documento_link: "Links do YouTube não podem ser excluídos por esta opção.",
+  tipo_documento_nao_permitido:
+    "Este item não é um arquivo enviado e não pode ser excluído por esta opção.",
   permissao_exclusao_documento:
     "Você não tem permissão para excluir este arquivo.",
   documento_nao_encontrado:

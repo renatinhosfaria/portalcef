@@ -9,6 +9,7 @@ export const CODIGOS_ERRO_EXCLUSAO_DOCUMENTO = {
   MOTIVO_INVALIDO: "MOTIVO_EXCLUSAO_INVALIDO",
   DOCUMENTO_APROVADO: "DOCUMENTO_APROVADO",
   DOCUMENTO_LINK: "DOCUMENTO_LINK",
+  TIPO_DOCUMENTO_NAO_PERMITIDO: "TIPO_DOCUMENTO_NAO_PERMITIDO",
   PERMISSAO: "PERMISSAO_EXCLUSAO_DOCUMENTO",
   DOCUMENTO_NAO_ENCONTRADO: "DOCUMENTO_NAO_ENCONTRADO",
   FALHA: "FALHA_EXCLUSAO_DOCUMENTO",
@@ -23,6 +24,8 @@ export const MENSAGEM_DOCUMENTO_APROVADO =
   "Este arquivo já foi aprovado e não pode ser excluído.";
 export const MENSAGEM_DOCUMENTO_LINK =
   "Links do YouTube não podem ser excluídos por esta opção.";
+export const MENSAGEM_TIPO_DOCUMENTO_NAO_PERMITIDO =
+  "Este item não é um arquivo enviado e não pode ser excluído por esta opção.";
 export const MENSAGEM_PERMISSAO_EXCLUSAO_DOCUMENTO =
   "Você não tem permissão para excluir este arquivo.";
 export const MENSAGEM_DOCUMENTO_NAO_ENCONTRADO =
@@ -52,6 +55,13 @@ export function criarErroDocumentoLink(): BadRequestException {
   return new BadRequestException({
     code: CODIGOS_ERRO_EXCLUSAO_DOCUMENTO.DOCUMENTO_LINK,
     message: MENSAGEM_DOCUMENTO_LINK,
+  });
+}
+
+export function criarErroTipoDocumentoNaoPermitido(): BadRequestException {
+  return new BadRequestException({
+    code: CODIGOS_ERRO_EXCLUSAO_DOCUMENTO.TIPO_DOCUMENTO_NAO_PERMITIDO,
+    message: MENSAGEM_TIPO_DOCUMENTO_NAO_PERMITIDO,
   });
 }
 

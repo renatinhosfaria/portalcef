@@ -34,6 +34,7 @@ import {
 } from "@essencia/db";
 
 import type { PdfGerado } from "../../common/sharepoint/pdf-generator.service";
+import { SharePointService } from "../../common/sharepoint/sharepoint.service";
 import { StorageService } from "../../common/storage/storage.service";
 import {
   criarErroDocumentoAprovado,
@@ -41,6 +42,7 @@ import {
   criarErroDocumentoNaoEncontrado,
   criarErroFalhaExclusaoDocumento,
   criarErroPermissaoExclusaoDocumento,
+  criarErroTipoDocumentoNaoPermitido,
   lancarMotivoExclusaoInvalido,
 } from "../../common/documento-exclusao";
 import { PlanoAulaHistoricoService } from "./plano-aula-historico.service";
@@ -135,6 +137,7 @@ export class PlanoAulaService {
     private readonly historicoService: PlanoAulaHistoricoService,
     private readonly planoAulaPdfQueueService: PlanoAulaPdfQueueService,
     private readonly storageService: StorageService,
+    private readonly sharePointService: SharePointService,
   ) {}
 
   // ============================================
@@ -1723,6 +1726,12 @@ export class PlanoAulaService {
         throw criarErroDocumentoLink();
       }
 
+      const ehUpload =
+        tipoDocumento === "ARQUIVO" || tipoDocumento === "UPLOAD";
+      if (!ehUpload) {
+        throw criarErroTipoDocumentoNaoPermitido();
+      }
+
       const userName = await this.getUserName(user.userId);
       const detalhes = {
         documentoId: documento.id,
@@ -1804,6 +1813,17 @@ export class PlanoAulaService {
           }
         }),
       );
+
+      if (documento.sharepointItemId) {
+        try {
+          await this.sharePointService.removerArquivo(documento.sharepointItemId);
+        } catch (error) {
+          const mensagem = error instanceof Error ? error.message : String(error);
+          this.logger.warn(
+            `[removerDocumento] Falha ao remover ${documento.sharepointItemId} do SharePoint: ${mensagem}`,
+          );
+        }
+      }
     } catch (error) {
       if (error instanceof HttpException) {
         throw error;

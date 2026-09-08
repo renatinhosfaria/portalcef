@@ -5,6 +5,7 @@ import {
 import { Test, TestingModule } from "@nestjs/testing";
 
 import { PdfGeneratorService } from "../../common/sharepoint/pdf-generator.service";
+import { SharePointService } from "../../common/sharepoint/sharepoint.service";
 import { StorageService } from "../../common/storage/storage.service";
 import { isNull } from "@essencia/db";
 import { PlanoAulaHistoricoService } from "./plano-aula-historico.service";
@@ -108,6 +109,9 @@ describe("PlanoAulaService", () => {
   const storageServiceMock = {
     deleteFile: jest.fn().mockResolvedValue(undefined),
   };
+  const sharePointServiceMock = {
+    removerArquivo: jest.fn().mockResolvedValue(true),
+  };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -128,6 +132,10 @@ describe("PlanoAulaService", () => {
         {
           provide: StorageService,
           useValue: storageServiceMock,
+        },
+        {
+          provide: SharePointService,
+          useValue: sharePointServiceMock,
         },
       ],
     }).compile();
@@ -652,6 +660,31 @@ describe("PlanoAulaService", () => {
       expect(storageServiceMock.deleteFile).not.toHaveBeenCalled();
     });
 
+    it("rejeita tipo de documento desconhecido com mensagem clara", async () => {
+      mockDb.query.planoDocumento.findFirst.mockResolvedValue({
+        ...documentoUpload,
+        tipo: "ANEXO_LEGADO",
+      });
+
+      await expect(
+        service.removerDocumento(
+          usuarioLogado,
+          "plano-1",
+          "doc-1",
+          "Tipo de documento não é compatível com a exclusão",
+        ),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: "TIPO_DOCUMENTO_NAO_PERMITIDO",
+          message:
+            "Este item não é um arquivo enviado e não pode ser excluído por esta opção.",
+        }),
+      });
+
+      expect(mockDb.transaction).not.toHaveBeenCalled();
+      expect(storageServiceMock.deleteFile).not.toHaveBeenCalled();
+    });
+
     it("retorna erro claro quando documento não pertence ao plano", async () => {
       mockDb.query.planoDocumento.findFirst.mockResolvedValue(null);
 
@@ -812,6 +845,32 @@ describe("PlanoAulaService", () => {
       expect(storageServiceMock.deleteFile).toHaveBeenCalledWith(
         "planos/doc-1.pdf",
       );
+      expect(sharePointServiceMock.removerArquivo).not.toHaveBeenCalled();
+    });
+
+    it("tenta remover item ativo do SharePoint sem bloquear a exclusão local", async () => {
+      mockDb.query.planoDocumento.findFirst.mockResolvedValue({
+        ...documentoUpload,
+        sharepointItemId: "item-sharepoint-1",
+      });
+      sharePointServiceMock.removerArquivo.mockRejectedValueOnce(
+        new Error("SharePoint indisponível"),
+      );
+
+      await expect(
+        service.removerDocumento(
+          usuarioLogado,
+          "plano-1",
+          "doc-1",
+          "Arquivo não deve mais ser utilizado",
+        ),
+      ).resolves.toBeUndefined();
+
+      expect(sharePointServiceMock.removerArquivo).toHaveBeenCalledWith(
+        "item-sharepoint-1",
+      );
+      expect(mockDb.transaction).toHaveBeenCalledTimes(1);
+      expect(storageServiceMock.deleteFile).toHaveBeenCalled();
     });
 
     it.each(["ARQUIVO", "UPLOAD"] as const)(
@@ -907,6 +966,34 @@ describe("PlanoAulaService", () => {
         "message",
         expect.stringContaining("detalhe interno que não deve chegar ao usuário"),
       );
+    });
+
+    it("não limpa storage nem SharePoint quando o histórico faz a transação falhar", async () => {
+      historicoServiceMock.registrar.mockRejectedValueOnce(
+        new Error("falha ao registrar histórico"),
+      );
+      mockDb.query.planoDocumento.findFirst.mockResolvedValue({
+        ...documentoUpload,
+        sharepointItemId: "item-sharepoint-2",
+      });
+
+      await expect(
+        service.removerDocumento(
+          usuarioLogado,
+          "plano-1",
+          "doc-1",
+          "Exclusão não deve ser concluída sem histórico",
+        ),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: "FALHA_EXCLUSAO_DOCUMENTO",
+        }),
+      });
+
+      expect(mockDb.transaction).toHaveBeenCalledTimes(1);
+      expect(historicoServiceMock.registrar).toHaveBeenCalled();
+      expect(storageServiceMock.deleteFile).not.toHaveBeenCalled();
+      expect(sharePointServiceMock.removerArquivo).not.toHaveBeenCalled();
     });
 
     it("conclui a exclusão mesmo quando a remoção no storage falha", async () => {

@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { GET } from "./route";
+import { DELETE, GET, POST } from "./route";
 
 describe("proxy da API do planejamento", () => {
   afterEach(() => {
@@ -56,6 +56,60 @@ describe("proxy da API do planejamento", () => {
       /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
     );
     expect(response.headers.get("x-correlation-id")).toBe(correlationId);
+  });
+
+  it("encaminha o motivo no corpo JSON de uma exclusão DELETE", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      Response.json({ success: true }, { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const motivo = "Arquivo enviado com conteúdo incorreto";
+    const request = new NextRequest(
+      "http://localhost/api/plano-aula/plano-1/documentos/doc-1",
+      {
+        method: "DELETE",
+        headers: {
+          "content-type": "application/json",
+          cookie: "sid=abc",
+        },
+        body: JSON.stringify({ motivo }),
+      },
+    );
+
+    await DELETE(request);
+
+    const opcoes = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    expect(opcoes?.method).toBe("DELETE");
+    expect(JSON.parse(String(opcoes?.body))).toEqual({ motivo });
+  });
+
+  it("preserva o multipart e o body de uploads POST", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      Response.json({ success: true }, { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const formulario = new FormData();
+    formulario.append(
+      "file",
+      new Blob(["conteúdo"], { type: "text/plain" }),
+      "arquivo.txt",
+    );
+    const request = new NextRequest(
+      "http://localhost/api/plano-aula/plano-1/documentos/upload",
+      {
+        method: "POST",
+        body: formulario,
+      },
+    );
+
+    await POST(request);
+
+    const opcoes = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    const headers = opcoes?.headers as Record<string, string> | undefined;
+    expect(headers?.["Content-Type"]).toContain("multipart/form-data");
+    expect(opcoes?.body).toBeDefined();
   });
 
   it("preserva respostas binarias do backend sem converter para JSON", async () => {

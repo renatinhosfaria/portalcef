@@ -81,6 +81,10 @@ describe("mensagens de erro amigáveis", () => {
       "Links do YouTube não podem ser excluídos por esta opção.",
     ],
     [
+      "TIPO_DOCUMENTO_NAO_PERMITIDO",
+      "Este item não é um arquivo enviado e não pode ser excluído por esta opção.",
+    ],
+    [
       "PERMISSAO_EXCLUSAO_DOCUMENTO",
       "Você não tem permissão para excluir este arquivo.",
     ],

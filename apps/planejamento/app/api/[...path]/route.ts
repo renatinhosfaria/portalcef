@@ -67,7 +67,7 @@ async function proxyRequest(
     };
 
     // Processar body para métodos que suportam payload
-    if (["POST", "PUT", "PATCH"].includes(method)) {
+    if (["POST", "PUT", "PATCH", "DELETE"].includes(method)) {
       if (isMultipart) {
         // Para multipart/form-data, passar o Content-Type original com boundary
         // e o body como stream para preservar os dados do arquivo
