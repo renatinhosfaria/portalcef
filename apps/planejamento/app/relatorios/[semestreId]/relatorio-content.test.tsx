@@ -1,4 +1,11 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import type { HistoricoEntry } from "@essencia/shared/types";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { RelatorioContent } from "./relatorio-content";
@@ -132,5 +139,83 @@ describe("RelatorioContent", () => {
       ),
     ).toBeInTheDocument();
     expect(screen.queryByText("Arquivo excluído com sucesso.")).toBeNull();
+  });
+
+  it("exibe exclusão no histórico com label e detalhes amigáveis", async () => {
+    const historico: HistoricoEntry[] = [
+      {
+        id: "historico-exclusao",
+        planoId: "relatorio-1",
+        userId: "usuario-1",
+        userName: "Professora",
+        userRole: "professora",
+        acao: "DOCUMENTO_EXCLUIDO",
+        statusAnterior: "RASCUNHO",
+        statusNovo: "RASCUNHO",
+        detalhes: {
+          documentoId: "documento-1",
+          documentoNome: "relatorio-final.pdf",
+          documentoTipo: "ARQUIVO",
+          motivo: "Arquivo enviado com informações incorretas",
+        },
+        createdAt: "2026-09-08T12:00:00.000Z",
+      },
+    ];
+    getHistorico.mockResolvedValue(historico);
+
+    render(<RelatorioContent semestreId="semestre-1" turmaId="turma-1" />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: /Histórico/i }),
+      ).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Histórico/i }));
+
+    expect(
+      screen.getByText("Documento do relatório excluído"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Arquivo: relatorio-final\.pdf/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Motivo: Arquivo enviado com informações incorretas/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("DOCUMENTO_EXCLUIDO")).not.toBeInTheDocument();
+    expect(
+      screen.getByText(
+        (_, elemento) =>
+          elemento?.tagName === "P" &&
+          elemento.textContent?.includes("Professora • RASCUNHO") === true,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("mantém os eventos antigos funcionando no histórico", async () => {
+    getHistorico.mockResolvedValue([
+      {
+        id: "historico-submetido",
+        planoId: "relatorio-1",
+        userId: "usuario-1",
+        userName: "Professora",
+        userRole: "professora",
+        acao: "SUBMETIDO",
+        statusAnterior: "RASCUNHO",
+        statusNovo: "AGUARDANDO_ANALISTA",
+        detalhes: null,
+        createdAt: "2026-09-08T12:00:00.000Z",
+      } satisfies HistoricoEntry,
+    ]);
+
+    render(<RelatorioContent semestreId="semestre-1" turmaId="turma-1" />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: /Histórico/i }),
+      ).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Histórico/i }));
+
+    expect(screen.getByText("SUBMETIDO")).toBeInTheDocument();
   });
 });

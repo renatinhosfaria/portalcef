@@ -37,6 +37,10 @@ import {
   type PlanoDocumento,
 } from "../../../features/plano-aula";
 import {
+  obterDetalhesDocumentoExcluido,
+  obterLabelDocumentoExcluido,
+} from "../../../features/plano-aula/components/historico-apresentacao";
+import {
   STATUS_LABELS,
   type Relatorio,
   type RelatorioDocumento,
@@ -102,13 +106,31 @@ function HistoricoRelatorio({ historico }: { historico: HistoricoEntry[] }) {
   return (
     <div className="space-y-3">
       {historico.map((item) => (
-        <div key={item.id} className="rounded-md border p-3">
-          <p className="text-sm font-medium">{item.acao}</p>
-          <p className="text-xs text-muted-foreground">
-            {item.userName} • {item.statusNovo}
-          </p>
-        </div>
+        <HistoricoRelatorioItem key={item.id} item={item} />
       ))}
+    </div>
+  );
+}
+
+function HistoricoRelatorioItem({ item }: { item: HistoricoEntry }) {
+  const detalhesExclusao =
+    item.acao === "DOCUMENTO_EXCLUIDO"
+      ? obterDetalhesDocumentoExcluido(item)
+      : null;
+
+  return (
+    <div className="rounded-md border p-3">
+      <p className="text-sm font-medium">
+        {item.acao === "DOCUMENTO_EXCLUIDO"
+          ? obterLabelDocumentoExcluido("relatorio")
+          : item.acao}
+      </p>
+      {detalhesExclusao ? (
+        <p className="text-sm text-muted-foreground">{detalhesExclusao}</p>
+      ) : null}
+      <p className="text-xs text-muted-foreground">
+        {item.userName} • {item.statusNovo}
+      </p>
     </div>
   );
 }

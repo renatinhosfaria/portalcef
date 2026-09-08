@@ -70,8 +70,58 @@ describe("HistoricoTimeline", () => {
 
     render(<HistoricoTimeline planoId="relatorio-1" modulo="relatorio" />);
 
-    expect(screen.getByText("Relatório submetido para análise")).toBeInTheDocument();
+    expect(
+      screen.getByText("Relatório submetido para análise"),
+    ).toBeInTheDocument();
     expect(screen.getByText("Rascunho")).toBeInTheDocument();
     expect(screen.getByText("Aguardando Analista")).toBeInTheDocument();
+  });
+
+  it("renderiza exclusão com label, ícone, cor e detalhes amigáveis", () => {
+    const historico: HistoricoEntry[] = [
+      {
+        id: "historico-exclusao",
+        planoId: "relatorio-1",
+        userId: "gestora-1",
+        userName: "Gestora",
+        userRole: "gerente_unidade",
+        acao: "DOCUMENTO_EXCLUIDO",
+        statusAnterior: "RASCUNHO",
+        statusNovo: "RASCUNHO",
+        detalhes: {
+          documentoId: "documento-1",
+          documentoNome: "relatorio-final.pdf",
+          documentoTipo: "ARQUIVO",
+          tamanhoBytes: 12345,
+          motivo: "Arquivo enviado com informações incorretas",
+        },
+        createdAt: "2026-09-08T12:00:00.000Z",
+      },
+    ];
+
+    mockUseHistorico.mockReturnValue({
+      historico,
+      isLoading: false,
+      error: null,
+    });
+
+    render(<HistoricoTimeline planoId="relatorio-1" modulo="relatorio" />);
+
+    expect(
+      screen.getByText("Documento do relatório excluído"),
+    ).toBeInTheDocument();
+    expect(document.querySelector("svg.lucide-trash2")).toBeInTheDocument();
+    expect(
+      document.querySelector(".bg-red-100.text-red-600"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Arquivo: relatorio-final\.pdf/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Motivo: Arquivo enviado com informações incorretas/),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/documento-1|ARQUIVO|12345/),
+    ).not.toBeInTheDocument();
   });
 });

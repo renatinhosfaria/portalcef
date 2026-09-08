@@ -18,6 +18,7 @@ import {
   Plus,
   Printer,
   Send,
+  Trash2,
   Undo,
 } from "lucide-react";
 
@@ -46,12 +47,15 @@ import {
 } from "../../relatorio/types";
 import { useHistorico } from "../hooks/use-historico";
 import {
+  obterDetalhesDocumentoExcluido,
+  obterLabelDocumentoExcluido,
+  type HistoricoModulo,
+} from "./historico-apresentacao";
+import {
   STATUS_COLORS as PLANO_STATUS_COLORS,
   STATUS_LABELS as PLANO_STATUS_LABELS,
   type PlanoAulaStatus,
 } from "../types";
-
-type HistoricoModulo = "plano-aula" | "prova" | "relatorio";
 
 interface HistoricoTimelineProps {
   planoId: string;
@@ -157,6 +161,8 @@ function getAcaoIcon(acao: AcaoHistorico) {
       return <Undo className="h-4 w-4" />;
     case "DOCUMENTO_IMPRESSO":
       return <Printer className="h-4 w-4" />;
+    case "DOCUMENTO_EXCLUIDO":
+      return <Trash2 className="h-4 w-4" />;
     case "RECUPERADO":
       return <Undo className="h-4 w-4" />;
     case "COMENTARIO_ADICIONADO":
@@ -189,6 +195,8 @@ function getAcaoColor(acao: AcaoHistorico): string {
       return "bg-red-100 text-red-600";
     case "DOCUMENTO_IMPRESSO":
       return "bg-indigo-100 text-indigo-600";
+    case "DOCUMENTO_EXCLUIDO":
+      return "bg-red-100 text-red-600";
     case "RECUPERADO":
       return "bg-amber-100 text-amber-600";
     case "COMENTARIO_ADICIONADO":
@@ -231,6 +239,8 @@ function getAcaoLabel(acao: AcaoHistorico, modulo: HistoricoModulo): string {
       return "Devolvido pela coordenadora";
     case "DOCUMENTO_IMPRESSO":
       return "Documento impresso";
+    case "DOCUMENTO_EXCLUIDO":
+      return obterLabelDocumentoExcluido(modulo);
     case "RECUPERADO":
       if (modulo === "relatorio") {
         return "Relatório recuperado pela professora";
@@ -275,6 +285,10 @@ function getDetalhesMensagem(entry: HistoricoEntry): string | null {
     }
 
     return `${documentoNome} impresso`;
+  }
+
+  if (entry.acao === "DOCUMENTO_EXCLUIDO") {
+    return obterDetalhesDocumentoExcluido(entry);
   }
 
   if (entry.acao === "COMENTARIO_ADICIONADO") {
@@ -392,6 +406,8 @@ function TimelineItem({
           <Alert className="mt-2">
             {entry.acao === "DOCUMENTO_IMPRESSO" ? (
               <Printer className="h-4 w-4" />
+            ) : entry.acao === "DOCUMENTO_EXCLUIDO" ? (
+              <Trash2 className="h-4 w-4" />
             ) : (
               <MessageSquare className="h-4 w-4" />
             )}
