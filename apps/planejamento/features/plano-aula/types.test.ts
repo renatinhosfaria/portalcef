@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { PDF_STATUS_VALUES, type PlanoDocumento } from "./types";
+import {
+  isDocumentoExcluivel,
+  PDF_STATUS_VALUES,
+  type PlanoDocumento,
+} from "./types";
 
 describe("PlanoDocumento", () => {
   it("aceita campos de edição via SharePoint", () => {
@@ -60,5 +64,17 @@ describe("PlanoDocumento", () => {
 
     expect(uploadLegado.tipo).toBe("UPLOAD");
     expect(youtubeLegado.tipo).toBe("YOUTUBE");
+  });
+
+  it("considera excluível apenas upload não aprovado", () => {
+    expect(isDocumentoExcluivel({ tipo: "ARQUIVO" })).toBe(true);
+    expect(isDocumentoExcluivel({ tipo: "UPLOAD" })).toBe(true);
+    expect(isDocumentoExcluivel({ tipo: "LINK_YOUTUBE" })).toBe(false);
+    expect(
+      isDocumentoExcluivel({ tipo: "ARQUIVO", approvedBy: "analista-1" }),
+    ).toBe(false);
+    expect(
+      isDocumentoExcluivel({ tipo: "ARQUIVO", approvedAt: "2026-06-01" }),
+    ).toBe(false);
   });
 });

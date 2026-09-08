@@ -312,10 +312,15 @@ describe("RevisaoRelatorioContent", () => {
       );
       expect(
         screen.getByText(
-          "O arquivo foi excluído, mas não foi possível atualizar o relatório agora. Atualize a página para conferir.",
+          "O arquivo foi excluído, mas não foi possível atualizar a lista agora. Atualize a página para conferir.",
         ),
       ).toBeInTheDocument();
     });
     expect(screen.queryByText("Arquivo excluído com sucesso!")).toBeNull();
+    expect(
+      screen.queryByRole("heading", {
+        name: /confirmar exclusão do arquivo/i,
+      }),
+    ).not.toBeInTheDocument();
   });
 });

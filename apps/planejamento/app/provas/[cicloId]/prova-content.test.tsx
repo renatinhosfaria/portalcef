@@ -147,17 +147,15 @@ describe("ProvaDetailContent", () => {
     });
 
     await act(async () => {
-      await expect(
-        documentoListProps?.onDelete?.(
-          "documento-1",
-          "Arquivo enviado com conteúdo incorreto",
-        ),
-      ).rejects.toThrow("Failed to fetch");
+      await documentoListProps?.onDelete?.(
+        "documento-1",
+        "Arquivo enviado com conteúdo incorreto",
+      );
     });
 
     expect(
       await screen.findByText(
-        "Não conseguimos conectar ao portal agora. Verifique sua internet e tente novamente.",
+        "O arquivo foi excluído, mas não foi possível atualizar a lista agora. Atualize a página para conferir.",
       ),
     ).toBeInTheDocument();
     expect(screen.queryByText("Arquivo excluído com sucesso.")).toBeNull();

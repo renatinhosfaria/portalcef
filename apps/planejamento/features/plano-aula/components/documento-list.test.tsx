@@ -284,6 +284,11 @@ describe("DocumentoList", () => {
     await waitFor(() => {
       expect(onDelete).toHaveBeenCalledWith("doc-upload-confirmacao", motivo);
     });
+    expect(
+      screen.queryByRole("heading", {
+        name: /confirmar exclusão do arquivo/i,
+      }),
+    ).not.toBeInTheDocument();
   });
 
   it("registra acao ao clicar em Visualizar para documento PDF", async () => {

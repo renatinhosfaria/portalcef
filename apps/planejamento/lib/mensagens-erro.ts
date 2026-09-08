@@ -5,6 +5,8 @@ const MENSAGEM_DOCUMENTO_INDISPONIVEL =
 const LIMITE_UPLOAD_ARQUIVO_MB = 500;
 const MENSAGEM_FALHA_EXCLUSAO_DOCUMENTO =
   "Não foi possível excluir o arquivo agora. Tente novamente. Se o problema continuar, procure o suporte.";
+export const MENSAGEM_ARQUIVO_EXCLUIDO_SEM_ATUALIZAR =
+  "O arquivo foi excluído, mas não foi possível atualizar a lista agora. Atualize a página para conferir.";
 export const MENSAGENS_ERRO_EXCLUSAO_DOCUMENTO: Record<string, string> = {
   motivo_exclusao_invalido:
     "Informe o motivo da exclusão com pelo menos 10 caracteres.",
@@ -32,7 +34,9 @@ function lerString(objeto: ObjetoErro, chave: string): string | null {
   const valor = objeto[chave];
   if (typeof valor === "string") return valor;
   if (Array.isArray(valor)) {
-    const mensagens = valor.filter((item): item is string => typeof item === "string");
+    const mensagens = valor.filter(
+      (item): item is string => typeof item === "string",
+    );
     return mensagens.length > 0 ? mensagens.join(", ") : null;
   }
   return null;
@@ -72,7 +76,9 @@ function extrairDadosErro(erro: unknown): {
   const error = lerObjeto(erro, "error");
   const response = lerObjeto(erro, "response");
   const responseData = response ? lerObjeto(response, "data") : null;
-  const responseDataError = responseData ? lerObjeto(responseData, "error") : null;
+  const responseDataError = responseData
+    ? lerObjeto(responseData, "error")
+    : null;
 
   const status =
     lerNumero(erro, "status") ??
@@ -101,10 +107,16 @@ function mensagemJaClara(mensagem: string): boolean {
 
   if (!texto) return false;
   if (/^erro ao\b/i.test(texto)) return false;
-  if (/^(error|failed|invalid|cannot|unauthorized|forbidden|bad request)\b/i.test(texto)) {
+  if (
+    /^(error|failed|invalid|cannot|unauthorized|forbidden|bad request)\b/i.test(
+      texto,
+    )
+  ) {
     return false;
   }
-  if (/[{}[\]<>]|https?:\/\/|\/api\/|stack|exception|itemnotfound/i.test(texto)) {
+  if (
+    /[{}[\]<>]|https?:\/\/|\/api\/|stack|exception|itemnotfound/i.test(texto)
+  ) {
     return false;
   }
   if (/\b[A-Z]{3,}(?:_[A-Z]{2,})+\b/.test(texto)) return false;
@@ -125,7 +137,10 @@ export function obterMensagemErro(
 
   if (
     codigoNormalizado === "itemnotfound" ||
-    contem(mensagemNormalizada, /resource could not be found|itemnotfound|sharepoint/)
+    contem(
+      mensagemNormalizada,
+      /resource could not be found|itemnotfound|sharepoint/,
+    )
   ) {
     return MENSAGEM_DOCUMENTO_INDISPONIVEL;
   }
@@ -146,13 +161,18 @@ export function obterMensagemErro(
     return "Você não tem permissão para fazer essa ação.";
   }
 
-  if (contem(mensagemNormalizada, /tipo de arquivo|file type|mime|não permitido/)) {
+  if (
+    contem(mensagemNormalizada, /tipo de arquivo|file type|mime|não permitido/)
+  ) {
     return "Esse arquivo não é aceito. Envie PDF, Word, Excel, PNG ou JPG.";
   }
 
   if (
     status === 413 ||
-    contem(mensagemNormalizada, /arquivo muito grande|payload too large|file too large/)
+    contem(
+      mensagemNormalizada,
+      /arquivo muito grande|payload too large|file too large/,
+    )
   ) {
     return `O arquivo é muito grande. Envie um arquivo de até ${LIMITE_UPLOAD_ARQUIVO_MB} MB.`;
   }
@@ -170,7 +190,10 @@ export function obterMensagemErro(
     status === 503 ||
     codigoNormalizado === "proxy_error" ||
     codigoNormalizado === "service_unavailable" ||
-    contem(mensagemNormalizada, /failed to fetch|network|fetch failed|failed to reach|servidor backend/)
+    contem(
+      mensagemNormalizada,
+      /failed to fetch|network|fetch failed|failed to reach|servidor backend/,
+    )
   ) {
     return "Não conseguimos conectar ao portal agora. Verifique sua internet e tente novamente.";
   }

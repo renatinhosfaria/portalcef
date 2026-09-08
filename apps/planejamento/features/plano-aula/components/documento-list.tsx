@@ -52,6 +52,7 @@ import {
 } from "../../../lib/observabilidade";
 import {
   isDocumentoLinkYoutube,
+  isDocumentoExcluivel,
   isDocumentoUpload,
   type PlanoDocumento,
 } from "../types";
@@ -514,11 +515,7 @@ export function DocumentoList({
             (!!documento.approvedAt && !!documento.approvedBy)) &&
           !!onImprimir;
         const podeExcluir =
-          canDelete &&
-          !!onDelete &&
-          ehUpload &&
-          !documento.approvedBy &&
-          !documento.approvedAt;
+          canDelete && !!onDelete && isDocumentoExcluivel(documento);
         const temAcoesVisiveis =
           podeVisualizar ||
           podeEditar ||

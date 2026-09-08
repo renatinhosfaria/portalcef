@@ -17,6 +17,7 @@ export type {
 export {
   DOCUMENTO_TIPOS_LINK,
   DOCUMENTO_TIPOS_UPLOAD,
+  isDocumentoExcluivel,
   isDocumentoLinkYoutube,
   isDocumentoUpload,
   STATUS_LABELS,

@@ -43,15 +43,15 @@ import {
   type RelatorioStatus,
   useRelatorio,
 } from "../../../features/relatorio";
-import { obterMensagemErro } from "../../../lib/mensagens-erro";
+import {
+  MENSAGEM_ARQUIVO_EXCLUIDO_SEM_ATUALIZAR,
+  obterMensagemErro,
+} from "../../../lib/mensagens-erro";
 
 interface RelatorioContentProps {
   semestreId: string;
   turmaId: string | null;
 }
-
-const MENSAGEM_ERRO_ATUALIZAR_RELATORIO_APOS_EXCLUSAO =
-  "O arquivo foi excluído, mas não foi possível atualizar o relatório e o histórico agora. Atualize a página para conferir.";
 
 function canEdit(status: RelatorioStatus): boolean {
   return [
@@ -144,7 +144,7 @@ export function RelatorioContent({
       } catch (err) {
         setHistorico([]);
         if (propagarErro) {
-          throw new Error(MENSAGEM_ERRO_ATUALIZAR_RELATORIO_APOS_EXCLUSAO, {
+          throw new Error(MENSAGEM_ARQUIVO_EXCLUIDO_SEM_ATUALIZAR, {
             cause: err,
           });
         }
@@ -153,12 +153,15 @@ export function RelatorioContent({
     [getHistorico],
   );
 
-  const refetchRelatorio = useCallback(async (propagarErroHistorico = false) => {
-    if (!relatorio?.id) return;
-    const atualizado = await getRelatorio(relatorio.id);
-    setRelatorio(atualizado);
-    await carregarHistorico(atualizado.id, propagarErroHistorico);
-  }, [carregarHistorico, getRelatorio, relatorio?.id]);
+  const refetchRelatorio = useCallback(
+    async (propagarErroHistorico = false) => {
+      if (!relatorio?.id) return;
+      const atualizado = await getRelatorio(relatorio.id);
+      setRelatorio(atualizado);
+      await carregarHistorico(atualizado.id, propagarErroHistorico);
+    },
+    [carregarHistorico, getRelatorio, relatorio?.id],
+  );
 
   const carregarOuCriarRelatorio = useCallback(async () => {
     if (!turmaId) {
@@ -215,16 +218,25 @@ export function RelatorioContent({
       setSuccessMessage(null);
       try {
         await deleteDocumento(relatorio.id, documentoId, motivo);
-        await refetchRelatorio(true);
-        setSuccessMessage("Arquivo excluído com sucesso.");
       } catch (err) {
         setError(
           obterMensagemErro(
             err,
-            MENSAGEM_ERRO_ATUALIZAR_RELATORIO_APOS_EXCLUSAO,
+            "Não foi possível excluir o arquivo. Tente novamente.",
           ),
         );
         throw err;
+      }
+
+      try {
+        await refetchRelatorio(true);
+        setSuccessMessage("Arquivo excluído com sucesso.");
+      } catch (err) {
+        console.error(
+          "Arquivo excluído, mas não foi possível atualizar o relatório:",
+          err,
+        );
+        setError(MENSAGEM_ARQUIVO_EXCLUIDO_SEM_ATUALIZAR);
       }
     },
     [deleteDocumento, refetchRelatorio, relatorio?.id],

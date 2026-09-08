@@ -123,4 +123,40 @@ describe("RevisaoContent", () => {
       await screen.findByText("Você não tem permissão para fazer essa ação."),
     ).toBeInTheDocument();
   });
+
+  it("limpa o sucesso anterior quando a atualização falha após nova exclusão", async () => {
+    refetch
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error("Falha de conexão"));
+
+    render(<RevisaoContent planoId="plano-1" />);
+
+    await waitFor(() => {
+      expect(documentoListProps?.onDelete).toEqual(expect.any(Function));
+    });
+
+    await act(async () => {
+      await documentoListProps?.onDelete?.(
+        "documento-1",
+        "Arquivo enviado com conteúdo incorreto",
+      );
+    });
+    expect(
+      screen.getByText("Arquivo excluído com sucesso!"),
+    ).toBeInTheDocument();
+
+    await act(async () => {
+      await documentoListProps?.onDelete?.(
+        "documento-2",
+        "Arquivo enviado com conteúdo incorreto",
+      );
+    });
+
+    expect(screen.queryByText("Arquivo excluído com sucesso!")).toBeNull();
+    expect(
+      screen.getByText(
+        "O arquivo foi excluído, mas não foi possível atualizar a lista agora. Atualize a página para conferir.",
+      ),
+    ).toBeInTheDocument();
+  });
 });

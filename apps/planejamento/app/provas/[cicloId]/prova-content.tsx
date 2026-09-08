@@ -62,7 +62,10 @@ import {
   PROVA_STATUS_LABELS,
   PROVA_STATUS_COLORS,
 } from "../../../features/prova/types";
-import { obterMensagemErro } from "../../../lib/mensagens-erro";
+import {
+  MENSAGEM_ARQUIVO_EXCLUIDO_SEM_ATUALIZAR,
+  obterMensagemErro,
+} from "../../../lib/mensagens-erro";
 
 interface ProvaDetailContentProps {
   cicloId: string;
@@ -207,11 +210,7 @@ export function ProvaDetailContent({
       setSuccessMessage(null);
       try {
         await deleteDocumento(prova.id, documentoId, motivo);
-        await refetchProva();
-        setHistoricoVersao((versao) => versao + 1);
-        setSuccessMessage("Arquivo excluído com sucesso.");
       } catch (err) {
-        setSuccessMessage(null);
         setError(
           obterMensagemErro(
             err,
@@ -219,6 +218,18 @@ export function ProvaDetailContent({
           ),
         );
         throw err;
+      }
+
+      try {
+        await refetchProva();
+        setHistoricoVersao((versao) => versao + 1);
+        setSuccessMessage("Arquivo excluído com sucesso.");
+      } catch (err) {
+        console.error(
+          "Arquivo excluído, mas não foi possível atualizar a prova:",
+          err,
+        );
+        setError(MENSAGEM_ARQUIVO_EXCLUIDO_SEM_ATUALIZAR);
       }
     },
     [deleteDocumento, prova?.id, refetchProva],

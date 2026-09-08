@@ -44,7 +44,10 @@ import {
   usePlanoAula,
   usePlanoDetalhe,
 } from "../../../features/plano-aula";
-import { obterMensagemErro } from "../../../lib/mensagens-erro";
+import {
+  MENSAGEM_ARQUIVO_EXCLUIDO_SEM_ATUALIZAR,
+  obterMensagemErro,
+} from "../../../lib/mensagens-erro";
 
 import { TarefaForm } from "./tarefa-form";
 
@@ -159,12 +162,11 @@ export function RevisaoContent({ planoId }: RevisaoContentProps) {
 
   const handleExcluirDocumento = useCallback(
     async (documentoId: string, motivo: string) => {
+      setActionError(null);
+      setSuccessMessage(null);
+
       try {
         await deleteDocumento(planoId, documentoId, motivo);
-        await refetch();
-        setHistoricoVersao((versao) => versao + 1);
-        setSuccessMessage("Arquivo excluído com sucesso!");
-        setTimeout(() => setSuccessMessage(null), 3000);
       } catch (err) {
         setActionError(
           obterMensagemErro(
@@ -173,6 +175,19 @@ export function RevisaoContent({ planoId }: RevisaoContentProps) {
           ),
         );
         throw err;
+      }
+
+      try {
+        await refetch();
+        setHistoricoVersao((versao) => versao + 1);
+        setSuccessMessage("Arquivo excluído com sucesso!");
+        setTimeout(() => setSuccessMessage(null), 3000);
+      } catch (err) {
+        console.error(
+          "Arquivo excluído, mas não foi possível atualizar o plano:",
+          err,
+        );
+        setActionError(MENSAGEM_ARQUIVO_EXCLUIDO_SEM_ATUALIZAR);
       }
     },
     [deleteDocumento, planoId, refetch],

@@ -32,6 +32,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   ConfirmarExclusaoDocumentoDialog,
   HistoricoTimeline,
+  isDocumentoExcluivel,
 } from "../../../../features/plano-aula";
 import {
   RelatorioHeader,
@@ -41,14 +42,14 @@ import {
   useRelatorio,
   useSemestreRelatorio,
 } from "../../../../features/relatorio";
-import { obterMensagemErro } from "../../../../lib/mensagens-erro";
+import {
+  MENSAGEM_ARQUIVO_EXCLUIDO_SEM_ATUALIZAR,
+  obterMensagemErro,
+} from "../../../../lib/mensagens-erro";
 
 interface RevisaoRelatorioContentProps {
   relatorioId: string;
 }
-
-const MENSAGEM_ERRO_ATUALIZAR_RELATORIO_APOS_EXCLUSAO =
-  "O arquivo foi excluído, mas não foi possível atualizar o relatório agora. Atualize a página para conferir.";
 
 function isDocumentoWord(documento: RelatorioDocumento): boolean {
   return (
@@ -90,24 +91,27 @@ export function RevisaoRelatorioContent({
     desaprovarDocumento,
   } = useAnalistaRelatorio();
 
-  const carregarRelatorio = useCallback(async (propagarErro = false) => {
-    setIsLoading(true);
-    setActionError(null);
-    try {
-      setRelatorio(await getRelatorio(relatorioId));
-    } catch (err) {
-      const mensagem = obterMensagemErro(
-        err,
-        "Não foi possível carregar o relatório. Tente novamente.",
-      );
-      setActionError(mensagem);
-      if (propagarErro) {
-        throw new Error(MENSAGEM_ERRO_ATUALIZAR_RELATORIO_APOS_EXCLUSAO);
+  const carregarRelatorio = useCallback(
+    async (propagarErro = false) => {
+      setIsLoading(true);
+      setActionError(null);
+      try {
+        setRelatorio(await getRelatorio(relatorioId));
+      } catch (err) {
+        const mensagem = obterMensagemErro(
+          err,
+          "Não foi possível carregar o relatório. Tente novamente.",
+        );
+        setActionError(mensagem);
+        if (propagarErro) {
+          throw new Error(MENSAGEM_ARQUIVO_EXCLUIDO_SEM_ATUALIZAR);
+        }
+      } finally {
+        setIsLoading(false);
       }
-    } finally {
-      setIsLoading(false);
-    }
-  }, [getRelatorio, relatorioId]);
+    },
+    [getRelatorio, relatorioId],
+  );
 
   useEffect(() => {
     void carregarRelatorio();
@@ -185,19 +189,31 @@ export function RevisaoRelatorioContent({
 
   const handleExcluirDocumento = useCallback(
     async (documentoId: string, motivo: string) => {
+      setActionError(null);
+      setSuccessMessage(null);
+
       try {
         await deleteDocumento(relatorioId, documentoId, motivo);
-        await carregarRelatorio(true);
-        setHistoricoVersao((versao) => versao + 1);
-        setSuccessMessage("Arquivo excluído com sucesso!");
       } catch (err) {
         setActionError(
           obterMensagemErro(
             err,
-            MENSAGEM_ERRO_ATUALIZAR_RELATORIO_APOS_EXCLUSAO,
+            "Não foi possível excluir o arquivo. Tente novamente.",
           ),
         );
         throw err;
+      }
+
+      try {
+        await carregarRelatorio(true);
+        setHistoricoVersao((versao) => versao + 1);
+        setSuccessMessage("Arquivo excluído com sucesso!");
+      } catch (err) {
+        console.error(
+          "Arquivo excluído, mas não foi possível atualizar o relatório:",
+          err,
+        );
+        setActionError(MENSAGEM_ARQUIVO_EXCLUIDO_SEM_ATUALIZAR);
       }
     },
     [carregarRelatorio, deleteDocumento, relatorioId],
@@ -412,20 +428,17 @@ export function RevisaoRelatorioContent({
                           Aprovar
                         </Button>
                       )}
-                      {(documento.tipo === "ARQUIVO" ||
-                        documento.tipo === "UPLOAD") &&
-                        !documento.approvedBy &&
-                        !documento.approvedAt && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="text-destructive hover:text-destructive"
-                            onClick={() => setDocumentoParaExcluir(documento)}
-                          >
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            Excluir arquivo
-                          </Button>
-                        )}
+                      {isDocumentoExcluivel(documento) && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-destructive hover:text-destructive"
+                          onClick={() => setDocumentoParaExcluir(documento)}
+                        >
+                          <Trash2 className="mr-2 h-4 w-4" />
+                          Excluir arquivo
+                        </Button>
+                      )}
                     </div>
                   </div>
                 ))

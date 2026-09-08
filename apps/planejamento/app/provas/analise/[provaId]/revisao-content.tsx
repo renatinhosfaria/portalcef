@@ -47,7 +47,10 @@ import {
   useProva,
   useProvaDetalhe,
 } from "../../../../features/prova";
-import { obterMensagemErro } from "../../../../lib/mensagens-erro";
+import {
+  MENSAGEM_ARQUIVO_EXCLUIDO_SEM_ATUALIZAR,
+  obterMensagemErro,
+} from "../../../../lib/mensagens-erro";
 import { TarefaForm } from "../../../analise/[planoId]/tarefa-form";
 
 interface RevisaoProvaContentProps {
@@ -132,12 +135,11 @@ export function RevisaoProvaContent({ provaId }: RevisaoProvaContentProps) {
 
   const handleExcluirDocumento = useCallback(
     async (documentoId: string, motivo: string) => {
+      setActionError(null);
+      setSuccessMessage(null);
+
       try {
         await deleteDocumento(provaId, documentoId, motivo);
-        await refetch();
-        setHistoricoVersao((versao) => versao + 1);
-        setSuccessMessage("Arquivo excluído com sucesso!");
-        setTimeout(() => setSuccessMessage(null), 3000);
       } catch (err) {
         setActionError(
           obterMensagemErro(
@@ -146,6 +148,19 @@ export function RevisaoProvaContent({ provaId }: RevisaoProvaContentProps) {
           ),
         );
         throw err;
+      }
+
+      try {
+        await refetch();
+        setHistoricoVersao((versao) => versao + 1);
+        setSuccessMessage("Arquivo excluído com sucesso!");
+        setTimeout(() => setSuccessMessage(null), 3000);
+      } catch (err) {
+        console.error(
+          "Arquivo excluído, mas não foi possível atualizar a prova:",
+          err,
+        );
+        setActionError(MENSAGEM_ARQUIVO_EXCLUIDO_SEM_ATUALIZAR);
       }
     },
     [deleteDocumento, provaId, refetch],

@@ -38,6 +38,20 @@ export function isDocumentoUpload(tipo: DocumentoTipo): boolean {
   return DOCUMENTO_TIPOS_UPLOAD.includes(tipo);
 }
 
+export function isDocumentoExcluivel(
+  documento: {
+    tipo: DocumentoTipo;
+    approvedBy?: string | null;
+    approvedAt?: string | null;
+  },
+): boolean {
+  return (
+    isDocumentoUpload(documento.tipo) &&
+    !documento.approvedBy &&
+    !documento.approvedAt
+  );
+}
+
 /**
  * Status de geração do PDF usado para impressão.
  */

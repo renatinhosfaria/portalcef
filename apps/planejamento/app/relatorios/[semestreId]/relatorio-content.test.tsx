@@ -120,17 +120,15 @@ describe("RelatorioContent", () => {
     });
 
     await act(async () => {
-      await expect(
-        documentoListProps?.onDelete?.(
-          "documento-1",
-          "Arquivo enviado com conteúdo incorreto",
-        ),
-      ).rejects.toBeInstanceOf(Error);
+      await documentoListProps?.onDelete?.(
+        "documento-1",
+        "Arquivo enviado com conteúdo incorreto",
+      );
     });
 
     expect(
       await screen.findByText(
-        "O arquivo foi excluído, mas não foi possível atualizar o relatório e o histórico agora. Atualize a página para conferir.",
+        "O arquivo foi excluído, mas não foi possível atualizar a lista agora. Atualize a página para conferir.",
       ),
     ).toBeInTheDocument();
     expect(screen.queryByText("Arquivo excluído com sucesso.")).toBeNull();

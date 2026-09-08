@@ -55,7 +55,10 @@ import {
   type PlanoAula,
   type PlanoAulaStatus,
 } from "../../../features/plano-aula";
-import { obterMensagemErro } from "../../../lib/mensagens-erro";
+import {
+  MENSAGEM_ARQUIVO_EXCLUIDO_SEM_ATUALIZAR,
+  obterMensagemErro,
+} from "../../../lib/mensagens-erro";
 
 interface PlanoContentProps {
   periodoId: string; // UUID do período (não mais número hardcoded)
@@ -245,11 +248,7 @@ export function PlanoContent({
       setSuccessMessage(null);
       try {
         await deleteDocumento(plano.id, documentoId, motivo);
-        await refetchPlano();
-        setHistoricoVersao((versao) => versao + 1);
-        setSuccessMessage("Arquivo excluído com sucesso.");
       } catch (err) {
-        setSuccessMessage(null);
         setError(
           obterMensagemErro(
             err,
@@ -257,6 +256,18 @@ export function PlanoContent({
           ),
         );
         throw err;
+      }
+
+      try {
+        await refetchPlano();
+        setHistoricoVersao((versao) => versao + 1);
+        setSuccessMessage("Arquivo excluído com sucesso.");
+      } catch (err) {
+        console.error(
+          "Arquivo excluído, mas não foi possível atualizar o plano:",
+          err,
+        );
+        setError(MENSAGEM_ARQUIVO_EXCLUIDO_SEM_ATUALIZAR);
       }
     },
     [deleteDocumento, plano?.id, refetchPlano],
