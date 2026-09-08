@@ -281,6 +281,13 @@
       "when": 1783083017395,
       "tag": "0039_workflows",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1788868353320,
+      "tag": "0040_historico_acao_documento_excluido",
+      "breakpoints": true
     }
   ]
 }
