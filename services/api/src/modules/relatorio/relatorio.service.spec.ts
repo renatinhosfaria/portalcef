@@ -526,6 +526,7 @@ describe("RelatorioService", () => {
         name: "Usuária da Sessão",
       });
       mockDb.query.units.findFirst.mockResolvedValue({ id: "unit-1" });
+      mockTx.returning.mockResolvedValue([documento]);
     };
 
     it("rejeita motivo inválido antes de consultar o banco", async () => {
@@ -665,6 +666,43 @@ describe("RelatorioService", () => {
       );
       expect(mockSharePoint.removerArquivo).toHaveBeenCalledWith(
         "sharepoint-1",
+      );
+    });
+
+    it("limpa as chaves e o SharePoint retornados pelo DELETE", async () => {
+      prepararExclusao(
+        { ...relatorioBase, userId: session.userId },
+        {
+          ...documentoBase,
+          storageKey: "relatorios/antigo.docx",
+          pdfStorageKey: "relatorios/antigo.pdf",
+          sharepointItemId: "sharepoint-antigo",
+        },
+      );
+      mockTx.returning.mockResolvedValueOnce([
+        {
+          ...documentoBase,
+          storageKey: "relatorios/novo.docx",
+          pdfStorageKey: "relatorios/novo.pdf",
+          sharepointItemId: "sharepoint-novo",
+        },
+      ]);
+
+      await removerDocumento(
+        session,
+        "r-1",
+        "doc-1",
+        "Arquivo atualizado durante a exclusão",
+      );
+
+      expect(mockStorage.deleteFile).toHaveBeenCalledWith(
+        "relatorios/novo.docx",
+      );
+      expect(mockStorage.deleteFile).not.toHaveBeenCalledWith(
+        "relatorios/antigo.docx",
+      );
+      expect(mockSharePoint.removerArquivo).toHaveBeenCalledWith(
+        "sharepoint-novo",
       );
     });
 

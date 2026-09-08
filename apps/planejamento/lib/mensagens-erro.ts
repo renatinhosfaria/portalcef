@@ -5,6 +5,14 @@ const MENSAGEM_DOCUMENTO_INDISPONIVEL =
 const LIMITE_UPLOAD_ARQUIVO_MB = 500;
 const MENSAGEM_FALHA_EXCLUSAO_DOCUMENTO =
   "Não foi possível excluir o arquivo agora. Tente novamente. Se o problema continuar, procure o suporte.";
+const MENSAGEM_SESSAO_EXPIRADA =
+  "Sua sessão expirou. Faça login novamente para continuar.";
+const MENSAGEM_MUITAS_TENTATIVAS =
+  "Houve muitas tentativas em pouco tempo. Aguarde alguns minutos e tente novamente.";
+const MENSAGEM_SERVIDOR_INDISPONIVEL =
+  "Não conseguimos conectar ao portal agora. Verifique sua internet e tente novamente.";
+const MENSAGEM_PERMISSAO_EXCLUSAO_DOCUMENTO =
+  "Você não tem permissão para excluir este arquivo.";
 export const MENSAGEM_ARQUIVO_EXCLUIDO_SEM_ATUALIZAR =
   "O arquivo foi excluído, mas não foi possível atualizar a lista agora. Atualize a página para conferir.";
 export const MENSAGENS_ERRO_EXCLUSAO_DOCUMENTO: Record<string, string> = {
@@ -14,8 +22,7 @@ export const MENSAGENS_ERRO_EXCLUSAO_DOCUMENTO: Record<string, string> = {
   documento_link: "Links do YouTube não podem ser excluídos por esta opção.",
   tipo_documento_nao_permitido:
     "Este item não é um arquivo enviado e não pode ser excluído por esta opção.",
-  permissao_exclusao_documento:
-    "Você não tem permissão para excluir este arquivo.",
+  permissao_exclusao_documento: MENSAGEM_PERMISSAO_EXCLUSAO_DOCUMENTO,
   documento_nao_encontrado:
     "Este arquivo não foi encontrado. Atualize a página e tente novamente.",
   falha_exclusao_documento: MENSAGEM_FALHA_EXCLUSAO_DOCUMENTO,
@@ -150,7 +157,7 @@ export function obterMensagemErro(
     codigoNormalizado === "unauthorized" ||
     contem(mensagemNormalizada, /unauthorized|não autenticado|sessão expirada/)
   ) {
-    return "Sua sessão expirou. Faça login novamente para continuar.";
+    return MENSAGEM_SESSAO_EXPIRADA;
   }
 
   if (
@@ -182,7 +189,7 @@ export function obterMensagemErro(
     codigoNormalizado === "too_many_requests" ||
     contem(mensagemNormalizada, /too many|muitas tentativas/)
   ) {
-    return "Houve muitas tentativas em pouco tempo. Aguarde alguns minutos e tente novamente.";
+    return MENSAGEM_MUITAS_TENTATIVAS;
   }
 
   if (
@@ -195,7 +202,7 @@ export function obterMensagemErro(
       /failed to fetch|network|fetch failed|failed to reach|servidor backend/,
     )
   ) {
-    return "Não conseguimos conectar ao portal agora. Verifique sua internet e tente novamente.";
+    return MENSAGEM_SERVIDOR_INDISPONIVEL;
   }
 
   if (status === 404 || codigoNormalizado === "not_found") {
@@ -226,9 +233,17 @@ export function obterMensagemErroExclusao(
   erro: unknown,
   fallback = MENSAGEM_FALHA_EXCLUSAO_DOCUMENTO,
 ): string {
+  const { status, codigo } = extrairDadosErro(erro);
+  if (status === 403 || codigo?.toLowerCase() === "forbidden") {
+    return MENSAGEM_PERMISSAO_EXCLUSAO_DOCUMENTO;
+  }
+
   const mensagem = obterMensagemErro(erro, fallback).trim();
   const mensagensConhecidas = new Set([
     ...Object.values(MENSAGENS_ERRO_EXCLUSAO_DOCUMENTO),
+    MENSAGEM_SESSAO_EXPIRADA,
+    MENSAGEM_MUITAS_TENTATIVAS,
+    MENSAGEM_SERVIDOR_INDISPONIVEL,
     fallback.trim(),
   ]);
 

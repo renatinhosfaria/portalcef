@@ -138,6 +138,33 @@ describe("ConfirmarExclusaoDocumentoDialog", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("mantém mensagem segura quando recebe erro já traduzido pelo hook", async () => {
+    const user = userEvent.setup();
+    const mensagem =
+      "Houve muitas tentativas em pouco tempo. Aguarde alguns minutos e tente novamente.";
+    const onConfirmar = vi.fn().mockRejectedValue(new Error(mensagem));
+
+    render(
+      <ConfirmarExclusaoDocumentoDialog
+        open
+        onOpenChange={vi.fn()}
+        documentoId="doc-1"
+        nomeArquivo="planejamento.pdf"
+        onConfirmar={onConfirmar}
+      />,
+    );
+
+    await user.type(
+      screen.getByRole("textbox", { name: /motivo da exclusão/i }),
+      "Arquivo duplicado no planejamento",
+    );
+    await user.click(screen.getByRole("button", { name: /excluir arquivo/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(mensagem)).toBeInTheDocument();
+    });
+  });
+
   it("converte erro de domínio de documento aprovado em mensagem amigável", async () => {
     const user = userEvent.setup();
     const onConfirmar = vi.fn().mockRejectedValue(

@@ -4,7 +4,10 @@ import { api } from "@essencia/shared/fetchers/client";
 import type { HistoricoEntry } from "@essencia/shared/types";
 import { useCallback, useState } from "react";
 
-import { obterMensagemErro } from "../../../lib/mensagens-erro";
+import {
+  obterMensagemErro,
+  obterMensagemErroExclusao,
+} from "../../../lib/mensagens-erro";
 import type { Relatorio, RelatorioDocumento } from "../types";
 
 interface UseRelatorioReturn {
@@ -38,10 +41,7 @@ interface UseRelatorioReturn {
     motivo: string,
   ) => Promise<void>;
   downloadDocumento: (relatorioId: string, docId: string) => Promise<string>;
-  editarWord: (
-    relatorioId: string,
-    docId: string,
-  ) => Promise<{ url: string }>;
+  editarWord: (relatorioId: string, docId: string) => Promise<{ url: string }>;
   getSharePointUrl: (
     relatorioId: string,
     docId: string,
@@ -59,13 +59,19 @@ function useEstadoAssincrono() {
   const [error, setError] = useState<string | null>(null);
 
   const executar = useCallback(
-    async <T>(acao: () => Promise<T>, mensagemErro: string): Promise<T> => {
+    async <T>(
+      acao: () => Promise<T>,
+      mensagemErro: string,
+      ehExclusao = false,
+    ): Promise<T> => {
       setLoading(true);
       setError(null);
       try {
         return await acao();
       } catch (err) {
-        const message = obterMensagemErro(err, mensagemErro);
+        const message = ehExclusao
+          ? obterMensagemErroExclusao(err, mensagemErro)
+          : obterMensagemErro(err, mensagemErro);
         setError(message);
         throw new Error(message);
       } finally {
@@ -117,8 +123,7 @@ export function useRelatorio(): UseRelatorioReturn {
     (id: string) =>
       executar(
         async () =>
-          (await api.get<HistoricoEntry[]>(`/relatorio/${id}/historico`)) ??
-          [],
+          (await api.get<HistoricoEntry[]>(`/relatorio/${id}/historico`)) ?? [],
         "Não foi possível carregar o histórico. Tente novamente.",
       ),
     [executar],
@@ -126,17 +131,14 @@ export function useRelatorio(): UseRelatorioReturn {
 
   const uploadDocumento = useCallback(
     (relatorioId: string, file: File) =>
-      executar(
-        () => {
-          const formData = new FormData();
-          formData.append("file", file);
-          return api.post<RelatorioDocumento>(
-            `/relatorio/${relatorioId}/documento/upload`,
-            formData,
-          );
-        },
-        "Não foi possível enviar o arquivo. Verifique sua conexão e tente novamente.",
-      ),
+      executar(() => {
+        const formData = new FormData();
+        formData.append("file", file);
+        return api.post<RelatorioDocumento>(
+          `/relatorio/${relatorioId}/documento/upload`,
+          formData,
+        );
+      }, "Não foi possível enviar o arquivo. Verifique sua conexão e tente novamente."),
     [executar],
   );
 
@@ -155,12 +157,9 @@ export function useRelatorio(): UseRelatorioReturn {
 
   const atualizarDocumento = useCallback(
     (relatorioId: string, docId: string, dados: { fileSize?: number }) =>
-      executar(
-        async () => {
-          await api.patch(`/relatorio/${relatorioId}/documento/${docId}`, dados);
-        },
-        "Não foi possível atualizar o documento. Tente novamente.",
-      ),
+      executar(async () => {
+        await api.patch(`/relatorio/${relatorioId}/documento/${docId}`, dados);
+      }, "Não foi possível atualizar o documento. Tente novamente."),
     [executar],
   );
 
@@ -173,6 +172,7 @@ export function useRelatorio(): UseRelatorioReturn {
           });
         },
         "Não foi possível excluir o documento. Tente novamente.",
+        true,
       ),
     [executar],
   );

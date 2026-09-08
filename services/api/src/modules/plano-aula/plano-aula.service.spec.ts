@@ -886,7 +886,7 @@ describe("PlanoAulaService", () => {
           userName: "Analista Responsável",
           userRole: usuarioLogado.role,
           acao: "DOCUMENTO_EXCLUIDO",
-          statusAnterior: null,
+          statusAnterior: "RASCUNHO",
           statusNovo: "RASCUNHO",
           detalhes: {
             documentoId: "doc-1",
@@ -907,11 +907,48 @@ describe("PlanoAulaService", () => {
       expect(sharePointServiceMock.removerArquivo).not.toHaveBeenCalled();
     });
 
+    it("limpa as chaves e o SharePoint retornados pelo DELETE", async () => {
+      mockDb.query.planoDocumento.findFirst.mockResolvedValue({
+        ...documentoUpload,
+        storageKey: "planos/doc-1-antigo.docx",
+        pdfStorageKey: "planos/doc-1-antigo.pdf",
+        sharepointItemId: "item-sharepoint-antigo",
+      });
+      mockTx.returning.mockResolvedValueOnce([
+        {
+          ...documentoUpload,
+          storageKey: "planos/doc-1-atualizado.docx",
+          pdfStorageKey: "planos/doc-1-atualizado.pdf",
+          sharepointItemId: "item-sharepoint-atualizado",
+        },
+      ]);
+
+      await service.removerDocumento(
+        usuarioLogado,
+        "plano-1",
+        "doc-1",
+        "Arquivo atualizado durante a exclusão",
+      );
+
+      expect(storageServiceMock.deleteFile).toHaveBeenCalledWith(
+        "planos/doc-1-atualizado.docx",
+      );
+      expect(storageServiceMock.deleteFile).not.toHaveBeenCalledWith(
+        "planos/doc-1-antigo.docx",
+      );
+      expect(sharePointServiceMock.removerArquivo).toHaveBeenCalledWith(
+        "item-sharepoint-atualizado",
+      );
+    });
+
     it("tenta remover item ativo do SharePoint sem bloquear a exclusão local", async () => {
       mockDb.query.planoDocumento.findFirst.mockResolvedValue({
         ...documentoUpload,
         sharepointItemId: "item-sharepoint-1",
       });
+      mockTx.returning.mockResolvedValueOnce([
+        { ...documentoUpload, sharepointItemId: "item-sharepoint-1" },
+      ]);
       sharePointServiceMock.removerArquivo.mockRejectedValueOnce(
         new Error("SharePoint indisponível"),
       );
@@ -941,6 +978,14 @@ describe("PlanoAulaService", () => {
           storageKey: null,
           pdfStorageKey: "planos/doc-1.pdf",
         });
+        mockTx.returning.mockResolvedValueOnce([
+          {
+            ...documentoUpload,
+            tipo,
+            storageKey: null,
+            pdfStorageKey: "planos/doc-1.pdf",
+          },
+        ]);
 
         await expect(
           service.removerDocumento(

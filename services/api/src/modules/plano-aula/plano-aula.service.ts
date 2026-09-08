@@ -1762,8 +1762,9 @@ export class PlanoAulaService {
         motivo: motivo.trim(),
       };
 
+      let documentoExcluido: PlanoDocumento;
       try {
-        await db.transaction(async (tx: DbTransaction) => {
+        documentoExcluido = await db.transaction(async (tx: DbTransaction) => {
           await this.historicoService.registrar(
             {
               planoId,
@@ -1771,7 +1772,7 @@ export class PlanoAulaService {
               userName,
               userRole: user.role,
               acao: "DOCUMENTO_EXCLUIDO",
-              statusAnterior: null,
+              statusAnterior: plano.status,
               statusNovo: plano.status,
               detalhes,
             },
@@ -1804,6 +1805,8 @@ export class PlanoAulaService {
           await tx
             .delete(documentoComentario)
             .where(eq(documentoComentario.documentoId, documentoId));
+
+          return documentoExcluido;
         });
       } catch (error) {
         if (error instanceof HttpException) {
@@ -1817,7 +1820,10 @@ export class PlanoAulaService {
         throw criarErroFalhaExclusaoDocumento();
       }
 
-      const chaves = [documento.storageKey, documento.pdfStorageKey].filter(
+      const chaves = [
+        documentoExcluido.storageKey,
+        documentoExcluido.pdfStorageKey,
+      ].filter(
         (chave, indice, todas): chave is string =>
           Boolean(chave) && todas.indexOf(chave) === indice,
       );
@@ -1836,19 +1842,19 @@ export class PlanoAulaService {
         }),
       );
 
-      if (documento.sharepointItemId) {
+      if (documentoExcluido.sharepointItemId) {
         // A transação local já foi confirmada. A limpeza no SharePoint é
         // best-effort: falhas externas são apenas registradas e não impedem
         // a remoção local do documento.
         try {
           await this.sharePointService.removerArquivo(
-            documento.sharepointItemId,
+            documentoExcluido.sharepointItemId,
           );
         } catch (error) {
           const mensagem =
             error instanceof Error ? error.message : String(error);
           this.logger.warn(
-            `[removerDocumento] Falha ao remover ${documento.sharepointItemId} do SharePoint: ${mensagem}`,
+            `[removerDocumento] Falha ao remover ${documentoExcluido.sharepointItemId} do SharePoint: ${mensagem}`,
           );
         }
       }

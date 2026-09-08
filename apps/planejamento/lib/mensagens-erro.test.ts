@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   obterMensagemErro,
   obterMensagemErroDaRespostaApi,
+  obterMensagemErroExclusao,
 } from "./mensagens-erro";
 
 describe("mensagens de erro amigáveis", () => {
@@ -25,10 +26,36 @@ describe("mensagens de erro amigáveis", () => {
   it("traduz sessão expirada sem mostrar código técnico", () => {
     expect(
       obterMensagemErro(
-        { status: 401, error: { code: "UNAUTHORIZED", message: "Unauthorized" } },
+        {
+          status: 401,
+          error: { code: "UNAUTHORIZED", message: "Unauthorized" },
+        },
         "Não foi possível continuar.",
       ),
     ).toBe("Sua sessão expirou. Faça login novamente para continuar.");
+  });
+
+  it("informa falta de permissão de forma clara na exclusão", () => {
+    expect(obterMensagemErroExclusao({ response: { status: 403 } })).toBe(
+      "Você não tem permissão para excluir este arquivo.",
+    );
+  });
+
+  it.each([
+    [401, "Sua sessão expirou. Faça login novamente para continuar."],
+    [429, "Houve muitas tentativas em pouco tempo. Aguarde alguns minutos e tente novamente."],
+    [503, "Não conseguimos conectar ao portal agora. Verifique sua internet e tente novamente."],
+  ])("preserva mensagem segura de exclusão para status %s", (status, mensagem) => {
+    expect(obterMensagemErroExclusao({ status }, "Falha de exclusão.")).toBe(
+      mensagem,
+    );
+  });
+
+  it("preserva uma mensagem segura já traduzida em uma segunda passagem", () => {
+    const mensagem =
+      "Houve muitas tentativas em pouco tempo. Aguarde alguns minutos e tente novamente.";
+
+    expect(obterMensagemErroExclusao(new Error(mensagem))).toBe(mensagem);
   });
 
   it("extrai mensagem de erro aninhada da resposta da API", () => {
@@ -44,9 +71,7 @@ describe("mensagens de erro amigáveis", () => {
         },
         "Não foi possível enviar o arquivo.",
       ),
-    ).toBe(
-      "Esse arquivo não é aceito. Envie PDF, Word, Excel, PNG ou JPG.",
-    );
+    ).toBe("Esse arquivo não é aceito. Envie PDF, Word, Excel, PNG ou JPG.");
   });
 
   it("informa limite máximo de arquivo de 500 MB", () => {

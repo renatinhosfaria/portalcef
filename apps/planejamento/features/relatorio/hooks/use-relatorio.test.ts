@@ -1,19 +1,26 @@
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { FetchError } from "@essencia/shared/fetchers/client";
 import { useRelatorio } from "./use-relatorio";
 
 const mockApiGet = vi.fn();
 const mockApiPost = vi.fn();
 const mockApiDelete = vi.fn();
 
-vi.mock("@essencia/shared/fetchers/client", () => ({
-  api: {
-    get: (...args: unknown[]) => mockApiGet(...args),
-    post: (...args: unknown[]) => mockApiPost(...args),
-    delete: (...args: unknown[]) => mockApiDelete(...args),
-  },
-}));
+vi.mock("@essencia/shared/fetchers/client", async () => {
+  const atual = await vi.importActual<
+    typeof import("@essencia/shared/fetchers/client")
+  >("@essencia/shared/fetchers/client");
+  return {
+    FetchError: atual.FetchError,
+    api: {
+      get: (...args: unknown[]) => mockApiGet(...args),
+      post: (...args: unknown[]) => mockApiPost(...args),
+      delete: (...args: unknown[]) => mockApiDelete(...args),
+    },
+  };
+});
 
 describe("useRelatorio", () => {
   beforeEach(() => {
@@ -66,5 +73,22 @@ describe("useRelatorio", () => {
       "/relatorio/relatorio-1/documento/documento-1",
       { body: { motivo: "arquivo duplicado no relatório" } },
     );
+  });
+
+  it("traduz 403 real como falta de permissão para excluir", async () => {
+    mockApiDelete.mockRejectedValueOnce(
+      new FetchError(403, "FORBIDDEN", "Acesso negado"),
+    );
+    const { result } = renderHook(() => useRelatorio());
+
+    await act(async () => {
+      await expect(
+        result.current.deleteDocumento(
+          "relatorio-1",
+          "documento-1",
+          "arquivo duplicado no relatório",
+        ),
+      ).rejects.toThrow("Você não tem permissão para excluir este arquivo.");
+    });
   });
 });

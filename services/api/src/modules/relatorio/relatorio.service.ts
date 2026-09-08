@@ -164,10 +164,7 @@ export class RelatorioService {
    * Cria ou busca relatório existente para turma/semestre.
    * Valida que a turma pertence a uma etapa permitida (BERCARIO ou INFANTIL).
    */
-  async criar(
-    dto: CreateRelatorioDto,
-    user: UserContext,
-  ): Promise<Relatorio> {
+  async criar(dto: CreateRelatorioDto, user: UserContext): Promise<Relatorio> {
     const db = getDb();
 
     if (!user.unitId) {
@@ -322,10 +319,7 @@ export class RelatorioService {
    * RASCUNHO, DEVOLVIDO_ANALISTA, DEVOLVIDO_COORDENADORA ou RECUPERADO
    * passam a AGUARDANDO_ANALISTA.
    */
-  async submeter(
-    relatorioId: string,
-    user: UserContext,
-  ): Promise<Relatorio> {
+  async submeter(relatorioId: string, user: UserContext): Promise<Relatorio> {
     const db = getDb();
 
     const encontrado = await db.query.relatorio.findFirst({
@@ -338,9 +332,7 @@ export class RelatorioService {
     }
 
     if (encontrado.userId !== user.userId) {
-      throw new ForbiddenException(
-        "Apenas o autor pode submeter o relatório",
-      );
+      throw new ForbiddenException("Apenas o autor pode submeter o relatório");
     }
 
     if (!encontrado.documentos || encontrado.documentos.length === 0) {
@@ -393,10 +385,7 @@ export class RelatorioService {
    * Recupera relatório submetido (AGUARDANDO_ANALISTA -> RECUPERADO).
    * Só é possível antes da analista iniciar a análise.
    */
-  async recuperar(
-    relatorioId: string,
-    user: UserContext,
-  ): Promise<Relatorio> {
+  async recuperar(relatorioId: string, user: UserContext): Promise<Relatorio> {
     const db = getDb();
 
     const encontrado = await db.query.relatorio.findFirst({
@@ -408,9 +397,7 @@ export class RelatorioService {
     }
 
     if (encontrado.userId !== user.userId) {
-      throw new ForbiddenException(
-        "Apenas o autor pode recuperar o relatório",
-      );
+      throw new ForbiddenException("Apenas o autor pode recuperar o relatório");
     }
 
     if (encontrado.status !== "AGUARDANDO_ANALISTA") {
@@ -1079,46 +1066,53 @@ export class RelatorioService {
         motivo: motivo.trim(),
       };
 
-      await db.transaction(async (tx: DbTransaction) => {
-        await this.historicoService.registrar(
-          {
-            relatorioId,
-            userId: session.userId,
-            userName,
-            userRole: session.role,
-            acao: "DOCUMENTO_EXCLUIDO",
-            statusAnterior: encontrado.status,
-            statusNovo: encontrado.status,
-            detalhes,
-          },
-          tx,
-        );
+      const documentoExcluido = await db.transaction(
+        async (tx: DbTransaction) => {
+          await this.historicoService.registrar(
+            {
+              relatorioId,
+              userId: session.userId,
+              userName,
+              userRole: session.role,
+              acao: "DOCUMENTO_EXCLUIDO",
+              statusAnterior: encontrado.status,
+              statusNovo: encontrado.status,
+              detalhes,
+            },
+            tx,
+          );
 
-        const [documentoExcluido] = await tx
-          .delete(relatorioDocumento)
-          .where(
-            and(
-              filtroDocumento,
-              isNull(relatorioDocumento.approvedBy),
-              isNull(relatorioDocumento.approvedAt),
-            ),
-          )
-          .returning();
+          const [documentoExcluido] = await tx
+            .delete(relatorioDocumento)
+            .where(
+              and(
+                filtroDocumento,
+                isNull(relatorioDocumento.approvedBy),
+                isNull(relatorioDocumento.approvedAt),
+              ),
+            )
+            .returning();
 
-        if (!documentoExcluido) {
-          const documentoAtual = await tx.query.relatorioDocumento.findFirst({
-            where: filtroDocumento,
-          });
+          if (!documentoExcluido) {
+            const documentoAtual = await tx.query.relatorioDocumento.findFirst({
+              where: filtroDocumento,
+            });
 
-          if (documentoAtual?.approvedBy || documentoAtual?.approvedAt) {
-            throw criarErroDocumentoAprovado();
+            if (documentoAtual?.approvedBy || documentoAtual?.approvedAt) {
+              throw criarErroDocumentoAprovado();
+            }
+
+            throw criarErroDocumentoNaoEncontrado();
           }
 
-          throw criarErroDocumentoNaoEncontrado();
-        }
-      });
+          return documentoExcluido;
+        },
+      );
 
-      const chaves = [documento.storageKey, documento.pdfStorageKey].filter(
+      const chaves = [
+        documentoExcluido.storageKey,
+        documentoExcluido.pdfStorageKey,
+      ].filter(
         (chave, indice, todas): chave is string =>
           Boolean(chave) && todas.indexOf(chave) === indice,
       );
@@ -1137,16 +1131,16 @@ export class RelatorioService {
         }),
       );
 
-      if (documento.sharepointItemId) {
+      if (documentoExcluido.sharepointItemId) {
         try {
           await this.sharePointService.removerArquivo(
-            documento.sharepointItemId,
+            documentoExcluido.sharepointItemId,
           );
         } catch (error) {
           const mensagem =
             error instanceof Error ? error.message : String(error);
           this.logger.warn(
-            `[removerDocumento] Falha ao remover ${documento.sharepointItemId} do SharePoint: ${mensagem}`,
+            `[removerDocumento] Falha ao remover ${documentoExcluido.sharepointItemId} do SharePoint: ${mensagem}`,
           );
         }
       }

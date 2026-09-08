@@ -3,7 +3,10 @@
 import { api } from "@essencia/shared/fetchers/client";
 import { useCallback, useState } from "react";
 
-import { obterMensagemErro } from "../../../lib/mensagens-erro";
+import {
+  obterMensagemErro,
+  obterMensagemErroExclusao,
+} from "../../../lib/mensagens-erro";
 import type {
   Prova,
   ProvaSummary,
@@ -23,7 +26,10 @@ import type {
 interface UseProvaReturn {
   loading: boolean;
   error: string | null;
-  criarProva: (turmaId: string, provaCicloId: string) => Promise<CriarProvaResult>;
+  criarProva: (
+    turmaId: string,
+    provaCicloId: string,
+  ) => Promise<CriarProvaResult>;
   getProva: (id: string) => Promise<Prova>;
   uploadDocumento: (provaId: string, file: File) => Promise<ProvaDocumento>;
   addLink: (provaId: string, url: string) => Promise<ProvaDocumento>;
@@ -56,7 +62,10 @@ export function useProva(): UseProvaReturn {
   const [error, setError] = useState<string | null>(null);
 
   const criarProva = useCallback(
-    async (turmaId: string, provaCicloId: string): Promise<CriarProvaResult> => {
+    async (
+      turmaId: string,
+      provaCicloId: string,
+    ): Promise<CriarProvaResult> => {
       setLoading(true);
       setError(null);
       try {
@@ -149,11 +158,7 @@ export function useProva(): UseProvaReturn {
   );
 
   const deleteDocumento = useCallback(
-    async (
-      provaId: string,
-      docId: string,
-      motivo: string,
-    ): Promise<void> => {
+    async (provaId: string, docId: string, motivo: string): Promise<void> => {
       setLoading(true);
       setError(null);
       try {
@@ -161,7 +166,7 @@ export function useProva(): UseProvaReturn {
           body: { motivo },
         });
       } catch (err) {
-        const message = obterMensagemErro(
+        const message = obterMensagemErroExclusao(
           err,
           "Não foi possível excluir o documento. Tente novamente.",
         );
@@ -407,9 +412,7 @@ export function useAnalistaProvaActions(): UseAnalistaProvaActionsReturn {
 
   const listarPendentes = useCallback(async (): Promise<ProvaSummary[]> => {
     try {
-      const result = await api.get<ProvaSummary[]>(
-        "/prova/analista/pendentes",
-      );
+      const result = await api.get<ProvaSummary[]>("/prova/analista/pendentes");
       return result || [];
     } catch (err) {
       throw new Error(
@@ -437,24 +440,21 @@ export function useAnalistaProvaActions(): UseAnalistaProvaActionsReturn {
     }
   }, []);
 
-  const devolver = useCallback(
-    async (provaId: string): Promise<void> => {
-      setLoading(true);
-      try {
-        await api.post(`/prova/${provaId}/analista/devolver`, {});
-      } catch (err) {
-        throw new Error(
-          obterMensagemErro(
-            err,
-            "Não foi possível devolver a prova. Tente novamente.",
-          ),
-        );
-      } finally {
-        setLoading(false);
-      }
-    },
-    [],
-  );
+  const devolver = useCallback(async (provaId: string): Promise<void> => {
+    setLoading(true);
+    try {
+      await api.post(`/prova/${provaId}/analista/devolver`, {});
+    } catch (err) {
+      throw new Error(
+        obterMensagemErro(
+          err,
+          "Não foi possível devolver a prova. Tente novamente.",
+        ),
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   return { loading, listarPendentes, aprovar, devolver };
 }
@@ -536,10 +536,7 @@ const DASHBOARD_STATS_VAZIAS: ProvaDashboardData["stats"] = {
   aprovados: 0,
 };
 
-function somarStatus(
-  itens: DashboardItemApi[],
-  status: ProvaStatus[],
-): number {
+function somarStatus(itens: DashboardItemApi[], status: ProvaStatus[]): number {
   return itens.reduce((acumulado, item) => {
     if (status.includes(item.status)) {
       return acumulado + item.count;
@@ -718,21 +715,18 @@ export function useGestaoProvas(): UseGestaoProvasReturn {
     [],
   );
 
-  const deletarProva = useCallback(
-    async (provaId: string): Promise<void> => {
-      try {
-        await api.delete(`/prova/${provaId}`);
-      } catch (err) {
-        throw new Error(
-          obterMensagemErro(
-            err,
-            "Não foi possível excluir a prova. Tente novamente.",
-          ),
-        );
-      }
-    },
-    [],
-  );
+  const deletarProva = useCallback(async (provaId: string): Promise<void> => {
+    try {
+      await api.delete(`/prova/${provaId}`);
+    } catch (err) {
+      throw new Error(
+        obterMensagemErro(
+          err,
+          "Não foi possível excluir a prova. Tente novamente.",
+        ),
+      );
+    }
+  }, []);
 
   return { provas, pagination, isLoading, error, fetchProvas, deletarProva };
 }

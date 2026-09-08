@@ -1,17 +1,24 @@
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { FetchError } from "@essencia/shared/fetchers/client";
 import { useGestaoProvas, useProva, useProvaDashboard } from "./use-prova";
 
 const mockApiGet = vi.fn();
 const mockApiDelete = vi.fn();
 
-vi.mock("@essencia/shared/fetchers/client", () => ({
-  api: {
-    get: (...args: unknown[]) => mockApiGet(...args),
-    delete: (...args: unknown[]) => mockApiDelete(...args),
-  },
-}));
+vi.mock("@essencia/shared/fetchers/client", async () => {
+  const atual = await vi.importActual<
+    typeof import("@essencia/shared/fetchers/client")
+  >("@essencia/shared/fetchers/client");
+  return {
+    FetchError: atual.FetchError,
+    api: {
+      get: (...args: unknown[]) => mockApiGet(...args),
+      delete: (...args: unknown[]) => mockApiDelete(...args),
+    },
+  };
+});
 
 describe("useProva", () => {
   beforeEach(() => {
@@ -56,6 +63,23 @@ describe("useProva", () => {
     });
 
     expect(result.current.error).toBe(mensagemEsperada);
+  });
+
+  it("traduz 403 real como falta de permissão para excluir", async () => {
+    mockApiDelete.mockRejectedValueOnce(
+      new FetchError(403, "FORBIDDEN", "Acesso negado"),
+    );
+    const { result } = renderHook(() => useProva());
+
+    await act(async () => {
+      await expect(
+        result.current.deleteDocumento(
+          "prova-1",
+          "doc-1",
+          "Arquivo enviado com conteúdo incorreto",
+        ),
+      ).rejects.toThrow("Você não tem permissão para excluir este arquivo.");
+    });
   });
 });
 

@@ -17,6 +17,7 @@ import {
   lte,
   inArray,
   isNotNull,
+  sql,
   prova,
   provaDocumento,
   provaCiclo,
@@ -160,9 +161,8 @@ export class ProvaService {
 
   private async prepararPdfsParaImpressao(
     documentos: ProvaDocumento[],
+    banco: DbInstance | DbTransaction = getDb(),
   ): Promise<void> {
-    const db = getDb();
-
     for (const documento of documentos) {
       if (documento.pdfUrl || documento.tipo === "LINK_YOUTUBE") {
         continue;
@@ -191,7 +191,7 @@ export class ProvaService {
         continue;
       }
 
-      const [documentoAtualizado] = await db
+      const [documentoAtualizado] = await banco
         .update(provaDocumento)
         .set({
           pdfStorageKey: pdf.pdfStorageKey,
@@ -205,6 +205,19 @@ export class ProvaService {
         await this.removerPdfGeradoSemFalhar(pdf.pdfStorageKey, documento.id);
       }
     }
+  }
+
+  /**
+   * Serializa operações que geram ou removem documentos da mesma prova.
+   * O bloqueio vive no PostgreSQL e funciona entre réplicas da API.
+   */
+  private async bloquearProva(
+    tx: DbTransaction,
+    provaId: string,
+  ): Promise<void> {
+    await tx.execute(
+      sql`SELECT id FROM prova WHERE id = ${provaId} FOR UPDATE`,
+    );
   }
 
   /**
@@ -340,57 +353,103 @@ export class ProvaService {
   /**
    * Envia prova para impressao (RASCUNHO -> AGUARDANDO_IMPRESSAO)
    */
-  async enviarParaImpressao(user: UserContext, provaId: string): Promise<Prova> {
+  async enviarParaImpressao(
+    user: UserContext,
+    provaId: string,
+  ): Promise<Prova> {
     const db = getDb();
-
-    const provaEncontrada = await db.query.prova.findFirst({
+    const provaInicial = await db.query.prova.findFirst({
       where: eq(prova.id, provaId),
       with: { documentos: true },
     });
 
-    if (!provaEncontrada) {
+    if (!provaInicial) {
       throw new NotFoundException("Prova nao encontrada");
     }
 
-    if (provaEncontrada.userId !== user.userId) {
-      throw new ForbiddenException("Apenas o autor pode enviar a prova para impressao");
-    }
-
-    if (!provaEncontrada.documentos || provaEncontrada.documentos.length === 0) {
-      throw new BadRequestException("Prova precisa ter pelo menos um documento anexado");
-    }
-
-    if (provaEncontrada.status !== "RASCUNHO" && provaEncontrada.status !== "RECUPERADO") {
-      throw new BadRequestException(
-        `Nao e possivel enviar para impressao prova com status ${provaEncontrada.status}`,
+    if (provaInicial.userId !== user.userId) {
+      throw new ForbiddenException(
+        "Apenas o autor pode enviar a prova para impressao",
       );
     }
 
-    const statusAnterior = provaEncontrada.status;
-    await this.prepararPdfsParaImpressao(provaEncontrada.documentos);
+    if (!provaInicial.documentos || provaInicial.documentos.length === 0) {
+      throw new BadRequestException(
+        "Prova precisa ter pelo menos um documento anexado",
+      );
+    }
 
-    const [atualizada] = await db
-      .update(prova)
-      .set({
-        status: "AGUARDANDO_IMPRESSAO",
-        submittedAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .where(eq(prova.id, provaId))
-      .returning();
+    if (
+      provaInicial.status !== "RASCUNHO" &&
+      provaInicial.status !== "RECUPERADO"
+    ) {
+      throw new BadRequestException(
+        `Nao e possivel enviar para impressao prova com status ${provaInicial.status}`,
+      );
+    }
 
+    // A geração pode chamar SharePoint/Storage e fica fora do lock curto.
+    await this.prepararPdfsParaImpressao(provaInicial.documentos);
     const userName = await this.getUserName(user.userId);
-    await this.historicoService.registrar({
-      provaId,
-      userId: user.userId,
-      userName,
-      userRole: user.role,
-      acao: "SUBMETIDO_IMPRESSAO",
-      statusAnterior,
-      statusNovo: "AGUARDANDO_IMPRESSAO",
-    });
 
-    return atualizada;
+    return db.transaction(async (tx: DbTransaction) => {
+      await this.bloquearProva(tx, provaId);
+
+      const provaAtual = await tx.query.prova.findFirst({
+        where: eq(prova.id, provaId),
+        with: { documentos: true },
+      });
+
+      if (!provaAtual) {
+        throw new NotFoundException("Prova nao encontrada");
+      }
+
+      if (
+        provaAtual.status !== "RASCUNHO" &&
+        provaAtual.status !== "RECUPERADO"
+      ) {
+        throw new BadRequestException(
+          `Nao e possivel enviar para impressao prova com status ${provaAtual.status}`,
+        );
+      }
+
+      if (!provaAtual.documentos || provaAtual.documentos.length === 0) {
+        throw new ConflictException(
+          "Não foi possível enviar a prova para impressão porque todos os documentos foram excluídos. Anexe um novo documento e tente novamente.",
+        );
+      }
+
+      const [atualizada] = await tx
+        .update(prova)
+        .set({
+          status: "AGUARDANDO_IMPRESSAO",
+          submittedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(prova.id, provaId))
+        .returning();
+
+      if (!atualizada) {
+        throw new ConflictException(
+          "A prova foi alterada enquanto era enviada para impressão. Atualize a página e tente novamente.",
+        );
+      }
+
+      await this.historicoService.registrar(
+        {
+          provaId,
+          userId: user.userId,
+          userName,
+          userRole: user.role,
+          acao: "SUBMETIDO_IMPRESSAO",
+          statusAnterior: provaAtual.status,
+          statusNovo: "AGUARDANDO_IMPRESSAO",
+        },
+        tx,
+      );
+
+      return atualizada;
+    });
   }
 
   /**
@@ -508,7 +567,10 @@ export class ProvaService {
   /**
    * Reenvia prova devolvida para analise (DEVOLVIDO_ANALISTA -> AGUARDANDO_ANALISTA)
    */
-  async reenviarParaAnalise(user: UserContext, provaId: string): Promise<Prova> {
+  async reenviarParaAnalise(
+    user: UserContext,
+    provaId: string,
+  ): Promise<Prova> {
     const db = getDb();
 
     const provaEncontrada = await db.query.prova.findFirst({
@@ -562,7 +624,10 @@ export class ProvaService {
    * Marca prova como enviada para analise apos impressao
    * (AGUARDANDO_IMPRESSAO -> AGUARDANDO_ANALISTA)
    */
-  async enviarParaResponder(user: UserContext, provaId: string): Promise<Prova> {
+  async enviarParaResponder(
+    user: UserContext,
+    provaId: string,
+  ): Promise<Prova> {
     const db = getDb();
 
     const provaEncontrada = await db.query.prova.findFirst({
@@ -577,7 +642,9 @@ export class ProvaService {
     }
 
     if (provaEncontrada.unitId !== user.unitId) {
-      throw new ForbiddenException("Voce so pode gerenciar provas da sua unidade");
+      throw new ForbiddenException(
+        "Voce so pode gerenciar provas da sua unidade",
+      );
     }
 
     if (provaEncontrada.status !== "AGUARDANDO_IMPRESSAO") {
@@ -587,7 +654,8 @@ export class ProvaService {
     }
 
     const documentos = provaEncontrada.documentos ?? [];
-    const documentosPendentes = this.getDocumentosPendentesImpressao(documentos);
+    const documentosPendentes =
+      this.getDocumentosPendentesImpressao(documentos);
 
     if (documentosPendentes.length > 0) {
       throw new BadRequestException(
@@ -676,13 +744,18 @@ export class ProvaService {
       orderBy: [desc(prova.submittedAt)],
     });
 
-    return provas.map((p: (typeof provas)[number]) => this.mapToProvaSummary(p));
+    return provas.map((p: (typeof provas)[number]) =>
+      this.mapToProvaSummary(p),
+    );
   }
 
   /**
    * Aprova prova como analista (-> APROVADO) - aprovacao final
    */
-  async aprovarComoAnalista(user: UserContext, provaId: string): Promise<Prova> {
+  async aprovarComoAnalista(
+    user: UserContext,
+    provaId: string,
+  ): Promise<Prova> {
     const db = getDb();
 
     const provaEncontrada = await db.query.prova.findFirst({
@@ -694,7 +767,9 @@ export class ProvaService {
     }
 
     if (provaEncontrada.unitId !== user.unitId) {
-      throw new ForbiddenException("Voce so pode aprovar provas da sua unidade");
+      throw new ForbiddenException(
+        "Voce so pode aprovar provas da sua unidade",
+      );
     }
 
     if (provaEncontrada.status !== "AGUARDANDO_ANALISTA") {
@@ -940,9 +1015,7 @@ export class ProvaService {
     if (dto.status && dto.status !== "todos") {
       const statusDb = PROVA_STATUS_URL_MAP[dto.status];
       if (statusDb && statusDb.length > 0) {
-        conditions.push(
-          inArray(prova.status, statusDb as ProvaStatus[]),
-        );
+        conditions.push(inArray(prova.status, statusDb as ProvaStatus[]));
       }
     }
 
@@ -1038,8 +1111,7 @@ export class ProvaService {
         segmento: turmaComStage?.stage?.name || "",
         provaCicloId: provaItem.provaCicloId,
         cicloPeriodo:
-          ciclo?.descricao ||
-          (ciclo?.numero ? `${ciclo.numero}a Prova` : ""),
+          ciclo?.descricao || (ciclo?.numero ? `${ciclo.numero}a Prova` : ""),
         status: provaItem.status,
         submittedAt: provaItem.submittedAt?.toISOString() || null,
         createdAt: provaItem.createdAt.toISOString(),
@@ -1277,10 +1349,7 @@ export class ProvaService {
       }
 
       const db = getDb();
-      const provaEncontrada = await this.buscarProvaParaExclusao(
-        user,
-        provaId,
-      );
+      const provaEncontrada = await this.buscarProvaParaExclusao(user, provaId);
       const filtroDocumento = and(
         eq(provaDocumento.id, documentoId),
         eq(provaDocumento.provaId, provaId),
@@ -1317,6 +1386,8 @@ export class ProvaService {
 
       const documentoExcluido = await db.transaction(
         async (tx: DbTransaction) => {
+          await this.bloquearProva(tx, provaId);
+
           await this.historicoService.registrar(
             {
               provaId,
@@ -1584,8 +1655,24 @@ export class ProvaService {
         pdfUrl,
         updatedAt: new Date(),
       })
-      .where(eq(provaDocumento.id, documentoId))
+      .where(
+        and(
+          eq(provaDocumento.id, documentoId),
+          isNull(provaDocumento.approvedBy),
+          isNull(provaDocumento.approvedAt),
+        ),
+      )
       .returning();
+
+    if (!documentoAtualizado) {
+      if (pdfStorageKey && pdfStorageKey !== documento.storageKey) {
+        await this.removerPdfGeradoSemFalhar(pdfStorageKey, documento.id);
+      }
+
+      throw new ConflictException(
+        "Este documento foi alterado ou excluído enquanto era aprovado. Atualize a página e tente novamente.",
+      );
+    }
 
     return documentoAtualizado;
   }

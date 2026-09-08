@@ -9,13 +9,19 @@ import { ProvaService } from "./prova.service";
 
 const mockTx = {
   query: {
+    prova: {
+      findFirst: jest.fn(),
+    },
     provaDocumento: {
       findFirst: jest.fn(),
     },
   },
   delete: jest.fn().mockReturnThis(),
+  update: jest.fn().mockReturnThis(),
+  set: jest.fn().mockReturnThis(),
   where: jest.fn().mockReturnThis(),
   returning: jest.fn(),
+  execute: jest.fn().mockResolvedValue([]),
 };
 
 const mockDb = {
@@ -55,6 +61,7 @@ jest.mock("@essencia/db", () => ({
   lte: jest.fn(),
   inArray: jest.fn(),
   isNotNull: jest.fn(),
+  sql: jest.fn(),
   prova: {},
   provaDocumento: {},
   provaCiclo: {},
@@ -181,25 +188,42 @@ describe("ProvaService", () => {
           },
         ],
       });
+      mockTx.query.prova.findFirst.mockResolvedValue({
+        id: "prova-1",
+        userId: "prof-1",
+        unitId: "unit-1",
+        status: "RASCUNHO",
+        documentos: [
+          {
+            id: "doc-1",
+            storageKey: "provas/doc-1.docx",
+            url: "https://cdn/doc-1.docx",
+            fileName: "Prova.docx",
+            mimeType:
+              "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            pdfStorageKey: "pdf/doc-1.pdf",
+            pdfUrl: "https://cdn/doc-1.pdf",
+          },
+        ],
+      });
       pdfGeneratorServiceMock.gerarParaImpressao.mockResolvedValue({
         pdfStorageKey: "pdf/doc-1.pdf",
         pdfUrl: "https://cdn/doc-1.pdf",
       });
       mockDb.query.users.findFirst.mockResolvedValue({ name: "Professora" });
-      mockDb.returning
-        .mockResolvedValueOnce([
-          {
-            id: "doc-1",
-            pdfStorageKey: "pdf/doc-1.pdf",
-            pdfUrl: "https://cdn/doc-1.pdf",
-          },
-        ])
-        .mockResolvedValueOnce([
-          {
-            id: "prova-1",
-            status: "AGUARDANDO_IMPRESSAO",
-          },
-        ]);
+      mockDb.returning.mockResolvedValueOnce([
+        {
+          id: "doc-1",
+          pdfStorageKey: "pdf/doc-1.pdf",
+          pdfUrl: "https://cdn/doc-1.pdf",
+        },
+      ]);
+      mockTx.returning.mockResolvedValueOnce([
+        {
+          id: "prova-1",
+          status: "AGUARDANDO_IMPRESSAO",
+        },
+      ]);
 
       const resultado = await service.enviarParaImpressao(user, "prova-1");
 
@@ -225,8 +249,74 @@ describe("ProvaService", () => {
           acao: "SUBMETIDO_IMPRESSAO",
           statusNovo: "AGUARDANDO_IMPRESSAO",
         }),
+        mockTx,
       );
       expect(resultado.status).toBe("AGUARDANDO_IMPRESSAO");
+    });
+
+    it("revalida os documentos após gerar PDFs e não muda o status quando todos foram excluídos", async () => {
+      mockDb.query.prova.findFirst.mockResolvedValue({
+        id: "prova-1",
+        userId: "prof-1",
+        unitId: "unit-1",
+        status: "RASCUNHO",
+        documentos: [
+          {
+            id: "doc-1",
+            tipo: "ARQUIVO",
+            storageKey: "provas/doc-1.docx",
+            url: "https://cdn/doc-1.docx",
+            fileName: "Prova.docx",
+            mimeType: "application/msword",
+            pdfStorageKey: null,
+            pdfUrl: null,
+          },
+        ],
+      });
+      mockTx.query.prova.findFirst.mockResolvedValue({
+        id: "prova-1",
+        userId: "prof-1",
+        unitId: "unit-1",
+        status: "RASCUNHO",
+        documentos: [],
+      });
+      mockDb.returning.mockResolvedValueOnce([]);
+      mockDb.query.users.findFirst.mockResolvedValue({ name: "Professora" });
+      pdfGeneratorServiceMock.gerarParaImpressao.mockResolvedValue({
+        pdfStorageKey: "pdf/doc-1-gerado.pdf",
+        pdfUrl: "https://cdn/doc-1-gerado.pdf",
+      });
+
+      await expect(
+        service.enviarParaImpressao(
+          {
+            userId: "prof-1",
+            role: "professora",
+            schoolId: "school-1",
+            unitId: "unit-1",
+            stageId: null,
+          },
+          "prova-1",
+        ),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          statusCode: 409,
+          message:
+            "Não foi possível enviar a prova para impressão porque todos os documentos foram excluídos. Anexe um novo documento e tente novamente.",
+        }),
+      });
+
+      expect(storageServiceMock.deleteFile).toHaveBeenCalledWith(
+        "pdf/doc-1-gerado.pdf",
+      );
+      expect(mockTx.execute.mock.invocationCallOrder[0]).toBeGreaterThan(
+        pdfGeneratorServiceMock.gerarParaImpressao.mock.invocationCallOrder[0],
+      );
+      expect(mockTx.update).not.toHaveBeenCalled();
+      expect(historicoServiceMock.registrar).not.toHaveBeenCalledWith(
+        expect.objectContaining({ acao: "SUBMETIDO_IMPRESSAO" }),
+        expect.anything(),
+      );
     });
   });
 
@@ -265,7 +355,10 @@ describe("ProvaService", () => {
         },
       ]);
 
-      const resultado = await service.enviarParaResponder(userGestao, "prova-1");
+      const resultado = await service.enviarParaResponder(
+        userGestao,
+        "prova-1",
+      );
 
       expect(mockDb.set).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -348,7 +441,10 @@ describe("ProvaService", () => {
         },
       ]);
 
-      const resultado = await service.regerarPdfDocumento(userAnalista, "doc-1");
+      const resultado = await service.regerarPdfDocumento(
+        userAnalista,
+        "doc-1",
+      );
 
       expect(pdfGeneratorServiceMock.gerarParaImpressao).toHaveBeenCalledWith({
         id: "doc-1",
@@ -368,6 +464,55 @@ describe("ProvaService", () => {
         }),
       );
       expect(resultado.pdfUrl).toBe("https://cdn/doc-1.pdf");
+    });
+  });
+
+  describe("aprovarDocumento", () => {
+    it("não aprova documento removido em paralelo e remove apenas o PDF derivado", async () => {
+      mockDb.query.provaDocumento.findFirst.mockResolvedValue({
+        id: "doc-1",
+        provaId: "prova-1",
+        storageKey: "provas/doc-1.docx",
+        approvedBy: null,
+        approvedAt: null,
+        pdfStorageKey: null,
+        pdfUrl: null,
+        tipo: "ARQUIVO",
+        fileName: "Prova.docx",
+        mimeType: "application/msword",
+        prova: { unitId: "unit-1" },
+      });
+      pdfGeneratorServiceMock.gerarParaImpressao.mockResolvedValue({
+        pdfStorageKey: "pdf/doc-1-gerado.pdf",
+        pdfUrl: "https://cdn/doc-1-gerado.pdf",
+      });
+      mockDb.returning.mockResolvedValue([]);
+
+      await expect(
+        service.aprovarDocumento(
+          {
+            userId: "analista-1",
+            role: "analista_pedagogico",
+            schoolId: "school-1",
+            unitId: "unit-1",
+            stageId: null,
+          },
+          "doc-1",
+        ),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          statusCode: 409,
+          message:
+            "Este documento foi alterado ou excluído enquanto era aprovado. Atualize a página e tente novamente.",
+        }),
+      });
+
+      expect(storageServiceMock.deleteFile).toHaveBeenCalledWith(
+        "pdf/doc-1-gerado.pdf",
+      );
+      expect(storageServiceMock.deleteFile).not.toHaveBeenCalledWith(
+        "provas/doc-1.docx",
+      );
     });
   });
 
@@ -415,6 +560,17 @@ describe("ProvaService", () => {
       historicoServiceMock.registrar.mockResolvedValue(undefined);
     });
 
+    it("usa o bloqueio da prova antes de excluir o documento", async () => {
+      await service.removerDocumento(
+        usuarioAnalista,
+        "prova-1",
+        "doc-1",
+        "Arquivo enviado com conteúdo incorreto",
+      );
+
+      expect(mockTx.execute).toHaveBeenCalledTimes(1);
+    });
+
     const executarRemocao = (
       user: {
         userId: string;
@@ -427,21 +583,25 @@ describe("ProvaService", () => {
       documentoId: string,
       motivo: string,
     ) =>
-      (service.removerDocumento as unknown as (
-        user: {
-          userId: string;
-          role: string;
-          schoolId: string | null;
-          unitId: string | null;
-          stageId: string | null;
-        },
-        provaId: string,
-        documentoId: string,
-        motivo: string,
-      ) => Promise<void>)(user, provaId, documentoId, motivo);
+      (
+        service.removerDocumento as unknown as (
+          user: {
+            userId: string;
+            role: string;
+            schoolId: string | null;
+            unitId: string | null;
+            stageId: string | null;
+          },
+          provaId: string,
+          documentoId: string,
+          motivo: string,
+        ) => Promise<void>
+      )(user, provaId, documentoId, motivo);
 
     it("rejeita motivo inválido antes de consultar a prova", async () => {
-      const removerDocumento = service.removerDocumento.bind(service) as unknown as (
+      const removerDocumento = service.removerDocumento.bind(
+        service,
+      ) as unknown as (
         user: typeof usuarioAnalista,
         provaId: string,
         documentoId: string,
@@ -830,12 +990,11 @@ describe("ProvaService", () => {
       );
 
       const erro = await executarRemocao(
-          usuarioAnalista,
-          "prova-1",
-          "doc-1",
-          "Falha inesperada durante a exclusão",
-        )
-        .catch((erro: unknown) => erro);
+        usuarioAnalista,
+        "prova-1",
+        "doc-1",
+        "Falha inesperada durante a exclusão",
+      ).catch((erro: unknown) => erro);
 
       expect(erro).toMatchObject({
         response: expect.objectContaining({

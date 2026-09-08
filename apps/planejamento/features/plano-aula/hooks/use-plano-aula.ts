@@ -3,7 +3,10 @@
 import { api } from "@essencia/shared/fetchers/client";
 import { useCallback, useState } from "react";
 
-import { obterMensagemErro } from "../../../lib/mensagens-erro";
+import {
+  obterMensagemErro,
+  obterMensagemErroExclusao,
+} from "../../../lib/mensagens-erro";
 import type {
   PlanoAula,
   PlanoAulaSummary,
@@ -157,7 +160,7 @@ export function usePlanoAula(): UsePlanoAulaReturn {
           body: { motivo },
         });
       } catch (err) {
-        const message = obterMensagemErro(
+        const message = obterMensagemErroExclusao(
           err,
           "Não foi possível excluir o documento. Tente novamente.",
         );
@@ -383,24 +386,21 @@ export function useAnalistaActions(): UseAnalistaActionsReturn {
     }
   }, []);
 
-  const devolver = useCallback(
-    async (planoId: string): Promise<void> => {
-      setLoading(true);
-      try {
-        await api.post(`/plano-aula/${planoId}/analista/devolver`, {});
-      } catch (err) {
-        throw new Error(
-          obterMensagemErro(
-            err,
-            "Não foi possível devolver o plano. Tente novamente.",
-          ),
-        );
-      } finally {
-        setLoading(false);
-      }
-    },
-    [],
-  );
+  const devolver = useCallback(async (planoId: string): Promise<void> => {
+    setLoading(true);
+    try {
+      await api.post(`/plano-aula/${planoId}/analista/devolver`, {});
+    } catch (err) {
+      throw new Error(
+        obterMensagemErro(
+          err,
+          "Não foi possível devolver o plano. Tente novamente.",
+        ),
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   return { loading, listarPendentes, aprovar, devolver };
 }
@@ -760,21 +760,18 @@ export function useGestaoPlanos(): UseGestaoPlanosReturn {
     [],
   );
 
-  const deletarPlano = useCallback(
-    async (planoId: string): Promise<void> => {
-      try {
-        await api.delete(`/plano-aula/${planoId}`);
-      } catch (err) {
-        throw new Error(
-          obterMensagemErro(
-            err,
-            "Não foi possível excluir o plano. Tente novamente.",
-          ),
-        );
-      }
-    },
-    [],
-  );
+  const deletarPlano = useCallback(async (planoId: string): Promise<void> => {
+    try {
+      await api.delete(`/plano-aula/${planoId}`);
+    } catch (err) {
+      throw new Error(
+        obterMensagemErro(
+          err,
+          "Não foi possível excluir o plano. Tente novamente.",
+        ),
+      );
+    }
+  }, []);
 
   return { planos, pagination, isLoading, error, fetchPlanos, deletarPlano };
 }
