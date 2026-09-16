@@ -113,8 +113,8 @@ pnpm db:migrate                             # Aplicar migrations (dev)
 pnpm db:studio                              # Interface visual (:4983)
 
 # Produção (no servidor)
-docker compose -f docker-compose.prod.yml build 
-docker compose -f docker-compose.prod.yml up -d
+docker buildx bake -f docker-bake.hcl
+docker compose -f docker-compose.prod.yml --env-file .env.docker up -d
 ./scripts/migrate.sh                        # Migrations em produção
 ./scripts/health-check.sh                   # Verificar saúde
 ```
@@ -156,9 +156,52 @@ Correções de bugs da loja não podem ser tratadas como casos isolados: classif
 
 ---
 
-# 1. Rebuild e restart
-docker compose -f docker-compose.prod.yml build --no-cache
-docker compose -f docker-compose.prod.yml up -d
+## 🚀 Deploy em Produção
+
+### Sequência canônica
+
+```bash
+pnpm turbo lint
+pnpm turbo typecheck
+
+# Constrói as 14 imagens. TAG versiona e permite rollback depois.
+TAG=$(git rev-parse --short HEAD) docker buildx bake -f docker-bake.hcl
+
+# Havendo migration nova, aplicar ANTES de subir o código novo
+docker compose -f docker-compose.prod.yml --env-file .env.docker \
+  run --rm api node /app/packages/db/dist/migrate.js
+
+IMAGE_TAG=$(git rev-parse --short HEAD) \
+  docker compose -f docker-compose.prod.yml --env-file .env.docker up -d
+
+./scripts/health-check.sh
+```
+
+### Três armadilhas que já derrubaram a produção
+
+**1. `--env-file .env.docker` é obrigatório.** O compose lê `.env` por padrão, e
+`.env` não tem `DATABASE_URL` (está apenas em `.env.docker`). Sem a flag, a API
+sobe com a variável vazia, entra em loop de restart e derruba todos os serviços
+que dependem dela. Os avisos `WARN ... variable is not set` são o sintoma disso —
+não são ruído.
+
+**2. `docker compose build` não constrói as aplicações.** Apenas `landing-mae`
+tem `build:` no compose; os demais usam `image:` e são construídos pelo
+`docker-bake.hcl`. O comando termina com sucesso sem reconstruir nada.
+
+**3. A imagem não tem `pnpm`.** Migrations rodam com
+`node /app/packages/db/dist/migrate.js`.
+
+### Rollback
+
+Como as imagens são versionadas por SHA, voltar é imediato — sem rebuild:
+
+```bash
+IMAGE_TAG=<sha-anterior> \
+  docker compose -f docker-compose.prod.yml --env-file .env.docker up -d
+```
+
+Para listar as versões disponíveis: `docker images essencia-api`.
 
 ### Variáveis de Ambiente Críticas
 
@@ -275,8 +318,8 @@ cat backup_pre_migration.sql | docker exec -i essencia-postgres psql -U essencia
 git checkout <commit-anterior>
 
 # 3. Rebuild
-docker compose -f docker-compose.prod.yml build --no-cache
-docker compose -f docker-compose.prod.yml up -d
+docker buildx bake -f docker-bake.hcl --no-cache
+docker compose -f docker-compose.prod.yml --env-file .env.docker up -d
 ```
 
 ### Renovar Certificado SSL
@@ -443,7 +486,7 @@ docker stats
 
 # Remover órfãos
 docker compose -f docker-compose.prod.yml down --remove-orphans
-docker compose -f docker-compose.prod.yml up -d
+docker compose -f docker-compose.prod.yml --env-file .env.docker up -d
 ```
 
 ### Erro de DNS no Nginx

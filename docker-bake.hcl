@@ -102,6 +102,7 @@ target "home" {
   tags = [
     "${REGISTRY}/home:${TAG}",
     "${REGISTRY}/home:latest",
+    "essencia-home:${TAG}",
     "essencia-home:latest"
   ]
 }
@@ -115,6 +116,7 @@ target "login" {
   tags = [
     "${REGISTRY}/login:${TAG}",
     "${REGISTRY}/login:latest",
+    "essencia-login:${TAG}",
     "essencia-login:latest"
   ]
 }
@@ -128,6 +130,7 @@ target "usuarios" {
   tags = [
     "${REGISTRY}/usuarios:${TAG}",
     "${REGISTRY}/usuarios:latest",
+    "essencia-usuarios:${TAG}",
     "essencia-usuarios:latest"
   ]
 }
@@ -141,6 +144,7 @@ target "escolas" {
   tags = [
     "${REGISTRY}/escolas:${TAG}",
     "${REGISTRY}/escolas:latest",
+    "essencia-escolas:${TAG}",
     "essencia-escolas:latest"
   ]
 }
@@ -155,6 +159,7 @@ target "turmas" {
   tags = [
     "${REGISTRY}/turmas:${TAG}",
     "${REGISTRY}/turmas:latest",
+    "essencia-turmas:${TAG}",
     "essencia-turmas:latest"
   ]
 }
@@ -168,6 +173,7 @@ target "planejamento" {
   tags = [
     "${REGISTRY}/planejamento:${TAG}",
     "${REGISTRY}/planejamento:latest",
+    "essencia-planejamento:${TAG}",
     "essencia-planejamento:latest"
   ]
 }
@@ -182,6 +188,7 @@ target "calendario" {
   tags = [
     "${REGISTRY}/calendario:${TAG}",
     "${REGISTRY}/calendario:latest",
+    "essencia-calendario:${TAG}",
     "essencia-calendario:latest"
   ]
 }
@@ -196,6 +203,7 @@ target "eventos" {
   tags = [
     "${REGISTRY}/eventos:${TAG}",
     "${REGISTRY}/eventos:latest",
+    "essencia-eventos:${TAG}",
     "essencia-eventos:latest"
   ]
 }
@@ -210,6 +218,7 @@ target "loja" {
   tags = [
     "${REGISTRY}/loja:${TAG}",
     "${REGISTRY}/loja:latest",
+    "essencia-loja:${TAG}",
     "essencia-loja:latest"
   ]
 }
@@ -224,6 +233,7 @@ target "loja-admin" {
   tags = [
     "${REGISTRY}/loja-admin:${TAG}",
     "${REGISTRY}/loja-admin:latest",
+    "essencia-loja-admin:${TAG}",
     "essencia-loja-admin:latest"
   ]
 }
@@ -237,6 +247,7 @@ target "tarefas" {
   tags = [
     "${REGISTRY}/tarefas:${TAG}",
     "${REGISTRY}/tarefas:latest",
+    "essencia-tarefas:${TAG}",
     "essencia-tarefas:latest"
   ]
 }
@@ -250,6 +261,7 @@ target "suporte" {
   tags = [
     "${REGISTRY}/suporte:${TAG}",
     "${REGISTRY}/suporte:latest",
+    "essencia-suporte:${TAG}",
     "essencia-suporte:latest"
   ]
 }
@@ -264,6 +276,7 @@ target "workflows" {
   tags = [
     "${REGISTRY}/workflows:${TAG}",
     "${REGISTRY}/workflows:latest",
+    "essencia-workflows:${TAG}",
     "essencia-workflows:latest"
   ]
 }
@@ -278,6 +291,7 @@ target "api" {
   tags = [
     "${REGISTRY}/api:${TAG}",
     "${REGISTRY}/api:latest",
+    "essencia-api:${TAG}",
     "essencia-api:latest"
   ]
 }

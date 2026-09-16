@@ -39,6 +39,8 @@ echo ""
 echo -e "Ambiente: ${YELLOW}${ENV}${NC}"
 echo ""
 
+COMPOSE_ENV_ARGS=()
+
 # Selecionar compose file e container
 case "$ENV" in
     dev)
@@ -48,6 +50,13 @@ case "$ENV" in
     prod)
         COMPOSE_FILE="docker-compose.prod.yml"
         CONTAINER="api"
+        # Sem --env-file o compose lê .env, que não tem DATABASE_URL.
+        ENV_FILE=".env.docker"
+        if [ ! -f "$ENV_FILE" ]; then
+            echo -e "${RED}Erro: $ENV_FILE não encontrado${NC}"
+            exit 1
+        fi
+        COMPOSE_ENV_ARGS=(--env-file "$ENV_FILE")
         ;;
     *)
         echo -e "${RED}Erro: Ambiente inválido '$ENV'${NC}"
@@ -57,11 +66,11 @@ case "$ENV" in
 esac
 
 # Verificar se container está rodando
-if ! docker compose -f $COMPOSE_FILE ps $CONTAINER | grep -q "Up"; then
+if ! docker compose -f "$COMPOSE_FILE" "${COMPOSE_ENV_ARGS[@]}" ps $CONTAINER | grep -q "Up"; then
     echo -e "${RED}Erro: Container '$CONTAINER' não está rodando${NC}"
     echo ""
     echo "Inicie os serviços primeiro:"
-    echo "  docker compose -f $COMPOSE_FILE up -d"
+    echo "  docker compose -f $COMPOSE_FILE ${COMPOSE_ENV_ARGS[*]} up -d"
     echo ""
     exit 1
 fi
@@ -85,14 +94,18 @@ if [ "$ENV" = "prod" ]; then
     docker exec essencia-postgres pg_dump \
         -U "$DB_USER" \
         -d "$DB_NAME" \
-        > "$PROJECT_DIR/backup/$BACKUP_FILE" 2>/dev/null || {
-            docker exec essencia-postgres pg_dump \
-                -U essencia \
-                -d essencia_db \
-                > "$PROJECT_DIR/backup/$BACKUP_FILE"
-        }
+        > "$PROJECT_DIR/backup/$BACKUP_FILE" 2>/dev/null || true
 
-    echo -e "${GREEN}✓ Backup criado: backup/$BACKUP_FILE${NC}"
+    # O redirect cria o arquivo mesmo quando o pg_dump falha (role errada, por
+    # exemplo), então um arquivo vazio passaria por backup válido.
+    if [ ! -s "$PROJECT_DIR/backup/$BACKUP_FILE" ]; then
+        rm -f "$PROJECT_DIR/backup/$BACKUP_FILE"
+        echo -e "${RED}Erro: backup falhou (arquivo vazio) com o usuário '$DB_USER'${NC}"
+        echo "Migrations abortadas — nenhuma alteração foi feita no banco."
+        exit 1
+    fi
+
+    echo -e "${GREEN}✓ Backup criado: backup/$BACKUP_FILE ($(du -h "$PROJECT_DIR/backup/$BACKUP_FILE" | cut -f1))${NC}"
     echo ""
 
     echo -e "${YELLOW}[2/3]${NC} Executando migrations..."
@@ -102,12 +115,12 @@ fi
 
 # Executar migrations
 if [ "$ENV" = "dev" ]; then
-    docker compose -f $COMPOSE_FILE run --rm $CONTAINER pnpm db:migrate
+    docker compose -f "$COMPOSE_FILE" "${COMPOSE_ENV_ARGS[@]}" run --rm $CONTAINER pnpm db:migrate
 else
-    if docker compose -f $COMPOSE_FILE exec $CONTAINER sh -lc "command -v pnpm >/dev/null 2>&1"; then
-        docker compose -f $COMPOSE_FILE exec $CONTAINER pnpm --filter @essencia/db migrate
-    elif docker compose -f $COMPOSE_FILE exec $CONTAINER sh -lc "test -f /app/packages/db/dist/migrate.js"; then
-        docker compose -f $COMPOSE_FILE exec $CONTAINER node /app/packages/db/dist/migrate.js
+    if docker compose -f "$COMPOSE_FILE" "${COMPOSE_ENV_ARGS[@]}" exec $CONTAINER sh -lc "command -v pnpm >/dev/null 2>&1"; then
+        docker compose -f "$COMPOSE_FILE" "${COMPOSE_ENV_ARGS[@]}" exec $CONTAINER pnpm --filter @essencia/db migrate
+    elif docker compose -f "$COMPOSE_FILE" "${COMPOSE_ENV_ARGS[@]}" exec $CONTAINER sh -lc "test -f /app/packages/db/dist/migrate.js"; then
+        docker compose -f "$COMPOSE_FILE" "${COMPOSE_ENV_ARGS[@]}" exec $CONTAINER node /app/packages/db/dist/migrate.js
     else
         echo -e "${RED}Erro: não foi encontrado pnpm nem /app/packages/db/dist/migrate.js no container '$CONTAINER'${NC}"
         exit 1

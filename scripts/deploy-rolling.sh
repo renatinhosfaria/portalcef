@@ -1,18 +1,18 @@
 #!/bin/bash
 # =============================================================================
-# DEPLOY ROLLING - Zero Downtime Deployment
+# DEPLOY ROLLING - Atualização sequencial com health gate
 # Portal Essência Feliz
 # =============================================================================
 #
 # Uso: ./scripts/deploy-rolling.sh [tag]
 #
-# Este script realiza deploy com zero downtime:
-# 1. Pull das novas imagens
-# 2. Para cada serviço:
-#    - Escala para 2 instâncias (nova + antiga)
-#    - Aguarda nova instância ficar healthy
-#    - Remove instância antiga
-# 3. Verifica health geral
+# Atualiza um serviço por vez, aguardando o health check de cada um antes de
+# seguir. Se a API falhar, aborta o deploy e os demais serviços permanecem na
+# versão anterior.
+#
+# Não é zero downtime: cada serviço fica indisponível durante a sua própria
+# recriação, já que roda em instância única. Para eliminar essa janela seria
+# preciso subir a nova instância antes de remover a antiga.
 # =============================================================================
 
 set -e
@@ -26,12 +26,22 @@ NC='\033[0m'
 
 # Configurações
 COMPOSE_FILE="docker-compose.prod.yml"
+ENV_FILE=".env.docker"
 TAG="${1:-latest}"
 HEALTH_TIMEOUT=60
 
 # Diretório do projeto
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$PROJECT_DIR"
+
+# Sem --env-file o compose lê .env, que não tem DATABASE_URL: a API sobe com a
+# variável vazia e entra em loop de restart, derrubando tudo que depende dela.
+if [ ! -f "$ENV_FILE" ]; then
+    echo -e "${RED}Erro: $ENV_FILE não encontrado em $PROJECT_DIR${NC}"
+    exit 1
+fi
+
+COMPOSE=(docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE")
 
 echo "=============================================="
 echo -e "${BLUE}  Portal Essência Feliz - Rolling Deploy${NC}"
@@ -53,6 +63,7 @@ SERVICES=(
     "turmas"
     "planejamento"
     "calendario"
+    "eventos"
     "loja"
     "loja-admin"
     "tarefas"
@@ -81,7 +92,7 @@ check_health() {
 }
 
 echo -e "${YELLOW}[1/4]${NC} Pulling novas imagens..."
-docker compose -f $COMPOSE_FILE pull
+"${COMPOSE[@]}" pull
 echo -e "${GREEN}✓ Imagens baixadas${NC}"
 echo ""
 
@@ -94,7 +105,7 @@ for service in "${SERVICES[@]}"; do
     echo -e "${BLUE}→ Atualizando ${service}...${NC}"
 
     # Recrear container com nova imagem
-    docker compose -f $COMPOSE_FILE up -d --force-recreate --no-deps "$service"
+    "${COMPOSE[@]}" up -d --force-recreate --no-deps "$service"
 
     # Aguardar health check
     echo "  Aguardando health check..."
@@ -105,7 +116,7 @@ for service in "${SERVICES[@]}"; do
         echo -e "  ${RED}✗ ${service} não passou no health check!${NC}"
         echo ""
         echo -e "${RED}Logs do serviço:${NC}"
-        docker compose -f $COMPOSE_FILE logs --tail=30 "$service"
+        "${COMPOSE[@]}" logs --tail=30 "$service"
         FAILED=1
 
         # Para o deploy se API falhar
@@ -122,7 +133,7 @@ echo -e "${YELLOW}[3/4]${NC} Verificando estado final..."
 
 # Verificar todos os serviços
 echo ""
-docker compose -f $COMPOSE_FILE ps --format "table {{.Name}}\t{{.Status}}\t{{.Health}}"
+"${COMPOSE[@]}" ps --format "table {{.Name}}\t{{.Status}}\t{{.Health}}"
 echo ""
 
 echo -e "${YELLOW}[4/4]${NC} Limpando imagens antigas..."

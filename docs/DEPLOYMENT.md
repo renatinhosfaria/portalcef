@@ -260,7 +260,7 @@ docker compose -f docker-compose.prod.yml run --rm certbot certonly \
   -d www.portalcef.com.br
 
 # 4. Iniciar serviços
-docker compose -f docker-compose.prod.yml up -d
+docker compose -f docker-compose.prod.yml --env-file .env.docker up -d
 
 # 5. Executar migrations
 ./scripts/migrate.sh
@@ -290,8 +290,8 @@ cd /opt/essencia
 git pull origin main
 
 # 3. Rebuild e restart
-docker compose -f docker-compose.prod.yml build --no-cache
-docker compose -f docker-compose.prod.yml up -d
+docker buildx bake -f docker-bake.hcl --no-cache
+docker compose -f docker-compose.prod.yml --env-file .env.docker up -d
 
 # 4. Executar migrations (se houver)
 ./scripts/migrate.sh
@@ -300,23 +300,34 @@ docker compose -f docker-compose.prod.yml up -d
 ./scripts/health-check.sh
 ```
 
-### 3. Deploy com Zero Downtime (Avançado)
+### 3. Deploy sequencial com health gate
+
+> **Zero downtime não está disponível hoje.** Cada serviço declara
+> `container_name` fixo no compose, e o Docker recusa escalar um serviço nesse
+> formato: *"Docker requires each container to have a unique name. Remove the
+> custom name to scale the service"*. Rodar `--scale api=2` não cria segunda
+> instância. Para haver zero downtime seria preciso remover os `container_name`
+> e ajustar o nginx para resolver os upstreams dinamicamente.
+
+O que existe é atualização sequencial com verificação de saúde a cada passo. Se
+a API não ficar healthy, o deploy aborta e os demais serviços permanecem na
+versão anterior:
 
 ```bash
-# 1. Build nova versão
-docker compose -f docker-compose.prod.yml build
-
-# 2. Scale up (criar instâncias duplicadas)
-docker compose -f docker-compose.prod.yml up -d --scale api=2
-
-# 3. Aguardar health checks
-
-# 4. Parar instâncias antigas
-docker stop essencia-api-old
-
-# 5. Scale down
-docker compose -f docker-compose.prod.yml up -d --scale api=1
+TAG=$(git rev-parse --short HEAD) docker buildx bake -f docker-bake.hcl
+./scripts/deploy-rolling.sh "$(git rev-parse --short HEAD)"
 ```
+
+### 4. Rollback
+
+As imagens são versionadas por SHA, então voltar não exige rebuild:
+
+```bash
+IMAGE_TAG=<sha-anterior> \
+  docker compose -f docker-compose.prod.yml --env-file .env.docker up -d
+```
+
+Versões disponíveis localmente: `docker images essencia-api`.
 
 ---
 
@@ -324,14 +335,17 @@ docker compose -f docker-compose.prod.yml up -d --scale api=1
 
 ### migrate.sh
 
-```bash
-#!/bin/bash
-# Executa migrations do Drizzle dentro do container da API
+Aplica migrations no container da API, criando backup antes e abortando se o
+backup sair vazio. A imagem de produção **não tem `pnpm`** — as migrations rodam
+via `node /app/packages/db/dist/migrate.js`, e o script já trata isso.
 
-set -e
-echo "Running database migrations..."
-docker exec essencia-api pnpm --filter @essencia/db db:migrate
-echo "Done!"
+Como usa `exec` no container em execução, ele aplica as migrations presentes na
+imagem que está no ar. Durante um deploy com migration nova, rode-a antes de
+subir o código novo, num container descartável da imagem recém-construída:
+
+```bash
+docker compose -f docker-compose.prod.yml --env-file .env.docker \
+  run --rm api node /app/packages/db/dist/migrate.js
 ```
 
 **Uso:**
@@ -613,8 +627,8 @@ git push origin main
 # 2. Pull e rebuild
 cd /opt/essencia
 git pull origin main
-docker compose -f docker-compose.prod.yml build --no-cache
-docker compose -f docker-compose.prod.yml up -d
+docker buildx bake -f docker-bake.hcl --no-cache
+docker compose -f docker-compose.prod.yml --env-file .env.docker up -d
 
 # 3. Health check
 ./scripts/health-check.sh
@@ -629,8 +643,8 @@ cat backup_pre_migration.sql | docker exec -i essencia-postgres psql -U essencia
 
 # 2. Rebuild containers com versão anterior
 git checkout <commit-anterior>
-docker compose -f docker-compose.prod.yml build --no-cache
-docker compose -f docker-compose.prod.yml up -d
+docker buildx bake -f docker-bake.hcl --no-cache
+docker compose -f docker-compose.prod.yml --env-file .env.docker up -d
 ```
 
 ---
@@ -660,7 +674,7 @@ docker system prune -a --volumes -f
 docker compose -f docker-compose.prod.yml pull postgres redis nginx
 
 # Rebuild após pull
-docker compose -f docker-compose.prod.yml up -d
+docker compose -f docker-compose.prod.yml --env-file .env.docker up -d
 ```
 
 ---

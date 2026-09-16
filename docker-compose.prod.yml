@@ -127,7 +127,7 @@ services:
   # ===========================================================================
 
   home:
-    image: essencia-home:latest
+    image: essencia-home:${IMAGE_TAG:-latest}
     container_name: essencia-home
     <<: *common
     environment:
@@ -141,7 +141,7 @@ services:
         condition: service_healthy
 
   login:
-    image: essencia-login:latest
+    image: essencia-login:${IMAGE_TAG:-latest}
     container_name: essencia-login
     <<: *common
     environment:
@@ -155,7 +155,7 @@ services:
         condition: service_healthy
 
   usuarios:
-    image: essencia-usuarios:latest
+    image: essencia-usuarios:${IMAGE_TAG:-latest}
     container_name: essencia-usuarios
     <<: *common
     environment:
@@ -169,7 +169,7 @@ services:
         condition: service_healthy
 
   escolas:
-    image: essencia-escolas:latest
+    image: essencia-escolas:${IMAGE_TAG:-latest}
     container_name: essencia-escolas
     <<: *common
     environment:
@@ -183,7 +183,7 @@ services:
         condition: service_healthy
 
   turmas:
-    image: essencia-turmas:latest
+    image: essencia-turmas:${IMAGE_TAG:-latest}
     container_name: essencia-turmas
     <<: *common
     environment:
@@ -197,7 +197,7 @@ services:
         condition: service_healthy
 
   planejamento:
-    image: essencia-planejamento:latest
+    image: essencia-planejamento:${IMAGE_TAG:-latest}
     container_name: essencia-planejamento
     <<: *common
     environment:
@@ -211,7 +211,7 @@ services:
         condition: service_healthy
 
   calendario:
-    image: essencia-calendario:latest
+    image: essencia-calendario:${IMAGE_TAG:-latest}
     container_name: essencia-calendario
     <<: *common
     environment:
@@ -225,7 +225,7 @@ services:
         condition: service_healthy
 
   eventos:
-    image: essencia-eventos:latest
+    image: essencia-eventos:${IMAGE_TAG:-latest}
     container_name: essencia-eventos
     <<: *common
     environment:
@@ -239,7 +239,7 @@ services:
         condition: service_healthy
 
   loja:
-    image: essencia-loja:latest
+    image: essencia-loja:${IMAGE_TAG:-latest}
     container_name: essencia-loja
     <<: *common
     environment:
@@ -254,7 +254,7 @@ services:
         condition: service_healthy
 
   loja-admin:
-    image: essencia-loja-admin:latest
+    image: essencia-loja-admin:${IMAGE_TAG:-latest}
     container_name: essencia-loja-admin
     <<: *common
     environment:
@@ -268,7 +268,7 @@ services:
         condition: service_healthy
 
   tarefas:
-    image: essencia-tarefas:latest
+    image: essencia-tarefas:${IMAGE_TAG:-latest}
     container_name: essencia-tarefas
     <<: *common
     environment:
@@ -282,7 +282,7 @@ services:
         condition: service_healthy
 
   suporte:
-    image: essencia-suporte:latest
+    image: essencia-suporte:${IMAGE_TAG:-latest}
     container_name: essencia-suporte
     <<: *common
     environment:
@@ -296,7 +296,7 @@ services:
         condition: service_healthy
 
   workflows:
-    image: essencia-workflows:latest
+    image: essencia-workflows:${IMAGE_TAG:-latest}
     container_name: essencia-workflows
     <<: *common
     environment:
@@ -317,6 +317,8 @@ services:
     build:
       context: ./landing-mae-por-inteiro
       dockerfile: Dockerfile
+    # Construída pelo próprio compose (build acima), fora do docker-bake.hcl —
+    # por isso não acompanha o IMAGE_TAG dos demais serviços.
     image: essencia-landing-mae:latest
     container_name: essencia-landing-mae
     <<: *common
@@ -329,7 +331,7 @@ services:
   # ===========================================================================
 
   api:
-    image: essencia-api:latest
+    image: essencia-api:${IMAGE_TAG:-latest}
     container_name: essencia-api
     <<: *common
     environment:
