@@ -330,6 +330,7 @@ export class TarefasService {
       tarefaId: c.tarefaId,
       modulo: c.modulo as TarefaContextoEnriquecido["modulo"],
       quinzenaId: c.quinzenaId ?? null,
+      provaId: c.provaId ?? null,
       etapaId: c.etapaId ?? null,
       turmaId: c.turmaId ?? null,
       professoraId: c.professoraId ?? null,
