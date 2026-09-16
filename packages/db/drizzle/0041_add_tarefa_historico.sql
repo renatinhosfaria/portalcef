@@ -1,3 +1,6 @@
+-- Migration: histórico de ações das tarefas
+-- Registra criação, edição, conclusão e cancelamento de cada tarefa
+
 CREATE TABLE IF NOT EXISTS "tarefa_historico" (
   "id"             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   "tarefa_id"      UUID NOT NULL,
@@ -16,9 +19,8 @@ CREATE TABLE IF NOT EXISTS "tarefa_historico" (
     FOREIGN KEY ("user_id") REFERENCES "users"("id"),
   CONSTRAINT "chk_tarefa_historico_acao"
     CHECK ("acao" IN ('CRIADA', 'EDITADA', 'CONCLUIDA', 'CANCELADA'))
-);
-
+);--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_tarefa_historico_tarefa_id"
-  ON "tarefa_historico"("tarefa_id");
+  ON "tarefa_historico"("tarefa_id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_tarefa_historico_created_at"
   ON "tarefa_historico"("created_at" DESC);

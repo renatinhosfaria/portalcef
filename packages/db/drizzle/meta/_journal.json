@@ -288,6 +288,13 @@
       "when": 1788868353320,
       "tag": "0040_historico_acao_documento_excluido",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1789566917782,
+      "tag": "0041_add_tarefa_historico",
+      "breakpoints": true
     }
   ]
 }
