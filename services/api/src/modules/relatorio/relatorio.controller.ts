@@ -32,7 +32,6 @@ import { PlanejamentoObservabilidadeService } from "../planejamento-observabilid
 import type { PlanejamentoObservabilidadeEventoEntrada } from "../planejamento-observabilidade/planejamento-observabilidade.types";
 import {
   CreateRelatorioDto,
-  DevolverRelatorioDto,
   ListarRelatoriosGestaoDto,
 } from "./dto/relatorio.dto";
 import { RelatorioHistoricoService } from "./relatorio-historico.service";
@@ -281,26 +280,6 @@ export class RelatorioController {
   @Roles(...ANALISTA_ACCESS)
   async listarPendentesAnalista(@Req() req: { user: UserContext }) {
     const relatorios = await this.relatorioService.listarPendentesAnalista(
-      req.user,
-    );
-    return {
-      success: true,
-      data: relatorios,
-    };
-  }
-
-  // ============================================
-  // Endpoints da Coordenadora
-  // ============================================
-
-  /**
-   * GET /relatorio/coordenadora/pendentes
-   * Lista relatórios pendentes para a coordenadora
-   */
-  @Get("coordenadora/pendentes")
-  @Roles(...COORDENADORA_ACCESS)
-  async listarPendentesCoordenadora(@Req() req: { user: UserContext }) {
-    const relatorios = await this.relatorioService.listarPendentesCoordenadora(
       req.user,
     );
     return {
@@ -1035,52 +1014,6 @@ export class RelatorioController {
   ) {
     const relatorio = await this.relatorioService.devolverAnalista(
       id,
-      req.user,
-    );
-    return {
-      success: true,
-      data: relatorio,
-    };
-  }
-
-  // ============================================
-  // Aprovação / Devolução pela Coordenadora
-  // ============================================
-
-  /**
-   * POST /relatorio/:id/aprovar-coordenadora
-   * Aprova relatório como coordenadora (aprovação final)
-   */
-  @Post(":id/aprovar-coordenadora")
-  @Roles(...COORDENADORA_ACCESS)
-  async aprovarCoordenadora(
-    @Req() req: { user: UserContext },
-    @Param("id") id: string,
-  ) {
-    const relatorio = await this.relatorioService.aprovarCoordenadora(
-      id,
-      req.user,
-    );
-    return {
-      success: true,
-      data: relatorio,
-    };
-  }
-
-  /**
-   * POST /relatorio/:id/devolver-coordenadora
-   * Devolve relatório como coordenadora
-   */
-  @Post(":id/devolver-coordenadora")
-  @Roles(...COORDENADORA_ACCESS)
-  async devolverCoordenadora(
-    @Req() req: { user: UserContext },
-    @Param("id") id: string,
-    @Body() body: DevolverRelatorioDto,
-  ) {
-    const relatorio = await this.relatorioService.devolverCoordenadora(
-      id,
-      body,
       req.user,
     );
     return {

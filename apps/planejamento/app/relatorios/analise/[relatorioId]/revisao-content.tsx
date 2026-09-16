@@ -21,9 +21,11 @@ import {
   FileText,
   Loader2,
   Pencil,
+  Printer,
   RotateCcw,
   Send,
   Trash2,
+  Undo2,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -59,6 +61,27 @@ function isDocumentoWord(documento: RelatorioDocumento): boolean {
   );
 }
 
+function getUrlParaImpressao(documento: RelatorioDocumento): string | null {
+  if (documento.tipo === "LINK_YOUTUBE") return null;
+
+  if (isDocumentoWord(documento)) {
+    return documento.pdfStatus === "PRONTO" && documento.pdfUrl
+      ? documento.pdfUrl
+      : null;
+  }
+
+  if (documento.pdfUrl) return documento.pdfUrl;
+  if (!documento.url) return null;
+  if (
+    documento.mimeType === "application/pdf" ||
+    documento.mimeType?.startsWith("image/")
+  ) {
+    return documento.url;
+  }
+
+  return null;
+}
+
 function getEtapaRelatorioLabel(etapa?: string): string | undefined {
   const labels: Record<string, string> = {
     BERCARIO: "Berçário",
@@ -89,6 +112,8 @@ export function RevisaoRelatorioContent({
     devolver,
     aprovarDocumento,
     desaprovarDocumento,
+    regerarPdfDocumento,
+    imprimirDocumento,
   } = useAnalistaRelatorio();
 
   const carregarRelatorio = useCallback(
@@ -254,6 +279,49 @@ export function RevisaoRelatorioContent({
     [carregarRelatorio, relatorioId, sincronizarWord],
   );
 
+  const handleRegerarPdfDocumento = useCallback(
+    async (documentoId: string) => {
+      try {
+        await regerarPdfDocumento(relatorioId, documentoId);
+        await carregarRelatorio();
+        setSuccessMessage("PDF enviado para preparação.");
+      } catch (err) {
+        setActionError(
+          obterMensagemErro(
+            err,
+            "Não foi possível preparar o PDF. Tente novamente.",
+          ),
+        );
+      }
+    },
+    [carregarRelatorio, regerarPdfDocumento, relatorioId],
+  );
+
+  const handleImprimirDocumento = useCallback(
+    async (documento: RelatorioDocumento) => {
+      const url = getUrlParaImpressao(documento);
+      if (!url) {
+        setActionError("PDF de impressão ainda não está disponível.");
+        return;
+      }
+
+      try {
+        window.open(url, "_blank", "noopener,noreferrer");
+        await imprimirDocumento(relatorioId, documento.id);
+        await carregarRelatorio();
+        setSuccessMessage("Impressão registrada.");
+      } catch (err) {
+        setActionError(
+          obterMensagemErro(
+            err,
+            "Não foi possível registrar a impressão. Tente novamente.",
+          ),
+        );
+      }
+    },
+    [carregarRelatorio, imprimirDocumento, relatorioId],
+  );
+
   if (isLoading && !relatorio) {
     return (
       <div className="container mx-auto max-w-7xl px-4 py-8">
@@ -359,89 +427,175 @@ export function RevisaoRelatorioContent({
                   Nenhum documento anexado.
                 </p>
               ) : (
-                relatorio.documentos.map((documento) => (
-                  <div
-                    key={documento.id}
-                    className="flex flex-col gap-3 rounded-lg border p-4 sm:flex-row sm:items-center sm:justify-between"
-                  >
-                    <div>
-                      <p className="font-medium">
-                        {documento.fileName || documento.url || "Documento"}
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        {documento.mimeType || documento.tipo}
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {documento.url && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() =>
-                            window.open(
-                              documento.url ?? "",
-                              "_blank",
-                              "noopener,noreferrer",
-                            )
-                          }
-                        >
-                          <ExternalLink className="mr-2 h-4 w-4" />
-                          Abrir
-                        </Button>
-                      )}
-                      {isDocumentoWord(documento) && (
-                        <>
+                relatorio.documentos.map((documento) => {
+                  const documentoWord = isDocumentoWord(documento);
+                  const urlParaImpressao = getUrlParaImpressao(documento);
+                  const pdfPendente =
+                    documentoWord &&
+                    !!documento.approvedAt &&
+                    !urlParaImpressao &&
+                    (documento.pdfStatus === "PENDENTE" ||
+                      documento.pdfStatus === "GERANDO");
+                  const pdfComErro =
+                    documentoWord &&
+                    !!documento.approvedAt &&
+                    documento.pdfStatus === "ERRO";
+                  const podeRegerarPdf =
+                    documentoWord &&
+                    !!documento.approvedAt &&
+                    !urlParaImpressao &&
+                    (documento.pdfStatus === "PENDENTE" ||
+                      documento.pdfStatus === "ERRO");
+
+                  return (
+                    <div
+                      key={documento.id}
+                      className="flex flex-col gap-3 rounded-lg border p-4 sm:flex-row sm:items-center sm:justify-between"
+                    >
+                      <div>
+                        <p className="font-medium">
+                          {documento.fileName || documento.url || "Documento"}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          {documento.mimeType || documento.tipo}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {documento.url && (
                           <Button
                             variant="outline"
-                            size="sm"
-                            onClick={() => handleEditarWord(documento.id)}
+                            size="icon"
+                            className="h-9 w-9"
+                            title="Abrir documento"
+                            aria-label="Abrir documento"
+                            onClick={() =>
+                              window.open(
+                                documento.url ?? "",
+                                "_blank",
+                                "noopener,noreferrer",
+                              )
+                            }
                           >
-                            <Pencil className="mr-2 h-4 w-4" />
-                            Editar Word
+                            <ExternalLink className="h-4 w-4" />
                           </Button>
+                        )}
+                        {documentoWord && (
+                          <>
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              className="h-9 w-9"
+                              title="Editar no Word"
+                              aria-label="Editar no Word"
+                              onClick={() => handleEditarWord(documento.id)}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              className="h-9 w-9"
+                              title="Sincronizar Word"
+                              aria-label="Sincronizar Word"
+                              onClick={() =>
+                                handleSincronizarWord(documento.id)
+                              }
+                            >
+                              <RotateCcw className="h-4 w-4" />
+                            </Button>
+                          </>
+                        )}
+                        {urlParaImpressao && documento.approvedAt && (
                           <Button
                             variant="outline"
-                            size="sm"
-                            onClick={() => handleSincronizarWord(documento.id)}
+                            size="icon"
+                            className="h-9 w-9"
+                            title="Imprimir documento"
+                            aria-label="Imprimir documento"
+                            onClick={() => handleImprimirDocumento(documento)}
                           >
-                            <RotateCcw className="mr-2 h-4 w-4" />
-                            Sincronizar Word
+                            <Printer className="h-4 w-4" />
                           </Button>
-                        </>
-                      )}
-                      {documento.approvedAt ? (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() =>
-                            handleDesaprovarDocumento(documento.id)
-                          }
-                        >
-                          Desaprovar
-                        </Button>
-                      ) : (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleAprovarDocumento(documento.id)}
-                        >
-                          Aprovar
-                        </Button>
-                      )}
-                      {isDocumentoExcluivel(documento) && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="text-destructive hover:text-destructive"
-                          onClick={() => setDocumentoParaExcluir(documento)}
-                        >
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Excluir arquivo
-                        </Button>
-                      )}
+                        )}
+                        {pdfPendente && (
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-9 w-9"
+                            title="PDF em preparação"
+                            aria-label="PDF em preparação"
+                            disabled
+                          >
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          </Button>
+                        )}
+                        {pdfComErro && (
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-9 w-9"
+                            title="PDF com erro"
+                            aria-label="PDF com erro"
+                            disabled
+                          >
+                            <AlertCircle className="h-4 w-4" />
+                          </Button>
+                        )}
+                        {podeRegerarPdf && (
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-9 w-9"
+                            title="Gerar PDF"
+                            aria-label="Gerar PDF"
+                            onClick={() =>
+                              handleRegerarPdfDocumento(documento.id)
+                            }
+                          >
+                            <RotateCcw className="h-4 w-4" />
+                          </Button>
+                        )}
+                        {documento.approvedAt ? (
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-9 w-9"
+                            title="Desfazer aprovação do documento"
+                            aria-label="Desfazer aprovação do documento"
+                            onClick={() =>
+                              handleDesaprovarDocumento(documento.id)
+                            }
+                          >
+                            <Undo2 className="h-4 w-4" />
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-9 w-9"
+                            title="Aprovar documento"
+                            aria-label="Aprovar documento"
+                            onClick={() => handleAprovarDocumento(documento.id)}
+                          >
+                            <Check className="h-4 w-4" />
+                          </Button>
+                        )}
+                        {isDocumentoExcluivel(documento) && (
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-9 w-9 text-destructive hover:text-destructive"
+                            title="Excluir arquivo"
+                            aria-label="Excluir arquivo"
+                            onClick={() => setDocumentoParaExcluir(documento)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </CardContent>
           </Card>

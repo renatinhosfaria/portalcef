@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleDestroy } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Queue, type ConnectionOptions } from "bullmq";
 import Redis from "ioredis";
+import { randomUUID } from "node:crypto";
 
 export const RELATORIO_PDF_QUEUE_NAME = "relatorio-pdf-impressao";
 export const RELATORIO_PDF_JOB_NAME = "gerar-pdf-relatorio";
@@ -42,7 +43,7 @@ export class RelatorioPdfQueueService implements OnModuleDestroy {
         RELATORIO_PDF_JOB_NAME,
         { documentoId },
         {
-          jobId: `relatorio-documento:${documentoId}`,
+          jobId: `relatorio-documento-${documentoId}-${randomUUID()}`,
           attempts: 3,
           backoff: { type: "exponential", delay: 5000 },
           removeOnComplete: 1000,

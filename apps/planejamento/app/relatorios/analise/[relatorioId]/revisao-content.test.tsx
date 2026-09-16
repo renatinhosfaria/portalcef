@@ -12,6 +12,8 @@ const devolver = vi.fn();
 const aprovarDocumento = vi.fn();
 const desaprovarDocumento = vi.fn();
 const deleteDocumento = vi.fn();
+const imprimirDocumento = vi.fn();
+const regerarPdfDocumento = vi.fn();
 
 let relatorioHeaderProps: {
   professorName: string;
@@ -50,6 +52,8 @@ vi.mock("../../../../features/relatorio", () => ({
     devolver,
     aprovarDocumento,
     desaprovarDocumento,
+    imprimirDocumento,
+    regerarPdfDocumento,
   }),
   useRelatorio: () => ({
     getRelatorio,
@@ -322,5 +326,192 @@ describe("RevisaoRelatorioContent", () => {
         name: /confirmar exclusão do arquivo/i,
       }),
     ).not.toBeInTheDocument();
+  });
+
+  it("exibe botão de imprimir para documento aprovado com PDF pronto", async () => {
+    getRelatorio.mockResolvedValueOnce({
+      id: "relatorio-1",
+      userId: "prof-1",
+      turmaId: "turma-1",
+      unitId: "unidade-1",
+      semestreId: "semestre-1",
+      semestreRelatorioId: "semestre-1",
+      status: "APROVADO",
+      submittedAt: "2026-06-30T09:44:00.000Z",
+      approvedAt: "2026-07-04T14:02:37.000Z",
+      createdAt: "2026-06-29T09:44:00.000Z",
+      updatedAt: "2026-07-04T14:02:37.000Z",
+      documentos: [
+        {
+          id: "doc-1",
+          relatorioId: "relatorio-1",
+          tipo: "ARQUIVO",
+          storageKey: "relatorios/doc-1.doc",
+          url: "https://storage.local/doc-1.doc",
+          fileName: "Aluno.doc",
+          fileSize: 1234,
+          mimeType: "application/msword",
+          pdfStorageKey: "relatorios/doc-1.pdf",
+          pdfUrl: "https://storage.local/doc-1.pdf",
+          pdfStatus: "PRONTO",
+          approvedBy: "analista-1",
+          approvedAt: "2026-07-04T14:00:00.000Z",
+          printedBy: null,
+          printedAt: null,
+          temComentarios: false,
+          createdAt: "2026-06-29T09:44:00.000Z",
+          updatedAt: "2026-07-04T14:00:00.000Z",
+        },
+      ],
+      user: { id: "prof-1", name: "Patrícia Kelly" },
+      turma: {
+        id: "turma-1",
+        name: "Infantil 2",
+        code: "INF-2-M",
+        stageId: "etapa-1",
+      },
+    });
+    imprimirDocumento.mockResolvedValueOnce({});
+    const abrir = vi.spyOn(window, "open").mockImplementation(() => null);
+
+    render(<RevisaoRelatorioContent relatorioId="relatorio-1" />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /imprimir/i })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /imprimir/i }));
+
+    expect(abrir).toHaveBeenCalledWith(
+      "https://storage.local/doc-1.pdf",
+      "_blank",
+      "noopener,noreferrer",
+    );
+    await waitFor(() => {
+      expect(imprimirDocumento).toHaveBeenCalledWith("relatorio-1", "doc-1");
+    });
+  });
+
+  it("mostra os botões de documento apenas com ícones e nomes acessíveis", async () => {
+    getRelatorio.mockResolvedValueOnce({
+      id: "relatorio-1",
+      userId: "prof-1",
+      turmaId: "turma-1",
+      unitId: "unidade-1",
+      semestreId: "semestre-1",
+      semestreRelatorioId: "semestre-1",
+      status: "APROVADO",
+      submittedAt: "2026-06-30T09:44:00.000Z",
+      approvedAt: "2026-07-04T14:02:37.000Z",
+      createdAt: "2026-06-29T09:44:00.000Z",
+      updatedAt: "2026-07-04T14:02:37.000Z",
+      documentos: [
+        {
+          id: "doc-1",
+          relatorioId: "relatorio-1",
+          tipo: "ARQUIVO",
+          storageKey: "relatorios/doc-1.doc",
+          url: "https://storage.local/doc-1.doc",
+          fileName: "Aluno.doc",
+          fileSize: 1234,
+          mimeType: "application/msword",
+          pdfStorageKey: "relatorios/doc-1.pdf",
+          pdfUrl: "https://storage.local/doc-1.pdf",
+          pdfStatus: "PRONTO",
+          approvedBy: "analista-1",
+          approvedAt: "2026-07-04T14:00:00.000Z",
+          printedBy: null,
+          printedAt: null,
+          temComentarios: false,
+          createdAt: "2026-06-29T09:44:00.000Z",
+          updatedAt: "2026-07-04T14:00:00.000Z",
+        },
+      ],
+      user: { id: "prof-1", name: "Patrícia Kelly" },
+      turma: {
+        id: "turma-1",
+        name: "Infantil 2",
+        code: "INF-2-M",
+        stageId: "etapa-1",
+      },
+    });
+
+    render(<RevisaoRelatorioContent relatorioId="relatorio-1" />);
+
+    const botoes = await screen.findAllByRole("button");
+    const nomesAcessiveis = [
+      "Abrir documento",
+      "Editar no Word",
+      "Sincronizar Word",
+      "Imprimir documento",
+      "Desfazer aprovação do documento",
+    ];
+
+    for (const nome of nomesAcessiveis) {
+      const botao = screen.getByRole("button", { name: nome });
+      expect(botao).not.toHaveTextContent(/\S/);
+    }
+
+    expect(botoes.length).toBeGreaterThanOrEqual(nomesAcessiveis.length);
+    expect(screen.queryByText("Abrir")).not.toBeInTheDocument();
+    expect(screen.queryByText("Editar Word")).not.toBeInTheDocument();
+    expect(screen.queryByText("Sincronizar Word")).not.toBeInTheDocument();
+    expect(screen.queryByText("Imprimir")).not.toBeInTheDocument();
+    expect(screen.queryByText("Desaprovar")).not.toBeInTheDocument();
+  });
+
+  it("mostra PDF em preparação quando documento Word aprovado ainda não tem PDF pronto", async () => {
+    getRelatorio.mockResolvedValueOnce({
+      id: "relatorio-1",
+      userId: "prof-1",
+      turmaId: "turma-1",
+      unitId: "unidade-1",
+      semestreId: "semestre-1",
+      semestreRelatorioId: "semestre-1",
+      status: "APROVADO",
+      submittedAt: "2026-06-30T09:44:00.000Z",
+      approvedAt: "2026-07-04T14:02:37.000Z",
+      createdAt: "2026-06-29T09:44:00.000Z",
+      updatedAt: "2026-07-04T14:02:37.000Z",
+      documentos: [
+        {
+          id: "doc-1",
+          relatorioId: "relatorio-1",
+          tipo: "ARQUIVO",
+          storageKey: "relatorios/doc-1.doc",
+          url: "https://storage.local/doc-1.doc",
+          fileName: "Aluno.doc",
+          fileSize: 1234,
+          mimeType: "application/msword",
+          pdfStorageKey: null,
+          pdfUrl: null,
+          pdfStatus: "PENDENTE",
+          approvedBy: "analista-1",
+          approvedAt: "2026-07-04T14:00:00.000Z",
+          printedBy: null,
+          printedAt: null,
+          temComentarios: false,
+          createdAt: "2026-06-29T09:44:00.000Z",
+          updatedAt: "2026-07-04T14:00:00.000Z",
+        },
+      ],
+      user: { id: "prof-1", name: "Patrícia Kelly" },
+      turma: {
+        id: "turma-1",
+        name: "Infantil 2",
+        code: "INF-2-M",
+        stageId: "etapa-1",
+      },
+    });
+
+    render(<RevisaoRelatorioContent relatorioId="relatorio-1" />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "PDF em preparação" }),
+      ).not.toHaveTextContent(/\S/);
+    });
+    expect(screen.queryByText("PDF em preparação")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /imprimir/i })).not.toBeInTheDocument();
   });
 });

@@ -49,7 +49,6 @@ import { RelatorioPdfQueueService } from "./relatorio-pdf-queue.service";
 
 import {
   type CreateRelatorioDto,
-  type DevolverRelatorioDto,
   type ListarRelatoriosGestaoDto,
   isAnalista,
   isCoordenadora,
@@ -479,7 +478,7 @@ export class RelatorioService {
   }
 
   /**
-   * Aprova relatório como analista (-> AGUARDANDO_COORDENADORA).
+   * Aprova relatório como analista (-> APROVADO, aprovação final).
    */
   async aprovarAnalista(
     relatorioId: string,
@@ -513,12 +512,13 @@ export class RelatorioService {
     }
 
     const statusAnterior = encontrado.status;
-    const novoStatus: RelatorioStatus = "AGUARDANDO_COORDENADORA";
+    const novoStatus: RelatorioStatus = "APROVADO";
 
     const [atualizado] = await db
       .update(relatorio)
       .set({
         status: novoStatus,
+        approvedAt: new Date(),
         updatedAt: new Date(),
       })
       .where(eq(relatorio.id, relatorioId))
@@ -592,180 +592,6 @@ export class RelatorioService {
       acao: "DEVOLVIDO_ANALISTA",
       statusAnterior,
       statusNovo: "DEVOLVIDO_ANALISTA",
-    });
-
-    return atualizado;
-  }
-
-  // ============================================
-  // Métodos da Coordenadora
-  // ============================================
-
-  /**
-   * Lista relatórios pendentes para coordenadora.
-   * Filtrado por segmento (BERCARIO/INFANTIL) da coordenadora.
-   */
-  async listarPendentesCoordenadora(user: UserContext) {
-    const db = getDb();
-
-    if (!user.unitId) {
-      throw new BadRequestException("Usuário não possui unidade associada");
-    }
-
-    const base = await db.query.relatorio.findMany({
-      where: and(
-        eq(relatorio.unitId, user.unitId),
-        eq(relatorio.status, "AGUARDANDO_COORDENADORA"),
-      ),
-      with: {
-        user: true,
-        turma: { with: { stage: true } },
-      },
-      orderBy: [desc(relatorio.submittedAt)],
-    });
-
-    // Filtrar por segmento da coordenadora (quando aplicável)
-    const filtrados = base.filter((r: (typeof base)[number]) => {
-      const turmaComStage = r.turma as { stage?: { code: string } };
-      const codigoEtapa = turmaComStage?.stage?.code ?? "";
-      return this.coordenadoraPodeVerEtapa(user.role, codigoEtapa);
-    });
-
-    return filtrados.map((r: (typeof filtrados)[number]) =>
-      this.mapToSummary(r),
-    );
-  }
-
-  /**
-   * Aprova relatório como coordenadora (-> APROVADO).
-   */
-  async aprovarCoordenadora(
-    relatorioId: string,
-    user: UserContext,
-  ): Promise<Relatorio> {
-    const db = getDb();
-
-    const encontrado = await db.query.relatorio.findFirst({
-      where: eq(relatorio.id, relatorioId),
-      with: {
-        turma: { with: { stage: true } },
-      },
-    });
-
-    if (!encontrado) {
-      throw new NotFoundException("Relatório não encontrado");
-    }
-
-    if (encontrado.unitId !== user.unitId) {
-      throw new ForbiddenException(
-        "Você só pode aprovar relatórios da sua unidade",
-      );
-    }
-
-    const turmaComStage = encontrado.turma as { stage?: { code: string } };
-    const codigoEtapa = turmaComStage?.stage?.code ?? "";
-
-    if (!this.coordenadoraPodeVerEtapa(user.role, codigoEtapa)) {
-      throw new ForbiddenException(
-        "Você só pode aprovar relatórios do seu segmento",
-      );
-    }
-
-    if (encontrado.status !== "AGUARDANDO_COORDENADORA") {
-      throw new BadRequestException(
-        `Não é possível aprovar relatório com status ${encontrado.status}`,
-      );
-    }
-
-    const statusAnterior = encontrado.status;
-
-    const [atualizado] = await db
-      .update(relatorio)
-      .set({
-        status: "APROVADO",
-        approvedAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .where(eq(relatorio.id, relatorioId))
-      .returning();
-
-    const userName = await this.getUserName(user.userId);
-    await this.historicoService.registrar({
-      relatorioId,
-      userId: user.userId,
-      userName,
-      userRole: user.role,
-      acao: "APROVADO_COORDENADORA",
-      statusAnterior,
-      statusNovo: "APROVADO",
-    });
-
-    return atualizado;
-  }
-
-  /**
-   * Devolve relatório como coordenadora (-> DEVOLVIDO_COORDENADORA).
-   */
-  async devolverCoordenadora(
-    relatorioId: string,
-    dto: DevolverRelatorioDto,
-    user: UserContext,
-  ): Promise<Relatorio> {
-    const db = getDb();
-
-    const encontrado = await db.query.relatorio.findFirst({
-      where: eq(relatorio.id, relatorioId),
-      with: {
-        turma: { with: { stage: true } },
-      },
-    });
-
-    if (!encontrado) {
-      throw new NotFoundException("Relatório não encontrado");
-    }
-
-    if (encontrado.unitId !== user.unitId) {
-      throw new ForbiddenException(
-        "Você só pode devolver relatórios da sua unidade",
-      );
-    }
-
-    const turmaComStage = encontrado.turma as { stage?: { code: string } };
-    const codigoEtapa = turmaComStage?.stage?.code ?? "";
-
-    if (!this.coordenadoraPodeVerEtapa(user.role, codigoEtapa)) {
-      throw new ForbiddenException(
-        "Você só pode devolver relatórios do seu segmento",
-      );
-    }
-
-    if (encontrado.status !== "AGUARDANDO_COORDENADORA") {
-      throw new BadRequestException(
-        `Não é possível devolver relatório com status ${encontrado.status}`,
-      );
-    }
-
-    const statusAnterior = encontrado.status;
-
-    const [atualizado] = await db
-      .update(relatorio)
-      .set({
-        status: "DEVOLVIDO_COORDENADORA",
-        updatedAt: new Date(),
-      })
-      .where(eq(relatorio.id, relatorioId))
-      .returning();
-
-    const userName = await this.getUserName(user.userId);
-    await this.historicoService.registrar({
-      relatorioId,
-      userId: user.userId,
-      userName,
-      userRole: user.role,
-      acao: "DEVOLVIDO_COORDENADORA",
-      statusAnterior,
-      statusNovo: "DEVOLVIDO_COORDENADORA",
-      detalhes: { motivo: dto.motivo },
     });
 
     return atualizado;

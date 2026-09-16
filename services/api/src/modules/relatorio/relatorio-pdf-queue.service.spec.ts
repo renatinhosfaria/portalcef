@@ -37,13 +37,26 @@ describe("RelatorioPdfQueueService", () => {
   });
 
   describe("adicionar", () => {
-    it("enfileira job com jobId correto", async () => {
+    it("enfileira job com jobId aceito pelo BullMQ", async () => {
       await service.adicionar("doc-123");
       expect(mockQueueAdd).toHaveBeenCalledWith(
         RELATORIO_PDF_JOB_NAME,
         { documentoId: "doc-123" },
-        expect.objectContaining({ jobId: "relatorio-documento:doc-123" }),
+        expect.objectContaining({
+          jobId: expect.stringMatching(/^relatorio-documento-doc-123-/),
+        }),
       );
+    });
+
+    it("enfileira novo processamento quando o mesmo documento é aprovado novamente", async () => {
+      await service.adicionar("doc-123");
+      await service.adicionar("doc-123");
+
+      const primeiroJobId = mockQueueAdd.mock.calls[0]?.[2]?.jobId;
+      const segundoJobId = mockQueueAdd.mock.calls[1]?.[2]?.jobId;
+
+      expect(mockQueueAdd).toHaveBeenCalledTimes(2);
+      expect(segundoJobId).not.toBe(primeiroJobId);
     });
 
     it("não lança exceção se queue.add falhar (swallows error)", async () => {

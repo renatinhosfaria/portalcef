@@ -1,10 +1,4 @@
-import {
-  IsString,
-  IsOptional,
-  IsUUID,
-  IsEnum,
-  IsNotEmpty,
-} from "class-validator";
+import { IsString, IsOptional, IsUUID, IsEnum } from "class-validator";
 import type { RelatorioStatus } from "@essencia/db/schema";
 
 export class CreateRelatorioDto {
@@ -17,12 +11,6 @@ export class CreateRelatorioDto {
   @IsOptional()
   @IsUUID()
   semestreRelatorioId?: string;
-}
-
-export class DevolverRelatorioDto {
-  @IsString()
-  @IsNotEmpty()
-  motivo!: string;
 }
 
 export class ListarRelatoriosGestaoDto {

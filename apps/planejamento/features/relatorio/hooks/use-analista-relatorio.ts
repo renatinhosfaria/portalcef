@@ -19,6 +19,14 @@ interface UseAnalistaRelatorioReturn {
     relatorioId: string,
     documentoId: string,
   ) => Promise<RelatorioDocumento>;
+  regerarPdfDocumento: (
+    relatorioId: string,
+    documentoId: string,
+  ) => Promise<RelatorioDocumento>;
+  imprimirDocumento: (
+    relatorioId: string,
+    documentoId: string,
+  ) => Promise<RelatorioDocumento>;
   editarWord: (
     relatorioId: string,
     documentoId: string,
@@ -108,6 +116,32 @@ export function useAnalistaRelatorio(): UseAnalistaRelatorioReturn {
     [executar],
   );
 
+  const regerarPdfDocumento = useCallback(
+    (relatorioId: string, documentoId: string) =>
+      executar(
+        () =>
+          api.post<RelatorioDocumento>(
+            `/relatorio/${relatorioId}/documento/${documentoId}/regerar-pdf`,
+            {},
+          ),
+        "Não foi possível tentar gerar o PDF novamente. Tente novamente.",
+      ),
+    [executar],
+  );
+
+  const imprimirDocumento = useCallback(
+    (relatorioId: string, documentoId: string) =>
+      executar(
+        () =>
+          api.post<RelatorioDocumento>(
+            `/relatorio/${relatorioId}/documento/${documentoId}/imprimir`,
+            {},
+          ),
+        "Não foi possível registrar a impressão. Tente novamente.",
+      ),
+    [executar],
+  );
+
   const editarWord = useCallback(
     (relatorioId: string, documentoId: string) =>
       executar(
@@ -141,6 +175,8 @@ export function useAnalistaRelatorio(): UseAnalistaRelatorioReturn {
     devolver,
     aprovarDocumento,
     desaprovarDocumento,
+    regerarPdfDocumento,
+    imprimirDocumento,
     editarWord,
     sincronizarWord,
   };

@@ -42,7 +42,6 @@ const STATUS_OPTIONS = [
   { value: "todos", label: "Todos" },
   { value: "RASCUNHO", label: "Rascunhos" },
   { value: "AGUARDANDO_ANALISTA", label: "Aguardando Analista" },
-  { value: "AGUARDANDO_COORDENADORA", label: "Aguardando Coordenação" },
   { value: "DEVOLVIDO_ANALISTA", label: "Devolvidos pela Analista" },
   { value: "DEVOLVIDO_COORDENADORA", label: "Devolvidos pela Coordenadora" },
   { value: "APROVADO", label: "Aprovados" },

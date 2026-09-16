@@ -994,6 +994,51 @@ describe("RelatorioService", () => {
     });
   });
 
+  describe("aprovarAnalista", () => {
+    const session = {
+      userId: "analista-1",
+      role: "analista_pedagogico",
+      unitId: "unit-1",
+      schoolId: null,
+      stageId: null,
+    };
+
+    it("aprova o relatório direto quando a analista pedagógica aprova", async () => {
+      mockDb.query.relatorio.findFirst.mockResolvedValueOnce({
+        id: "r-1",
+        unitId: "unit-1",
+        status: "AGUARDANDO_ANALISTA",
+      });
+      mockDb.returning.mockResolvedValueOnce([
+        {
+          id: "r-1",
+          status: "APROVADO",
+        },
+      ]);
+      mockDb.query.users.findFirst.mockResolvedValueOnce({ name: "Analista" });
+
+      const result = await service.aprovarAnalista("r-1", session);
+
+      expect(result.status).toBe("APROVADO");
+      expect(mockDb.set).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: "APROVADO",
+          approvedAt: expect.any(Date),
+          updatedAt: expect.any(Date),
+        }),
+      );
+      expect(mockHistorico.registrar).toHaveBeenCalledWith({
+        relatorioId: "r-1",
+        userId: "analista-1",
+        userName: "Analista",
+        userRole: "analista_pedagogico",
+        acao: "APROVADO_ANALISTA",
+        statusAnterior: "AGUARDANDO_ANALISTA",
+        statusNovo: "APROVADO",
+      });
+    });
+  });
+
   describe("devolverAnalista", () => {
     const session = {
       userId: "analista-1",

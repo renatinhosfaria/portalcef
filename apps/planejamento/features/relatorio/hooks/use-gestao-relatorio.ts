@@ -28,8 +28,6 @@ interface UseGestaoRelatorioReturn {
   relatorios: RelatorioListItem[];
   fetchDashboard: () => Promise<DashboardRelatorioData>;
   listar: (filtros?: FiltrosGestaoRelatorios) => Promise<RelatorioListItem[]>;
-  aprovarCoordenadora: (relatorioId: string) => Promise<void>;
-  devolverCoordenadora: (relatorioId: string, motivo: string) => Promise<void>;
   regerarPdfDocumento: (
     relatorioId: string,
     documentoId: string,
@@ -157,30 +155,6 @@ export function useGestaoRelatorio(): UseGestaoRelatorioReturn {
     [executar],
   );
 
-  const aprovarCoordenadora = useCallback(
-    (relatorioId: string) =>
-      executar(
-        async () => {
-          await api.post(`/relatorio/${relatorioId}/aprovar-coordenadora`, {});
-        },
-        "Não foi possível aprovar o relatório. Tente novamente.",
-      ),
-    [executar],
-  );
-
-  const devolverCoordenadora = useCallback(
-    (relatorioId: string, motivo: string) =>
-      executar(
-        async () => {
-          await api.post(`/relatorio/${relatorioId}/devolver-coordenadora`, {
-            motivo,
-          });
-        },
-        "Não foi possível devolver o relatório. Tente novamente.",
-      ),
-    [executar],
-  );
-
   const regerarPdfDocumento = useCallback(
     (relatorioId: string, documentoId: string) =>
       executar(
@@ -213,8 +187,6 @@ export function useGestaoRelatorio(): UseGestaoRelatorioReturn {
     relatorios,
     fetchDashboard,
     listar,
-    aprovarCoordenadora,
-    devolverCoordenadora,
     regerarPdfDocumento,
     imprimirDocumento,
   };
