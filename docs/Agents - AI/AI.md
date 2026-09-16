@@ -237,7 +237,7 @@ INFO memory                       # Uso de memória
 
 ```bash
 # Conectar ao PostgreSQL
-docker exec -it essencia-postgres psql -U essencia -d essencia_db
+docker exec -it essencia-postgres psql -U essencia_prod -d essencia_db
 
 # Comandos úteis
 SELECT count(*) FROM pg_stat_activity;    # Conexões ativas
@@ -249,24 +249,27 @@ SELECT pg_database_size('essencia_db');   # Tamanho do banco
 
 ```bash
 # Backup manual
-docker exec essencia-postgres pg_dump -U essencia -d essencia_db > backup_$(date +%Y%m%d_%H%M%S).sql
+docker exec essencia-postgres pg_dump -U essencia_prod -d essencia_db > backup_$(date +%Y%m%d_%H%M%S).sql
 
 # Backup antes de migration crítica
-docker exec essencia-postgres pg_dump -U essencia -d essencia_db > backup_pre_migration.sql
+docker exec essencia-postgres pg_dump -U essencia_prod -d essencia_db > backup_pre_migration.sql
 ```
+
+> O `./scripts/migrate.sh` já cria seu próprio backup em `backup/` antes de aplicar migrations —
+> o backup manual acima é redundante quando se usa o script.
 
 ### Restaurar Backup
 
 ```bash
 # Restaurar
-cat backup_20260114_020000.sql | docker exec -i essencia-postgres psql -U essencia -d essencia_db
+cat backup_20260114_020000.sql | docker exec -i essencia-postgres psql -U essencia_prod -d essencia_db
 ```
 
 ### Rollback de Migration
 
 ```bash
 # 1. Restaurar backup do banco
-cat backup_pre_migration.sql | docker exec -i essencia-postgres psql -U essencia -d essencia_db
+cat backup_pre_migration.sql | docker exec -i essencia-postgres psql -U essencia_prod -d essencia_db
 
 # 2. Voltar código para versão anterior
 git checkout <commit-anterior>
@@ -457,7 +460,7 @@ docker compose -f docker-compose.prod.yml restart nginx
 
 ```bash
 # Verificar conexões
-docker exec essencia-postgres psql -U essencia -c "SELECT count(*) FROM pg_stat_activity;"
+docker exec essencia-postgres psql -U essencia_prod -c "SELECT count(*) FROM pg_stat_activity;"
 
 # Restart
 docker compose -f docker-compose.prod.yml restart postgres
