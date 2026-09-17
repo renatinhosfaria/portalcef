@@ -112,11 +112,9 @@ pnpm db:generate                            # Gerar migration
 pnpm db:migrate                             # Aplicar migrations (dev)
 pnpm db:studio                              # Interface visual (:4983)
 
-# Produção (no servidor)
-docker buildx bake -f docker-bake.hcl
-docker compose -f docker-compose.prod.yml --env-file .env.docker up -d
-./scripts/migrate.sh                        # Migrations em produção
-./scripts/health-check.sh                   # Verificar saúde
+# Produção (build local no servidor)
+./scripts/deploy.sh                         # Deploy sem migration nova
+./scripts/deploy.sh --migrar                 # Deploy com backup + migration
 ```
 
 **Regra de Ouro:** Apps NUNCA acessam banco diretamente → sempre via API HTTP.
@@ -160,22 +158,22 @@ Correções de bugs da loja não podem ser tratadas como casos isolados: classif
 
 ### Sequência canônica
 
+Para build local no servidor, use o orquestrador versionado pelo SHA do commit:
+
 ```bash
-pnpm turbo lint
-pnpm turbo typecheck
-
-# Constrói as 14 imagens. TAG versiona e permite rollback depois.
-TAG=$(git rev-parse --short HEAD) docker buildx bake -f docker-bake.hcl
-
-# Havendo migration nova, aplicar ANTES de subir o código novo
-docker compose -f docker-compose.prod.yml --env-file .env.docker \
-  run --rm api node /app/packages/db/dist/migrate.js
-
-IMAGE_TAG=$(git rev-parse --short HEAD) \
-  docker compose -f docker-compose.prod.yml --env-file .env.docker up -d
-
-./scripts/health-check.sh
+./scripts/deploy.sh
 ```
+
+Quando houver migration nova, o script cria um backup, aplica a migration na
+imagem recém-construída e só então sobe os serviços novos:
+
+```bash
+./scripts/deploy.sh --migrar
+```
+
+O script sempre executa lint, typecheck, Buildx Bake com `--load`, build da
+landing page do Compose, `up` com `IMAGE_TAG` explícito e `health-check.sh`.
+Ele recusa árvore de trabalho suja para manter o SHA do rollback confiável.
 
 ### Três armadilhas que já derrubaram a produção
 
@@ -238,7 +236,7 @@ curl https://www.portalcef.com.br/api/health
 
 ```bash
 # Status geral
-docker compose -f docker-compose.prod.yml ps
+docker compose -f docker-compose.prod.yml --env-file .env.docker ps
 
 # Uso de recursos
 docker stats
@@ -251,16 +249,16 @@ docker stats
 
 ```bash
 # Todos os serviços
-docker compose -f docker-compose.prod.yml logs -f
+docker compose -f docker-compose.prod.yml --env-file .env.docker logs -f
 
 # Serviço específico
-docker compose -f docker-compose.prod.yml logs -f api
+docker compose -f docker-compose.prod.yml --env-file .env.docker logs -f api
 
 # Últimas 100 linhas com timestamp
-docker compose -f docker-compose.prod.yml logs --tail=100 -t api
+docker compose -f docker-compose.prod.yml --env-file .env.docker logs --tail=100 -t api
 
 # Filtrar erros
-docker compose -f docker-compose.prod.yml logs api 2>&1 | grep -i error
+docker compose -f docker-compose.prod.yml --env-file .env.docker logs api 2>&1 | grep -i error
 ```
 
 ### Verificar Sessões Redis
@@ -326,10 +324,10 @@ docker compose -f docker-compose.prod.yml --env-file .env.docker up -d
 
 ```bash
 # Renovar manualmente
-docker compose -f docker-compose.prod.yml run --rm certbot renew
+docker compose -f docker-compose.prod.yml --env-file .env.docker run --rm certbot renew
 
 # Restart do nginx
-docker compose -f docker-compose.prod.yml restart nginx
+docker compose -f docker-compose.prod.yml --env-file .env.docker restart nginx
 ```
 
 ---
@@ -479,13 +477,13 @@ import { UserCard } from './user-card';
 
 ```bash
 # Ver logs
-docker compose -f docker-compose.prod.yml logs
+docker compose -f docker-compose.prod.yml --env-file .env.docker logs
 
 # Verificar recursos
 docker stats
 
 # Remover órfãos
-docker compose -f docker-compose.prod.yml down --remove-orphans
+docker compose -f docker-compose.prod.yml --env-file .env.docker down --remove-orphans
 docker compose -f docker-compose.prod.yml --env-file .env.docker up -d
 ```
 
@@ -496,7 +494,7 @@ docker compose -f docker-compose.prod.yml --env-file .env.docker up -d
 docker network inspect essencia-prod
 
 # Restart nginx
-docker compose -f docker-compose.prod.yml restart nginx
+docker compose -f docker-compose.prod.yml --env-file .env.docker restart nginx
 ```
 
 ### Banco não Responde
@@ -506,7 +504,7 @@ docker compose -f docker-compose.prod.yml restart nginx
 docker exec essencia-postgres psql -U essencia_prod -c "SELECT count(*) FROM pg_stat_activity;"
 
 # Restart
-docker compose -f docker-compose.prod.yml restart postgres
+docker compose -f docker-compose.prod.yml --env-file .env.docker restart postgres
 ```
 
 ### Sessão Expirada (Usuários Reclamando)

@@ -23,10 +23,18 @@ BLUE='\033[0;34m'
 NC='\033[0m'
 
 COMPOSE_FILE="docker-compose.prod.yml"
+ENV_FILE=".env.docker"
 
 # Diretório do projeto
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$PROJECT_DIR"
+
+if [ ! -f "$ENV_FILE" ]; then
+    echo -e "${RED}Erro: $ENV_FILE não encontrado em $PROJECT_DIR${NC}" >&2
+    exit 1
+fi
+
+COMPOSE=(docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE")
 
 echo "=============================================="
 echo -e "${BLUE}  Portal Essência Feliz - Health Check${NC}"
@@ -42,12 +50,18 @@ FAILED=0
 echo -e "${YELLOW}[1/4] Status dos Containers${NC}"
 echo ""
 
-docker compose -f $COMPOSE_FILE ps --format "table {{.Name}}\t{{.Status}}\t{{.Health}}"
+CONTAINER_STATUS=$("${COMPOSE[@]}" ps --all --format "{{.Name}}\t{{.State}}\t{{.Health}}")
+if [ -n "$CONTAINER_STATUS" ]; then
+    printf '%s\n' "$CONTAINER_STATUS" | awk -F '\t' 'BEGIN { print "NAME\tSTATUS\tHEALTH" } { print }'
+else
+    echo -e "${RED}Nenhum container de produção foi encontrado.${NC}"
+    FAILED=1
+fi
 
 echo ""
 
-# Verificar se há containers não healthy
-UNHEALTHY=$(docker compose -f $COMPOSE_FILE ps --format "{{.Name}}\t{{.Health}}" | grep -v healthy | grep -v "N/A" || true)
+# Verificar se há containers parados ou não healthy.
+UNHEALTHY=$(printf '%s\n' "$CONTAINER_STATUS" | awk -F '\t' '$2 != "running" || ($3 != "" && $3 != "healthy" && $3 != "N/A")' || true)
 
 if [ -n "$UNHEALTHY" ]; then
     echo -e "${YELLOW}Containers com problemas:${NC}"

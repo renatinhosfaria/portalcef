@@ -250,7 +250,7 @@ nano .env.docker  # Editar com valores de produção
 
 # 3. Gerar certificado SSL (primeira vez)
 # Certifique-se de que o DNS aponta para o servidor
-docker compose -f docker-compose.prod.yml run --rm certbot certonly \
+docker compose -f docker-compose.prod.yml --env-file .env.docker run --rm certbot certonly \
   --webroot \
   --webroot-path=/var/www/certbot \
   --email admin@essencia.edu.br \
@@ -280,43 +280,33 @@ curl -X POST https://www.portalcef.com.br/api/setup/init \
 ./scripts/health-check.sh
 ```
 
-### 2. Deploys Subsequentes
+### 2. Deploys Subsequentes com Build Local
 
 ```bash
-# 1. Navegar para diretório
-cd /opt/essencia
+cd /var/www/essencia
+git pull --ff-only origin main
 
-# 2. Pull das mudanças
-git pull origin main
-
-# 3. Rebuild e restart
-docker buildx bake -f docker-bake.hcl --no-cache
-docker compose -f docker-compose.prod.yml --env-file .env.docker up -d
-
-# 4. Executar migrations (se houver)
-./scripts/migrate.sh
-
-# 5. Verificar saúde
-./scripts/health-check.sh
+# Escolha um comando:
+./scripts/deploy.sh           # Sem migration nova
+# OU
+./scripts/deploy.sh --migrar  # Com backup e migration
 ```
 
-### 3. Deploy sequencial com health gate
+O script deriva a tag do SHA curto do commit, constrói as imagens com
+`docker buildx bake --load`, reconstrói a `landing-mae`, usa `IMAGE_TAG` em
+migration e Compose e executa o health check no final. A árvore de trabalho
+precisa estar limpa para evitar que alterações não commitadas sejam publicadas
+com a tag errada.
 
-> **Zero downtime não está disponível hoje.** Cada serviço declara
-> `container_name` fixo no compose, e o Docker recusa escalar um serviço nesse
-> formato: *"Docker requires each container to have a unique name. Remove the
-> custom name to scale the service"*. Rodar `--scale api=2` não cria segunda
-> instância. Para haver zero downtime seria preciso remover os `container_name`
-> e ajustar o nginx para resolver os upstreams dinamicamente.
+### 3. Limitações do deploy sequencial existente
 
-O que existe é atualização sequencial com verificação de saúde a cada passo. Se
-a API não ficar healthy, o deploy aborta e os demais serviços permanecem na
-versão anterior:
+Use `./scripts/deploy.sh` para o fluxo local. O `deploy-rolling.sh` existente
+executa `pull`, mas o Compose usa nomes locais `essencia-*`, enquanto o CI
+publica no GHCR. Essa integração precisa ser alinhada antes de utilizar o
+script com o registry; ele não substitui o fluxo local documentado aqui.
 
-```bash
-TAG=$(git rev-parse --short HEAD) docker buildx bake -f docker-bake.hcl
-./scripts/deploy-rolling.sh "$(git rev-parse --short HEAD)"
-```
+Não há zero downtime: os serviços possuem uma instância com `container_name`
+fixo e ficam temporariamente indisponíveis durante a recriação.
 
 ### 4. Rollback
 
@@ -333,6 +323,26 @@ Versões disponíveis localmente: `docker images essencia-api`.
 
 ## Scripts de Deploy
 
+### deploy.sh
+
+Orquestra o deploy quando as imagens são construídas no próprio servidor:
+
+```bash
+./scripts/deploy.sh           # Sem migration nova
+# OU
+./scripts/deploy.sh --migrar  # Com backup e migration
+```
+
+O primeiro comando executa lint, typecheck, Buildx Bake com a tag SHA, build da
+`landing-mae`, subida dos serviços e health check. A opção `--migrar` também
+inicia a infraestrutura necessária, cria um backup com permissão restrita e
+aplica a migration da mesma imagem versionada antes de iniciar os serviços da
+aplicação. Se alguma etapa falhar, o script retorna erro e interrompe as próximas
+etapas. O `up` aguarda até 180 segundos pela saúde dos containers. Não há
+rollback automático de código ou banco; migrations devem ser compatíveis com
+a versão ainda em execução. A `landing-mae` mantém sua tag `latest`, portanto
+não acompanha o rollback por SHA dos demais aplicativos.
+
 ### migrate.sh
 
 Aplica migrations no container da API, criando backup antes e abortando se o
@@ -344,8 +354,8 @@ imagem que está no ar. Durante um deploy com migration nova, rode-a antes de
 subir o código novo, num container descartável da imagem recém-construída:
 
 ```bash
-docker compose -f docker-compose.prod.yml --env-file .env.docker \
-  run --rm api node /app/packages/db/dist/migrate.js
+IMAGE_TAG=TAG_DA_IMAGEM docker compose -f docker-compose.prod.yml --env-file .env.docker \
+  run --rm --no-deps --pull never api node /app/packages/db/dist/migrate.js
 ```
 
 **Uso:**
@@ -401,16 +411,16 @@ essencia-api         Up 2 hours (healthy)
 
 ```bash
 # Todos os serviços
-docker compose -f docker-compose.prod.yml logs -f
+docker compose -f docker-compose.prod.yml --env-file .env.docker logs -f
 
 # Serviço específico
-docker compose -f docker-compose.prod.yml logs -f api
+docker compose -f docker-compose.prod.yml --env-file .env.docker logs -f api
 
 # Últimas 100 linhas
-docker compose -f docker-compose.prod.yml logs --tail=100 api
+docker compose -f docker-compose.prod.yml --env-file .env.docker logs --tail=100 api
 
 # Com timestamps
-docker compose -f docker-compose.prod.yml logs -f -t api
+docker compose -f docker-compose.prod.yml --env-file .env.docker logs -f -t api
 ```
 
 ### Log Rotation
@@ -529,13 +539,13 @@ docker run --rm \
 
 ```bash
 # Ver logs de erro
-docker compose -f docker-compose.prod.yml logs
+docker compose -f docker-compose.prod.yml --env-file .env.docker logs
 
 # Verificar recursos
 docker stats
 
 # Remover containers órfãos
-docker compose -f docker-compose.prod.yml down --remove-orphans
+docker compose -f docker-compose.prod.yml --env-file .env.docker down --remove-orphans
 ```
 
 ### Erro de DNS no Nginx
@@ -549,17 +559,17 @@ docker compose -f docker-compose.prod.yml down --remove-orphans
 docker network inspect essencia-prod
 
 # Restart do nginx
-docker compose -f docker-compose.prod.yml restart nginx
+docker compose -f docker-compose.prod.yml --env-file .env.docker restart nginx
 ```
 
 ### Certificado SSL expirado
 
 ```bash
 # Renovar manualmente
-docker compose -f docker-compose.prod.yml run --rm certbot renew
+docker compose -f docker-compose.prod.yml --env-file .env.docker run --rm certbot renew
 
 # Restart do nginx
-docker compose -f docker-compose.prod.yml restart nginx
+docker compose -f docker-compose.prod.yml --env-file .env.docker restart nginx
 ```
 
 ### Banco de dados não responde
@@ -569,7 +579,7 @@ docker compose -f docker-compose.prod.yml restart nginx
 docker exec essencia-postgres psql -U essencia -c "SELECT count(*) FROM pg_stat_activity;"
 
 # Reiniciar PostgreSQL
-docker compose -f docker-compose.prod.yml restart postgres
+docker compose -f docker-compose.prod.yml --env-file .env.docker restart postgres
 ```
 
 ---
@@ -625,8 +635,8 @@ git revert HEAD
 git push origin main
 
 # 2. Pull e rebuild
-cd /opt/essencia
-git pull origin main
+cd /var/www/essencia
+git pull --ff-only origin main
 docker buildx bake -f docker-bake.hcl --no-cache
 docker compose -f docker-compose.prod.yml --env-file .env.docker up -d
 
@@ -671,7 +681,7 @@ docker system prune -a --volumes -f
 
 ```bash
 # Pull de novas versões das images base
-docker compose -f docker-compose.prod.yml pull postgres redis nginx
+docker compose -f docker-compose.prod.yml --env-file .env.docker pull postgres redis nginx
 
 # Rebuild após pull
 docker compose -f docker-compose.prod.yml --env-file .env.docker up -d
@@ -731,7 +741,7 @@ O pipeline de CI/CD está configurado em `.github/workflows/deploy.yml` com os s
 - Etapas:
   1. `git pull` do código mais recente
   2. `docker compose pull` das novas imagens
-  3. `./scripts/deploy-rolling.sh` (zero downtime)
+  3. `./scripts/deploy-rolling.sh` (integração com registry pendente de alinhamento)
   4. `./scripts/health-check.sh` (verificação)
   5. Limpeza de imagens antigas (24h+)
 
