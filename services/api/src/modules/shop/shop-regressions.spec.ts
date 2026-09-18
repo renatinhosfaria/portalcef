@@ -3261,14 +3261,37 @@ describe("Expiração de pedidos da loja", () => {
 
 describe("Ambiente de produção da loja", () => {
   it("documenta LOJA_PUBLIC_URL no env docker e no guia de deploy", () => {
-    const envDocker = readFileSync(join(process.cwd(), "../../.env.docker"), "utf8");
+    const envFixture = readFileSync(
+      join(process.cwd(), "test/fixtures/env.docker.fixture"),
+      "utf8",
+    );
     const deploymentDoc = readFileSync(
       join(process.cwd(), "../../docs/DEPLOYMENT.md"),
       "utf8",
     );
 
-    expect(envDocker).toContain("LOJA_PUBLIC_URL=https://loja.portalcef.com.br");
-    expect(deploymentDoc).toContain("LOJA_PUBLIC_URL=https://loja.portalcef.com.br");
+    const lerVariavel = (conteudo: string, nome: string) => {
+      const linha = conteudo
+        .split(/\r?\n/)
+        .find((item) => item.trim().startsWith(`${nome}=`));
+      return linha
+        ?.slice(linha.indexOf("=") + 1)
+        .trim()
+        .replace(/^['"]|['"]$/g, "");
+    };
+
+    expect(lerVariavel(envFixture, "LOJA_PUBLIC_URL")).toBe(
+      "https://loja.portalcef.com.br",
+    );
+    expect(
+      lerVariavel(
+        "LOJA_PUBLIC_URL=https://loja.portalcef.com.br",
+        "LOJA_PUBLIC_URL",
+      ),
+    ).toBe("https://loja.portalcef.com.br");
+    expect(deploymentDoc).toContain(
+      "LOJA_PUBLIC_URL=https://loja.portalcef.com.br",
+    );
   });
 
   it("mantém migration idempotente para tabela de pagamentos dos pedidos", () => {

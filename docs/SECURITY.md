@@ -107,6 +107,14 @@ Escola -> Unidade -> Usuarios -> Recursos
 - Drizzle ORM usa prepared statements.
 - Nunca interpolar SQL manualmente.
 
+### Segredos e fixtures de teste
+
+- `.env`, `.env.docker`, backups, dumps e logs de produção nunca entram no Git.
+- Testes que precisam validar configuração usam fixtures sanitizadas com apenas
+  a chave necessária, sem copiar valores de produção.
+- Mensagens de falha não devem incluir o conteúdo integral de arquivos de
+  ambiente, cookies, tokens ou credenciais.
+
 ---
 
 ## Rate Limiting
