@@ -125,7 +125,7 @@ echo "[2/7] Executando typecheck..."
 "$PNPM_BIN" turbo typecheck
 
 echo "[3/7] Construindo imagens..."
-TAG="$RELEASE_TAG" "$DOCKER_BIN" buildx bake -f docker-bake.hcl --load
+TAG="$RELEASE_TAG" PUBLISH=false "$DOCKER_BIN" buildx bake -f docker-bake.hcl --load
 
 echo "[4/7] Construindo landing-mae do Compose..."
 "${COMPOSE[@]}" build landing-mae

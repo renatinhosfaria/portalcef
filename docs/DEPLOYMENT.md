@@ -737,33 +737,22 @@ DATABASE_URL=postgresql://user:pass@postgres:5432/essencia_db?pool_timeout=10&po
 
 ## CI/CD (GitHub Actions)
 
-O pipeline de CI/CD está configurado em `.github/workflows/deploy.yml` com os seguintes estágios:
+Os workflows ficam versionados em `.github/workflows/` e usam a mesma tag em
+todos os serviços de uma release:
 
-### 1. Quality Check
-- **Trigger**: Todo push para `main` e pull requests
-- **Tasks**: `pnpm turbo lint` e `pnpm turbo typecheck`
-- Node 22, pnpm 9.15.1, Turbo cache
+- `quality.yml` roda em pull requests e em pushes para `main`, executando lint,
+  typecheck, testes, build e `pnpm audit --prod --audit-level=high`.
+- `deploy.yml` é manual (`workflow_dispatch`). Primeiro repete a validação
+  completa, depois publica API, aplicações e `landing-mae` no GHCR com a tag
+  informada ou com o SHA completo do commit.
+- O job de deploy só é ativado quando solicitado e exige runner self-hosted com
+  o ambiente `production` protegido. Ele chama `deploy-rolling.sh`, que faz
+  pull explícito de cada imagem, aplica a mesma tag no Compose e preserva as
+  versões anteriores.
 
-### 2. Build de Imagens Docker (Matrix)
-- 10 apps Next.js + API + Worker (12 serviços)
-- Build paralelo com matrix strategy
-- Cache otimizado com GitHub Actions cache
-- Imagens publicadas no GHCR (GitHub Container Registry)
-
-### 3. Deploy em Produção
-- **Condição**: Apenas branch `main` (não PRs)
-- Acesso via SSH (`appleboy/ssh-action`)
-- Etapas:
-  1. `git pull` do código mais recente
-  2. `docker compose pull` das novas imagens
-  3. `./scripts/deploy-rolling.sh` (integração com registry pendente de alinhamento)
-  4. `./scripts/health-check.sh` (verificação)
-  5. Limpeza de imagens antigas (24h+)
-
-### 4. E2E Tests (Opcional)
-- Executados após deploy em produção
-- Playwright contra `https://www.portalcef.com.br`
-- Reports de testes salvos como artifacts
+O fluxo local continua separado: `deploy.sh` constrói com Buildx Bake, cria o
+backup/migration opcional e carrega as imagens no próprio host. Nenhum caminho
+de produção usa Compose sem `--env-file .env.docker`.
 
 ---
 

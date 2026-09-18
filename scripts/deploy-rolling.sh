@@ -4,7 +4,7 @@
 # Portal Essência Feliz
 # =============================================================================
 #
-# Uso: ./scripts/deploy-rolling.sh [tag]
+# Uso: ./scripts/deploy-rolling.sh <tag>
 #
 # Atualiza um serviço por vez, aguardando o health check de cada um antes de
 # seguir. Se a API falhar, aborta o deploy e os demais serviços permanecem na
@@ -30,6 +30,7 @@ ENV_FILE=".env.docker"
 TAG="${1:-}"
 HEALTH_TIMEOUT=60
 DOCKER_BIN="${DOCKER_BIN:-docker}"
+REGISTRY="${IMAGE_REGISTRY:-ghcr.io/renatinhosfaria/portalcef}"
 
 # Diretório do projeto
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -43,6 +44,11 @@ fi
 
 if [[ ! "$TAG" =~ ^[a-zA-Z0-9_][a-zA-Z0-9_.-]{0,127}$ ]]; then
     echo -e "${RED}Erro: tag inválida: $TAG${NC}" >&2
+    exit 1
+fi
+
+if [[ ! "$REGISTRY" =~ ^[a-zA-Z0-9./_-]+$ ]]; then
+    echo -e "${RED}Erro: registry inválido.${NC}" >&2
     exit 1
 fi
 
@@ -81,6 +87,7 @@ SERVICES=(
     "tarefas"
     "suporte"
     "workflows"
+    "landing-mae"
 )
 
 # Função para verificar health de um container
@@ -103,8 +110,14 @@ check_health() {
     return 1
 }
 
-echo -e "${YELLOW}[1/4]${NC} Pulling novas imagens..."
-"${COMPOSE[@]}" pull
+echo -e "${YELLOW}[1/4]${NC} Baixando imagens imutáveis do registry..."
+for service in "${SERVICES[@]}"; do
+    echo "  Baixando $REGISTRY/$service:$TAG"
+    "$DOCKER_BIN" pull "$REGISTRY/$service:$TAG"
+    "$DOCKER_BIN" tag \
+        "$REGISTRY/$service:$TAG" \
+        "essencia-$service:$TAG"
+done
 echo -e "${GREEN}✓ Imagens baixadas${NC}"
 echo ""
 
@@ -117,7 +130,7 @@ for service in "${SERVICES[@]}"; do
     echo -e "${BLUE}→ Atualizando ${service}...${NC}"
 
     # Recrear container com nova imagem
-    "${COMPOSE[@]}" up -d --force-recreate --no-deps "$service"
+    "${COMPOSE[@]}" up -d --force-recreate --no-build --pull never --no-deps "$service"
 
     # Aguardar health check
     echo "  Aguardando health check..."
@@ -148,7 +161,7 @@ echo ""
 "${COMPOSE[@]}" ps --format "table {{.Name}}\t{{.Status}}\t{{.Health}}"
 echo ""
 
-echo -e "${YELLOW}[4/4]${NC} Limpando imagens antigas..."
+echo -e "${YELLOW}[4/4]${NC} Preservando imagens anteriores..."
 echo -e "${GREEN}✓ Imagens antigas preservadas para rollback${NC}"
 
 echo ""
