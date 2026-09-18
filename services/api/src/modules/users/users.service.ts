@@ -1,6 +1,8 @@
 import { and, asc, eq, getDb, isNull, sql } from "@essencia/db";
 import {
   turmas as turmasTable,
+  unitStages as unitStagesTable,
+  units as unitsTable,
   users as usersTable,
   type NewUser,
   type User,
@@ -27,9 +29,117 @@ interface CurrentUser {
   stageId: string | null;
 }
 
+interface UserScopeData {
+  role: UserRole;
+  schoolId: string | null;
+  unitId: string | null;
+  stageId: string | null;
+}
+
 @Injectable()
 export class UsersService {
   constructor(private readonly sessionService: SessionService) {}
+
+  private async validarEscopoUsuario(
+    db: ReturnType<typeof getDb>,
+    data: UserScopeData,
+    currentUser: CurrentUser,
+  ): Promise<void> {
+    if (data.role === "master") {
+      if (data.schoolId !== null || data.unitId !== null || data.stageId !== null) {
+        throw new UnprocessableEntityException(
+          "Usuário master não pode possuir escola, unidade ou etapa",
+        );
+      }
+      return;
+    }
+
+    if (!data.schoolId) {
+      throw new UnprocessableEntityException("Escola é obrigatória para este role");
+    }
+
+    if (
+      currentUser.role !== "master" &&
+      (!currentUser.schoolId || data.schoolId !== currentUser.schoolId)
+    ) {
+      throw new ForbiddenException("Acesso negado - escola diferente");
+    }
+
+    if (
+      currentUser.role !== "master" &&
+      currentUser.role !== "diretora_geral" &&
+      data.unitId !== currentUser.unitId
+    ) {
+      throw new ForbiddenException("Acesso negado - unidade diferente");
+    }
+
+    if (
+      stageRequiredRoles.includes(
+        currentUser.role as (typeof stageRequiredRoles)[number],
+      ) &&
+      data.stageId !== currentUser.stageId
+    ) {
+      throw new ForbiddenException("Acesso negado - etapa diferente");
+    }
+
+    const exigeUnidade = data.role !== "diretora_geral";
+    if (exigeUnidade && !data.unitId) {
+      throw new UnprocessableEntityException(
+        "Unidade é obrigatória para este role",
+      );
+    }
+
+    if (data.role === "diretora_geral" && data.stageId !== null) {
+      throw new UnprocessableEntityException(
+        "Diretora geral não pode possuir etapa",
+      );
+    }
+
+    const exigeEtapa = stageRequiredRoles.includes(
+      data.role as (typeof stageRequiredRoles)[number],
+    );
+    if (exigeEtapa && !data.stageId) {
+      throw new UnprocessableEntityException(
+        "Etapa é obrigatória para este role",
+      );
+    }
+    if (!exigeEtapa && data.stageId !== null) {
+      throw new UnprocessableEntityException(
+        "Este role não pode possuir etapa",
+      );
+    }
+
+    if (!data.unitId) return;
+
+    const unit = await db.query.units.findFirst({
+      where: eq(unitsTable.id, data.unitId),
+      columns: { id: true, schoolId: true },
+    });
+    if (!unit) {
+      throw new UnprocessableEntityException("Unidade não encontrada");
+    }
+    if (unit.schoolId !== data.schoolId) {
+      throw new UnprocessableEntityException(
+        "Unidade não pertence à escola informada",
+      );
+    }
+
+    if (data.stageId) {
+      const unitStage = await db.query.unitStages.findFirst({
+        where: and(
+          eq(unitStagesTable.unitId, data.unitId),
+          eq(unitStagesTable.stageId, data.stageId),
+          eq(unitStagesTable.isActive, true),
+        ),
+        columns: { id: true },
+      });
+      if (!unitStage) {
+        throw new UnprocessableEntityException(
+          "Etapa não está habilitada para a unidade informada",
+        );
+      }
+    }
+  }
 
   /**
    * Find all users within tenant scope
@@ -153,6 +263,8 @@ export class UsersService {
       });
     }
 
+    await this.validarEscopoUsuario(db, data, currentUser);
+
     // Check if email already exists
     const existing = await db.query.users.findFirst({
       where: eq(usersTable.email, data.email),
@@ -228,6 +340,17 @@ export class UsersService {
       });
     }
 
+    await this.validarEscopoUsuario(
+      db,
+      {
+        role: data.role ?? (existing.role as UserRole),
+        schoolId: data.schoolId === undefined ? existing.schoolId : data.schoolId,
+        unitId: data.unitId === undefined ? existing.unitId : data.unitId,
+        stageId: data.stageId === undefined ? existing.stageId : data.stageId,
+      },
+      currentUser,
+    );
+
     // Prepare update data
     const updateData: Record<string, unknown> = {
       ...data,
@@ -257,6 +380,8 @@ export class UsersService {
         createdAt: usersTable.createdAt,
         updatedAt: usersTable.updatedAt,
       });
+
+    await this.sessionService.deleteAllUserSessions(id);
 
     return updated;
   }
@@ -307,6 +432,7 @@ export class UsersService {
     }
 
     await db.delete(usersTable).where(sql`${usersTable.id} = ${id}`);
+    await this.sessionService.deleteAllUserSessions(id);
   }
 
   /**
@@ -463,6 +589,8 @@ export class UsersService {
         createdAt: usersTable.createdAt,
         updatedAt: usersTable.updatedAt,
       });
+
+    await this.sessionService.deleteAllUserSessions(targetId);
 
     return updated;
   }

@@ -295,6 +295,20 @@
       "when": 1789566917782,
       "tag": "0041_add_tarefa_historico",
       "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1789754658442,
+      "tag": "0042_restringe_usuario_unidade_escola",
+      "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1789757172855,
+      "tag": "0043_shop_order_refunds",
+      "breakpoints": true
     }
   ]
 }
