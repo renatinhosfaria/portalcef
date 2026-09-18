@@ -30,11 +30,13 @@ esac
 SIMULADOR
 cat > "$DIRETORIO_TESTE/bin/curl" <<'SIMULADOR'
 #!/usr/bin/env bash
+printf '%s\n' "$*" >> "$CURL_LOG"
 [[ "${CENARIO_TESTE:-}" != externo-indisponivel ]]
 SIMULADOR
 chmod +x "$DIRETORIO_TESTE/bin/"*
 export PATH="$DIRETORIO_TESTE/bin:$PATH"
 export REGISTRO_TESTE="$DIRETORIO_TESTE/comandos.log"
+export CURL_LOG="$DIRETORIO_TESTE/curl.log"
 
 bash "$DIRETORIO_TESTE/scripts/health-check.sh" > "$DIRETORIO_TESTE/saida.log"
 grep -Fq -- '--env-file .env.docker ps' "$REGISTRO_TESTE"
@@ -47,7 +49,11 @@ for cenario in unhealthy starting parado vazio; do
   fi
   echo "Detecção de $cenario passou."
 done
-CENARIO_TESTE=externo-indisponivel bash "$DIRETORIO_TESTE/scripts/health-check.sh" > "$DIRETORIO_TESTE/saida.log"
+if CENARIO_TESTE=externo-indisponivel bash "$DIRETORIO_TESTE/scripts/health-check.sh" > "$DIRETORIO_TESTE/saida.log"; then
+  echo 'Falha: endpoints externos indisponíveis foram declarados saudáveis.' >&2
+  exit 1
+fi
 grep -Fq 'Endpoints externos não acessíveis' "$DIRETORIO_TESTE/saida.log"
+grep -Fq 'https://www.portalcef.com.br/api/health' "$CURL_LOG"
 [[ "$(cat "$DIRETORIO_TESTE/.env.docker")" == CONFIGURACAO_FICTICIA=teste ]]
 echo 'Testes de saúde concluídos sem acessar produção.'
