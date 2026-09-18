@@ -162,4 +162,53 @@ fi
 grep -q "backup falhou" "$OUTPUT_FILE_2"
 
 echo "Cenário 2 (backup vazio aborta) passou."
+
+# -----------------------------------------------------------------------------
+# Cenário 3: pg_dump grava conteúdo parcial e falha — o temporário deve sumir
+# -----------------------------------------------------------------------------
+LOG_FILE_3="$TMP_DIR/docker3.log"
+OUTPUT_FILE_3="$TMP_DIR/output3.log"
+rm -rf "$ROOT_DIR/backup"
+
+cat > "$TMP_DIR/docker" <<'FAKE_DOCKER_PARCIAL'
+#!/usr/bin/env bash
+set -euo pipefail
+
+printf '%s\n' "$*" >> "$DOCKER_FAKE_LOG"
+
+case "$*" in
+  "compose -f docker-compose.prod.yml --env-file .env.docker ps api")
+    echo "api Up"
+    exit 0
+    ;;
+  "exec essencia-postgres printenv POSTGRES_USER") echo "essencia_prod" ;;
+  "exec essencia-postgres printenv POSTGRES_DB") echo "essencia_db" ;;
+  *"exec essencia-postgres pg_dump"*)
+    echo 'conteúdo parcial que não pode virar backup válido'
+    exit 1
+    ;;
+esac
+
+echo "Comando inesperado no cenário de backup parcial: $*" >&2
+exit 2
+FAKE_DOCKER_PARCIAL
+
+chmod +x "$TMP_DIR/docker"
+
+set +e
+PATH="$TMP_DIR:$PATH" DOCKER_FAKE_LOG="$LOG_FILE_3" \
+  bash "$ROOT_DIR/scripts/migrate.sh" prod > "$OUTPUT_FILE_3" 2>&1
+STATUS=$?
+set -e
+
+if [ "$STATUS" -eq 0 ]; then
+  echo "Falha: migrate.sh deveria abortar com pg_dump parcial." >&2
+  exit 1
+fi
+if find "$ROOT_DIR/backup" -maxdepth 1 -type f -name '*.sql' -print -quit 2>/dev/null | grep -q .; then
+  echo "Falha: backup parcial foi preservado." >&2
+  exit 1
+fi
+grep -q "backup falhou" "$OUTPUT_FILE_3"
+echo "Cenário 3 (backup parcial aborta) passou."
 echo "Teste do scripts/migrate.sh passou."

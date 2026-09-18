@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # =============================================================================
 # MIGRATE - Executar migrations do banco de dados
 # Portal Essência Feliz
@@ -17,7 +17,7 @@
 #
 # =============================================================================
 
-set -e
+set -euo pipefail
 
 # Cores para output
 RED='\033[0;31m'
@@ -31,6 +31,14 @@ ENV="${1:-prod}"
 # Diretório do projeto
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$PROJECT_DIR"
+
+TEMP_BACKUP=""
+limpar_backup_temporario() {
+    if [[ -n "$TEMP_BACKUP" ]]; then
+        rm -f "$TEMP_BACKUP"
+    fi
+}
+trap limpar_backup_temporario EXIT
 
 echo "=============================================="
 echo -e "${YELLOW}  Portal Essência Feliz - Migrations${NC}"
@@ -89,23 +97,33 @@ if [ "$ENV" = "prod" ]; then
     DB_NAME="${DB_NAME:-essencia_db}"
 
     BACKUP_FILE="backup_pre_migration_$(date +%Y%m%d_%H%M%S).sql"
-    mkdir -p "$PROJECT_DIR/backup"
+    BACKUP_DIR="$PROJECT_DIR/backup"
+    umask 077
+    mkdir -p "$BACKUP_DIR"
+    chmod 700 "$BACKUP_DIR"
+    TEMP_BACKUP="$(mktemp "$BACKUP_DIR/.${BACKUP_FILE}.tmp.XXXXXX")"
+    chmod 600 "$TEMP_BACKUP"
 
-    docker exec essencia-postgres pg_dump \
+    if ! docker exec essencia-postgres pg_dump \
         -U "$DB_USER" \
         -d "$DB_NAME" \
-        > "$PROJECT_DIR/backup/$BACKUP_FILE" 2>/dev/null || true
+        > "$TEMP_BACKUP" 2>/dev/null; then
+        echo -e "${RED}Erro: backup falhou com o usuário '$DB_USER'${NC}"
+        echo "Migrations abortadas — nenhuma alteração foi feita no banco."
+        exit 1
+    fi
 
-    # O redirect cria o arquivo mesmo quando o pg_dump falha (role errada, por
-    # exemplo), então um arquivo vazio passaria por backup válido.
-    if [ ! -s "$PROJECT_DIR/backup/$BACKUP_FILE" ]; then
-        rm -f "$PROJECT_DIR/backup/$BACKUP_FILE"
+    if [ ! -s "$TEMP_BACKUP" ]; then
         echo -e "${RED}Erro: backup falhou (arquivo vazio) com o usuário '$DB_USER'${NC}"
         echo "Migrations abortadas — nenhuma alteração foi feita no banco."
         exit 1
     fi
 
-    echo -e "${GREEN}✓ Backup criado: backup/$BACKUP_FILE ($(du -h "$PROJECT_DIR/backup/$BACKUP_FILE" | cut -f1))${NC}"
+    mv "$TEMP_BACKUP" "$BACKUP_DIR/$BACKUP_FILE"
+    TEMP_BACKUP=""
+    chmod 600 "$BACKUP_DIR/$BACKUP_FILE"
+
+    echo -e "${GREEN}✓ Backup criado: backup/$BACKUP_FILE ($(du -h "$BACKUP_DIR/$BACKUP_FILE" | cut -f1))${NC}"
     echo ""
 
     echo -e "${YELLOW}[2/3]${NC} Executando migrations..."

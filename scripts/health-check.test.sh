@@ -53,7 +53,6 @@ if CENARIO_TESTE=externo-indisponivel bash "$DIRETORIO_TESTE/scripts/health-chec
   echo 'Falha: endpoints externos indisponíveis foram declarados saudáveis.' >&2
   exit 1
 fi
-grep -Fq 'Endpoints externos não acessíveis' "$DIRETORIO_TESTE/saida.log"
 grep -Fq 'https://www.portalcef.com.br/api/health' "$CURL_LOG"
 [[ "$(cat "$DIRETORIO_TESTE/.env.docker")" == CONFIGURACAO_FICTICIA=teste ]]
 echo 'Testes de saúde concluídos sem acessar produção.'

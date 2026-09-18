@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # =============================================================================
 # DEPLOY ROLLING - Atualização sequencial com health gate
 # Portal Essência Feliz
@@ -15,7 +15,7 @@
 # preciso subir a nova instância antes de remover a antiga.
 # =============================================================================
 
-set -e
+set -euo pipefail
 
 # Cores para output
 RED='\033[0;31m'
@@ -27,12 +27,24 @@ NC='\033[0m'
 # Configurações
 COMPOSE_FILE="docker-compose.prod.yml"
 ENV_FILE=".env.docker"
-TAG="${1:-latest}"
+TAG="${1:-}"
 HEALTH_TIMEOUT=60
+DOCKER_BIN="${DOCKER_BIN:-docker}"
 
 # Diretório do projeto
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$PROJECT_DIR"
+
+if [[ -z "$TAG" ]]; then
+    echo -e "${RED}Erro: informe a tag imutável da release.${NC}" >&2
+    echo "Uso: ./scripts/deploy-rolling.sh <tag>" >&2
+    exit 1
+fi
+
+if [[ ! "$TAG" =~ ^[a-zA-Z0-9_][a-zA-Z0-9_.-]{0,127}$ ]]; then
+    echo -e "${RED}Erro: tag inválida: $TAG${NC}" >&2
+    exit 1
+fi
 
 # Sem --env-file o compose lê .env, que não tem DATABASE_URL: a API sobe com a
 # variável vazia e entra em loop de restart, derrubando tudo que depende dela.
@@ -41,7 +53,7 @@ if [ ! -f "$ENV_FILE" ]; then
     exit 1
 fi
 
-COMPOSE=(docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE")
+COMPOSE=("$DOCKER_BIN" compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE")
 
 echo "=============================================="
 echo -e "${BLUE}  Portal Essência Feliz - Rolling Deploy${NC}"
@@ -78,7 +90,7 @@ check_health() {
     local elapsed=0
 
     while [ $elapsed -lt $timeout ]; do
-        local health=$(docker inspect --format='{{.State.Health.Status}}' "essencia-$service" 2>/dev/null || echo "unknown")
+        local health=$("$DOCKER_BIN" inspect --format='{{.State.Health.Status}}' "essencia-$service" 2>/dev/null || echo "unknown")
 
         if [ "$health" = "healthy" ]; then
             return 0
@@ -137,8 +149,7 @@ echo ""
 echo ""
 
 echo -e "${YELLOW}[4/4]${NC} Limpando imagens antigas..."
-docker image prune -af --filter "until=24h" 2>/dev/null || true
-echo -e "${GREEN}✓ Limpeza concluída${NC}"
+echo -e "${GREEN}✓ Imagens antigas preservadas para rollback${NC}"
 
 echo ""
 echo "=============================================="
