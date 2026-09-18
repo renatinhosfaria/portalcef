@@ -189,6 +189,9 @@ Invariantes obrigatórias:
 | Pagamento não baixa estoque duas vezes | Segunda confirmação concorrente recebe erro de status/conflito sem alterar estoque. |
 | Pagamentos conciliam o total | Soma de pagamentos deve ser igual a `totalAmount`, inclusive quando houver `BRINDE`. |
 | Venda presencial é atômica | Baixa de estoque, pedido, itens, ledger e pagamentos entram ou saem juntos. |
+| Estorno pago é idempotente | Cada pedido possui um único registro de estorno; a mesma chave determinística é enviada ao Stripe em todas as tentativas. |
+| Falha de estorno preserva o pedido | O pedido e o estoque só mudam depois de o Stripe confirmar `succeeded`; falha deixa o pedido `PAGO` e o estorno em `ERRO` para retry administrativo. |
+| Webhook reconcilia estorno | `charge.refunded` atualiza o registro de estorno, cancela o pedido e recompõe o estoque sem duplicar movimentos. |
 | Pré-venda usa origem e status próprios | Voucher de pré-venda nasce com `orderSource = PRE_VENDA` e `status = AGUARDANDO_PAGAMENTO`. |
 | Pré-venda preserva estoque em todo ciclo | Criação, confirmação de pagamento, retirada, cancelamento e exclusão de `PRE_VENDA` não mexem em `quantity` nem `reservedQuantity`. |
 | Pré-venda exige flag manual | Apenas produtos com `isPreSale = true` aceitam pedido de pré-venda; produtos sem o flag são recusados com `PRODUCT_NOT_PRE_SALE`. |
@@ -207,6 +210,8 @@ Testes obrigatórios:
 | API | `services/api/src/modules/shop/shop-regressions.spec.ts` | Listagem admin aceita `orderSource=PRE_VENDA` e resumo usa `orders/pre-venda/summary`. |
 | API | `services/api/src/modules/shop/shop-orders.service.spec.ts` | `BRINDE` não desativa validação da soma dos pagamentos. |
 | API | `services/api/src/modules/shop/shop-regressions.spec.ts` | Dashboard retorna `data.stats` e `recentOrders` com status corretos. |
+| API | `services/api/src/modules/shop/shop-regressions.spec.ts` | Falha no Stripe não cancela pedido pago nem libera estoque. |
+| API | `services/api/src/modules/shop/shop-regressions.spec.ts` | Retry de estorno usa operação idempotente e webhook `charge.refunded` reconcilia pedido e estoque. |
 | loja-admin | `apps/loja-admin/__tests__/venda-presencial.test.ts` | Venda presencial usa preço efetivo e total em centavos compatível com API. |
 | loja-admin | `apps/loja-admin/__tests__/dashboard-source.test.ts` | Dashboard consome `data.stats.salesToday` e `salesWeek` como `{ count, total }`. |
 

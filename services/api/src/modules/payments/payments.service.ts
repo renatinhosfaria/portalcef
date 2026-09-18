@@ -162,9 +162,7 @@ export class PaymentsService {
   /**
    * Cria Checkout Session hospedada para pagamento online da loja.
    */
-  async createCheckoutSession(
-    input: CreateCheckoutSessionInput,
-  ): Promise<{
+  async createCheckoutSession(input: CreateCheckoutSessionInput): Promise<{
     checkoutSessionId: string;
     checkoutUrl: string;
     paymentIntentId?: string;
@@ -287,6 +285,7 @@ export class PaymentsService {
    * @param paymentIntentId - ID do PaymentIntent no Stripe
    * @param amount - Valor a estornar em centavos (opcional, default: total)
    * @param reason - Motivo do estorno
+   * @param idempotencyKey - Chave determinística para repetir a operação com segurança
    * @returns refundId do Stripe
    */
   async refundPayment(
@@ -296,6 +295,7 @@ export class PaymentsService {
       | "duplicate"
       | "fraudulent"
       | "requested_by_customer" = "requested_by_customer",
+    idempotencyKey?: string,
   ): Promise<{ refundId: string; status: string; amount: number }> {
     try {
       this.logger.log(
@@ -323,7 +323,9 @@ export class PaymentsService {
         refundParams.amount = amount;
       }
 
-      const refund = await this.stripe.refunds.create(refundParams);
+      const refund = idempotencyKey
+        ? await this.stripe.refunds.create(refundParams, { idempotencyKey })
+        : await this.stripe.refunds.create(refundParams);
 
       this.logger.log(
         `Refund criado: ${refund.id} | Status: ${refund.status} | Valor: R$ ${refund.amount / 100}`,
@@ -346,7 +348,7 @@ export class PaymentsService {
       if (stripeError?.type === "StripeInvalidRequestError") {
         throw new BadRequestException({
           code: "INVALID_REFUND",
-          message: errorMessage,
+          message: "Não foi possível processar o estorno no Stripe",
         });
       }
 
