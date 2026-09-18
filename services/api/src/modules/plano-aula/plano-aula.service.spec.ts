@@ -1,4 +1,8 @@
-import { BadRequestException, ForbiddenException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ForbiddenException,
+  ServiceUnavailableException,
+} from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
 
 import { PdfGeneratorService } from "../../common/sharepoint/pdf-generator.service";
@@ -371,6 +375,36 @@ describe("PlanoAulaService", () => {
           pdfError: null,
           pdfRequestedAt: expect.any(Date),
           pdfGeneratedAt: expect.any(Date),
+        }),
+      );
+    });
+
+    it("marca erro recuperável quando Redis falha ao enfileirar PDF", async () => {
+      mockDb.query.planoDocumento.findFirst.mockResolvedValue({
+        id: "doc-word-falha-fila",
+        planoId: "plano-1",
+        storageKey: "documentos/plano.docx",
+        url: "https://cdn.exemplo.com/plano.docx",
+        fileName: "Plano semanal.docx",
+        mimeType:
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        plano: { unitId: "unit-1" },
+      });
+      mockDb.returning.mockResolvedValue([
+        { id: "doc-word-falha-fila", pdfStatus: "PENDENTE" },
+      ]);
+      planoAulaPdfQueueServiceMock.adicionar.mockRejectedValueOnce(
+        new Error("Redis indisponível"),
+      );
+
+      await expect(
+        service.aprovarDocumento(usuarioLogado, "doc-word-falha-fila"),
+      ).rejects.toBeInstanceOf(ServiceUnavailableException);
+
+      expect(mockDb.set).toHaveBeenCalledWith(
+        expect.objectContaining({
+          pdfStatus: "ERRO",
+          pdfError: "Falha ao enfileirar PDF para processamento",
         }),
       );
     });

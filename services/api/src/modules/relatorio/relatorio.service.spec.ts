@@ -4,6 +4,7 @@ import {
   BadRequestException,
   ForbiddenException,
   NotFoundException,
+  ServiceUnavailableException,
 } from "@nestjs/common";
 
 const mockTurmaQueryBuilder = (etapaCode: string) => ({
@@ -1036,6 +1037,44 @@ describe("RelatorioService", () => {
         statusAnterior: "AGUARDANDO_ANALISTA",
         statusNovo: "APROVADO",
       });
+    });
+  });
+
+  describe("aprovarDocumento", () => {
+    const session = {
+      userId: "analista-1",
+      role: "analista_pedagogico",
+      unitId: "unit-1",
+      schoolId: null,
+      stageId: null,
+    };
+
+    it("marca erro recuperável quando Redis falha ao enfileirar PDF", async () => {
+      mockDb.query.relatorioDocumento.findFirst.mockResolvedValueOnce({
+        id: "doc-word-falha-fila",
+        relatorioId: "r-1",
+        storageKey: "relatorios/relatorio.docx",
+        url: "https://cdn.exemplo.com/relatorio.docx",
+        fileName: "Relatório semestral.docx",
+        mimeType:
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        relatorio: { unitId: "unit-1" },
+      });
+      mockDb.returning.mockResolvedValueOnce([
+        { id: "doc-word-falha-fila", pdfStatus: "PENDENTE" },
+      ]);
+      mockQueue.adicionar.mockRejectedValueOnce(new Error("Redis down"));
+
+      await expect(
+        service.aprovarDocumento("r-1", "doc-word-falha-fila", session),
+      ).rejects.toBeInstanceOf(ServiceUnavailableException);
+
+      expect(mockDb.set).toHaveBeenCalledWith(
+        expect.objectContaining({
+          pdfStatus: "ERRO",
+          pdfError: "Falha ao enfileirar PDF para processamento",
+        }),
+      );
     });
   });
 

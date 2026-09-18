@@ -6,6 +6,7 @@ import {
   BadRequestException,
   ForbiddenException,
   ConflictException,
+  ServiceUnavailableException,
 } from "@nestjs/common";
 import {
   getDb,
@@ -1271,7 +1272,7 @@ export class PlanoAulaService {
       .returning();
 
     if (pdfStatus === "PENDENTE") {
-      await this.planoAulaPdfQueueService.adicionar(documentoId);
+      await this.enfileirarPdf(documentoId);
     }
 
     return documentoAtualizado;
@@ -1341,7 +1342,7 @@ export class PlanoAulaService {
       .where(eq(planoDocumento.id, documentoId))
       .returning();
 
-    await this.planoAulaPdfQueueService.adicionar(documentoId);
+    await this.enfileirarPdf(documentoId);
 
     return documentoAtualizado;
   }
@@ -1385,6 +1386,33 @@ export class PlanoAulaService {
         updatedAt: new Date(),
       })
       .where(eq(planoDocumento.id, documentoId));
+  }
+
+  private async enfileirarPdf(documentoId: string): Promise<void> {
+    try {
+      await this.planoAulaPdfQueueService.adicionar(documentoId);
+    } catch (error: unknown) {
+      try {
+        await this.marcarPdfErro(
+          documentoId,
+          new Error("Falha ao enfileirar PDF para processamento"),
+        );
+      } catch (persistError: unknown) {
+        this.logger.error(
+          `Não foi possível registrar falha de fila do documento ${documentoId}`,
+          persistError instanceof Error ? persistError.stack : undefined,
+        );
+      }
+
+      this.logger.error(
+        `Fila de PDF indisponível para o documento ${documentoId}`,
+        error instanceof Error ? error.stack : undefined,
+      );
+      throw new ServiceUnavailableException({
+        code: "PDF_QUEUE_UNAVAILABLE",
+        message: "A geração do PDF está temporariamente indisponível",
+      });
+    }
   }
 
   async limparEdicaoSharePoint(documentoId: string): Promise<void> {
