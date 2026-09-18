@@ -461,6 +461,7 @@ export function RelatorioContent({
                 onDelete={handleExcluirDocumento}
                 canDelete={true}
                 modulo="plano-aula"
+                usarVisualizacaoInterna={false}
               />
             </TabsContent>
 

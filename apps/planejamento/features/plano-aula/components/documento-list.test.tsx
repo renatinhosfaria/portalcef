@@ -35,6 +35,7 @@ describe("DocumentoList", () => {
     mimeType:
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     url: "https://cdn/teste.docx",
+    storageKey: "teste.docx",
     createdAt: "2026-01-23T10:00:00.000Z",
   };
 
@@ -111,6 +112,28 @@ describe("DocumentoList", () => {
       }),
     );
     expect(enviarEventosPendentes).toHaveBeenCalled();
+  });
+
+  it("abre o preview ao clicar no nome de um documento Word", async () => {
+    const user = userEvent.setup();
+    render(<DocumentoList documentos={[mockDocumentoWord]} />);
+
+    await user.click(screen.getByText("teste.docx"));
+
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("mantém o link externo quando o preview interno está desabilitado", () => {
+    render(
+      <DocumentoList
+        documentos={[mockDocumentoWord]}
+        usarVisualizacaoInterna={false}
+      />,
+    );
+
+    expect(
+      screen.getByRole("link", { name: /teste\.docx/i }),
+    ).toHaveAttribute("href", "https://cdn/teste.docx");
   });
 
   it("fecha modal ao clicar no botão Fechar", async () => {
@@ -200,7 +223,10 @@ describe("DocumentoList", () => {
     expect(screen.getByText("PDF")).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: /arquivo-legado\.pdf/i }),
-    ).toHaveAttribute("href", "https://cdn/teste.pdf");
+    ).toHaveAttribute(
+      "href",
+      "/api/plano-aula/plano-1/documentos/doc-upload-legado/download",
+    );
     expect(
       screen.getByRole("button", { name: /excluir documento/i }),
     ).toBeInTheDocument();
@@ -301,7 +327,10 @@ describe("DocumentoList", () => {
       screen.getByRole("button", { name: /visualizar documento/i }),
     );
 
-    expect(abrirJanela).toHaveBeenCalledWith("https://cdn/teste.pdf", "_blank");
+    expect(abrirJanela).toHaveBeenCalledWith(
+      "/api/plano-aula/plano-1/documentos/doc-pdf/download",
+      "_blank",
+    );
     expect(registrarEventoObservabilidade).toHaveBeenCalledWith(
       expect.objectContaining({
         evento: "arquivo_acao",
@@ -329,7 +358,10 @@ describe("DocumentoList", () => {
     render(<DocumentoList documentos={[mockDocumentoPdf]} />);
 
     const linkDocumento = screen.getByRole("link", { name: /teste\.pdf/i });
-    expect(linkDocumento).toHaveAttribute("href", "https://cdn/teste.pdf");
+    expect(linkDocumento).toHaveAttribute(
+      "href",
+      "/api/plano-aula/plano-1/documentos/doc-pdf/download",
+    );
     expect(linkDocumento).toHaveAttribute("target", "_blank");
 
     await user.click(linkDocumento);

@@ -73,6 +73,7 @@ interface DocumentoListProps {
   canComentar?: boolean;
   permitirImpressaoSemAprovacao?: boolean;
   modulo?: DocumentoModulo;
+  usarVisualizacaoInterna?: boolean;
 }
 
 type DocumentoModulo = "plano-aula" | "prova";
@@ -150,6 +151,20 @@ function getDocumentUrl(documento: PlanoDocumento): string | undefined {
   }
 
   return undefined;
+}
+
+function getUrlParaVisualizacao(
+  documento: PlanoDocumento,
+  modulo: DocumentoModulo,
+): string | undefined {
+  const url = getDocumentUrl(documento);
+  if (!url) return undefined;
+
+  if (documento.mimeType?.startsWith("application/pdf") && documento.storageKey) {
+    return `/api/${modulo}/${documento.planoId}/documentos/${documento.id}/download`;
+  }
+
+  return url;
 }
 
 function getUrlParaImpressao(documento: PlanoDocumento): string | null {
@@ -305,6 +320,7 @@ export function DocumentoList({
   canComentar: _canComentar = false,
   permitirImpressaoSemAprovacao = false,
   modulo = "plano-aula",
+  usarVisualizacaoInterna = true,
 }: DocumentoListProps) {
   const [editorDocId, setEditorDocId] = useState<string | null>(null);
   const [aprovandoId, setAprovandoId] = useState<string | null>(null);
@@ -486,13 +502,21 @@ export function DocumentoList({
         const url = getDocumentUrl(documento);
         const urlParaImpressao = getUrlParaImpressao(documento);
         const documentoWord = isWordDocument(documento);
+        const abreModalWord =
+          usarVisualizacaoInterna && documentoWord && modulo === "plano-aula";
         const urlPdfProva =
           modulo === "prova" && documentoWord && urlParaImpressao
             ? urlParaImpressao
             : null;
-        const urlLinkDocumento = urlPdfProva ?? url;
+        const urlVisualizacaoArquivo = usarVisualizacaoInterna
+          ? getUrlParaVisualizacao(documento, modulo)
+          : url;
+        const urlLinkDocumento = urlPdfProva ?? urlVisualizacaoArquivo;
         const urlVisualizacaoAcao =
-          urlPdfProva ?? (documentoWord ? undefined : url);
+          urlPdfProva ??
+          (documentoWord && usarVisualizacaoInterna
+            ? undefined
+            : urlVisualizacaoArquivo);
         const name = getDocumentName(documento);
         const podeVisualizar = documentoWord || !!urlVisualizacaoAcao;
         const ehUpload = isDocumentoUpload(documento.tipo);
@@ -551,7 +575,21 @@ export function DocumentoList({
 
                 <div className="min-w-0 flex-1 space-y-1.5">
                   {/* Nome do arquivo */}
-                  {urlLinkDocumento ? (
+                  {abreModalWord ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        registrarVisualizacaoDocumento(documento);
+                        setEditorDocId(documento.id);
+                      }}
+                      className="font-medium text-sm truncate hover:underline hover:text-primary flex items-center gap-1 text-left"
+                      title={name}
+                      aria-label={`Visualizar ${name}`}
+                    >
+                      <span className="truncate">{name}</span>
+                      <Eye className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
+                    </button>
+                  ) : urlLinkDocumento ? (
                     <a
                       href={urlLinkDocumento}
                       target="_blank"
@@ -940,7 +978,7 @@ export function DocumentoList({
             </div>
 
             {/* Modal de visualização do documento (Word) */}
-            {documentoWord && !urlPdfProva && (
+            {usarVisualizacaoInterna && documentoWord && !urlPdfProva && (
               <DocumentoEditorModal
                 planoId={documento.planoId}
                 documentoId={documento.id}
