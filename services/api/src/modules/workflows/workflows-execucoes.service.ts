@@ -175,13 +175,25 @@ export class WorkflowsExecucoesService {
       anexos: {
         orderBy: desc(workflowAnexos.createdAt),
         with: {
-          enviadoPorUser: true,
+          enviadoPorUser: {
+            columns: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
         },
       },
       historico: {
         orderBy: desc(workflowHistorico.createdAt),
         with: {
-          autor: true,
+          autor: {
+            columns: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
         },
       },
     };
@@ -264,10 +276,14 @@ export class WorkflowsExecucoesService {
           enviadoPorNome: this.nomeUsuario(enviadoPorUser),
         };
       }),
-      historico: (execucao.historico ?? []).map((item) => ({
-        ...item,
-        autorNome: this.nomeUsuario(item.autor),
-      })),
+      historico: (execucao.historico ?? []).map((item) => {
+        const { autor, ...dadosHistorico } = item;
+
+        return {
+          ...dadosHistorico,
+          autorNome: this.nomeUsuario(autor),
+        };
+      }),
       faseAtual: modelo ? this.calcularFaseAtual(modelo, progresso) : null,
       progressoPercentual: modelo
         ? this.calcularProgressoPercentual(modelo, progresso)

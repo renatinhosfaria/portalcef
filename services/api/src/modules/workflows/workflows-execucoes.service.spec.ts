@@ -282,6 +282,46 @@ describe("WorkflowsExecucoesService", () => {
     ]);
   });
 
+  it("remove dados privados do autor no historico da execucao", async () => {
+    db.query.workflowExecucoes.findFirst.mockResolvedValue({
+      id: "execucao-1",
+      status: "EM_ANDAMENTO",
+      iniciadoPor: "gestor-1",
+      schoolId: "school-1",
+      unitId: "unit-1",
+      teste: false,
+      modelo: modeloPublicado,
+      progresso: [],
+      anexos: [],
+      historico: [
+        {
+          id: "historico-1",
+          tipo: "WORKFLOW_INICIADO",
+          descricao: "Execucao iniciada",
+          autor: {
+            id: "gestor-1",
+            name: "Gestor",
+            email: "gestor@essencia.edu.br",
+            role: "coordenadora_geral",
+            passwordHash: "hash-privado-ficticio",
+          },
+        },
+      ],
+    });
+
+    const execucao = await service.buscarPorId(gestao, "execucao-1");
+    const item = execucao.historico?.[0] as Record<string, unknown>;
+
+    expect(item).toEqual(
+      expect.objectContaining({
+        id: "historico-1",
+        autorNome: "Gestor",
+      }),
+    );
+    expect(item).not.toHaveProperty("autor");
+    expect(JSON.stringify(execucao)).not.toContain("hash-privado-ficticio");
+  });
+
   it("bloqueia usuario comum iniciando teste de rascunho", async () => {
     db.query.workflowModelos.findFirst.mockResolvedValue({
       ...modeloPublicado,
