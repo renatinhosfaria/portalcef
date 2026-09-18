@@ -63,7 +63,10 @@ export class UnitsController {
 
     // Other roles can only see their own unit
     if (currentUser.unitId) {
-      const unit = await this.unitsService.findById(currentUser.unitId);
+      const unit = await this.unitsService.findById(
+        currentUser.unitId,
+        currentUser,
+      );
       return {
         success: true,
         data: unit ? [unit] : [],
@@ -88,41 +91,16 @@ export class UnitsController {
       role: string;
     },
   ) {
-    // Master can access any unit
-    if (currentUser.role === "master") {
-      const unit = await this.unitsService.findById(id);
-      return {
-        success: true,
-        data: unit,
-      };
-    }
-
     // Verify user can access this school
-    if (schoolId !== currentUser.schoolId) {
+    if (currentUser.role !== "master" && schoolId !== currentUser.schoolId) {
       return {
         success: false,
         error: { code: "FORBIDDEN", message: "Acesso negado" },
       };
     }
 
-    // Diretora geral can access any unit in their school
-    if (currentUser.role === "diretora_geral") {
-      const unit = await this.unitsService.findById(id);
-      return {
-        success: true,
-        data: unit,
-      };
-    }
+    const unit = await this.unitsService.findById(id, currentUser);
 
-    // Other roles can only access their own unit
-    if (id !== currentUser.unitId) {
-      return {
-        success: false,
-        error: { code: "FORBIDDEN", message: "Acesso negado" },
-      };
-    }
-
-    const unit = await this.unitsService.findById(id);
     return {
       success: true,
       data: unit,
@@ -134,7 +112,12 @@ export class UnitsController {
   async create(
     @Param("schoolId") schoolId: string,
     @Body() body: unknown,
-    @CurrentUser() currentUser: { schoolId: string | null; role: string },
+    @CurrentUser()
+    currentUser: {
+      schoolId: string | null;
+      unitId: string | null;
+      role: string;
+    },
   ) {
     // Master can create units in any school
     if (currentUser.role !== "master" && schoolId !== currentUser.schoolId) {
@@ -172,7 +155,12 @@ export class UnitsController {
     @Param("schoolId") schoolId: string,
     @Param("id") id: string,
     @Body() body: unknown,
-    @CurrentUser() currentUser: { schoolId: string | null; role: string },
+    @CurrentUser()
+    currentUser: {
+      schoolId: string | null;
+      unitId: string | null;
+      role: string;
+    },
   ) {
     // Master can update any unit
     if (currentUser.role !== "master" && schoolId !== currentUser.schoolId) {
@@ -183,7 +171,7 @@ export class UnitsController {
     }
 
     // Verify unit belongs to this school
-    const existingUnit = await this.unitsService.findById(id);
+    const existingUnit = await this.unitsService.findById(id, currentUser);
     if (!existingUnit || existingUnit.schoolId !== schoolId) {
       return {
         success: false,
@@ -203,7 +191,7 @@ export class UnitsController {
       };
     }
 
-    const unit = await this.unitsService.update(id, result.data);
+    const unit = await this.unitsService.update(id, result.data, currentUser);
     return {
       success: true,
       data: unit,
@@ -216,7 +204,12 @@ export class UnitsController {
   async delete(
     @Param("schoolId") schoolId: string,
     @Param("id") id: string,
-    @CurrentUser() currentUser: { schoolId: string | null; role: string },
+    @CurrentUser()
+    currentUser: {
+      schoolId: string | null;
+      unitId: string | null;
+      role: string;
+    },
   ) {
     // Master can delete any unit
     if (currentUser.role !== "master" && schoolId !== currentUser.schoolId) {
@@ -227,7 +220,7 @@ export class UnitsController {
     }
 
     // Verify unit belongs to this school
-    const existingUnit = await this.unitsService.findById(id);
+    const existingUnit = await this.unitsService.findById(id, currentUser);
     if (!existingUnit || existingUnit.schoolId !== schoolId) {
       return {
         success: false,
@@ -235,7 +228,7 @@ export class UnitsController {
       };
     }
 
-    await this.unitsService.delete(id);
+    await this.unitsService.delete(id, currentUser);
     return {
       success: true,
       data: null,

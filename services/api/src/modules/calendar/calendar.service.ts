@@ -3,12 +3,13 @@ import {
   NotFoundException,
   ForbiddenException,
 } from "@nestjs/common";
-import { getDb, calendarEvents, units, eq, and, asc, sql } from "@essencia/db";
+import { getDb, calendarEvents, eq, and, asc, sql } from "@essencia/db";
 import type {
   CreateCalendarEventInput,
   UpdateCalendarEventInput,
   QueryCalendarEventsInput,
 } from "@essencia/shared/schemas";
+import { TenantScopeService } from "../../common/tenant/tenant-scope.service";
 
 interface UserContext {
   userId: string;
@@ -19,6 +20,8 @@ interface UserContext {
 
 @Injectable()
 export class CalendarService {
+  constructor(private readonly tenantScope: TenantScopeService) {}
+
   async getEvents(user: UserContext, query: QueryCalendarEventsInput) {
     const db = getDb();
     const filters = [];
@@ -37,28 +40,29 @@ export class CalendarService {
     if (user.role === "master") {
       if (query.unitId) filters.push(eq(calendarEvents.unitId, query.unitId));
     } else if (user.role === "diretora_geral") {
-      const unitIds = await db.query.units.findMany({
-        where: eq(units.schoolId, user.schoolId),
-        columns: { id: true },
-      });
-      const ids = unitIds.map((u: { id: string }) => u.id);
-      if (ids.length > 0) {
-        filters.push(
-          sql`${calendarEvents.unitId} IN (${sql.join(
-            ids.map((id: string) => sql`${id}`),
-            sql`, `,
-          )})`,
-        );
+      if (query.unitId) {
+        await this.tenantScope.assertUnitAccess(user, query.unitId);
+        filters.push(eq(calendarEvents.unitId, query.unitId));
+      } else {
+        const ids = await this.tenantScope.listUnitIdsForSchool(user.schoolId);
+        if (ids.length > 0) {
+          filters.push(
+            sql`${calendarEvents.unitId} IN (${sql.join(
+              ids.map((id: string) => sql`${id}`),
+              sql`, `,
+            )})`,
+          );
+        } else {
+          filters.push(sql`1 = 0`);
+        }
       }
     } else {
-      // Para outros roles, filtrar pela unidade do usuário
-      if (user.unitId) {
-        filters.push(eq(calendarEvents.unitId, user.unitId));
+      const targetUnitId = user.unitId ?? query.unitId;
+      if (!targetUnitId) {
+        throw new ForbiddenException("Usuário sem unidade");
       }
-      // Se não tem unitId na sessão, filtrar pelo query.unitId (vem do frontend)
-      else if (query.unitId) {
-        filters.push(eq(calendarEvents.unitId, query.unitId));
-      }
+      await this.tenantScope.assertUnitAccess(user, targetUnitId);
+      filters.push(eq(calendarEvents.unitId, targetUnitId));
     }
 
     // Optional filters - converter year/month para número
@@ -105,12 +109,7 @@ export class CalendarService {
       throw new NotFoundException("Evento não encontrado");
     }
 
-    // Verificar acesso ao tenant
-    if (user.role !== "master" && user.role !== "diretora_geral") {
-      if (event.unitId !== user.unitId) {
-        throw new ForbiddenException("Acesso negado: evento de outra unidade");
-      }
-    }
+    await this.tenantScope.assertUnitAccess(user, event.unitId);
 
     return event;
   }
@@ -118,14 +117,7 @@ export class CalendarService {
   async createEvent(user: UserContext, data: CreateCalendarEventInput) {
     const db = getDb();
 
-    // Verificar permissão de escrita na unidade
-    if (user.role !== "master" && user.role !== "diretora_geral") {
-      if (data.unitId !== user.unitId) {
-        throw new ForbiddenException(
-          "Acesso negado: não pode criar evento em outra unidade",
-        );
-      }
-    }
+    await this.tenantScope.assertUnitAccess(user, data.unitId);
 
     const [newEvent] = await db
       .insert(calendarEvents)
@@ -168,15 +160,39 @@ export class CalendarService {
   async getStats(user: UserContext, unitId?: string, year = 2026) {
     const db = getDb();
     let targetUnitId = unitId;
+    let targetUnitIds: string[] | undefined;
 
-    if (user.role !== "master" && user.role !== "diretora_geral") {
-      if (!user.unitId) throw new ForbiddenException("Usuário sem unidade");
-      targetUnitId = user.unitId;
+    if (user.role !== "master") {
+      if (user.role === "diretora_geral" && !targetUnitId) {
+        targetUnitIds = await this.tenantScope.listUnitIdsForSchool(
+          user.schoolId,
+        );
+      } else {
+        targetUnitId =
+          user.role === "diretora_geral" ? unitId : (user.unitId ?? undefined);
+      }
+
+      if (targetUnitId) {
+        await this.tenantScope.assertUnitAccess(user, targetUnitId);
+      } else if (user.role !== "diretora_geral" && !targetUnitIds) {
+        throw new ForbiddenException("Usuário sem unidade");
+      }
     }
 
     const filters = [];
     if (targetUnitId) {
       filters.push(eq(calendarEvents.unitId, targetUnitId));
+    } else if (targetUnitIds) {
+      if (targetUnitIds.length === 0) {
+        filters.push(sql`1 = 0`);
+      } else {
+        filters.push(
+          sql`${calendarEvents.unitId} IN (${sql.join(
+            targetUnitIds.map((id) => sql`${id}`),
+            sql`, `,
+          )})`,
+        );
+      }
     }
     filters.push(sql`EXTRACT(YEAR FROM ${calendarEvents.startDate}) = ${year}`);
     filters.push(eq(calendarEvents.isSchoolDay, true));
