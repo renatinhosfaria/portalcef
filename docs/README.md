@@ -116,10 +116,10 @@ pnpm dev
 | Camada             | Tecnologia               | Versao       |
 | ------------------ | ------------------------ | ------------ |
 | **Monorepo**       | Turborepo + pnpm         | 2.3.3 / 9.15 |
-| **Frontend**       | Next.js (App Router)     | 15.1.0       |
-| **UI Runtime**     | React                    | 19.0.0       |
+| **Frontend**       | Next.js (App Router)     | 15.5.25      |
+| **UI Runtime**     | React                    | 19.0.4       |
 | **Backend**        | NestJS + Fastify         | 10.4.15      |
-| **Database**       | PostgreSQL + Drizzle ORM | 16 / 0.38.2  |
+| **Database**       | PostgreSQL + Drizzle ORM | 16 / 0.45.2  |
 | **Cache/Sessions** | Redis                    | 7            |
 | **UI**             | Tailwind CSS + shadcn/ui | 3.4.17       |
 | **Runtime**        | Node.js                  | 22+          |
@@ -184,6 +184,8 @@ pnpm dev
 | [MODULO_LOJA.md](./MODULO_LOJA.md)   | Documentacao do modulo de loja         |
 | [LOJA_INVARIANTES_TESTES.md](./LOJA_INVARIANTES_TESTES.md) | Matriz obrigatoria de invariantes e testes da loja |
 | [SECURITY.md](./SECURITY.md)         | Autenticacao, RBAC, seguranca          |
+| [runbooks/rollback.md](./runbooks/rollback.md) | Rollback de release e restauração |
+| [runbooks/incidente-refund.md](./runbooks/incidente-refund.md) | Incidentes e reconciliação de estorno |
 
 ---
 

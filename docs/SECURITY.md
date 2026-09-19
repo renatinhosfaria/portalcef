@@ -40,6 +40,11 @@ interface SessionData {
 }
 ```
 
+Alterações de senha, papel, escola, unidade, etapa, inativação ou exclusão do
+usuário revogam todas as sessões desse usuário no Redis. O logout sempre chama
+`POST /api/auth/logout`; limpar armazenamento do navegador não substitui a
+revogação no servidor.
+
 ---
 
 ## RBAC (Role-Based Access Control)

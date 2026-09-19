@@ -397,6 +397,10 @@ dependência falhar, retorna `degraded` e HTTP 503; se as duas falharem, retorna
 `unhealthy` e HTTP 503. A resposta não contém URL, host, senha ou detalhes de
 conexão.
 
+O deploy só avança quando o health público e o health interno retornam sucesso.
+Em incidente, use o [runbook de rollback](./runbooks/rollback.md); não improvise
+uma troca de tag ou restauração do banco fora da sequência documentada.
+
 **Saída esperada:**
 
 ```

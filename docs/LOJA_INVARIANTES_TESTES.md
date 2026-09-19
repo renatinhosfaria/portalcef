@@ -222,6 +222,11 @@ pnpm --filter @essencia/api test -- src/modules/shop/shop-orders.service.spec.ts
 pnpm --filter @essencia/loja-admin test -- venda-presencial dashboard-source
 ```
 
+O atendimento operacional de estorno pendente ou em erro deve seguir o
+[runbook de incidente de estorno](./runbooks/incidente-refund.md). Nunca altere
+o pedido para `CANCELADO` nem recomponha estoque manualmente antes da confirmação
+do Stripe ou do webhook reconciliado.
+
 ## LOJA-07: Interesse
 
 Invariantes obrigatórias:
