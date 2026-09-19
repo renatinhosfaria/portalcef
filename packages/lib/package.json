@@ -3,16 +3,26 @@
   "version": "0.0.1",
   "private": true,
   "exports": {
-    "./types": "./src/types.ts"
+    "./types": "./src/types.ts",
+    "./server/api-proxy": "./src/server/api-proxy.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --environment node"
   },
   "dependencies": {
     "@essencia/shared": "workspace:*"
   },
   "devDependencies": {
     "@essencia/config": "workspace:^",
-    "typescript": "^5.7.2"
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.3.1",
+    "jsdom": "^27.3.0",
+    "typescript": "^5.7.2",
+    "vitest": "^4.0.16",
+    "next": "15.1.12"
+  },
+  "peerDependencies": {
+    "next": "^15.1.0"
   }
 }

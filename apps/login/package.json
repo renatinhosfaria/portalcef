@@ -11,6 +11,7 @@
     "format": "prettier --write \"**/*.{ts,tsx,md,json}\""
   },
   "dependencies": {
+    "@essencia/lib": "workspace:^",
     "@essencia/ui": "workspace:*",
     "@essencia/tailwind-config": "workspace:*",
     "lucide-react": "^0.469.0",

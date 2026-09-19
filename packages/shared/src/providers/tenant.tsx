@@ -1,13 +1,6 @@
 "use client";
 
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode,
-} from "react";
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 
 interface TenantContextType {
   userId: string;
@@ -20,136 +13,67 @@ interface TenantContextType {
   isLoaded: boolean;
 }
 
+interface UsuarioSessao {
+  id?: string;
+  email?: string;
+  name?: string;
+  role?: string;
+  schoolId?: string;
+  unitId?: string;
+  stageId?: string;
+}
+
 const TenantContext = createContext<TenantContextType | undefined>(undefined);
+const estadoInicial: TenantContextType = { userId: "", schoolId: "", unitId: "", stageId: "", role: "", name: "", email: "", isLoaded: false };
 
-// Helper function to get login URL (memoized outside component)
-const getLoginUrl = (): string => {
+function getLoginUrl(): string {
   if (typeof window === "undefined") return "/login";
-  return window.location.hostname === "localhost"
-    ? "http://localhost:3003"
-    : "/login";
-};
+  return window.location.hostname === "localhost" ? "http://localhost:3003" : "/login";
+}
 
-// Initialize tenant from localStorage synchronously (SSR-safe)
-const initializeTenant = (): TenantContextType => {
-  if (typeof window === "undefined") {
-    return {
-      userId: "",
-      schoolId: "",
-      unitId: "",
-      stageId: "",
-      role: "",
-      name: "",
-      email: "",
-      isLoaded: false,
-    };
-  }
-
-  // Check URL params first
+function limparLegadoDeIdentidade() {
   const params = new URLSearchParams(window.location.search);
-  const dataParam = params.get("data");
-
-  if (dataParam) {
-    try {
-      const decoded = JSON.parse(decodeURIComponent(dataParam));
-      localStorage.setItem("tenant", JSON.stringify(decoded));
-
-      // Clean URL without full redirect
-      params.delete("data");
-      const nextQuery = params.toString();
-      const nextUrl = `${window.location.pathname}${
-        nextQuery ? `?${nextQuery}` : ""
-      }`;
-      window.history.replaceState({}, "", nextUrl);
-
-      return { ...decoded, isLoaded: true };
-    } catch (error) {
-      console.error("Failed to hydrate tenant data", error);
-    }
+  if (params.has("data")) {
+    params.delete("data");
+    const query = params.toString();
+    window.history.replaceState({}, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
   }
+  localStorage.removeItem("tenant");
+}
 
-  // Try localStorage
-  const stored = localStorage.getItem("tenant");
-  if (stored) {
-    try {
-      const parsed = JSON.parse(stored);
-      return { ...parsed, isLoaded: true };
-    } catch {
-      localStorage.removeItem("tenant");
-    }
-  }
-
-  return {
-    userId: "",
-    schoolId: "",
-    unitId: "",
-    stageId: "",
-    role: "",
-    name: "",
-    email: "",
-    isLoaded: false,
-  };
-};
+function normalizarUsuario(usuario: UsuarioSessao): TenantContextType {
+  return { userId: usuario.id ?? "", schoolId: usuario.schoolId ?? "", unitId: usuario.unitId ?? "", stageId: usuario.stageId ?? "", role: usuario.role ?? "", name: usuario.name ?? "", email: usuario.email ?? "", isLoaded: true };
+}
 
 export function TenantProvider({ children }: { children: ReactNode }) {
-  // Initialize with empty state to avoid hydration mismatch
-  const [tenant, setTenant] = useState<TenantContextType>({
-    userId: "",
-    schoolId: "",
-    unitId: "",
-    stageId: "",
-    role: "",
-    name: "",
-    email: "",
-    isLoaded: false,
-  });
+  const [tenant, setTenant] = useState<TenantContextType>(estadoInicial);
 
   useEffect(() => {
-    // Only run on client-side to avoid hydration mismatch
-    const initialTenant = initializeTenant();
-    setTenant(initialTenant);
-
-    // If no tenant data, redirect to login
-    if (!initialTenant.isLoaded) {
-      window.location.href = getLoginUrl();
-    }
+    let montado = true;
+    limparLegadoDeIdentidade();
+    fetch("/api/auth/me", { credentials: "include" })
+      .then(async (resposta) => {
+        if (!resposta.ok) throw new Error("Sessão não autenticada");
+        const corpo = (await resposta.json()) as { data?: { user?: UsuarioSessao }; user?: UsuarioSessao };
+        const usuario = corpo.data?.user ?? corpo.user;
+        if (!usuario) throw new Error("Resposta de sessão inválida");
+        if (montado) setTenant(normalizarUsuario(usuario));
+      })
+      .catch(() => {
+        if (montado) window.location.href = getLoginUrl();
+      });
+    return () => { montado = false; };
   }, []);
 
-  // Memoize context value to prevent re-renders when tenant doesn't change
-  const contextValue = useMemo(
-    () => tenant,
-    [
-      tenant.userId,
-      tenant.schoolId,
-      tenant.unitId,
-      tenant.stageId,
-      tenant.role,
-      tenant.name,
-      tenant.email,
-      tenant.isLoaded,
-    ],
-  );
-
-  // Prevent flash of unauthenticated content
+  const contextValue = useMemo(() => tenant, [tenant]);
   if (!tenant.isLoaded) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#A3D154]" />
-      </div>
-    );
+    return <div className="min-h-screen flex items-center justify-center bg-slate-50"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#A3D154]" /></div>;
   }
-
-  return (
-    <TenantContext.Provider value={contextValue}>
-      {children}
-    </TenantContext.Provider>
-  );
+  return <TenantContext.Provider value={contextValue}>{children}</TenantContext.Provider>;
 }
 
 export const useTenant = () => {
   const context = useContext(TenantContext);
-  if (context === undefined) {
-    throw new Error("useTenant must be used within a TenantProvider");
-  }
+  if (context === undefined) throw new Error("useTenant must be used within a TenantProvider");
   return context;
 };

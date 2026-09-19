@@ -151,19 +151,9 @@ export interface AppSidebarProps {
 }
 
 export function AppSidebar({ tarefasBadge, suporteBadge, collapsed = false, onToggle, onCollapse }: AppSidebarProps = {}) {
-  const { role, name, schoolId, unitId, email } = useTenant();
+  const { role, name } = useTenant();
   const pathname = usePathname();
   const [activePage, setActivePage] = useState<ActivePage | null>(null);
-
-  // Build a portable payload so other apps can hydrate tenant context
-  // Memoized to avoid recalculating on every render
-  const tenantPayload = useMemo(
-    () =>
-      encodeURIComponent(
-        JSON.stringify({ schoolId, unitId, role, name, email }),
-      ),
-    [schoolId, unitId, role, name, email],
-  );
 
   // Configuração de itens do menu
   const menuItems = useMemo(() => [
@@ -171,80 +161,80 @@ export function AppSidebar({ tarefasBadge, suporteBadge, collapsed = false, onTo
       key: "home" as ModuleKey,
       icon: LayoutDashboard,
       label: "Visão Geral",
-      href: `https://www.portalcef.com.br/?data=${tenantPayload}`,
+      href: "https://www.portalcef.com.br/",
       activePage: "home" as ActivePage,
     },
     {
       key: "usuarios" as ModuleKey,
       icon: Users,
       label: "Usuários",
-      href: `https://www.portalcef.com.br/usuarios?data=${tenantPayload}`,
+      href: "https://www.portalcef.com.br/usuarios",
       activePage: "usuarios" as ActivePage,
     },
     {
       key: "escolas" as ModuleKey,
       icon: School,
       label: "Gestão Escolar",
-      href: `https://www.portalcef.com.br/escolas?data=${tenantPayload}`,
+      href: "https://www.portalcef.com.br/escolas",
       activePage: "escolas" as ActivePage,
     },
     {
       key: "turmas" as ModuleKey,
       icon: GraduationCap,
       label: "Turmas",
-      href: `https://www.portalcef.com.br/turmas?data=${tenantPayload}`,
+      href: "https://www.portalcef.com.br/turmas",
       activePage: "turmas" as ActivePage,
     },
     {
       key: "planejamento" as ModuleKey,
       icon: BookOpen,
       label: "Planejamento",
-      href: `https://www.portalcef.com.br/planejamento?data=${tenantPayload}`,
+      href: "https://www.portalcef.com.br/planejamento",
       activePage: "planejamento" as ActivePage,
     },
     {
       key: "calendario" as ModuleKey,
       icon: Calendar,
       label: "Calendário",
-      href: `https://www.portalcef.com.br/calendario?data=${tenantPayload}`,
+      href: "https://www.portalcef.com.br/calendario",
       activePage: "calendario" as ActivePage,
     },
     {
       key: "eventos" as ModuleKey,
       icon: HeartHandshake,
       label: "Eventos",
-      href: `https://www.portalcef.com.br/eventos/inscricoes-evento?data=${tenantPayload}`,
+      href: "https://www.portalcef.com.br/eventos/inscricoes-evento",
       activePage: "eventos" as ActivePage,
     },
     {
       key: "tarefas" as ModuleKey,
       icon: CheckSquare,
       label: "Tarefas",
-      href: `https://www.portalcef.com.br/tarefas?data=${tenantPayload}`,
+      href: "https://www.portalcef.com.br/tarefas",
       activePage: "tarefas" as ActivePage,
     },
     {
       key: "workflows" as ModuleKey,
       icon: ClipboardList,
       label: "Workflows",
-      href: `https://www.portalcef.com.br/workflows?data=${tenantPayload}`,
+      href: "https://www.portalcef.com.br/workflows",
       activePage: "workflows" as ActivePage,
     },
     {
       key: "suporte" as ModuleKey,
       icon: Headset,
       label: "Suporte",
-      href: `https://www.portalcef.com.br/suporte?data=${tenantPayload}`,
+      href: "https://www.portalcef.com.br/suporte",
       activePage: "suporte" as ActivePage,
     },
     {
       key: "lojaAdmin" as ModuleKey,
       icon: ShoppingBag,
       label: "Loja",
-      href: `https://www.portalcef.com.br/loja-admin?data=${tenantPayload}`,
+      href: "https://www.portalcef.com.br/loja-admin",
       activePage: "loja-admin" as ActivePage,
     },
-  ], [tenantPayload]);
+  ], []);
 
   // Filtrar itens do menu baseado nas permissões do usuário
   const visibleMenuItems = useMemo(() => {
@@ -282,7 +272,7 @@ export function AppSidebar({ tarefasBadge, suporteBadge, collapsed = false, onTo
   const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
 
   const handleGoToSupport = () => {
-    window.location.href = `https://www.portalcef.com.br/suporte?data=${tenantPayload}`;
+    window.location.href = "https://www.portalcef.com.br/suporte";
   };
 
   const handleLogout = async () => {

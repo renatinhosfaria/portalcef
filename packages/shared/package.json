@@ -88,11 +88,14 @@
   },
   "devDependencies": {
     "@essencia/config": "workspace:*",
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.3.1",
     "@types/react": "^19.0.2",
     "@types/react-dom": "^19.0.2",
     "@typescript-eslint/eslint-plugin": "^8.18.1",
     "@typescript-eslint/parser": "^8.18.1",
     "eslint": "^8.57.1",
+    "jsdom": "^27.3.0",
     "typescript": "^5.7.2",
     "vitest": "4.0.16"
   }

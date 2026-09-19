@@ -13,6 +13,7 @@
     "test": "vitest run --environment jsdom --globals"
   },
   "dependencies": {
+    "@essencia/lib": "workspace:^",
     "@essencia/ui": "workspace:*",
     "@essencia/tailwind-config": "workspace:*",
     "@essencia/shared": "workspace:*",

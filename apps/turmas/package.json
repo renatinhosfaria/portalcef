@@ -11,6 +11,7 @@
     "test": "vitest run --environment jsdom --globals"
   },
   "dependencies": {
+    "@essencia/lib": "workspace:^",
     "@essencia/components": "workspace:*",
     "@essencia/shared": "workspace:*",
     "@essencia/ui": "workspace:*",

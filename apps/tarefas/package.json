@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@essencia/lib": "workspace:^",
     "@essencia/components": "workspace:*",
     "@essencia/shared": "workspace:*",
     "@essencia/tailwind-config": "workspace:*",

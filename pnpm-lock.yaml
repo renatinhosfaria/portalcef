@@ -32,6 +32,9 @@ importers:
       '@essencia/components':
         specifier: workspace:*
         version: link:../../packages/components
+      '@essencia/lib':
+        specifier: workspace:^
+        version: link:../../packages/lib
       '@essencia/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -126,6 +129,9 @@ importers:
 
   apps/escolas:
     dependencies:
+      '@essencia/lib':
+        specifier: workspace:^
+        version: link:../../packages/lib
       '@essencia/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -257,6 +263,9 @@ importers:
       '@essencia/components':
         specifier: workspace:*
         version: link:../../packages/components
+      '@essencia/lib':
+        specifier: workspace:^
+        version: link:../../packages/lib
       '@essencia/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -330,6 +339,9 @@ importers:
 
   apps/login:
     dependencies:
+      '@essencia/lib':
+        specifier: workspace:^
+        version: link:../../packages/lib
       '@essencia/tailwind-config':
         specifier: workspace:*
         version: link:../../packages/tailwind-config
@@ -555,6 +567,9 @@ importers:
       '@essencia/components':
         specifier: workspace:*
         version: link:../../packages/components
+      '@essencia/lib':
+        specifier: workspace:^
+        version: link:../../packages/lib
       '@essencia/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -716,6 +731,9 @@ importers:
       '@essencia/components':
         specifier: workspace:*
         version: link:../../packages/components
+      '@essencia/lib':
+        specifier: workspace:^
+        version: link:../../packages/lib
       '@essencia/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -774,6 +792,9 @@ importers:
       '@essencia/components':
         specifier: workspace:*
         version: link:../../packages/components
+      '@essencia/lib':
+        specifier: workspace:^
+        version: link:../../packages/lib
       '@essencia/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -1115,13 +1136,28 @@ importers:
       '@essencia/shared':
         specifier: workspace:*
         version: link:../shared
+      next:
+        specifier: 15.1.12
+        version: 15.1.12(@playwright/test@1.57.0)(react-dom@19.0.4(react@19.2.3))(react@19.2.3)
     devDependencies:
       '@essencia/config':
         specifier: workspace:^
         version: link:../config
+      '@testing-library/jest-dom':
+        specifier: ^6.6.3
+        version: 6.9.1
+      '@testing-library/react':
+        specifier: ^16.3.1
+        version: 16.3.1(@testing-library/dom@10.4.1)(@types/react-dom@19.2.3(@types/react@19.2.7))(@types/react@19.2.7)(react-dom@19.0.4(react@19.2.3))(react@19.2.3)
+      jsdom:
+        specifier: ^27.3.0
+        version: 27.3.0
       typescript:
         specifier: ^5.7.2
         version: 5.9.3
+      vitest:
+        specifier: ^4.0.16
+        version: 4.0.16(@types/node@22.19.3)(jiti@1.21.7)(jsdom@27.3.0)(terser@5.44.1)(tsx@4.21.0)
 
   packages/shared:
     dependencies:
@@ -1141,6 +1177,12 @@ importers:
       '@essencia/config':
         specifier: workspace:*
         version: link:../config
+      '@testing-library/jest-dom':
+        specifier: ^6.6.3
+        version: 6.9.1
+      '@testing-library/react':
+        specifier: ^16.3.1
+        version: 16.3.1(@testing-library/dom@10.4.1)(@types/react-dom@19.2.3(@types/react@19.2.7))(@types/react@19.2.7)(react-dom@19.0.4(react@19.0.4))(react@19.0.4)
       '@types/react':
         specifier: ^19.0.2
         version: 19.2.7
@@ -1156,6 +1198,9 @@ importers:
       eslint:
         specifier: ^8.57.1
         version: 8.57.1
+      jsdom:
+        specifier: ^27.3.0
+        version: 27.3.0
       typescript:
         specifier: ^5.7.2
         version: 5.9.3
@@ -11364,6 +11409,16 @@ snapshots:
       '@types/react': 19.2.7
       '@types/react-dom': 19.2.3(@types/react@19.2.7)
 
+  '@testing-library/react@16.3.1(@testing-library/dom@10.4.1)(@types/react-dom@19.2.3(@types/react@19.2.7))(@types/react@19.2.7)(react-dom@19.0.4(react@19.2.3))(react@19.2.3)':
+    dependencies:
+      '@babel/runtime': 7.28.4
+      '@testing-library/dom': 10.4.1
+      react: 19.2.3
+      react-dom: 19.0.4(react@19.2.3)
+    optionalDependencies:
+      '@types/react': 19.2.7
+      '@types/react-dom': 19.2.3(@types/react@19.2.7)
+
   '@testing-library/user-event@14.6.1(@testing-library/dom@10.4.1)':
     dependencies:
       '@testing-library/dom': 10.4.1
@@ -14850,6 +14905,32 @@ snapshots:
       - '@babel/core'
       - babel-plugin-macros
 
+  next@15.1.12(@playwright/test@1.57.0)(react-dom@19.0.4(react@19.2.3))(react@19.2.3):
+    dependencies:
+      '@next/env': 15.1.12
+      '@swc/counter': 0.1.3
+      '@swc/helpers': 0.5.15
+      busboy: 1.6.0
+      caniuse-lite: 1.0.30001760
+      postcss: 8.4.31
+      react: 19.2.3
+      react-dom: 19.0.4(react@19.2.3)
+      styled-jsx: 5.1.6(react@19.2.3)
+    optionalDependencies:
+      '@next/swc-darwin-arm64': 15.1.9
+      '@next/swc-darwin-x64': 15.1.9
+      '@next/swc-linux-arm64-gnu': 15.1.9
+      '@next/swc-linux-arm64-musl': 15.1.9
+      '@next/swc-linux-x64-gnu': 15.1.9
+      '@next/swc-linux-x64-musl': 15.1.9
+      '@next/swc-win32-arm64-msvc': 15.1.9
+      '@next/swc-win32-x64-msvc': 15.1.9
+      '@playwright/test': 1.57.0
+      sharp: 0.33.5
+    transitivePeerDependencies:
+      - '@babel/core'
+      - babel-plugin-macros
+
   node-abort-controller@3.1.1: {}
 
   node-addon-api@5.1.0: {}
@@ -15225,6 +15306,11 @@ snapshots:
       react: 19.0.4
       scheduler: 0.25.0
 
+  react-dom@19.0.4(react@19.2.3):
+    dependencies:
+      react: 19.2.3
+      scheduler: 0.25.0
+
   react-hook-form@7.69.0(react@19.0.4):
     dependencies:
       react: 19.0.4
@@ -15268,8 +15354,7 @@ snapshots:
 
   react@19.0.4: {}
 
-  react@19.2.3:
-    optional: true
+  react@19.2.3: {}
 
   read-cache@1.0.0:
     dependencies:
@@ -15814,6 +15899,11 @@ snapshots:
       react: 19.0.4
     optionalDependencies:
       '@babel/core': 7.28.5
+
+  styled-jsx@5.1.6(react@19.2.3):
+    dependencies:
+      client-only: 0.0.1
+      react: 19.2.3
 
   sucrase@3.35.1:
     dependencies:

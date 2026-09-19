@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { createContext, useContext, useEffect, useState } from "react";
 
 interface TenantContextType {
@@ -15,7 +14,6 @@ interface TenantContextType {
 const TenantContext = createContext<TenantContextType | undefined>(undefined);
 
 export function TenantProvider({ children }: { children: React.ReactNode }) {
-  const router = useRouter();
   const [tenant, setTenant] = useState<TenantContextType>({
     schoolId: null,
     unitId: null,
@@ -26,52 +24,18 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
   });
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const dataParam = params.get("data");
-
-    if (dataParam) {
-      try {
-        const decoded = JSON.parse(decodeURIComponent(dataParam));
-        localStorage.setItem("tenant", JSON.stringify(decoded));
-
-        params.delete("data");
-        const nextQuery = params.toString();
-        const nextUrl = `${window.location.pathname}${
-          nextQuery ? `?${nextQuery}` : ""
-        }`;
-        window.history.replaceState({}, document.title, nextUrl);
-      } catch (error) {
-        console.error("Failed to hydrate tenant data", error);
-      }
-    }
-
-    const stored = localStorage.getItem("tenant");
-    if (!stored) {
-      window.location.href = "https://www.portalcef.com.br/login"; // Login
-      return;
-    }
-
-    try {
-      const parsed = JSON.parse(stored);
-      const role =
-        typeof parsed.role === "string" ? parsed.role.toLowerCase() : "";
-
-      // STRICT CHECK: ONLY MASTER ALLOWED
-      if (role !== "master") {
-        console.warn(
-          "Acesso negado: Apenas usuários Master podem acessar este módulo.",
-        );
-        localStorage.removeItem("tenant"); // Force verify or send back
-        window.location.href = "https://www.portalcef.com.br/login"; // Redirect to Login
-        return;
-      }
-
-      setTenant({ ...parsed, role, isLoaded: true });
-    } catch {
-      localStorage.removeItem("tenant");
-      window.location.href = "https://www.portalcef.com.br/login";
-    }
-  }, [router]);
+    fetch("/api/auth/me", { credentials: "include" })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Sessão inválida");
+        const body = (await response.json()) as { data?: { user?: TenantContextType } };
+        const user = body.data?.user;
+        if (!user || user.role?.toLowerCase() !== "master") throw new Error("Acesso negado");
+        setTenant({ ...user, role: user.role.toLowerCase(), isLoaded: true });
+      })
+      .catch(() => {
+        window.location.href = "https://www.portalcef.com.br/login";
+      });
+  }, []);
 
   if (!tenant.isLoaded) {
     return (
