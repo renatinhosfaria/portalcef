@@ -9,6 +9,7 @@
     "start": "next start",
     "lint": "next lint",
     "format": "prettier --write \"**/*.{ts,tsx,md,json}\"",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run --environment jsdom --globals"
   },
   "dependencies": {
