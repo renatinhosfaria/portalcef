@@ -1,10 +1,10 @@
 "use client";
 
-import { Button } from "@essencia/ui/components/button";
-import { Menu, Search } from "lucide-react";
+import { Search } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { AppSidebar, type AppSidebarProps } from "./app-sidebar";
+import { MobileDrawer } from "./mobile-drawer";
 
 const SIDEBAR_KEY = "sidebar-collapsed";
 
@@ -35,9 +35,9 @@ function TopBar() {
   return (
     <header className="sticky top-0 z-10 flex h-20 items-center justify-between px-8 bg-white/50 backdrop-blur-md border-b border-white/20">
       <div className="flex items-center gap-4 lg:hidden">
-        <Button variant="ghost" size="icon">
-          <Menu className="w-6 h-6 text-slate-600" />
-        </Button>
+        <MobileDrawer title="Menu principal">
+          <AppSidebar mobile />
+        </MobileDrawer>
       </div>
 
       <div className="flex-1 max-w-xl hidden md:block">

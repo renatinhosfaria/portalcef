@@ -114,9 +114,10 @@ interface SidebarItemProps {
   active?: boolean;
   collapsed?: boolean;
   onNavigate?: () => void;
+  mobile?: boolean;
 }
 
-function SidebarItem({ icon: Icon, label, href, active, collapsed, onNavigate }: SidebarItemProps) {
+function SidebarItem({ icon: Icon, label, href, active, collapsed, onNavigate, mobile }: SidebarItemProps) {
   return (
     <a
       href={href}
@@ -132,7 +133,7 @@ function SidebarItem({ icon: Icon, label, href, active, collapsed, onNavigate }:
         <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-[#A3D154] rounded-r-full" />
       )}
       <Icon className="w-5 h-5 relative z-10 flex-shrink-0" />
-      <span className={cn("relative z-10 whitespace-nowrap transition-opacity duration-200", collapsed ? "hidden" : "hidden lg:block")}>{label}</span>
+      <span className={cn("relative z-10 whitespace-nowrap transition-opacity duration-200", collapsed ? "hidden" : mobile ? "block" : "hidden lg:block")}>{label}</span>
     </a>
   );
 }
@@ -148,9 +149,13 @@ export interface AppSidebarProps {
   onToggle?: () => void;
   /** Callback para colapsar o sidebar */
   onCollapse?: () => void;
+  /** Renderiza a versão embutida no drawer móvel. */
+  mobile?: boolean;
+  /** Fecha o drawer após navegar. */
+  onNavigate?: () => void;
 }
 
-export function AppSidebar({ tarefasBadge, suporteBadge, collapsed = false, onToggle, onCollapse }: AppSidebarProps = {}) {
+export function AppSidebar({ tarefasBadge, suporteBadge, collapsed = false, onToggle, onCollapse, mobile = false, onNavigate }: AppSidebarProps = {}) {
   const { role, name } = useTenant();
   const pathname = usePathname();
   const [activePage, setActivePage] = useState<ActivePage | null>(null);
@@ -290,15 +295,17 @@ export function AppSidebar({ tarefasBadge, suporteBadge, collapsed = false, onTo
 
   return (
     <aside className={cn(
-      "fixed inset-y-0 left-0 z-20 hidden w-20 flex-col items-center py-8 border-r border-slate-200/60 bg-white/80 backdrop-blur-xl sm:flex transition-all duration-300 ease-in-out",
-      collapsed ? "" : "lg:w-72",
+      mobile
+        ? "flex h-full w-full flex-col items-center py-8"
+        : "fixed inset-y-0 left-0 z-20 hidden w-20 flex-col items-center py-8 border-r border-slate-200/60 bg-white/80 backdrop-blur-xl sm:flex transition-all duration-300 ease-in-out",
+      !mobile && !collapsed ? "lg:w-72" : "",
     )}>
       <div className="flex items-center gap-3 px-6 mb-12 w-full">
         <div className="relative flex items-center justify-center w-10 h-10 rounded-xl bg-[#A3D154] shadow-lg shadow-[#A3D154]/20 flex-shrink-0">
           <span className="text-white font-bold text-xl">E</span>
           <div className="absolute inset-0 bg-white/20 rounded-xl animate-pulse" />
         </div>
-        <span className={cn("text-2xl font-bold tracking-tight text-slate-800 whitespace-nowrap transition-opacity duration-200", collapsed ? "hidden" : "hidden lg:block")}>
+        <span className={cn("text-2xl font-bold tracking-tight text-slate-800 whitespace-nowrap transition-opacity duration-200", collapsed ? "hidden" : mobile ? "block" : "hidden lg:block")}>
           Portal CEF
         </span>
         <Button
@@ -335,14 +342,15 @@ export function AppSidebar({ tarefasBadge, suporteBadge, collapsed = false, onTo
               href={item.href}
               active={activePage === item.activePage}
               collapsed={collapsed}
-              onNavigate={onCollapse}
+              onNavigate={onNavigate ?? onCollapse}
+              mobile={mobile}
             />
-            {item.key === "tarefas" && tarefasBadge && !collapsed && (
+            {item.key === "tarefas" && tarefasBadge && !collapsed && !mobile && (
               <div className="absolute right-2 top-1/2 -translate-y-1/2 hidden lg:block">
                 {tarefasBadge}
               </div>
             )}
-            {item.key === "suporte" && suporteBadge && !collapsed && (
+            {item.key === "suporte" && suporteBadge && !collapsed && !mobile && (
               <div className="absolute right-2 top-1/2 -translate-y-1/2 hidden lg:block">
                 {suporteBadge}
               </div>
@@ -352,7 +360,7 @@ export function AppSidebar({ tarefasBadge, suporteBadge, collapsed = false, onTo
       </nav>
 
       <div className="mt-auto flex flex-col gap-4 w-full px-6 py-6 border-t border-slate-100/50">
-        <div className={cn("flex-col gap-1", collapsed ? "hidden" : "hidden lg:flex")}>
+        <div className={cn("flex-col gap-1", collapsed ? "hidden" : mobile ? "flex" : "hidden lg:flex")}>
           <p className="text-sm font-bold text-slate-800">
             {name || "Usuário"}
           </p>

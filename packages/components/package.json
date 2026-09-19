@@ -11,12 +11,13 @@
     "./dashboard-stats": "./src/dashboard-stats.tsx",
     "./users-page-content": "./src/users-page-content.tsx",
     "./shell/shell": "./src/shell/shell.tsx",
+    "./shell/mobile-drawer": "./src/shell/mobile-drawer.tsx",
     "./tarefas": "./src/tarefas/index.ts",
     "./suporte": "./src/suporte/index.ts"
   },
   "scripts": {
     "lint": "eslint src/",
-    "test": "vitest run --environment node",
+    "test": "vitest run --environment jsdom",
     "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
@@ -37,11 +38,13 @@
   },
   "devDependencies": {
     "@essencia/config": "workspace:^",
+    "@testing-library/react": "^16.3.1",
     "@types/react": "^19.0.2",
     "@types/react-dom": "^19.0.2",
     "react": "19.0.4",
     "react-dom": "19.0.4",
     "typescript": "^5.7.2",
-    "vitest": "^4.0.16"
+    "vitest": "^4.0.16",
+    "jsdom": "^27.3.0"
   }
 }

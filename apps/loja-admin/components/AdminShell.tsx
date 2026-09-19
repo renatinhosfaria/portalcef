@@ -13,14 +13,13 @@ import {
   ShoppingCart,
   Sparkles,
   Warehouse,
-  Menu,
   Search,
   type LucideIcon,
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useMemo } from "react";
+import { MobileDrawer } from "@essencia/components/shell/mobile-drawer";
 
 interface SidebarItemProps {
   icon: LucideIcon;
@@ -49,17 +48,9 @@ function SidebarItem({ icon: Icon, label, href, active }: SidebarItemProps) {
   );
 }
 
-function AdminSidebar() {
+function AdminSidebar({ mobile = false }: { mobile?: boolean }) {
   const pathname = usePathname();
-  const { role, name, schoolId, unitId, email } = useTenant();
-
-  const tenantPayload = useMemo(
-    () =>
-      encodeURIComponent(
-        JSON.stringify({ schoolId, unitId, role, name, email }),
-      ),
-    [schoolId, unitId, role, name, email],
-  );
+  const { role, name } = useTenant();
 
   const handleLogout = async () => {
     try {
@@ -73,17 +64,17 @@ function AdminSidebar() {
   };
 
   const handleBackToPortal = () => {
-    window.location.href = `https://www.portalcef.com.br/?data=${tenantPayload}`;
+    window.location.href = "https://www.portalcef.com.br/";
   };
 
   return (
-    <aside className="fixed inset-y-0 left-0 z-20 hidden w-20 flex-col items-center py-8 border-r border-slate-200 bg-white sm:flex lg:w-72 transition-all duration-200 ease-in-out">
+    <aside className={cn(mobile ? "flex h-full w-full flex-col items-center py-8" : "fixed inset-y-0 left-0 z-20 hidden w-20 flex-col items-center py-8 border-r border-slate-200 bg-white sm:flex lg:w-72 transition-all duration-200 ease-in-out")}>
       {/* Logo */}
       <div className="flex items-center gap-3 px-6 mb-8 w-full">
         <div className="relative flex items-center justify-center w-10 h-10 rounded-xl bg-[#A3D154] shadow-sm">
           <ShoppingBag className="w-5 h-5 text-white" />
         </div>
-        <div className="hidden lg:block">
+        <div className={cn(mobile ? "block" : "hidden lg:block")}>
           <span className="text-xl font-semibold tracking-tight text-slate-800">
             Loja Admin
           </span>
@@ -145,10 +136,10 @@ function AdminSidebar() {
           onClick={handleBackToPortal}
         >
           <span className="text-lg">←</span>
-          <span className="hidden lg:block text-sm">Voltar ao Portal</span>
+          <span className={cn("text-sm", mobile ? "block" : "hidden lg:block")}>Voltar ao Portal</span>
         </Button>
 
-        <div className="hidden lg:flex flex-col gap-1 px-2">
+        <div className={cn("flex-col gap-1 px-2", mobile ? "flex" : "hidden lg:flex")}>
           <p className="text-sm font-semibold text-slate-800 truncate">
             {name || "Usuário"}
           </p>
@@ -163,7 +154,7 @@ function AdminSidebar() {
           onClick={handleLogout}
         >
           <LogOut className="w-5 h-5" />
-          <span className="hidden lg:block font-medium text-sm">Sair</span>
+          <span className={cn("font-medium text-sm", mobile ? "block" : "hidden lg:block")}>Sair</span>
         </Button>
       </div>
     </aside>
@@ -174,9 +165,9 @@ function TopBar() {
   return (
     <header className="sticky top-0 z-10 flex h-20 items-center justify-between px-8 bg-white border-b border-slate-200">
       <div className="flex items-center gap-4 lg:hidden">
-        <Button variant="ghost" size="icon">
-          <Menu className="w-6 h-6 text-slate-600" />
-        </Button>
+        <MobileDrawer title="Menu da loja">
+          <AdminSidebar mobile />
+        </MobileDrawer>
       </div>
 
       <div className="flex-1 max-w-xl hidden md:block">
@@ -207,7 +198,7 @@ function TopBar() {
 }
 
 export function AdminShell({ children }: { children: React.ReactNode }) {
-  const { role, schoolId, unitId, name, email } = useTenant();
+  const { role } = useTenant();
 
   // Validate access
   const allowedRoles = [
@@ -221,12 +212,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   const hasAccess = role && allowedRoles.includes(role);
 
   if (!hasAccess && typeof window !== "undefined") {
-    // Redirect to portal if no access
-    // Encode payload to maintain session context if needed, though portal handles its own auth
-    const tenantPayload = encodeURIComponent(
-      JSON.stringify({ schoolId, unitId, role, name, email }),
-    );
-    window.location.href = `https://www.portalcef.com.br/?data=${tenantPayload}`;
+    window.location.href = "https://www.portalcef.com.br/";
     return null;
   }
 
