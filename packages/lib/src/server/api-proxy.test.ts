@@ -32,13 +32,11 @@ describe("proxy HTTP compartilhado", () => {
     const response = await proxyRequest(request, "POST");
     const [url, options] = fetchMock.mock.calls[0] as [string, RequestInit];
 
-    expect(url).toBe("http://localhost:3001/api/usuarios?pagina=2");
+    expect(url).toBe("http://localhost:3001/usuarios?pagina=2");
     expect(options.method).toBe("POST");
-    expect((options.headers as Headers).get("cookie")).toBe("sessao=atual");
-    expect((options.headers as Headers).get("x-request-id")).toBe("req-123");
-    expect(new TextDecoder().decode(options.body as ArrayBuffer)).toBe(
-      JSON.stringify({ nome: "Ana" }),
-    );
+    expect((options.headers as Record<string, string>).Cookie).toBe("sessao=atual");
+    expect((options.headers as Record<string, string>)["x-request-id"]).toBe("req-123");
+    expect(options.body).toBe(JSON.stringify({ nome: "Ana" }));
     expect(response.status).toBe(201);
     expect(response.headers.get("set-cookie")).toContain("sessao=nova");
   });
