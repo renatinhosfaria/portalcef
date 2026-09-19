@@ -40,7 +40,7 @@
     "seed:calendario": "tsx seeds/calendar-seed-2026.ts"
   },
   "dependencies": {
-    "drizzle-orm": "^0.38.2",
+    "drizzle-orm": "^0.45.2",
     "drizzle-zod": "^0.8.3",
     "postgres": "^3.4.5",
     "zod": "^3.24.1"

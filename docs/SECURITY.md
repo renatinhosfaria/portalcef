@@ -237,3 +237,23 @@ const safeHash = createHash("sha256").update(token).digest("hex").slice(0, 10);
 - [ ] Rate limiting ativo (ThrottlerModule)
 - [ ] Log rotation configurado
 - [ ] Firewall: apenas portas 80, 443, 22 abertas
+
+## Baseline de dependencias — 2026-09-19
+
+Nesta rodada, todas as aplicações Next.js foram alinhadas em `15.5.25`, o
+React permaneceu na linha compatível `19.0.x`, o Drizzle ORM foi atualizado
+para `0.45.2` e o Axios para `1.18.0`. O typecheck, lint e os testes dos 21
+workspaces passaram após a atualização.
+
+O `pnpm audit --prod` ainda reporta advisories altos ou críticos transitivos.
+Eles ficam registrados aqui para não serem tratados como aceitos sem prazo:
+
+| Pacote | Decisão | Prazo |
+| --- | --- | --- |
+| `fastify` 4.x, `@nestjs/platform-fastify` 10.x e `@fastify/middie` 8.x | Atualizar em uma mudança coordenada para Nest 11/Fastify 5; forçar a major agora quebraria o adaptador HTTP em produção. | 2026-10-31 |
+| `tar` usado pelo `bcrypt`/`node-pre-gyp` | Manter isolado no toolchain de instalação e revisar a substituição do binário nativo antes do próximo rebuild de imagem. | 2026-10-15 |
+| `socket.io-parser`, `engine.io`, `ws` e `fast-uri` | Atualizar junto com a próxima revisão do stack Socket.IO, validando compatibilidade do cliente de tarefas e dos gateways. | 2026-10-31 |
+| `minimatch`, `brace-expansion`, `picomatch`, `lodash`, `shell-quote`, `tmp`, `nanoid` e `browserslist` | Dependências transitivas de ferramentas; atualizar por overrides isolados após reproduzir a árvore em CI, sem alterar runtime sem teste. | 2026-10-15 |
+
+Uma nova execução de `pnpm audit --prod` deve ser anexada ao registro de release
+e não pode ultrapassar esses prazos sem uma nova decisão de risco.

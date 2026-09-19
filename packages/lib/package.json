@@ -20,9 +20,9 @@
     "jsdom": "^27.3.0",
     "typescript": "^5.7.2",
     "vitest": "^4.0.16",
-    "next": "15.1.12"
+    "next": "15.5.25"
   },
   "peerDependencies": {
-    "next": "^15.1.0"
+    "next": "^15.5.0"
   }
 }
