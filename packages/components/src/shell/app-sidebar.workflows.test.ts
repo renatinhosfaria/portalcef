@@ -8,7 +8,8 @@ describe("AppSidebar Workflows", () => {
   it("inclui Workflows no menu compartilhado para todos os usuarios", () => {
     expect(source).toContain('workflows: "ALL"');
     expect(source).toContain('label: "Workflows"');
-    expect(source).toContain("/workflows?data=");
+    expect(source).toContain('href: "https://www.portalcef.com.br/workflows"');
+    expect(source).not.toContain("tenantPayload");
     expect(source).toContain('if (port === "3015") return setActivePage("workflows")');
   });
 });

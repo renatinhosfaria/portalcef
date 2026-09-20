@@ -13,7 +13,7 @@
 # 4. Recursos do sistema
 # =============================================================================
 
-set -e
+set -euo pipefail
 
 # Cores para output
 RED='\033[0;31m'
@@ -130,17 +130,12 @@ check_external() {
     fi
 }
 
-# Verificar endpoints externos (se acessíveis)
-if curl -sf --max-time 5 "https://www.portalcef.com.br/" > /dev/null 2>&1; then
-    check_external "Home" "https://www.portalcef.com.br/"
-    check_external "API Health" "https://www.portalcef.com.br/health"
-    check_external "Login" "https://www.portalcef.com.br/login"
-    check_external "Planejamento" "https://www.portalcef.com.br/planejamento"
-    check_external "Workflows" "https://www.portalcef.com.br/workflows"
-    check_external "Loja" "https://loja.portalcef.com.br/"
-else
-    echo -e "  ${YELLOW}⚠ Endpoints externos não acessíveis (verificação local)${NC}"
-fi
+check_external "Home" "https://www.portalcef.com.br/"
+check_external "API Health" "https://www.portalcef.com.br/api/health"
+check_external "Login" "https://www.portalcef.com.br/login"
+check_external "Planejamento" "https://www.portalcef.com.br/planejamento"
+check_external "Workflows" "https://www.portalcef.com.br/workflows"
+check_external "Loja" "https://loja.portalcef.com.br/"
 
 echo ""
 
@@ -163,7 +158,7 @@ free -h | grep Mem | awk '{printf "    Usado: %s de %s\n", $3, $2}'
 # Docker stats resumido
 echo ""
 echo "  Docker (top 5 por memória):"
-docker stats --no-stream --format "    {{.Name}}: {{.MemUsage}}" | head -5
+docker stats --no-stream --format "    {{.Name}}: {{.MemUsage}}" | awk 'NR <= 5'
 
 echo ""
 

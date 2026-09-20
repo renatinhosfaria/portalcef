@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  InternalServerErrorException,
   Inject,
   forwardRef,
 } from "@nestjs/common";
@@ -12,6 +13,7 @@ import {
   type ShopOrder,
   shopOrderItems,
   shopOrderPayments,
+  shopOrderRefunds,
   type PaymentMethod,
   type ShopOrderPayment,
   type ShopOrderItem,
@@ -83,10 +85,7 @@ const PRE_SALE_SUMMARY_STATUSES = [
   "RETIRADO",
 ] as const;
 
-type PreSaleSummaryOrder = Pick<
-  ShopOrder,
-  "customerName" | "customerPhone"
-> & {
+type PreSaleSummaryOrder = Pick<ShopOrder, "customerName" | "customerPhone"> & {
   status: (typeof PRE_SALE_SUMMARY_STATUSES)[number];
   items: Array<
     Pick<ShopOrderItem, "quantity"> & {
@@ -133,7 +132,7 @@ export class ShopOrdersService {
     private inventoryService: ShopInventoryService,
     @Inject(forwardRef(() => PaymentsService))
     private paymentsService: PaymentsService,
-  ) { }
+  ) {}
 
   /**
    * Gera número de pedido único de 6 dígitos
@@ -814,21 +813,19 @@ export class ShopOrdersService {
         const { variant } = item;
         const { product } = variant;
         const summaryKey = variant.id;
-        const current =
-          summaryByVariant.get(summaryKey) ??
-          {
-            productId: product.id,
-            variantId: variant.id,
-            productName: product.name,
-            variantSize: variant.size,
-            variantSku: variant.sku,
-            reservedQuantity: 0,
-            paidQuantity: 0,
-            pickedUpQuantity: 0,
-            totalQuantity: 0,
-            customers: [],
-            customersByKey: new Map<string, { name: string; phone: string }>(),
-          };
+        const current = summaryByVariant.get(summaryKey) ?? {
+          productId: product.id,
+          variantId: variant.id,
+          productName: product.name,
+          variantSize: variant.size,
+          variantSku: variant.sku,
+          reservedQuantity: 0,
+          paidQuantity: 0,
+          pickedUpQuantity: 0,
+          totalQuantity: 0,
+          customers: [],
+          customersByKey: new Map<string, { name: string; phone: string }>(),
+        };
 
         if (order.status === "AGUARDANDO_PAGAMENTO") {
           current.reservedQuantity += item.quantity;
@@ -887,7 +884,10 @@ export class ShopOrdersService {
     await this.assertUnitBelongsToSchool(schoolId, unitId);
 
     // 1. Validar itens
-    const variantsById = new Map<string, Awaited<ReturnType<typeof this.getActiveVariantForOrder>>>();
+    const variantsById = new Map<
+      string,
+      Awaited<ReturnType<typeof this.getActiveVariantForOrder>>
+    >();
     for (const item of dto.items) {
       variantsById.set(
         item.variantId,
@@ -922,20 +922,29 @@ export class ShopOrdersService {
     }
 
     // 4. Validar Pagamentos
-    const payments = dto.payments || (dto.paymentMethod ? [{ method: dto.paymentMethod, amount: totalAmount }] : []);
+    const payments =
+      dto.payments ||
+      (dto.paymentMethod
+        ? [{ method: dto.paymentMethod, amount: totalAmount }]
+        : []);
 
     if (payments.length === 0) {
-      throw new BadRequestException("Pelo menos um método de pagamento deve ser informado.");
+      throw new BadRequestException(
+        "Pelo menos um método de pagamento deve ser informado.",
+      );
     }
 
     const totalPaid = payments.reduce((acc, p) => acc + p.amount, 0);
 
     if (totalPaid !== totalAmount) {
-      throw new BadRequestException(`Valor pago (${totalPaid}) diverge do total do pedido (${totalAmount})`);
+      throw new BadRequestException(
+        `Valor pago (${totalPaid}) diverge do total do pedido (${totalAmount})`,
+      );
     }
 
     const now = new Date();
-    const primaryPaymentMethod = payments.length === 1 ? payments[0].method : "MULTIPLO";
+    const primaryPaymentMethod =
+      payments.length === 1 ? payments[0].method : "MULTIPLO";
     const lockTargets = dto.items.map((item) => ({
       variantId: item.variantId,
       unitId,
@@ -986,7 +995,7 @@ export class ShopOrdersService {
           await tx.insert(shopOrderItems).values(orderItemsValues);
 
           if (payments.length > 0) {
-            const paymentValues = payments.map(p => ({
+            const paymentValues = payments.map((p) => ({
               orderId: createdOrder.id,
               paymentMethod: p.method,
               amount: p.amount,
@@ -1020,7 +1029,7 @@ export class ShopOrdersService {
   ) {
     const db = getDb();
 
-    const cancelledOrder = await this.inventoryService.withOrderLock(
+    const cancellation = await this.inventoryService.withOrderLock(
       orderId,
       async () => {
         const order = await db.query.shopOrders.findFirst({
@@ -1035,11 +1044,109 @@ export class ShopOrdersService {
           });
         }
 
-        if (["CANCELADO", "EXPIRADO", "RETIRADO"].includes(order.status)) {
+        if (order.status === "CANCELADO") {
+          if (!order.stripePaymentIntentId) {
+            return { order, alreadyCancelled: true };
+          }
+
+          const refund = await db.query.shopOrderRefunds.findFirst({
+            where: eq(shopOrderRefunds.orderId, order.id),
+          });
+
+          if (refund?.status === "CONCLUIDO") {
+            return { order, alreadyCancelled: true };
+          }
+
+          throw new BadRequestException({
+            code: "REFUND_PENDING",
+            message:
+              "O pedido está cancelado, mas o estorno ainda não foi confirmado",
+          });
+        }
+
+        if (["EXPIRADO", "RETIRADO"].includes(order.status)) {
           throw new BadRequestException({
             code: "INVALID_STATUS",
             message: `Não é possível cancelar pedido com status ${order.status}`,
           });
+        }
+
+        if (order.status === "PAGO" && order.stripePaymentIntentId) {
+          const idempotencyKey = `shop-order-refund:${order.id}`;
+          const existingRefund = await db.query.shopOrderRefunds.findFirst({
+            where: eq(shopOrderRefunds.orderId, order.id),
+          });
+
+          if (existingRefund?.status !== "CONCLUIDO") {
+            const refundValues = {
+              orderId: order.id,
+              paymentIntentId: order.stripePaymentIntentId,
+              amount: order.totalAmount,
+              status: "PROCESSANDO" as const,
+              errorMessage: null,
+              updatedAt: new Date(),
+            };
+
+            if (existingRefund) {
+              await db
+                .update(shopOrderRefunds)
+                .set(refundValues)
+                .where(eq(shopOrderRefunds.id, existingRefund.id));
+            } else {
+              await db.insert(shopOrderRefunds).values(refundValues);
+            }
+
+            try {
+              const refund = await this.paymentsService.refundPayment(
+                order.stripePaymentIntentId,
+                undefined,
+                "requested_by_customer",
+                idempotencyKey,
+              );
+
+              if (refund.status !== "succeeded") {
+                throw new InternalServerErrorException({
+                  code: "REFUND_NOT_COMPLETED",
+                  message: "O estorno ainda não foi concluído pelo Stripe",
+                });
+              }
+
+              await db
+                .update(shopOrderRefunds)
+                .set({
+                  status: "CONCLUIDO",
+                  stripeRefundId: refund.refundId,
+                  amount: refund.amount,
+                  errorMessage: null,
+                  processedAt: new Date(),
+                  updatedAt: new Date(),
+                })
+                .where(eq(shopOrderRefunds.orderId, order.id));
+            } catch (error: unknown) {
+              await db
+                .update(shopOrderRefunds)
+                .set({
+                  status: "ERRO",
+                  errorMessage: "Estorno não concluído no Stripe",
+                  updatedAt: new Date(),
+                })
+                .where(eq(shopOrderRefunds.orderId, order.id));
+
+              if (error instanceof BadRequestException) {
+                throw error;
+              }
+
+              if (error instanceof InternalServerErrorException) {
+                throw error;
+              }
+
+              throw new InternalServerErrorException({
+                code: "REFUND_FAILED",
+                message:
+                  "Não foi possível processar o estorno. Tente novamente.",
+              });
+            }
+          }
         }
 
         const cancelOrderInTransaction = async (tx: DbTransaction) => {
@@ -1056,7 +1163,7 @@ export class ShopOrdersService {
 
         if (order.orderSource === "PRE_VENDA") {
           await db.transaction(cancelOrderInTransaction);
-          return order;
+          return { order, alreadyCancelled: false };
         }
 
         const lockTargets = order.items.map((item: ShopOrderItem) => ({
@@ -1092,27 +1199,130 @@ export class ShopOrdersService {
           }),
         );
 
-        return order;
+        return { order, alreadyCancelled: false };
       },
     );
 
-    if (cancelledOrder.status === "PAGO" && cancelledOrder.stripePaymentIntentId) {
-      try {
-        await this.paymentsService.refundPayment(
-          cancelledOrder.stripePaymentIntentId,
-        );
-      } catch (error: unknown) {
-        const errorMessage =
-          error instanceof Error ? error.message : "Unknown error";
-        // Log erro mas nǜo falhar o cancelamento (estoque jǭ foi liberado)
-        console.error(
-          `Erro ao criar refund no Stripe para pedido ${cancelledOrder.orderNumber}:`,
-          errorMessage,
-        );
-      }
+    if (cancellation.alreadyCancelled) {
+      return { success: true, message: "Pedido já estava cancelado" };
     }
 
     return { success: true, message: "Pedido cancelado com sucesso" };
+  }
+
+  /**
+   * Reprocessa o estorno de um pedido que permaneceu pago após uma falha.
+   */
+  async retryRefund(orderId: string, userId: string, scope?: ShopTenantScope) {
+    return this.cancelOrder(
+      orderId,
+      userId,
+      "Reprocessamento de estorno Stripe",
+      scope,
+    );
+  }
+
+  /**
+   * Reconcilia um estorno confirmado pelo webhook do Stripe.
+   */
+  async reconcileStripeRefund(input: {
+    paymentIntentId: string;
+    stripeRefundId: string;
+    amount: number;
+  }) {
+    const db = getDb();
+    const candidate = await db.query.shopOrders.findFirst({
+      where: eq(shopOrders.stripePaymentIntentId, input.paymentIntentId),
+      with: { items: true },
+    });
+
+    if (!candidate) {
+      return { success: false, reason: "ORDER_NOT_FOUND" };
+    }
+
+    return this.inventoryService.withOrderLock(candidate.id, async () => {
+      const order = await db.query.shopOrders.findFirst({
+        where: eq(shopOrders.id, candidate.id),
+        with: { items: true },
+      });
+
+      if (!order) {
+        return { success: false, reason: "ORDER_NOT_FOUND" };
+      }
+
+      const refund = await db.query.shopOrderRefunds.findFirst({
+        where: eq(shopOrderRefunds.orderId, order.id),
+      });
+      const refundValues = {
+        paymentIntentId: input.paymentIntentId,
+        stripeRefundId: input.stripeRefundId,
+        status: "CONCLUIDO" as const,
+        amount: input.amount,
+        errorMessage: null,
+        processedAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      if (refund) {
+        await db
+          .update(shopOrderRefunds)
+          .set(refundValues)
+          .where(eq(shopOrderRefunds.id, refund.id));
+      } else {
+        await db.insert(shopOrderRefunds).values({
+          orderId: order.id,
+          ...refundValues,
+        });
+      }
+
+      if (order.status !== "PAGO") {
+        return { success: true, alreadyReconciled: true };
+      }
+
+      const lockTargets = order.items.map((item: ShopOrderItem) => ({
+        variantId: item.variantId,
+        unitId: order.unitId,
+      }));
+
+      if (order.orderSource === "PRE_VENDA") {
+        await db
+          .update(shopOrders)
+          .set({
+            status: "CANCELADO",
+            cancelledAt: new Date(),
+            cancelledBy: null,
+            cancellationReason: "Estorno Stripe confirmado",
+          })
+          .where(eq(shopOrders.id, order.id));
+      } else {
+        await this.inventoryService.withInventoryLocks(lockTargets, async () =>
+          db.transaction(async (tx: DbTransaction) => {
+            for (const item of order.items) {
+              await this.inventoryService.addStockInTransaction(
+                item.variantId,
+                order.unitId,
+                item.quantity,
+                `Estorno do pedido ${order.orderNumber}`,
+                "stripe-webhook",
+                tx,
+              );
+            }
+
+            await tx
+              .update(shopOrders)
+              .set({
+                status: "CANCELADO",
+                cancelledAt: new Date(),
+                cancelledBy: null,
+                cancellationReason: "Estorno Stripe confirmado",
+              })
+              .where(eq(shopOrders.id, order.id));
+          }),
+        );
+      }
+
+      return { success: true, alreadyReconciled: false };
+    });
   }
 
   /**
@@ -1309,7 +1519,9 @@ export class ShopOrdersService {
         });
       }
 
-      if (["CANCELADO", "EXPIRADO", "PAGO", "RETIRADO"].includes(order.status)) {
+      if (
+        ["CANCELADO", "EXPIRADO", "PAGO", "RETIRADO"].includes(order.status)
+      ) {
         return {
           success: true,
           message: "Falha Stripe já processada ou pedido finalizado",
@@ -1402,8 +1614,21 @@ export class ShopOrdersService {
     orderId: string,
     // paymentMethod: "DINHEIRO" | "PIX" | "CARTAO_CREDITO" | "CARTAO_DEBITO", // REMOVED
     dto: {
-      paymentMethod?: "DINHEIRO" | "PIX" | "CARTAO_CREDITO" | "CARTAO_DEBITO" | "BRINDE",
-      payments?: Array<{ method: "DINHEIRO" | "PIX" | "CARTAO_CREDITO" | "CARTAO_DEBITO" | "BRINDE"; amount: number }>
+      paymentMethod?:
+        | "DINHEIRO"
+        | "PIX"
+        | "CARTAO_CREDITO"
+        | "CARTAO_DEBITO"
+        | "BRINDE";
+      payments?: Array<{
+        method:
+          | "DINHEIRO"
+          | "PIX"
+          | "CARTAO_CREDITO"
+          | "CARTAO_DEBITO"
+          | "BRINDE";
+        amount: number;
+      }>;
     },
     _adminUserId: string,
     scope?: ShopTenantScope,
@@ -1441,16 +1666,24 @@ export class ShopOrdersService {
         });
       }
 
-      const payments = dto.payments || (dto.paymentMethod ? [{ method: dto.paymentMethod, amount: order.totalAmount }] : []);
+      const payments =
+        dto.payments ||
+        (dto.paymentMethod
+          ? [{ method: dto.paymentMethod, amount: order.totalAmount }]
+          : []);
 
       if (payments.length === 0) {
-        throw new BadRequestException("Pelo menos um método de pagamento deve ser informado.");
+        throw new BadRequestException(
+          "Pelo menos um método de pagamento deve ser informado.",
+        );
       }
 
       const totalPaid = payments.reduce((acc, p) => acc + p.amount, 0);
 
       if (totalPaid !== order.totalAmount) {
-        throw new BadRequestException(`Valor pago (${totalPaid}) diverge do total do pedido (${order.totalAmount})`);
+        throw new BadRequestException(
+          `Valor pago (${totalPaid}) diverge do total do pedido (${order.totalAmount})`,
+        );
       }
 
       const confirmPaymentInTransaction = async (tx: DbTransaction) => {
@@ -1486,7 +1719,9 @@ export class ShopOrdersService {
 
         const currentTotalPaid = payments.reduce((acc, p) => acc + p.amount, 0);
         if (currentTotalPaid !== currentOrder.totalAmount) {
-          throw new BadRequestException(`Valor pago (${currentTotalPaid}) diverge do total do pedido (${currentOrder.totalAmount})`);
+          throw new BadRequestException(
+            `Valor pago (${currentTotalPaid}) diverge do total do pedido (${currentOrder.totalAmount})`,
+          );
         }
 
         if (currentOrder.orderSource !== "PRE_VENDA") {
@@ -1501,7 +1736,8 @@ export class ShopOrdersService {
           }
         }
 
-        const primaryPaymentMethod = payments.length === 1 ? payments[0].method : "MULTIPLO";
+        const primaryPaymentMethod =
+          payments.length === 1 ? payments[0].method : "MULTIPLO";
 
         await tx
           .update(shopOrders)
@@ -1513,7 +1749,7 @@ export class ShopOrdersService {
           .where(this.orderWhere(orderId, scope));
 
         if (payments.length > 0) {
-          const paymentValues = payments.map(p => ({
+          const paymentValues = payments.map((p) => ({
             orderId: currentOrder.id,
             paymentMethod: p.method,
             amount: p.amount,

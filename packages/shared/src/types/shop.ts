@@ -13,6 +13,7 @@ export type OrderStatus =
   | "RETIRADO"
   | "CANCELADO"
   | "EXPIRADO";
+export type RefundStatus = "PENDENTE" | "PROCESSANDO" | "CONCLUIDO" | "ERRO";
 export type OrderSource = "ONLINE" | "PRESENCIAL" | "PRE_VENDA";
 export type PaymentMethod =
   | "PIX"
@@ -139,6 +140,20 @@ export interface ShopOrderPayment {
   paymentMethod: PaymentMethod;
   amount: number;
   createdAt: Date;
+}
+
+export interface ShopOrderRefund {
+  id: string;
+  orderId: string;
+  paymentIntentId: string;
+  stripeRefundId?: string | null;
+  status: RefundStatus;
+  amount: number;
+  errorMessage?: string | null;
+  requestedAt: Date;
+  processedAt?: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface ShopOrderWithItems extends ShopOrder {

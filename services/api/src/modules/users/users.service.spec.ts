@@ -17,11 +17,20 @@ const mockDb = {
     turmas: {
       findMany: jest.fn(),
     },
+    units: {
+      findFirst: jest.fn(),
+    },
+    unitStages: {
+      findFirst: jest.fn(),
+    },
   },
+  insert: jest.fn().mockReturnThis(),
+  values: jest.fn().mockReturnThis(),
   update: jest.fn().mockReturnThis(),
   set: jest.fn().mockReturnThis(),
   where: jest.fn().mockReturnThis(),
   returning: jest.fn(),
+  delete: jest.fn(),
 };
 
 jest.mock("@essencia/db", () => ({
@@ -36,6 +45,8 @@ jest.mock("@essencia/db", () => ({
 jest.mock("@essencia/db/schema", () => ({
   users: {},
   turmas: {},
+  units: {},
+  unitStages: {},
 }));
 
 jest.mock("@essencia/shared/roles", () => ({
@@ -59,7 +70,7 @@ jest.mock("@essencia/shared/roles", () => ({
 }));
 
 jest.mock("@essencia/shared/types", () => ({
-  stageRequiredRoles: [],
+  stageRequiredRoles: ["professora"],
 }));
 
 const ator = {
@@ -228,7 +239,7 @@ describe("UsersService — reativar", () => {
     jest.clearAllMocks();
   });
 
-  it("reativa usuário inativo — limpa timestamp e ator, não toca sessões", async () => {
+  it("reativa usuário inativo — limpa timestamp e revoga sessões antigas", async () => {
     mockDb.query.users.findFirst.mockResolvedValue(alvoInativo);
     mockDb.returning.mockResolvedValue([
       { ...alvoInativo, inativadoEm: null, inativadoPor: null },
@@ -244,7 +255,7 @@ describe("UsersService — reativar", () => {
       }),
     );
     expect(result.inativadoEm).toBeNull();
-    expect(sessionServiceMock.deleteAllUserSessions).not.toHaveBeenCalled();
+    expect(sessionServiceMock.deleteAllUserSessions).toHaveBeenCalledWith("prof-1");
   });
 
   it("rejeita auto-reativação", async () => {
@@ -304,5 +315,136 @@ describe("UsersService — findAllByTenant filtro de inativos", () => {
 
     const call = mockDb.query.users.findMany.mock.calls[0][0];
     expect(call.where).toBeUndefined();
+  });
+});
+
+describe("UsersService — consistência escola-unidade", () => {
+  let service: UsersService;
+  const sessionServiceMock = { deleteAllUserSessions: jest.fn() };
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        UsersService,
+        { provide: SessionService, useValue: sessionServiceMock },
+      ],
+    }).compile();
+    service = module.get<UsersService>(UsersService);
+    mockDb.query.units.findFirst.mockReset();
+    mockDb.query.unitStages.findFirst.mockReset();
+    mockDb.insert.mockReset();
+    mockDb.update.mockReset();
+    jest.clearAllMocks();
+  });
+
+  it("rejeita criação de usuário com escola e unidade divergentes", async () => {
+    mockDb.query.users.findFirst.mockResolvedValue(null);
+    mockDb.query.units.findFirst.mockResolvedValue({
+      id: "u-2",
+      schoolId: "s-2",
+    });
+
+    await expect(
+      service.create(
+        {
+          email: "nova@example.com",
+          password: "senha-segura",
+          name: "Nova Professora",
+          role: "professora",
+          schoolId: "s-1",
+          unitId: "u-2",
+          stageId: "st-1",
+        },
+        ator,
+      ),
+    ).rejects.toBeInstanceOf(UnprocessableEntityException);
+    expect(mockDb.insert).not.toHaveBeenCalled();
+  });
+
+  it("rejeita atualização de usuário com escola e unidade divergentes", async () => {
+    mockDb.query.users.findFirst.mockResolvedValue(alvoAtivo);
+    mockDb.query.units.findFirst.mockResolvedValue({
+      id: "u-2",
+      schoolId: "s-2",
+    });
+
+    await expect(
+      service.update(
+        alvoAtivo.id,
+        { schoolId: "s-1", unitId: "u-2", stageId: "st-1" },
+        ator,
+      ),
+    ).rejects.toBeInstanceOf(UnprocessableEntityException);
+    expect(mockDb.update).not.toHaveBeenCalled();
+  });
+});
+
+describe("UsersService — revogação após mutações de autorização", () => {
+  let service: UsersService;
+  const sessionServiceMock = {
+    deleteAllUserSessions: jest.fn().mockResolvedValue(undefined),
+  };
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        UsersService,
+        { provide: SessionService, useValue: sessionServiceMock },
+      ],
+    }).compile();
+    service = module.get<UsersService>(UsersService);
+    mockDb.query.users.findFirst.mockReset();
+    mockDb.query.units.findFirst.mockReset();
+    mockDb.query.unitStages.findFirst.mockReset();
+    mockDb.update.mockReset().mockReturnValue(mockDb);
+    mockDb.set.mockReset().mockReturnValue(mockDb);
+    mockDb.where.mockReset().mockReturnValue(mockDb);
+    mockDb.returning.mockReset();
+    jest.clearAllMocks();
+  });
+
+  it("revoga sessões após alterar role, escola, unidade e etapa", async () => {
+    const atualizado = {
+      ...alvoAtivo,
+      role: "professora",
+      schoolId: "s-1",
+      unitId: "u-1",
+      stageId: "st-1",
+    };
+    mockDb.query.users.findFirst.mockResolvedValue(alvoAtivo);
+    mockDb.query.units.findFirst.mockResolvedValue({
+      id: "u-1",
+      schoolId: "s-1",
+    });
+    mockDb.query.unitStages.findFirst.mockResolvedValue({ id: "us-1" });
+    mockDb.returning.mockResolvedValue([atualizado]);
+
+    await service.update(
+      alvoAtivo.id,
+      {
+        role: "professora",
+        schoolId: "s-1",
+        unitId: "u-1",
+        stageId: "st-1",
+      },
+      ator,
+    );
+
+    expect(sessionServiceMock.deleteAllUserSessions).toHaveBeenCalledWith(
+      alvoAtivo.id,
+    );
+  });
+
+  it("revoga sessões antes de concluir a exclusão", async () => {
+    mockDb.query.users.findFirst.mockResolvedValue(alvoAtivo);
+    mockDb.delete = jest.fn().mockReturnValue({
+      where: jest.fn().mockResolvedValue(undefined),
+    });
+
+    await service.delete(alvoAtivo.id, ator);
+
+    expect(sessionServiceMock.deleteAllUserSessions).toHaveBeenCalledWith(
+      alvoAtivo.id,
+    );
   });
 });

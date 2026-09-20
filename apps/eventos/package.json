@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start --port 3014",
     "lint": "next lint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --environment node"
   },
   "dependencies": {
     "@essencia/components": "workspace:*",
@@ -16,7 +17,7 @@
     "@essencia/ui": "workspace:*",
     "exceljs": "^4.4.0",
     "lucide-react": "^0.469.0",
-    "next": "15.1.12",
+    "next": "15.5.25",
     "react": "19.0.4",
     "react-dom": "19.0.4"
   },
@@ -28,6 +29,7 @@
     "autoprefixer": "^10.4.20",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.17",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "vitest": "^4.0.16"
   }
 }

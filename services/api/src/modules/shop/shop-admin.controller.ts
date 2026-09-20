@@ -988,6 +988,29 @@ export class ShopAdminController {
   }
 
   /**
+   * POST /shop/admin/orders/:id/refund-retry
+   *
+   * Reprocessa de forma idempotente um estorno que falhou.
+   */
+  @Post("orders/:id/refund-retry")
+  @Roles(
+    "master",
+    "diretora_geral",
+    "gerente_unidade",
+    "auxiliar_administrativo",
+  )
+  async retryRefund(
+    @Req() req: { user: UserContext },
+    @Param("id") id: string,
+  ) {
+    return this.ordersService.retryRefund(
+      id,
+      req.user.userId,
+      createShopTenantScope(req.user),
+    );
+  }
+
+  /**
    * PATCH /shop/admin/orders/:id/confirm-payment
    *
    * Confirma pagamento presencial de pedido online (sistema de voucher)

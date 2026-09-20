@@ -88,7 +88,7 @@ describe("PlanoAulaPdfQueueService", () => {
     expect(segundoJobId).not.toBe(primeiroJobId);
   });
 
-  it("não quebra o fluxo quando Redis falha ao enfileirar", async () => {
+  it("propaga falha do Redis para o serviço marcar o documento como erro", async () => {
     const errorSpy = jest
       .spyOn(Logger.prototype, "error")
       .mockImplementation(() => undefined);
@@ -98,7 +98,9 @@ describe("PlanoAulaPdfQueueService", () => {
       configServiceMock as unknown as ConfigService,
     );
 
-    await expect(service.adicionar("documento-2")).resolves.toBeUndefined();
+    await expect(service.adicionar("documento-2")).rejects.toThrow(
+      "Redis indisponível",
+    );
     expect(errorSpy).toHaveBeenCalledWith(
       expect.stringContaining("Falha ao enfileirar PDF do documento documento-2"),
     );

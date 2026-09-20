@@ -391,15 +391,29 @@ export class PaymentsWebhookController {
   /**
    * charge.refunded
    *
-   * Estorno processado -> Log para auditoria
+   * Estorno processado -> reconcilia pedido e estoque
    */
   private async handleChargeRefunded(charge: Stripe.Charge): Promise<void> {
     this.logger.log(
       `Charge estornado: ${charge.id} | Valor: R$ ${charge.amount_refunded / 100}`,
     );
 
-    // TODO: Se necessario, atualizar registro no banco para auditoria
-    // Por ora, o cancelamento ja foi tratado pelo admin via cancelOrder()
+    const paymentIntentId =
+      typeof charge.payment_intent === "string"
+        ? charge.payment_intent
+        : charge.payment_intent?.id;
+
+    if (!paymentIntentId) {
+      this.logger.warn(`Charge estornado sem PaymentIntent: ${charge.id}`);
+      return;
+    }
+
+    const refundId = charge.refunds?.data?.[0]?.id ?? charge.id;
+    await this.ordersService.reconcileStripeRefund({
+      paymentIntentId,
+      stripeRefundId: refundId,
+      amount: charge.amount_refunded,
+    });
   }
 
   /**

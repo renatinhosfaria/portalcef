@@ -55,6 +55,9 @@ export class PlanoAulaPdfQueueService implements OnModuleDestroy {
       this.logger.error(
         `Falha ao enfileirar PDF do documento ${documentoId}: ${mensagem}`,
       );
+      throw error instanceof Error
+        ? error
+        : new Error("Falha ao enfileirar PDF");
     }
   }
 

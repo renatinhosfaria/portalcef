@@ -57,23 +57,7 @@ export default function LoginPage() {
       const data: LoginResponse = await response.json();
 
       if (data.success && data.data) {
-        // Store tenant context in localStorage for quick access
-        const tenantData = {
-          userId: data.data.user.id,
-          schoolId: data.data.user.schoolId,
-          unitId: data.data.user.unitId,
-          stageId: data.data.user.stageId,
-          role: data.data.user.role,
-          name: data.data.user.name,
-          email: data.data.user.email,
-        };
-
-        // Store locally (backup)
-        localStorage.setItem("tenant", JSON.stringify(tenantData));
-
-        // Redirect to Home with Payload
-        const payload = encodeURIComponent(JSON.stringify(tenantData));
-        window.location.href = `https://www.portalcef.com.br?data=${payload}`;
+        window.location.href = "https://www.portalcef.com.br/";
       } else {
         setError(data.error?.message || "Erro ao fazer login");
       }

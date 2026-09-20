@@ -7,7 +7,8 @@
 #   docker buildx bake                    # Build todas as imagens
 #   docker buildx bake apps               # Build apenas apps Next.js
 #   docker buildx bake api                # Build específicos
-#   docker buildx bake --push             # Build e push para registry
+#   PUBLISH=true TAG=sha REGISTRY=ghcr.io/org/portalcef docker buildx bake --push
+#                                      # Build e push imutável para registry
 #
 # Com cache remoto:
 #   docker buildx bake --set "*.cache-from=type=registry,ref=ghcr.io/user/repo/cache"
@@ -23,6 +24,10 @@ variable "REGISTRY" {
 
 variable "TAG" {
   default = "latest"
+}
+
+variable "PUBLISH" {
+  default = false
 }
 
 variable "NEXT_PUBLIC_API_URL" {
@@ -57,7 +62,8 @@ group "apps" {
     "loja-admin",
     "tarefas",
     "suporte",
-    "workflows"
+    "workflows",
+    "landing-mae"
   ]
 }
 
@@ -99,9 +105,9 @@ target "home" {
     APP_NAME = "home"
     APP_PORT = "3000"
   }
-  tags = [
-    "${REGISTRY}/home:${TAG}",
-    "${REGISTRY}/home:latest",
+  tags = PUBLISH ? [
+    "${REGISTRY}/home:${TAG}"
+  ] : [
     "essencia-home:${TAG}",
     "essencia-home:latest"
   ]
@@ -113,9 +119,9 @@ target "login" {
     APP_NAME = "login"
     APP_PORT = "3003"
   }
-  tags = [
-    "${REGISTRY}/login:${TAG}",
-    "${REGISTRY}/login:latest",
+  tags = PUBLISH ? [
+    "${REGISTRY}/login:${TAG}"
+  ] : [
     "essencia-login:${TAG}",
     "essencia-login:latest"
   ]
@@ -127,9 +133,9 @@ target "usuarios" {
     APP_NAME = "usuarios"
     APP_PORT = "3004"
   }
-  tags = [
-    "${REGISTRY}/usuarios:${TAG}",
-    "${REGISTRY}/usuarios:latest",
+  tags = PUBLISH ? [
+    "${REGISTRY}/usuarios:${TAG}"
+  ] : [
     "essencia-usuarios:${TAG}",
     "essencia-usuarios:latest"
   ]
@@ -141,9 +147,9 @@ target "escolas" {
     APP_NAME = "escolas"
     APP_PORT = "3005"
   }
-  tags = [
-    "${REGISTRY}/escolas:${TAG}",
-    "${REGISTRY}/escolas:latest",
+  tags = PUBLISH ? [
+    "${REGISTRY}/escolas:${TAG}"
+  ] : [
     "essencia-escolas:${TAG}",
     "essencia-escolas:latest"
   ]
@@ -156,9 +162,9 @@ target "turmas" {
     PACKAGE_NAME = "@essencia/turmas"
     APP_PORT     = "3006"
   }
-  tags = [
-    "${REGISTRY}/turmas:${TAG}",
-    "${REGISTRY}/turmas:latest",
+  tags = PUBLISH ? [
+    "${REGISTRY}/turmas:${TAG}"
+  ] : [
     "essencia-turmas:${TAG}",
     "essencia-turmas:latest"
   ]
@@ -170,9 +176,9 @@ target "planejamento" {
     APP_NAME = "planejamento"
     APP_PORT = "3007"
   }
-  tags = [
-    "${REGISTRY}/planejamento:${TAG}",
-    "${REGISTRY}/planejamento:latest",
+  tags = PUBLISH ? [
+    "${REGISTRY}/planejamento:${TAG}"
+  ] : [
     "essencia-planejamento:${TAG}",
     "essencia-planejamento:latest"
   ]
@@ -185,9 +191,9 @@ target "calendario" {
     PACKAGE_NAME = "@essencia/calendario"
     APP_PORT     = "3008"
   }
-  tags = [
-    "${REGISTRY}/calendario:${TAG}",
-    "${REGISTRY}/calendario:latest",
+  tags = PUBLISH ? [
+    "${REGISTRY}/calendario:${TAG}"
+  ] : [
     "essencia-calendario:${TAG}",
     "essencia-calendario:latest"
   ]
@@ -200,9 +206,9 @@ target "eventos" {
     PACKAGE_NAME = "eventos"
     APP_PORT     = "3014"
   }
-  tags = [
-    "${REGISTRY}/eventos:${TAG}",
-    "${REGISTRY}/eventos:latest",
+  tags = PUBLISH ? [
+    "${REGISTRY}/eventos:${TAG}"
+  ] : [
     "essencia-eventos:${TAG}",
     "essencia-eventos:latest"
   ]
@@ -215,9 +221,9 @@ target "loja" {
     PACKAGE_NAME = "@essencia/loja"
     APP_PORT     = "3010"
   }
-  tags = [
-    "${REGISTRY}/loja:${TAG}",
-    "${REGISTRY}/loja:latest",
+  tags = PUBLISH ? [
+    "${REGISTRY}/loja:${TAG}"
+  ] : [
     "essencia-loja:${TAG}",
     "essencia-loja:latest"
   ]
@@ -230,9 +236,9 @@ target "loja-admin" {
     PACKAGE_NAME = "@essencia/loja-admin"
     APP_PORT     = "3011"
   }
-  tags = [
-    "${REGISTRY}/loja-admin:${TAG}",
-    "${REGISTRY}/loja-admin:latest",
+  tags = PUBLISH ? [
+    "${REGISTRY}/loja-admin:${TAG}"
+  ] : [
     "essencia-loja-admin:${TAG}",
     "essencia-loja-admin:latest"
   ]
@@ -244,9 +250,9 @@ target "tarefas" {
     APP_NAME = "tarefas"
     APP_PORT = "3012"
   }
-  tags = [
-    "${REGISTRY}/tarefas:${TAG}",
-    "${REGISTRY}/tarefas:latest",
+  tags = PUBLISH ? [
+    "${REGISTRY}/tarefas:${TAG}"
+  ] : [
     "essencia-tarefas:${TAG}",
     "essencia-tarefas:latest"
   ]
@@ -258,9 +264,9 @@ target "suporte" {
     APP_NAME = "suporte"
     APP_PORT = "3013"
   }
-  tags = [
-    "${REGISTRY}/suporte:${TAG}",
-    "${REGISTRY}/suporte:latest",
+  tags = PUBLISH ? [
+    "${REGISTRY}/suporte:${TAG}"
+  ] : [
     "essencia-suporte:${TAG}",
     "essencia-suporte:latest"
   ]
@@ -273,11 +279,22 @@ target "workflows" {
     PACKAGE_NAME = "workflows"
     APP_PORT     = "3015"
   }
-  tags = [
-    "${REGISTRY}/workflows:${TAG}",
-    "${REGISTRY}/workflows:latest",
+  tags = PUBLISH ? [
+    "${REGISTRY}/workflows:${TAG}"
+  ] : [
     "essencia-workflows:${TAG}",
     "essencia-workflows:latest"
+  ]
+}
+
+target "landing-mae" {
+  context   = "landing-mae-por-inteiro"
+  dockerfile = "Dockerfile"
+  tags = PUBLISH ? [
+    "${REGISTRY}/landing-mae:${TAG}"
+  ] : [
+    "essencia-landing-mae:${TAG}",
+    "essencia-landing-mae:latest"
   ]
 }
 
@@ -288,9 +305,9 @@ target "workflows" {
 target "api" {
   inherits   = ["_common"]
   dockerfile = "docker/Dockerfile.api"
-  tags = [
-    "${REGISTRY}/api:${TAG}",
-    "${REGISTRY}/api:latest",
+  tags = PUBLISH ? [
+    "${REGISTRY}/api:${TAG}"
+  ] : [
     "essencia-api:${TAG}",
     "essencia-api:latest"
   ]

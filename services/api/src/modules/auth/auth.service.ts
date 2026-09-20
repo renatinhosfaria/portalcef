@@ -146,5 +146,7 @@ export class AuthService {
       .update(users)
       .set({ passwordHash, updatedAt: new Date() })
       .where(eq(users.id, userId));
+
+    await this.sessionService.deleteAllUserSessions(userId);
   }
 }

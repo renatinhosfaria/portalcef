@@ -5,9 +5,15 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
+import {
+  TenantScopeService,
+  type TenantScopeUser,
+} from "../../common/tenant/tenant-scope.service";
 
 @Injectable()
 export class UnitsService {
+  constructor(private readonly tenantScope: TenantScopeService) {}
+
   async findBySchool(schoolId: string): Promise<Unit[]> {
     const db = getDb();
     return db.query.units.findMany({
@@ -16,7 +22,11 @@ export class UnitsService {
     });
   }
 
-  async findById(id: string): Promise<Unit | null> {
+  async findById(id: string, user?: TenantScopeUser): Promise<Unit | null> {
+    if (user) {
+      return this.tenantScope.assertUnitAccess(user, id);
+    }
+
     const db = getDb();
     const unit = await db.query.units.findFirst({
       where: eq(units.id, id),
@@ -24,9 +34,16 @@ export class UnitsService {
     return unit ?? null;
   }
 
-  async findByIds(ids: string[]): Promise<Unit[]> {
+  async findByIds(ids: string[], user?: TenantScopeUser): Promise<Unit[]> {
     const db = getDb();
     if (!ids || ids.length === 0) return [];
+
+    if (user) {
+      return Promise.all(
+        ids.map((id) => this.tenantScope.assertUnitAccess(user, id)),
+      );
+    }
+
     return db.query.units.findMany({
       where: or(...ids.map((id) => eq(units.id, id))),
       orderBy: [asc(units.name)],
@@ -73,10 +90,13 @@ export class UnitsService {
   async update(
     id: string,
     data: Partial<{ name: string; code: string; address: string }>,
+    user?: TenantScopeUser,
   ): Promise<Unit> {
     const db = getDb();
 
-    const existing = await this.findById(id);
+    const existing = user
+      ? await this.tenantScope.assertUnitAccess(user, id)
+      : await this.findById(id);
     if (!existing) {
       throw new NotFoundException("Unidade nao encontrada");
     }
@@ -101,10 +121,12 @@ export class UnitsService {
     return updated;
   }
 
-  async delete(id: string): Promise<void> {
+  async delete(id: string, user?: TenantScopeUser): Promise<void> {
     const db = getDb();
 
-    const existing = await this.findById(id);
+    const existing = user
+      ? await this.tenantScope.assertUnitAccess(user, id)
+      : await this.findById(id);
     if (!existing) {
       throw new NotFoundException("Unidade nao encontrada");
     }

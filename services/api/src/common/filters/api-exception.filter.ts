@@ -94,8 +94,19 @@ export class ApiExceptionFilter implements ExceptionFilter {
       message = normalizeMessage(fastifyError.message, fallbackMessage);
       code = normalizeErrorCode(fastifyError.code, status);
     } else if (exception instanceof Error) {
-      message = normalizeMessage(exception.message, fallbackMessage);
+      // Erros inesperados podem conter SQL, URLs internas ou credenciais.
+      // O detalhe permanece somente no log estruturado abaixo.
+      message = fallbackMessage;
       code = statusToErrorCode(status);
+    }
+
+    if (
+      status === HttpStatus.INTERNAL_SERVER_ERROR ||
+      (status >= 500 && !(exception instanceof HttpException))
+    ) {
+      message = fallbackMessage;
+      code = "INTERNAL_ERROR";
+      details = undefined;
     }
 
     // Log de erros 500 para debugging

@@ -43,6 +43,9 @@ const mockOrderItemsInsert = {
 const mockOrderPaymentsInsert = {
   values: jest.fn().mockResolvedValue(undefined),
 };
+const mockOrderRefundsInsert = {
+  values: jest.fn().mockResolvedValue(undefined),
+};
 const mockStripeWebhookEventsInsert = {
   values: jest.fn().mockResolvedValue(undefined),
 };
@@ -77,6 +80,7 @@ const mockDb = {
     shopProducts: { findFirst: jest.fn(), findMany: jest.fn() },
     shopInventory: { findFirst: jest.fn(), findMany: jest.fn() },
     shopOrders: { findFirst: jest.fn(), findMany: jest.fn() },
+    shopOrderRefunds: { findFirst: jest.fn(), findMany: jest.fn() },
     shopOrderItems: { findFirst: jest.fn() },
     stripeWebhookEvents: { findFirst: jest.fn() },
     shopSettings: { findFirst: jest.fn() },
@@ -90,6 +94,7 @@ const mockDb = {
     if (table?.table === "shop_orders") return mockOrderInsert;
     if (table?.table === "shop_order_items") return mockOrderItemsInsert;
     if (table?.table === "shop_order_payments") return mockOrderPaymentsInsert;
+    if (table?.table === "shop_order_refunds") return mockOrderRefundsInsert;
     if (table?.table === "stripe_webhook_events") {
       return mockStripeWebhookEventsInsert;
     }
@@ -182,6 +187,7 @@ jest.mock("@essencia/db", () => ({
   },
   shopOrderItems: { table: "shop_order_items" },
   shopOrderPayments: { table: "shop_order_payments" },
+  shopOrderRefunds: { table: "shop_order_refunds" },
   stripeWebhookEvents: { table: "stripe_webhook_events" },
   shopInventory: { table: "shop_inventory" },
   shopInventoryLedger: { table: "shop_inventory_ledger" },
@@ -226,6 +232,8 @@ describe("Regressões da loja", () => {
     ]);
     mockOrderItemsInsert.values.mockResolvedValue(undefined);
     mockOrderPaymentsInsert.values.mockResolvedValue(undefined);
+    mockOrderRefundsInsert.values.mockResolvedValue(undefined);
+    mockDb.query.shopOrderRefunds.findFirst.mockResolvedValue(null);
     mockStripeWebhookEventsInsert.values.mockResolvedValue(undefined);
     mockInventoryLedgerInsert.values.mockResolvedValue(undefined);
     mockProductInsert.values.mockReturnThis();
@@ -1989,6 +1997,145 @@ describe("Regressões da loja", () => {
     );
   });
 
+  it("não cancela pedido pago quando o estorno Stripe falha", async () => {
+    const inventoryService = {
+      withOrderLock: jest.fn(async (_orderId, callback) => callback()),
+      withInventoryLocks: jest.fn(async (_items, callback) => callback()),
+      addStockInTransaction: jest.fn(),
+    };
+    const paymentsService = {
+      refundPayment: jest.fn().mockRejectedValue(new Error("Stripe indisponível")),
+    };
+    const service = new ShopOrdersService(
+      inventoryService as never,
+      paymentsService as never,
+    );
+
+    mockDb.query.shopOrders.findFirst.mockResolvedValue({
+      id: "order-pago-1",
+      orderNumber: "123457",
+      status: "PAGO",
+      orderSource: "ONLINE",
+      totalAmount: 4500,
+      stripePaymentIntentId: "pi_pago_1",
+      unitId: "unit-1",
+      items: [{ variantId: "variant-1", quantity: 1 }],
+    });
+
+    await expect(
+      service.cancelOrder("order-pago-1", "admin-1", "Cliente solicitou", {
+        userId: "admin-1",
+        role: "gerente_unidade",
+        schoolId: "school-1",
+        unitId: "unit-1",
+      }),
+    ).rejects.toBeInstanceOf(InternalServerErrorException);
+
+    expect(paymentsService.refundPayment).toHaveBeenCalledWith(
+      "pi_pago_1",
+      undefined,
+      "requested_by_customer",
+      "shop-order-refund:order-pago-1",
+    );
+    expect(inventoryService.withInventoryLocks).not.toHaveBeenCalled();
+    expect(
+      mockDb.set.mock.calls.some(([values]) => values?.status === "CANCELADO"),
+    ).toBe(false);
+  });
+
+  it("estorna pedido pago uma única vez e só depois libera o estoque", async () => {
+    const inventoryService = {
+      withOrderLock: jest.fn(async (_orderId, callback) => callback()),
+      withInventoryLocks: jest.fn(async (_items, callback) => callback()),
+      addStockInTransaction: jest.fn().mockResolvedValue({ success: true }),
+    };
+    const paymentsService = {
+      refundPayment: jest.fn().mockResolvedValue({
+        refundId: "re_123",
+        status: "succeeded",
+        amount: 4500,
+      }),
+    };
+    const service = new ShopOrdersService(
+      inventoryService as never,
+      paymentsService as never,
+    );
+
+    mockDb.query.shopOrders.findFirst.mockResolvedValue({
+      id: "order-pago-2",
+      orderNumber: "123458",
+      status: "PAGO",
+      orderSource: "ONLINE",
+      totalAmount: 4500,
+      stripePaymentIntentId: "pi_pago_2",
+      unitId: "unit-1",
+      items: [{ variantId: "variant-1", quantity: 1 }],
+    });
+
+    await service.cancelOrder("order-pago-2", "admin-1", "Cliente solicitou", {
+      userId: "admin-1",
+      role: "gerente_unidade",
+      schoolId: "school-1",
+      unitId: "unit-1",
+    });
+
+    expect(paymentsService.refundPayment).toHaveBeenCalledTimes(1);
+    expect(inventoryService.withInventoryLocks).toHaveBeenCalledTimes(1);
+    expect(inventoryService.addStockInTransaction).toHaveBeenCalledWith(
+      "variant-1",
+      "unit-1",
+      1,
+      "Estorno do pedido 123458",
+      "admin-1",
+      mockDb,
+      expect.objectContaining({ unitId: "unit-1" }),
+    );
+    expect(mockDb.set).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "CANCELADO" }),
+    );
+  });
+
+  it("trata cancelamento já concluído como operação idempotente", async () => {
+    const inventoryService = {
+      withOrderLock: jest.fn(async (_orderId, callback) => callback()),
+      withInventoryLocks: jest.fn(),
+    };
+    const paymentsService = { refundPayment: jest.fn() };
+    const service = new ShopOrdersService(
+      inventoryService as never,
+      paymentsService as never,
+    );
+
+    mockDb.query.shopOrders.findFirst.mockResolvedValue({
+      id: "order-cancelado-1",
+      orderNumber: "123459",
+      status: "CANCELADO",
+      stripePaymentIntentId: "pi_cancelado_1",
+      unitId: "unit-1",
+    });
+    mockDb.query.shopOrderRefunds.findFirst.mockResolvedValue({
+      id: "refund-1",
+      orderId: "order-cancelado-1",
+      status: "CONCLUIDO",
+      stripeRefundId: "re_123",
+    });
+
+    await expect(
+      service.cancelOrder("order-cancelado-1", "admin-1", "Repetição", {
+        userId: "admin-1",
+        role: "gerente_unidade",
+        schoolId: "school-1",
+        unitId: "unit-1",
+      }),
+    ).resolves.toEqual({
+      success: true,
+      message: "Pedido já estava cancelado",
+    });
+
+    expect(paymentsService.refundPayment).not.toHaveBeenCalled();
+    expect(inventoryService.withInventoryLocks).not.toHaveBeenCalled();
+  });
+
   it("cria venda presencial em transação junto com baixa de estoque", async () => {
     const inventoryService = {
       withInventoryLocks: jest.fn(async (_items, callback) => callback()),
@@ -2916,6 +3063,55 @@ describe("Webhook Stripe da loja", () => {
     });
   });
 
+  it("reconcilia estorno Stripe recebido por webhook", async () => {
+    const ordersService = {
+      confirmStripePayment: jest.fn(),
+      failStripePayment: jest.fn(),
+      reconcileStripeRefund: jest.fn().mockResolvedValue({ success: true }),
+    };
+    const controller = new PaymentsWebhookController(
+      {
+        get: jest.fn((key: string) =>
+          key === "STRIPE_WEBHOOK_SECRET" ? "whsec_test" : undefined,
+        ),
+      } as never,
+      {} as never,
+      ordersService as never,
+    );
+
+    mockDb.query.stripeWebhookEvents.findFirst.mockResolvedValue(null);
+
+    await (
+      controller as unknown as {
+        processWebhookEvent: (event: {
+          id: string;
+          type: string;
+          data: { object: unknown };
+        }) => Promise<void>;
+      }
+    ).processWebhookEvent({
+      id: "evt_refund_1",
+      type: "charge.refunded",
+      data: {
+        object: {
+          id: "ch_123",
+          amount_refunded: 4500,
+          payment_intent: "pi_pago_2",
+        },
+      },
+    });
+
+    expect(ordersService.reconcileStripeRefund).toHaveBeenCalledWith({
+      paymentIntentId: "pi_pago_2",
+      stripeRefundId: "ch_123",
+      amount: 4500,
+    });
+    expect(mockStripeWebhookEventsInsert.values).toHaveBeenCalledWith({
+      id: "evt_refund_1",
+      type: "charge.refunded",
+    });
+  });
+
   it("aguarda evento de Checkout quando PaymentIntent succeeded tem método ambíguo", async () => {
     const ordersService = {
       confirmStripePayment: jest.fn(),
@@ -3065,14 +3261,37 @@ describe("Expiração de pedidos da loja", () => {
 
 describe("Ambiente de produção da loja", () => {
   it("documenta LOJA_PUBLIC_URL no env docker e no guia de deploy", () => {
-    const envDocker = readFileSync(join(process.cwd(), "../../.env.docker"), "utf8");
+    const envFixture = readFileSync(
+      join(process.cwd(), "test/fixtures/env.docker.fixture"),
+      "utf8",
+    );
     const deploymentDoc = readFileSync(
       join(process.cwd(), "../../docs/DEPLOYMENT.md"),
       "utf8",
     );
 
-    expect(envDocker).toContain("LOJA_PUBLIC_URL=https://loja.portalcef.com.br");
-    expect(deploymentDoc).toContain("LOJA_PUBLIC_URL=https://loja.portalcef.com.br");
+    const lerVariavel = (conteudo: string, nome: string) => {
+      const linha = conteudo
+        .split(/\r?\n/)
+        .find((item) => item.trim().startsWith(`${nome}=`));
+      return linha
+        ?.slice(linha.indexOf("=") + 1)
+        .trim()
+        .replace(/^['"]|['"]$/g, "");
+    };
+
+    expect(lerVariavel(envFixture, "LOJA_PUBLIC_URL")).toBe(
+      "https://loja.portalcef.com.br",
+    );
+    expect(
+      lerVariavel(
+        "LOJA_PUBLIC_URL=https://loja.portalcef.com.br",
+        "LOJA_PUBLIC_URL",
+      ),
+    ).toBe("https://loja.portalcef.com.br");
+    expect(deploymentDoc).toContain(
+      "LOJA_PUBLIC_URL=https://loja.portalcef.com.br",
+    );
   });
 
   it("mantém migration idempotente para tabela de pagamentos dos pedidos", () => {

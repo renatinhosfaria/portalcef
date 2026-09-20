@@ -34,7 +34,6 @@ COPY apps/loja-admin/package.json ./apps/loja-admin/
 COPY apps/tarefas/package.json ./apps/tarefas/
 
 COPY services/api/package.json ./services/api/
-COPY services/worker/package.json ./services/worker/
 
 COPY packages/ui/package.json ./packages/ui/
 COPY packages/shared/package.json ./packages/shared/

@@ -7,6 +7,7 @@ import {
   shopOrders,
   shopOrderItems,
   shopOrderPayments,
+  shopOrderRefunds,
   shopInterestRequests,
   shopInterestItems,
   shopSettings,
@@ -119,6 +120,7 @@ export const shopOrdersRelations = relations(shopOrders, ({ one, many }) => ({
   }),
   items: many(shopOrderItems),
   payments: many(shopOrderPayments),
+  refunds: many(shopOrderRefunds),
 }));
 
 // ============================================
@@ -143,6 +145,19 @@ export const shopOrderPaymentsRelations = relations(
   ({ one }) => ({
     order: one(shopOrders, {
       fields: [shopOrderPayments.orderId],
+      references: [shopOrders.id],
+    }),
+  }),
+);
+
+// ============================================
+// Shop Order Refunds Relations
+// ============================================
+export const shopOrderRefundsRelations = relations(
+  shopOrderRefunds,
+  ({ one }) => ({
+    order: one(shopOrders, {
+      fields: [shopOrderRefunds.orderId],
       references: [shopOrders.id],
     }),
   }),

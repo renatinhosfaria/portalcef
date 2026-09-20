@@ -1,4 +1,11 @@
-import { type AnyPgColumn, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import {
+  foreignKey,
+  type AnyPgColumn,
+  pgTable,
+  text,
+  timestamp,
+  uuid,
+} from "drizzle-orm/pg-core";
 
 import { educationStages } from "./education-stages.js";
 import { schools } from "./schools.js";
@@ -22,33 +29,43 @@ export const userRoleEnum = [
 ] as const;
 export type UserRole = (typeof userRoleEnum)[number];
 
-export const users = pgTable("users", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  email: text("email").notNull().unique(),
-  passwordHash: text("password_hash").notNull(),
-  name: text("name").notNull(),
-  role: text("role", { enum: userRoleEnum })
-    .notNull()
-    .default("auxiliar_administrativo"),
-  schoolId: uuid("school_id").references(() => schools.id, {
-    onDelete: "cascade",
+export const users = pgTable(
+  "users",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    email: text("email").notNull().unique(),
+    passwordHash: text("password_hash").notNull(),
+    name: text("name").notNull(),
+    role: text("role", { enum: userRoleEnum })
+      .notNull()
+      .default("auxiliar_administrativo"),
+    schoolId: uuid("school_id").references(() => schools.id, {
+      onDelete: "cascade",
+    }),
+    unitId: uuid("unit_id").references(() => units.id, { onDelete: "cascade" }),
+    stageId: uuid("stage_id").references(() => educationStages.id, {
+      onDelete: "set null",
+    }),
+    inativadoEm: timestamp("inativado_em", { withTimezone: true }),
+    inativadoPor: uuid("inativado_por").references(
+      (): AnyPgColumn => users.id,
+      { onDelete: "set null" },
+    ),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    unitSchoolForeignKey: foreignKey({
+      columns: [table.unitId, table.schoolId],
+      foreignColumns: [units.id, units.schoolId],
+      name: "users_unit_school_fk",
+    }),
   }),
-  unitId: uuid("unit_id").references(() => units.id, { onDelete: "cascade" }),
-  stageId: uuid("stage_id").references(() => educationStages.id, {
-    onDelete: "set null",
-  }),
-  inativadoEm: timestamp("inativado_em", { withTimezone: true }),
-  inativadoPor: uuid("inativado_por").references(
-    (): AnyPgColumn => users.id,
-    { onDelete: "set null" },
-  ),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-});
+);
 
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;

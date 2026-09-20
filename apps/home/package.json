@@ -9,9 +9,11 @@
     "start": "next start",
     "lint": "next lint",
     "format": "prettier --write \"**/*.{ts,tsx,md,json}\"",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run --environment jsdom --globals"
   },
   "dependencies": {
+    "@essencia/lib": "workspace:^",
     "@essencia/components": "workspace:*",
     "@essencia/shared": "workspace:*",
     "@essencia/tailwind-config": "workspace:*",
@@ -19,7 +21,7 @@
     "clsx": "^2.1.1",
     "framer-motion": "^12.23.26",
     "lucide-react": "^0.469.0",
-    "next": "15.1.12",
+    "next": "15.5.25",
     "react": "19.0.4",
     "react-dom": "19.0.4",
     "tailwind-merge": "^2.6.0"

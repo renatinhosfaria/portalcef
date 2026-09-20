@@ -39,6 +39,17 @@ export const orderStatusEnum = [
 export type OrderStatus = (typeof orderStatusEnum)[number];
 
 // ============================================
+// Refund Status Enum
+// ============================================
+export const refundStatusEnum = [
+  "PENDENTE",
+  "PROCESSANDO",
+  "CONCLUIDO",
+  "ERRO",
+] as const;
+export type RefundStatus = (typeof refundStatusEnum)[number];
+
+// ============================================
 // Order Source Enum
 // ============================================
 export const orderSourceEnum = ["ONLINE", "PRESENCIAL", "PRE_VENDA"] as const;
@@ -439,7 +450,6 @@ export const shopSettings = pgTable(
 export type ShopSettings = typeof shopSettings.$inferSelect;
 export type NewShopSettings = typeof shopSettings.$inferInsert;
 
-
 // ============================================
 // Table: shop_order_payments
 // ============================================
@@ -450,7 +460,9 @@ export const shopOrderPayments = pgTable(
     orderId: uuid("order_id")
       .notNull()
       .references(() => shopOrders.id, { onDelete: "cascade" }),
-    paymentMethod: text("payment_method", { enum: paymentMethodEnum }).notNull(),
+    paymentMethod: text("payment_method", {
+      enum: paymentMethodEnum,
+    }).notNull(),
     amount: integer("amount").notNull(), // em centavos
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -463,6 +475,48 @@ export const shopOrderPayments = pgTable(
 
 export type ShopOrderPayment = typeof shopOrderPayments.$inferSelect;
 export type NewShopOrderPayment = typeof shopOrderPayments.$inferInsert;
+
+// ============================================
+// Table: shop_order_refunds
+// ============================================
+export const shopOrderRefunds = pgTable(
+  "shop_order_refunds",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orderId: uuid("order_id")
+      .notNull()
+      .references(() => shopOrders.id, { onDelete: "cascade" }),
+    paymentIntentId: varchar("payment_intent_id", { length: 255 }).notNull(),
+    stripeRefundId: varchar("stripe_refund_id", { length: 255 }),
+    status: text("status", { enum: refundStatusEnum })
+      .notNull()
+      .default("PENDENTE"),
+    amount: integer("amount").notNull(),
+    errorMessage: text("error_message"),
+    requestedAt: timestamp("requested_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    processedAt: timestamp("processed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    orderIdUnique: uniqueIndex("shop_order_refunds_order_id_unique").on(
+      table.orderId,
+    ),
+    paymentIntentIdx: index("shop_order_refunds_payment_intent_idx").on(
+      table.paymentIntentId,
+    ),
+    statusIdx: index("shop_order_refunds_status_idx").on(table.status),
+  }),
+);
+
+export type ShopOrderRefund = typeof shopOrderRefunds.$inferSelect;
+export type NewShopOrderRefund = typeof shopOrderRefunds.$inferInsert;
 
 // ============================================
 // Table: stripe_webhook_events
@@ -500,8 +554,13 @@ export const selectShopInterestRequestSchema =
 export const insertShopSettingsSchema = createInsertSchema(shopSettings);
 export const selectShopSettingsSchema = createSelectSchema(shopSettings);
 
-export const insertShopOrderPaymentSchema = createInsertSchema(shopOrderPayments);
-export const selectShopOrderPaymentSchema = createSelectSchema(shopOrderPayments);
+export const insertShopOrderPaymentSchema =
+  createInsertSchema(shopOrderPayments);
+export const selectShopOrderPaymentSchema =
+  createSelectSchema(shopOrderPayments);
+
+export const insertShopOrderRefundSchema = createInsertSchema(shopOrderRefunds);
+export const selectShopOrderRefundSchema = createSelectSchema(shopOrderRefunds);
 
 export const insertStripeWebhookEventSchema =
   createInsertSchema(stripeWebhookEvents);

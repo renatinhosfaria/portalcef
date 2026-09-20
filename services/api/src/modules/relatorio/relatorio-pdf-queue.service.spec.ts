@@ -59,9 +59,9 @@ describe("RelatorioPdfQueueService", () => {
       expect(segundoJobId).not.toBe(primeiroJobId);
     });
 
-    it("não lança exceção se queue.add falhar (swallows error)", async () => {
+    it("propaga falha do Redis para o serviço marcar o documento como erro", async () => {
       mockQueueAdd.mockRejectedValueOnce(new Error("Redis down"));
-      await expect(service.adicionar("doc-456")).resolves.toBeUndefined();
+      await expect(service.adicionar("doc-456")).rejects.toThrow("Redis down");
     });
   });
 

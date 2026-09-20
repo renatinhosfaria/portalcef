@@ -317,9 +317,8 @@ services:
     build:
       context: ./landing-mae-por-inteiro
       dockerfile: Dockerfile
-    # Construída pelo próprio compose (build acima), fora do docker-bake.hcl —
-    # por isso não acompanha o IMAGE_TAG dos demais serviços.
-    image: essencia-landing-mae:latest
+    # A landing também recebe a tag da release para permitir rollback coerente.
+    image: essencia-landing-mae:${IMAGE_TAG:-latest}
     container_name: essencia-landing-mae
     <<: *common
     healthcheck:

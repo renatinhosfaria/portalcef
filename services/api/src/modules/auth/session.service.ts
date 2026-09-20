@@ -36,6 +36,11 @@ export class SessionService implements OnModuleDestroy {
     await this.redis.quit();
   }
 
+  /** Verifica a disponibilidade do Redis sem expor configuração da conexão. */
+  async ping(): Promise<void> {
+    await this.redis.ping();
+  }
+
   /**
    * Create a new session for a user with tenant context
    */

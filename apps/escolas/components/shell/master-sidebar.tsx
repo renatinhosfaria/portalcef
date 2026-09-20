@@ -2,10 +2,30 @@
 
 import { Button } from "@essencia/ui/components/button";
 import { LayoutDashboard, LayoutGrid, LogOut, School } from "lucide-react";
+import { useState } from "react";
 
 import { SidebarItem } from "./sidebar-item";
 
 export function MasterSidebar() {
+  const [saindo, setSaindo] = useState(false);
+
+  const sair = async () => {
+    if (saindo) return;
+    setSaindo(true);
+
+    try {
+      await fetch("/api/auth/logout", {
+        method: "POST",
+        credentials: "include",
+      });
+    } catch {
+      // O redirecionamento continua para não manter o estado visual autenticado.
+    } finally {
+      localStorage.removeItem("tenant");
+      window.location.assign("https://www.portalcef.com.br/login");
+    }
+  };
+
   return (
     <aside className="fixed inset-y-0 left-0 z-20 hidden w-20 flex-col items-center py-8 border-r border-slate-200/60 bg-white/80 backdrop-blur-xl sm:flex lg:w-72 transition-all duration-500 ease-in-out">
       <div className="flex items-center gap-3 px-6 mb-12 w-full">
@@ -37,10 +57,9 @@ export function MasterSidebar() {
         <Button
           variant="ghost"
           className="w-full justify-start gap-3 text-red-500 hover:text-red-600 hover:bg-red-50 rounded-xl py-6"
-          onClick={() => {
-            localStorage.removeItem("tenant");
-            window.location.href = "https://www.portalcef.com.br/login";
-          }}
+          onClick={() => void sair()}
+          disabled={saindo}
+          aria-busy={saindo}
         >
           <LogOut className="w-5 h-5" />
           <span className="hidden lg:block font-medium">Sair do Master</span>

@@ -5,14 +5,23 @@ import {
   NestFastifyApplication,
 } from "@nestjs/platform-fastify";
 
-import { HealthModule } from "./health.module";
+jest.mock("@essencia/db", () => ({
+  sql: jest.fn(),
+}));
+
+import { HealthController } from "./health.controller";
+import { HealthService } from "./health.service";
 
 describe("HealthController", () => {
   let app: NestFastifyApplication;
+  const healthService = {
+    check: jest.fn(),
+  };
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
-      imports: [HealthModule],
+      controllers: [HealthController],
+      providers: [{ provide: HealthService, useValue: healthService }],
     }).compile();
 
     app = moduleRef.createNestApplication<NestFastifyApplication>(
@@ -24,6 +33,16 @@ describe("HealthController", () => {
 
     await app.init();
     await app.getHttpAdapter().getInstance().ready();
+  });
+
+  beforeEach(() => {
+    healthService.check.mockResolvedValue({
+      status: "ok",
+      timestamp: new Date().toISOString(),
+      uptime: 1,
+      database: "connected",
+      redis: "connected",
+    });
   });
 
   afterAll(async () => {
@@ -56,6 +75,29 @@ describe("HealthController", () => {
       expect.objectContaining({
         success: true,
         data: expect.objectContaining({ status: "ok" }),
+      }),
+    );
+  });
+
+  it("responde 503 quando uma dependência está degradada", async () => {
+    healthService.check.mockResolvedValueOnce({
+      status: "degraded",
+      timestamp: new Date().toISOString(),
+      uptime: 1,
+      database: "disconnected",
+      redis: "connected",
+    });
+
+    const resposta = await app.inject({
+      method: "GET",
+      url: "/health",
+    });
+
+    expect(resposta.statusCode).toBe(503);
+    expect(resposta.json()).toEqual(
+      expect.objectContaining({
+        success: false,
+        data: expect.objectContaining({ status: "degraded" }),
       }),
     );
   });

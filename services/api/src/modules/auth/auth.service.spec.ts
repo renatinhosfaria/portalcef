@@ -10,6 +10,7 @@ const mockDb = {
       findFirst: jest.fn(),
     },
   },
+  update: jest.fn(),
 };
 
 jest.mock("@essencia/db", () => ({
@@ -25,6 +26,7 @@ describe("AuthService — login bloqueia inativos", () => {
   let service: AuthService;
   const sessionServiceMock = {
     createSession: jest.fn().mockResolvedValue("token-123"),
+    deleteAllUserSessions: jest.fn().mockResolvedValue(undefined),
   };
 
   beforeEach(async () => {
@@ -82,5 +84,23 @@ describe("AuthService — login bloqueia inativos", () => {
 
     expect(result.token).toBe("token-123");
     expect(sessionServiceMock.createSession).toHaveBeenCalledTimes(1);
+  });
+
+  it("revoga todas as sessões depois de trocar a senha", async () => {
+    const passwordHash = await bcrypt.hash("senha-atual", 12);
+    const where = jest.fn().mockResolvedValue(undefined);
+    const set = jest.fn().mockReturnValue({ where });
+    mockDb.query.users.findFirst.mockResolvedValue({
+      id: "u-3",
+      passwordHash,
+    });
+    mockDb.update.mockReturnValue({ set });
+
+    await service.changePassword("u-3", "senha-atual", "senha-nova");
+
+    expect(set).toHaveBeenCalledWith(
+      expect.objectContaining({ passwordHash: expect.any(String) }),
+    );
+    expect(sessionServiceMock.deleteAllUserSessions).toHaveBeenCalledWith("u-3");
   });
 });

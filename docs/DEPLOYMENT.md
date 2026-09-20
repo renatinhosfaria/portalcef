@@ -298,24 +298,32 @@ migration e Compose e executa o health check no final. A árvore de trabalho
 precisa estar limpa para evitar que alterações não commitadas sejam publicadas
 com a tag errada.
 
-### 3. Limitações do deploy sequencial existente
+### 3. Modos de deploy
 
-Use `./scripts/deploy.sh` para o fluxo local. O `deploy-rolling.sh` existente
-executa `pull`, mas o Compose usa nomes locais `essencia-*`, enquanto o CI
-publica no GHCR. Essa integração precisa ser alinhada antes de utilizar o
-script com o registry; ele não substitui o fluxo local documentado aqui.
+Use `./scripts/deploy.sh` para o fluxo local: ele constrói e carrega as imagens
+no próprio servidor. O `deploy-rolling.sh` recebe uma tag imutável explícita e
+faz a atualização sequencial com health gate; ele não aceita `latest` implícito
+e preserva as imagens anteriores para rollback.
 
 Não há zero downtime: os serviços possuem uma instância com `container_name`
 fixo e ficam temporariamente indisponíveis durante a recriação.
 
 ### 4. Rollback
 
-As imagens são versionadas por SHA, então voltar não exige rebuild:
+O rollback local usa somente uma imagem já presente no host e não faz `pull`:
 
 ```bash
-IMAGE_TAG=<sha-anterior> \
-  docker compose -f docker-compose.prod.yml --env-file .env.docker up -d
+ROLLBACK_ASSUME_YES=1 ./scripts/rollback.sh --local <sha-anterior>
 ```
+
+Quando a release estiver no registry, use o modo explícito que baixa a tag:
+
+```bash
+ROLLBACK_ASSUME_YES=1 ./scripts/rollback.sh --registry <sha-anterior>
+```
+
+Os dois modos passam `IMAGE_TAG` e `--env-file .env.docker` ao Compose. Uma
+imagem local ausente interrompe o modo local antes de recriar containers.
 
 Versões disponíveis localmente: `docker images essencia-api`.
 
@@ -340,13 +348,15 @@ aplica a migration da mesma imagem versionada antes de iniciar os serviços da
 aplicação. Se alguma etapa falhar, o script retorna erro e interrompe as próximas
 etapas. O `up` aguarda até 180 segundos pela saúde dos containers. Não há
 rollback automático de código ou banco; migrations devem ser compatíveis com
-a versão ainda em execução. A `landing-mae` mantém sua tag `latest`, portanto
-não acompanha o rollback por SHA dos demais aplicativos.
+a versão ainda em execução. A `landing-mae` também recebe `IMAGE_TAG`, portanto
+acompanha a versão escolhida no rollback.
 
 ### migrate.sh
 
 Aplica migrations no container da API, criando backup antes e abortando se o
-backup sair vazio. A imagem de produção **não tem `pnpm`** — as migrations rodam
+backup sair vazio ou parcial. O dump é escrito em arquivo temporário com
+permissão `600` e só recebe o nome final depois de terminar com sucesso. A
+imagem de produção **não tem `pnpm`** — as migrations rodam
 via `node /app/packages/db/dist/migrate.js`, e o script já trata isso.
 
 Como usa `exec` no container em execução, ele aplica as migrations presentes na
@@ -369,10 +379,10 @@ IMAGE_TAG=TAG_DA_IMAGEM docker compose -f docker-compose.prod.yml --env-file .en
 Script completo de verificação de saúde:
 
 - Status de containers Docker
-- Health check da API (/health)
+- Health check da API (/health e /api/health)
 - Health check do frontend (Home)
-- PostgreSQL (pg_isready)
-- Redis (redis-cli ping)
+- PostgreSQL (pg_isready e `SELECT 1` no endpoint da API)
+- Redis (redis-cli ping e verificação no endpoint da API)
 - Uso de disco
 - Uso de memória
 
@@ -381,6 +391,15 @@ Script completo de verificação de saúde:
 ```bash
 ./scripts/health-check.sh
 ```
+
+O endpoint retorna `status: ok` somente quando banco e Redis respondem. Se uma
+dependência falhar, retorna `degraded` e HTTP 503; se as duas falharem, retorna
+`unhealthy` e HTTP 503. A resposta não contém URL, host, senha ou detalhes de
+conexão.
+
+O deploy só avança quando o health público e o health interno retornam sucesso.
+Em incidente, use o [runbook de rollback](./runbooks/rollback.md); não improvise
+uma troca de tag ou restauração do banco fora da sequência documentada.
 
 **Saída esperada:**
 
@@ -722,33 +741,22 @@ DATABASE_URL=postgresql://user:pass@postgres:5432/essencia_db?pool_timeout=10&po
 
 ## CI/CD (GitHub Actions)
 
-O pipeline de CI/CD está configurado em `.github/workflows/deploy.yml` com os seguintes estágios:
+Os workflows ficam versionados em `.github/workflows/` e usam a mesma tag em
+todos os serviços de uma release:
 
-### 1. Quality Check
-- **Trigger**: Todo push para `main` e pull requests
-- **Tasks**: `pnpm turbo lint` e `pnpm turbo typecheck`
-- Node 22, pnpm 9.15.1, Turbo cache
+- `quality.yml` roda em pull requests e em pushes para `main`, executando lint,
+  typecheck, testes, build e `pnpm audit --prod --audit-level=high`.
+- `deploy.yml` é manual (`workflow_dispatch`). Primeiro repete a validação
+  completa, depois publica API, aplicações e `landing-mae` no GHCR com a tag
+  informada ou com o SHA completo do commit.
+- O job de deploy só é ativado quando solicitado e exige runner self-hosted com
+  o ambiente `production` protegido. Ele chama `deploy-rolling.sh`, que faz
+  pull explícito de cada imagem, aplica a mesma tag no Compose e preserva as
+  versões anteriores.
 
-### 2. Build de Imagens Docker (Matrix)
-- 10 apps Next.js + API + Worker (12 serviços)
-- Build paralelo com matrix strategy
-- Cache otimizado com GitHub Actions cache
-- Imagens publicadas no GHCR (GitHub Container Registry)
-
-### 3. Deploy em Produção
-- **Condição**: Apenas branch `main` (não PRs)
-- Acesso via SSH (`appleboy/ssh-action`)
-- Etapas:
-  1. `git pull` do código mais recente
-  2. `docker compose pull` das novas imagens
-  3. `./scripts/deploy-rolling.sh` (integração com registry pendente de alinhamento)
-  4. `./scripts/health-check.sh` (verificação)
-  5. Limpeza de imagens antigas (24h+)
-
-### 4. E2E Tests (Opcional)
-- Executados após deploy em produção
-- Playwright contra `https://www.portalcef.com.br`
-- Reports de testes salvos como artifacts
+O fluxo local continua separado: `deploy.sh` constrói com Buildx Bake, cria o
+backup/migration opcional e carrega as imagens no próprio host. Nenhum caminho
+de produção usa Compose sem `--env-file .env.docker`.
 
 ---
 
