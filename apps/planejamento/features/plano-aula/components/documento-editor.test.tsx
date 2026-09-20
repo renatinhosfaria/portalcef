@@ -37,68 +37,16 @@ describe("DocumentoEditorModal", () => {
     vi.mocked(enviarEventosPendentes).mockResolvedValue(undefined);
   });
 
-  it("usa preview local antes de tentar o visualizador externo do SharePoint", async () => {
+  it("usa o visualizador do SharePoint antes do preview local para preservar o layout do Word", async () => {
     fetchMock.mockResolvedValueOnce({
       ok: true,
-      arrayBuffer: async () => new ArrayBuffer(8),
+      json: async () => ({
+        data: {
+          disponivel: true,
+          embedUrl: "https://sharepoint/preview",
+        },
+      }),
     });
-
-    render(
-      <DocumentoEditorModal
-        planoId="plano-1"
-        documentoId="doc-1"
-        open={true}
-        onOpenChange={vi.fn()}
-      />,
-    );
-
-    await waitFor(() => {
-      expect(registrarEventoObservabilidade).toHaveBeenCalledWith(
-        expect.objectContaining({
-          evento: "arquivo_acao",
-          nivel: "info",
-          arquivo: expect.objectContaining({
-            planoId: "plano-1",
-            documentoId: "doc-1",
-          }),
-          detalhes: expect.objectContaining({
-            acao: "download_preview",
-            fallback: "docx-preview",
-            status: "sucesso",
-          }),
-        }),
-      );
-    });
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock).toHaveBeenCalledWith(
-      "/api/plano-aula/plano-1/documentos/doc-1/download",
-      { credentials: "include" },
-    );
-    expect(fetchMock).not.toHaveBeenCalledWith(
-      expect.stringContaining("visualizar-sharepoint"),
-      expect.anything(),
-    );
-    expect(renderAsync).toHaveBeenCalled();
-    expect(enviarEventosPendentes).toHaveBeenCalled();
-  });
-
-  it("tenta SharePoint quando o preview local falha", async () => {
-    vi.mocked(renderAsync).mockRejectedValueOnce(new Error("DOCX inválido"));
-
-    fetchMock
-      .mockResolvedValueOnce({
-        ok: true,
-        arrayBuffer: async () => new ArrayBuffer(8),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          data: {
-            disponivel: true,
-            embedUrl: "https://sharepoint/embed",
-          },
-        }),
-      });
 
     render(
       <DocumentoEditorModal
@@ -114,6 +62,10 @@ describe("DocumentoEditorModal", () => {
         expect.objectContaining({
           evento: "sharepoint_word",
           nivel: "info",
+          arquivo: expect.objectContaining({
+            planoId: "plano-1",
+            documentoId: "doc-1",
+          }),
           detalhes: expect.objectContaining({
             acao: "visualizar",
             status: "sucesso",
@@ -121,20 +73,81 @@ describe("DocumentoEditorModal", () => {
         }),
       );
     });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/plano-aula/plano-1/documentos/doc-1/visualizar-sharepoint",
+      { credentials: "include" },
+    );
+    expect(screen.getByTitle("Visualizador de documento")).toHaveAttribute(
+      "src",
+      "https://sharepoint/preview",
+    );
+    expect(screen.getByTitle("Visualizador de documento")).toHaveAttribute(
+      "sandbox",
+      "allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox",
+    );
+    expect(screen.getByTitle("Visualizador de documento")).not.toHaveAttribute(
+      "srcdoc",
+    );
+    expect(renderAsync).not.toHaveBeenCalled();
+    expect(enviarEventosPendentes).toHaveBeenCalled();
+  });
+
+  it("usa o preview local quando o visualizador do SharePoint não está disponível", async () => {
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          data: {
+            disponivel: false,
+          },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        arrayBuffer: async () => new ArrayBuffer(8),
+      });
+
+    render(
+      <DocumentoEditorModal
+        planoId="plano-1"
+        documentoId="doc-1"
+        open={true}
+        onOpenChange={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(registrarEventoObservabilidade).toHaveBeenCalledWith(
+        expect.objectContaining({
+          evento: "arquivo_acao",
+          nivel: "info",
+          detalhes: expect.objectContaining({
+            acao: "download_preview",
+            fallback: "docx-preview",
+            status: "sucesso",
+          }),
+        }),
+      );
+    });
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "/api/plano-aula/plano-1/documentos/doc-1/download",
+      "/api/plano-aula/plano-1/documentos/doc-1/visualizar-sharepoint",
       { credentials: "include" },
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "/api/plano-aula/plano-1/documentos/doc-1/visualizar-sharepoint",
+      "/api/plano-aula/plano-1/documentos/doc-1/download",
       { credentials: "include" },
     );
+    expect(renderAsync).toHaveBeenCalled();
   });
 
   it("registra erro final quando SharePoint e preview falham", async () => {
     fetchMock
+      .mockResolvedValueOnce({
+        ok: false,
+      })
       .mockResolvedValueOnce({
         ok: false,
         status: 500,
@@ -142,9 +155,6 @@ describe("DocumentoEditorModal", () => {
           success: false,
           error: { message: "Falha ao baixar" },
         }),
-      })
-      .mockResolvedValueOnce({
-        ok: false,
       });
 
     render(

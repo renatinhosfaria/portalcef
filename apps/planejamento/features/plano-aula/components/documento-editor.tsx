@@ -138,7 +138,7 @@ export function DocumentoEditorModal({
       setCarregando(false);
       if (iframeRef.current) {
         iframeRef.current.src = "about:blank";
-        iframeRef.current.srcdoc = "";
+        iframeRef.current.removeAttribute("srcdoc");
       }
       return;
     }
@@ -149,48 +149,9 @@ export function DocumentoEditorModal({
         setCarregando(true);
         setError(null);
 
-        let erroPreviewLocal: unknown = null;
-
-        try {
-          registrarEventoObservabilidade({
-            evento: "arquivo_acao",
-            nivel: "info",
-            arquivo,
-            detalhes: {
-              acao: "download_preview",
-              fallback: "docx-preview",
-              modulo,
-              status: "inicio",
-            },
-          });
-          enviarObservabilidadeBestEffort();
-          const iframeHtml = await renderizarViaDocxPreview(
-            modulo,
-            planoId,
-            documentoId,
-          );
-          if (iframeRef.current) {
-            iframeRef.current.setAttribute("sandbox", "allow-same-origin");
-            iframeRef.current.src = "about:blank";
-            iframeRef.current.srcdoc = iframeHtml;
-          }
-          registrarEventoObservabilidade({
-            evento: "arquivo_acao",
-            nivel: "info",
-            arquivo,
-            detalhes: {
-              acao: "download_preview",
-              fallback: "docx-preview",
-              modulo,
-              status: "sucesso",
-            },
-          });
-          enviarObservabilidadeBestEffort();
-          return;
-        } catch (err) {
-          erroPreviewLocal = err;
-        }
-
+        // O Office para Web preserva paginação, fontes, tabelas e imagens com
+        // a mesma engine do Word. O docx-preview fica como fallback quando o
+        // SharePoint não está disponível para o documento.
         registrarEventoObservabilidade({
           evento: "sharepoint_word",
           nivel: "info",
@@ -224,14 +185,45 @@ export function DocumentoEditorModal({
             "sandbox",
             "allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox",
           );
-          iframeRef.current.srcdoc = "";
+          iframeRef.current.removeAttribute("srcdoc");
           iframeRef.current.src = embedUrl;
           return;
         }
 
-        throw erroPreviewLocal instanceof Error
-          ? erroPreviewLocal
-          : new Error("Não foi possível abrir o documento.");
+        registrarEventoObservabilidade({
+          evento: "arquivo_acao",
+          nivel: "info",
+          arquivo,
+          detalhes: {
+            acao: "download_preview",
+            fallback: "docx-preview",
+            modulo,
+            status: "inicio",
+          },
+        });
+        enviarObservabilidadeBestEffort();
+        const iframeHtml = await renderizarViaDocxPreview(
+          modulo,
+          planoId,
+          documentoId,
+        );
+        if (iframeRef.current) {
+          iframeRef.current.setAttribute("sandbox", "allow-same-origin");
+          iframeRef.current.src = "about:blank";
+          iframeRef.current.srcdoc = iframeHtml;
+        }
+        registrarEventoObservabilidade({
+          evento: "arquivo_acao",
+          nivel: "info",
+          arquivo,
+          detalhes: {
+            acao: "download_preview",
+            fallback: "docx-preview",
+            modulo,
+            status: "sucesso",
+          },
+        });
+        enviarObservabilidadeBestEffort();
       } catch (err) {
         registrarEventoObservabilidade({
           evento: "erro_navegador",
