@@ -28,12 +28,12 @@ function assert(condition: boolean, desc: string) {
 // 1. Teste getUserSegment
 console.log("\n1. Testando getUserSegment:");
 assert(
-  getUserSegment("coordenadora_infantil") === "INFANTIL",
-  "Coord Infantil -> INFANTIL",
+  getUserSegment("coordenadora_infantil") === "ALL",
+  "Coord Infantil -> ALL",
 );
 assert(
-  getUserSegment("coordenadora_fundamental_i") === "FUNDAMENTAL_I",
-  "Coord Fundamental I -> FUNDAMENTAL_I",
+  getUserSegment("coordenadora_fundamental_i") === "ALL",
+  "Coord Fundamental I -> ALL",
 );
 assert(getUserSegment("professora") === "ALL", "Professora -> ALL (default)");
 assert(getUserSegment("diretora_geral") === "ALL", "Diretora -> ALL");
@@ -91,8 +91,8 @@ assert(
 
 const whereCoord = getPlanningsWhereClause(mockUser("coordenadora_infantil"));
 assert(
-  whereCoord !== undefined,
-  "Query Builders para coordenação retorna cláusula",
+  whereCoord === undefined,
+  "Query Builders para coordenação não aplica filtro de etapa",
 );
 
 const whereDir = getPlanningsWhereClause(mockUser("diretora_geral"));

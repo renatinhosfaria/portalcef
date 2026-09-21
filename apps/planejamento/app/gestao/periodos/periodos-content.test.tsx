@@ -98,15 +98,15 @@ describe("PeriodosContent", () => {
     });
   });
 
-  it("limita coordenadora_infantil a criar período apenas em INFANTIL", async () => {
+  it("permite coordenadora_infantil criar período em qualquer etapa", async () => {
     const user = userEvent.setup();
     mocks.tenant.role = "coordenadora_infantil";
 
     render(<PeriodosContent />);
 
-    expect(
-      screen.getByRole("button", { name: "FUNDAMENTAL I" }),
-    ).toBeDisabled();
+    const etapa = screen.getByRole("button", { name: "FUNDAMENTAL I" });
+    expect(etapa).not.toBeDisabled();
+    await user.click(etapa);
 
     await user.click(
       screen.getByRole("button", { name: /adicionar plano de aula/i }),
@@ -118,7 +118,7 @@ describe("PeriodosContent", () => {
 
     await waitFor(() => {
       expect(mocks.criarPeriodo).toHaveBeenCalledWith(
-        expect.objectContaining({ etapa: "INFANTIL" }),
+        expect.objectContaining({ etapa: "FUNDAMENTAL_I" }),
       );
     });
   });

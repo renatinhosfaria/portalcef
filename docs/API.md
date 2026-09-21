@@ -350,7 +350,9 @@ Sistema de planos de aula com workflow de aprovacao em duas etapas: analista ped
 - **Professora**: `professora`
 - **Analista**: `analista_pedagogico`
 - **Coordenadora**: `coordenadora_geral`, `coordenadora_bercario`, `coordenadora_infantil`, `coordenadora_fundamental_i`, `coordenadora_fundamental_ii`, `coordenadora_medio`
-- **Gestao**: `master`, `diretora_geral`, `gerente_unidade`
+- **Gestao**: `master`, `diretora_geral`, `gerente_unidade`, `gerente_financeiro` e todas as roles `coordenadora_*`
+
+No módulo de planejamento, todas as coordenadoras têm a mesma superfície de gestão da gerente de unidade dentro da própria unidade.
 
 ---
 
@@ -1366,7 +1368,7 @@ Sistema de gerenciamento de períodos de planejamento por etapa educacional.
 
 Cria um novo período de planejamento para uma etapa específica.
 
-**Permissões:** Coordenadoras (por etapa) + Gestão (coordenadora_geral, gerente_unidade, diretora_geral)
+**Permissões:** Todas as coordenadoras e Gestão (`coordenadora_geral`, `gerente_unidade`, `diretora_geral`)
 
 **Body:**
 
@@ -1395,8 +1397,7 @@ Cria um novo período de planejamento para uma etapa específica.
 - `dataInicio` deve ser anterior a `dataFim`
 - `dataMaximaEntrega` deve ser anterior a `dataInicio`
 - Não pode haver sobreposição de períodos para a mesma etapa
-- Coordenadoras de etapa só podem criar períodos para sua etapa específica
-- Gestão pode criar períodos para qualquer etapa
+- Coordenadoras e Gestão podem criar períodos para qualquer etapa da unidade
 
 **Resposta 201 Created:**
 
@@ -1424,7 +1425,7 @@ Cria um novo período de planejamento para uma etapa específica.
 | 400 | Data de início deve ser anterior à data de fim |
 | 400 | Data máxima de entrega deve ser anterior à data de início |
 | 400 | Já existe um período conflitante para esta etapa |
-| 403 | Coordenadora só pode criar períodos para sua etapa |
+| 403 | Usuário sem permissão para criar períodos |
 
 **Exemplo cURL:**
 
@@ -1603,7 +1604,7 @@ curl http://localhost:3001/api/plano-aula-periodo/turma/uuid-turma \
 
 Edita um período existente.
 
-**Permissões:** Coordenadoras (por etapa) + Gestão (coordenadora_geral, gerente_unidade, diretora_geral)
+**Permissões:** Todas as coordenadoras e Gestão (`coordenadora_geral`, `gerente_unidade`, `diretora_geral`)
 
 **Path Parameters:**
 
@@ -1625,7 +1626,7 @@ Edita um período existente.
 **Validações:**
 
 - Mesmas validações do POST
-- Coordenadoras de etapa só podem editar períodos de sua etapa
+- Coordenadoras podem editar períodos de qualquer etapa da unidade
 - Proteção contra edição de datas de períodos em andamento ou finalizados
 
 **Resposta 200 OK:**
@@ -1652,7 +1653,7 @@ Edita um período existente.
 | Código | Mensagem |
 |--------|----------|
 | 404 | Período não encontrado |
-| 403 | Coordenadora só pode editar períodos de sua etapa |
+| 403 | Usuário sem permissão para editar períodos |
 | 400 | Não é possível editar datas de período em andamento |
 
 **Exemplo cURL:**
@@ -1672,7 +1673,7 @@ curl -X PUT http://localhost:3001/api/plano-aula-periodo/uuid-periodo \
 
 Exclui um período. Bloqueado se houver planos de aula vinculados.
 
-**Permissões:** Coordenadoras (por etapa) + Gestão (coordenadora_geral, gerente_unidade, diretora_geral)
+**Permissões:** Todas as coordenadoras e Gestão (`coordenadora_geral`, `gerente_unidade`, `diretora_geral`)
 
 **Path Parameters:**
 
@@ -1689,13 +1690,13 @@ Exclui um período. Bloqueado se houver planos de aula vinculados.
 | Código | Mensagem |
 |--------|----------|
 | 404 | Período não encontrado |
-| 403 | Coordenadora só pode excluir períodos de sua etapa |
+| 403 | Usuário sem permissão para excluir períodos |
 | 400 | Não é possível excluir período com planos vinculados |
 
 **Validações:**
 
 - Período deve pertencer à unidade do usuário (tenant isolation)
-- Coordenadoras de etapa só podem excluir períodos de sua etapa
+- Coordenadoras podem excluir períodos de qualquer etapa da unidade
 - Bloqueado se existirem planos de aula vinculados ao período
 
 **Exemplo cURL:**

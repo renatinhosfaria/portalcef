@@ -142,6 +142,24 @@ describe("ProvaController", () => {
     };
   };
 
+  it("autoriza todas as coordenadoras a excluir provas como a gerente de unidade", () => {
+    const roles = Reflect.getMetadata(
+      ROLES_KEY,
+      ProvaController.prototype.deletarProva,
+    );
+
+    expect(roles).toEqual(
+      expect.arrayContaining([
+        "coordenadora_geral",
+        "coordenadora_bercario",
+        "coordenadora_infantil",
+        "coordenadora_fundamental_i",
+        "coordenadora_fundamental_ii",
+        "coordenadora_medio",
+      ]),
+    );
+  });
+
   const criarReply = () => ({
     header: jest.fn().mockReturnThis(),
     status: jest.fn().mockReturnThis(),

@@ -292,7 +292,7 @@ export class PlanoAulaService {
       return this.formatPlanoResponse(plano);
     }
 
-    // Coordenadora pode ver planos da sua unidade e segmento
+    // Coordenadora pode ver todos os planos da sua unidade, como a gestão.
     if (isCoordenadoraUser && isSameUnit) {
       const turmaDoPlano = await db.query.turmas.findFirst({
         where: eq(turmas.id, plano.turmaId),
@@ -657,8 +657,7 @@ export class PlanoAulaService {
   // ============================================
 
   /**
-   * Lista planos pendentes para coordenadora
-   * Filtrado por segmento da coordenadora
+   * Lista planos pendentes para coordenadora em toda a unidade
    */
   async listarPendentesCoordenadora(user: UserContext) {
     const db = getDb();
@@ -684,7 +683,8 @@ export class PlanoAulaService {
       orderBy: [desc(planoAula.submittedAt)],
     });
 
-    // Filtrar por segmento da coordenadora
+    // A lista já está limitada à unidade da sessão. Coordenadoras têm visão
+    // global das etapas, assim como a gerente de unidade.
     const segmentosPermitidos = getSegmentosPermitidos(user.role);
 
     let planosFiltrados = planosBase;

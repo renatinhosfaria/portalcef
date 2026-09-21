@@ -329,7 +329,7 @@ export class ProvaService {
       return this.formatProvaResponse(provaEncontrada);
     }
 
-    // Coordenadora pode ver provas da sua unidade e segmento
+    // Coordenadora pode ver provas de toda a sua unidade
     if (isCoordenadoraUser && isSameUnit) {
       const turmaDoProva = await db.query.turmas.findFirst({
         where: eq(turmas.id, provaEncontrada.turmaId),
@@ -1063,7 +1063,8 @@ export class ProvaService {
       });
     }
 
-    // Filtro por segmento respeitando o escopo das coordenadoras especificas.
+    // A lista já está limitada à unidade da sessão. Coordenadoras têm visão
+    // global das etapas, assim como a gerente de unidade.
     provasFiltradas = provasFiltradas.filter((p: ProvaComRelacoes) => {
       const turmaComStage = p.turma as { stage?: { code: string } };
       const stageCode = turmaComStage?.stage?.code;

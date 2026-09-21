@@ -8,14 +8,15 @@ import {
 } from "./permissions";
 
 describe("permissions", () => {
-  it("maps coordinator roles to the correct stage codes", () => {
-    expect(getUserSegment("coordenadora_bercario")).toBe("BERCARIO");
-    expect(getUserSegment("coordenadora_infantil")).toBe("INFANTIL");
-    expect(getUserSegment("coordenadora_fundamental_i")).toBe("FUNDAMENTAL_I");
-    expect(getUserSegment("coordenadora_fundamental_ii")).toBe(
-      "FUNDAMENTAL_II",
-    );
-    expect(getUserSegment("coordenadora_medio")).toBe("MEDIO");
+  it.each([
+    "coordenadora_geral",
+    "coordenadora_bercario",
+    "coordenadora_infantil",
+    "coordenadora_fundamental_i",
+    "coordenadora_fundamental_ii",
+    "coordenadora_medio",
+  ] as const)("retorna ALL para %s, como para a gerente de unidade", (role) => {
+    expect(getUserSegment(role)).toBe("ALL");
   });
 
   it("returns ALL for roles without stage scoping", () => {

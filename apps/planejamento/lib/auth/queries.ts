@@ -30,7 +30,7 @@ export function canAccessPlanning(
     return planning.userId === user.id;
   }
 
-  // Coordenação: verificar segmento
+  // Coordenadoras têm a mesma visão de unidade da gerente de unidade.
   if (isCoordenacao(user.role)) {
     const segment = getUserSegment(user.role);
 
@@ -55,7 +55,7 @@ export function canAccessPlanning(
     }
   }
 
-  // Direção: acesso total
+  // Demais roles com acesso ao módulo: sem filtro adicional aqui.
   return true;
 }
 
@@ -88,7 +88,7 @@ export function getPlanningsWhereClause(user: UserContext) {
     }
   }
 
-  // Direção: sem filtro (undefined)
+  // Coordenadoras e demais roles gerenciais: sem filtro de etapa.
   return undefined;
 }
 

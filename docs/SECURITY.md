@@ -81,6 +81,8 @@ Request -> AuthGuard -> RolesGuard -> TenantGuard -> Controller
 - **Acesso total na unidade**: `gerente_unidade`, `gerente_financeiro`, `coordenadora_geral`, `analista_pedagogico`.
 - **Roles por etapa**: `coordenadora_*`, `professora`, `auxiliar_sala` restringidas por `stageId`.
 
+No módulo de planejamento, todas as coordenadoras têm as mesmas funções de gestão da `gerente_unidade` em todas as etapas da própria unidade. Essa regra abrange planos, provas, relatórios e a configuração de períodos, ciclos e semestres. O isolamento por unidade continua sendo validado com os dados da sessão.
+
 **Regra de ouro:** identidade do tenant vem sempre da sessao (nunca do payload).
 
 ---

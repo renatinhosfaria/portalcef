@@ -52,7 +52,6 @@ import {
   type CreateRelatorioDto,
   type ListarRelatoriosGestaoDto,
   isAnalista,
-  isCoordenadora,
   isGestao,
 } from "./dto/relatorio.dto";
 
@@ -73,16 +72,14 @@ const PERFIS_COM_ACESSO_A_DOCUMENTOS = [
   "analista_pedagogico",
   "coordenadora_bercario",
   "coordenadora_infantil",
+  "coordenadora_fundamental_i",
+  "coordenadora_fundamental_ii",
+  "coordenadora_medio",
   "coordenadora_geral",
   "gerente_unidade",
   "gerente_financeiro",
   "diretora_geral",
   "master",
-] as const;
-
-const PERFIS_COORDENADORA_POR_SEGMENTO = [
-  "coordenadora_bercario",
-  "coordenadora_infantil",
 ] as const;
 
 const PERFIS_COM_RESTRICAO_DE_AUTORIA = [
@@ -268,7 +265,6 @@ export class RelatorioService {
     const isOwner = encontrado.userId === user.userId;
     const isGestaoUser = isGestao(user.role);
     const isAnalistaUser = isAnalista(user.role);
-    const isCoordenadoraUser = isCoordenadora(user.role);
     const isSameUnit = encontrado.unitId === user.unitId;
 
     if (isOwner) {
@@ -281,14 +277,6 @@ export class RelatorioService {
 
     if (isAnalistaUser && isSameUnit) {
       return this.formatResponse(encontrado);
-    }
-
-    if (isCoordenadoraUser && isSameUnit) {
-      // Verificar se a coordenadora tem permissão para a etapa do relatório
-      const turmaInfo = await this.buscarEtapaDaTurma(encontrado.turmaId);
-      if (turmaInfo && this.coordenadoraPodeVerEtapa(user.role, turmaInfo)) {
-        return this.formatResponse(encontrado);
-      }
     }
 
     throw new ForbiddenException(
@@ -1051,17 +1039,6 @@ export class RelatorioService {
       throw criarErroPermissaoExclusaoDocumento();
     }
 
-    if (
-      PERFIS_COORDENADORA_POR_SEGMENTO.includes(
-        user.role as (typeof PERFIS_COORDENADORA_POR_SEGMENTO)[number],
-      )
-    ) {
-      const etapa = await this.buscarEtapaDaTurma(encontrado.turmaId);
-      if (!this.coordenadoraPodeVerEtapa(user.role, etapa ?? "")) {
-        throw criarErroPermissaoExclusaoDocumento();
-      }
-    }
-
     return this.formatResponse(encontrado);
   }
 
@@ -1698,44 +1675,6 @@ export class RelatorioService {
       status === "DEVOLVIDO_COORDENADORA" ||
       status === "RECUPERADO"
     );
-  }
-
-  /**
-   * Verifica se uma coordenadora pode acessar relatórios de uma determinada etapa.
-   */
-  private coordenadoraPodeVerEtapa(role: string, codigoEtapa: string): boolean {
-    if (
-      role === "master" ||
-      role === "diretora_geral" ||
-      role === "gerente_unidade" ||
-      role === "coordenadora_geral"
-    ) {
-      return true;
-    }
-
-    if (role === "coordenadora_bercario") {
-      return codigoEtapa === "BERCARIO";
-    }
-
-    if (role === "coordenadora_infantil") {
-      return codigoEtapa === "INFANTIL";
-    }
-
-    return false;
-  }
-
-  /**
-   * Busca apenas o código da etapa da turma.
-   */
-  private async buscarEtapaDaTurma(turmaId: string): Promise<string | null> {
-    const db = getDb();
-    const linhas = await db
-      .select({ etapaCode: educationStages.code })
-      .from(turmas)
-      .innerJoin(educationStages, eq(turmas.stageId, educationStages.id))
-      .where(eq(turmas.id, turmaId));
-
-    return linhas[0]?.etapaCode ?? null;
   }
 
   private mapToSummary(

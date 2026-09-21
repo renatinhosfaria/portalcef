@@ -1155,45 +1155,31 @@ describe("PlanoAulaService", () => {
       expect(mockTx.delete).toHaveBeenCalledTimes(2);
     });
 
-    it("bloqueia coordenadora ao excluir plano fora do seu segmento", async () => {
+    it("permite coordenadora excluir plano de qualquer etapa da unidade", async () => {
       const coordenadoraInfantil = {
         ...usuarioLogado,
         role: "coordenadora_infantil",
         stageId: "stage-infantil",
       };
-      mockDb.query.turmas.findFirst.mockResolvedValue({
-        id: "turma-1",
-        stage: { code: "FUNDAMENTAL_I" },
-      });
 
       await expect(
         service.removerDocumento(
           coordenadoraInfantil,
           "plano-1",
           "doc-1",
-          "Arquivo não pertence ao segmento da coordenadora",
+          "Arquivo removido pela coordenação",
         ),
-      ).rejects.toMatchObject({
-        response: expect.objectContaining({
-          code: "PERMISSAO_EXCLUSAO_DOCUMENTO",
-        }),
-      });
+      ).resolves.toBeUndefined();
 
-      expect(mockDb.query.planoDocumento.findFirst).not.toHaveBeenCalled();
-      expect(mockDb.transaction).not.toHaveBeenCalled();
+      expect(mockDb.transaction).toHaveBeenCalledTimes(1);
     });
 
-    it("permite coordenadora ao excluir plano do seu segmento", async () => {
+    it("permite coordenadora ao excluir plano de qualquer etapa da unidade", async () => {
       const coordenadoraInfantil = {
         ...usuarioLogado,
         role: "coordenadora_infantil",
         stageId: "stage-infantil",
       };
-      mockDb.query.turmas.findFirst.mockResolvedValue({
-        id: "turma-1",
-        stage: { code: "INFANTIL" },
-      });
-
       await expect(
         service.removerDocumento(
           coordenadoraInfantil,
@@ -1203,7 +1189,6 @@ describe("PlanoAulaService", () => {
         ),
       ).resolves.toBeUndefined();
 
-      expect(mockDb.query.turmas.findFirst).toHaveBeenCalled();
       expect(mockDb.transaction).toHaveBeenCalledTimes(1);
     });
 
@@ -1341,10 +1326,18 @@ describe("PlanoAulaService", () => {
   });
 
   describe("getDashboard", () => {
-    it("bloqueia gerente_unidade consultando dashboard de outra unidade", async () => {
+    it.each([
+      "gerente_unidade",
+      "coordenadora_geral",
+      "coordenadora_bercario",
+      "coordenadora_infantil",
+      "coordenadora_fundamental_i",
+      "coordenadora_fundamental_ii",
+      "coordenadora_medio",
+    ])("bloqueia %s consultando dashboard de outra unidade", async (role) => {
       const user = {
         userId: "user-1",
-        role: "gerente_unidade",
+        role,
         schoolId: "school-1",
         unitId: "unit-1",
         stageId: null,

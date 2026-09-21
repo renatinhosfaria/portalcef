@@ -125,11 +125,9 @@ export class PlanoAulaPeriodoController {
     },
     @Body() dto: CriarPeriodoDto,
   ) {
-    // Validar permissão por etapa
+    // Validar permissão de gestão
     if (!this.podeEditarEtapa(session.role, dto.etapa)) {
-      throw new ForbiddenException(
-        "Sem permissão para criar períodos desta etapa",
-      );
+      throw new ForbiddenException("Sem permissão para criar períodos");
     }
 
     if (!session.unitId) {
@@ -162,14 +160,12 @@ export class PlanoAulaPeriodoController {
       throw new BadRequestException("Sessão inválida: unitId ausente");
     }
 
-    // Buscar período e validar tenant (Task 12 corrigiu buscarPorId para receber unitId)
+    // Buscar período e validar tenant
     const periodo = await this.service.buscarPorId(id, session.unitId);
 
-    // Validar permissão por etapa (mesma lógica do POST)
+    // Validar permissão de gestão (mesma lógica do POST)
     if (!this.podeEditarEtapa(session.role, periodo.etapa)) {
-      throw new ForbiddenException(
-        "Sem permissão para editar períodos desta etapa",
-      );
+      throw new ForbiddenException("Sem permissão para editar períodos");
     }
 
     const data = await this.service.editarPeriodo(id, session.unitId, dto);
@@ -196,38 +192,16 @@ export class PlanoAulaPeriodoController {
     // Buscar período e validar tenant
     const periodo = await this.service.buscarPorId(id, session.unitId);
 
-    // Validar permissão por etapa
+    // Validar permissão de gestão
     if (!this.podeEditarEtapa(session.role, periodo.etapa)) {
-      throw new ForbiddenException(
-        "Sem permissão para excluir períodos desta etapa",
-      );
+      throw new ForbiddenException("Sem permissão para excluir períodos");
     }
 
     const result = await this.service.excluirPeriodo(id, session.unitId);
     return { success: true, data: result };
   }
 
-  private podeEditarEtapa(role: string, etapa: string): boolean {
-    const mapeamento: Record<string, string[]> = {
-      coordenadora_infantil: ["INFANTIL"],
-      coordenadora_fundamental_i: ["FUNDAMENTAL_I"],
-      coordenadora_fundamental_ii: ["FUNDAMENTAL_II"],
-      coordenadora_bercario: ["BERCARIO"],
-      coordenadora_medio: ["MEDIO"],
-    };
-
-    // Roles globais podem editar qualquer etapa
-    if (
-      [
-        "master",
-        "diretora_geral",
-        "gerente_unidade",
-        "coordenadora_geral",
-      ].includes(role)
-    ) {
-      return true;
-    }
-
-    return mapeamento[role]?.includes(etapa) || false;
+  private podeEditarEtapa(role: string, _etapa: string): boolean {
+    return (GERENCIAR_PERIODOS_ROLES as readonly string[]).includes(role);
   }
 }

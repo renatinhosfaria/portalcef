@@ -39,12 +39,10 @@ function getEtapasPermitidas(role?: string): Etapa[] {
     role === "master" ||
     role === "diretora_geral" ||
     role === "gerente_unidade" ||
-    role === "coordenadora_geral"
+    role.startsWith("coordenadora_")
   ) {
     return [...ETAPAS];
   }
-  if (role === "coordenadora_bercario") return ["BERCARIO"];
-  if (role === "coordenadora_infantil") return ["INFANTIL"];
   return [];
 }
 

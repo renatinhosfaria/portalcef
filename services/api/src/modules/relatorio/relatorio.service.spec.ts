@@ -757,6 +757,9 @@ describe("RelatorioService", () => {
         "analista_pedagogico",
         "coordenadora_bercario",
         "coordenadora_infantil",
+        "coordenadora_fundamental_i",
+        "coordenadora_fundamental_ii",
+        "coordenadora_medio",
         "coordenadora_geral",
         "gerente_unidade",
         "gerente_financeiro",
@@ -780,22 +783,6 @@ describe("RelatorioService", () => {
         );
         mockDb.query.users.findFirst.mockResolvedValueOnce({ name: "Usuária" });
         mockDb.query.units.findFirst.mockResolvedValue({ id: "unit-1" });
-        if (
-          role === "coordenadora_bercario" ||
-          role === "coordenadora_infantil"
-        ) {
-          mockDb.select.mockReturnValueOnce({
-            from: jest.fn().mockReturnThis(),
-            innerJoin: jest.fn().mockReturnThis(),
-            where: jest.fn().mockResolvedValue([
-              {
-                etapaCode:
-                  role === "coordenadora_bercario" ? "BERCARIO" : "INFANTIL",
-              },
-            ]),
-          });
-        }
-
         await expect(
           removerDocumento(
             {
@@ -868,22 +855,17 @@ describe("RelatorioService", () => {
       ).resolves.toBeUndefined();
     });
 
-    it("rejeita coordenadora quando a etapa do relatório não pertence ao seu segmento", async () => {
+    it("permite coordenadora acessar relatório de qualquer etapa da unidade", async () => {
       prepararExclusao();
-      mockDb.select.mockReturnValueOnce({
-        from: jest.fn().mockReturnThis(),
-        innerJoin: jest.fn().mockReturnThis(),
-        where: jest.fn().mockResolvedValue([{ etapaCode: "INFANTIL" }]),
-      });
 
       await expect(
         removerDocumento(
           { ...session, role: "coordenadora_bercario" },
           "r-1",
           "doc-1",
-          "segmento incompatível para exclusão",
+          "remoção solicitada pela coordenação",
         ),
-      ).rejects.toThrow(ForbiddenException);
+      ).resolves.toBeUndefined();
     });
 
     it("não interrompe a remoção local quando Storage ou SharePoint falham", async () => {

@@ -1058,12 +1058,7 @@ describe("ProvaService", () => {
       expect(mockDb.query.units.findFirst).toHaveBeenCalled();
     });
 
-    it("bloqueia coordenadora quando a turma está fora do seu segmento", async () => {
-      mockDb.query.turmas.findFirst.mockResolvedValue({
-        id: "turma-1",
-        stage: { code: "FUNDAMENTAL_I" },
-      });
-
+    it("permite coordenadora excluir prova de qualquer etapa da unidade", async () => {
       await expect(
         executarRemocao(
           {
@@ -1075,25 +1070,14 @@ describe("ProvaService", () => {
           },
           "prova-1",
           "doc-1",
-          "Documento fora do segmento da coordenadora",
+          "Documento removido pela coordenação",
         ),
-      ).rejects.toMatchObject({
-        response: expect.objectContaining({
-          code: "PERMISSAO_EXCLUSAO_DOCUMENTO",
-          message: "Você não tem permissão para excluir este arquivo.",
-        }),
-      });
+      ).resolves.toBeUndefined();
 
-      expect(mockDb.query.provaDocumento.findFirst).not.toHaveBeenCalled();
-      expect(mockDb.transaction).not.toHaveBeenCalled();
+      expect(mockDb.transaction).toHaveBeenCalledTimes(1);
     });
 
-    it("permite coordenadora quando a turma está no seu segmento", async () => {
-      mockDb.query.turmas.findFirst.mockResolvedValue({
-        id: "turma-1",
-        stage: { code: "INFANTIL" },
-      });
-
+    it("permite coordenadora quando a turma está em qualquer etapa da unidade", async () => {
       await expect(
         executarRemocao(
           {
@@ -1109,7 +1093,6 @@ describe("ProvaService", () => {
         ),
       ).resolves.toBeUndefined();
 
-      expect(mockDb.query.turmas.findFirst).toHaveBeenCalled();
       expect(mockDb.transaction).toHaveBeenCalledTimes(1);
     });
 
@@ -1209,10 +1192,18 @@ describe("ProvaService", () => {
   });
 
   describe("getDashboard", () => {
-    it("bloqueia gerente_unidade consultando dashboard de outra unidade", async () => {
+    it.each([
+      "gerente_unidade",
+      "coordenadora_geral",
+      "coordenadora_bercario",
+      "coordenadora_infantil",
+      "coordenadora_fundamental_i",
+      "coordenadora_fundamental_ii",
+      "coordenadora_medio",
+    ])("bloqueia %s consultando dashboard de outra unidade", async (role) => {
       const user = {
         userId: "user-1",
-        role: "gerente_unidade",
+        role,
         schoolId: "school-1",
         unitId: "unit-1",
         stageId: null,
@@ -1228,7 +1219,7 @@ describe("ProvaService", () => {
   });
 
   describe("listarProvasGestao", () => {
-    it("permite coordenadora listar somente provas do seu segmento", async () => {
+    it("permite coordenadora listar provas de qualquer etapa da unidade", async () => {
       const user = {
         userId: "coord-1",
         role: "coordenadora_infantil",
@@ -1276,8 +1267,11 @@ describe("ProvaService", () => {
         limit: 20,
       });
 
-      expect(resultado.data).toHaveLength(1);
-      expect(resultado.data[0]?.id).toBe("prova-infantil");
+      expect(resultado.data).toHaveLength(2);
+      expect(resultado.data.map((item) => item.id)).toEqual([
+        "prova-infantil",
+        "prova-fundamental",
+      ]);
     });
   });
 });

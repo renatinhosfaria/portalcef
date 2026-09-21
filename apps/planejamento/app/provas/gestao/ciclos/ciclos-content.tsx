@@ -33,12 +33,7 @@ function getMensagemErro(error: unknown, fallback: string) {
 
 /**
  * Retorna as etapas que a role pode gerenciar
- * - coordenadora_geral: todas as etapas
- * - coordenadora_bercario: apenas BERCARIO
- * - coordenadora_infantil: apenas INFANTIL
- * - coordenadora_fundamental_i: apenas FUNDAMENTAL_I
- * - coordenadora_fundamental_ii: apenas FUNDAMENTAL_II
- * - coordenadora_medio: apenas MEDIO
+ * - Todas as coordenadoras: todas as etapas
  * - master, diretora_geral: todas as etapas
  */
 function getEtapasPermitidas(role?: string): Etapa[] {
@@ -49,22 +44,12 @@ function getEtapasPermitidas(role?: string): Etapa[] {
     role === "master" ||
     role === "diretora_geral" ||
     role === "gerente_unidade" ||
-    role === "coordenadora_geral"
+    role.startsWith("coordenadora_")
   ) {
     return [...ETAPAS];
   }
 
-  // Coordenadoras especificas
-  const roleEtapaMap: Record<string, Etapa> = {
-    coordenadora_bercario: "BERCARIO",
-    coordenadora_infantil: "INFANTIL",
-    coordenadora_fundamental_i: "FUNDAMENTAL_I",
-    coordenadora_fundamental_ii: "FUNDAMENTAL_II",
-    coordenadora_medio: "MEDIO",
-  };
-
-  const etapa = roleEtapaMap[role];
-  return etapa ? [etapa] : [];
+  return [];
 }
 
 export function CiclosContent() {

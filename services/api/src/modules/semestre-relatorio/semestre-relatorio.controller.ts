@@ -37,6 +37,9 @@ const VISUALIZAR_ROLES = [
   "coordenadora_geral",
   "coordenadora_bercario",
   "coordenadora_infantil",
+  "coordenadora_fundamental_i",
+  "coordenadora_fundamental_ii",
+  "coordenadora_medio",
   "analista_pedagogico",
   "professora",
   "auxiliar_sala",
@@ -49,6 +52,9 @@ const GERENCIAR_ROLES = [
   "coordenadora_geral",
   "coordenadora_bercario",
   "coordenadora_infantil",
+  "coordenadora_fundamental_i",
+  "coordenadora_fundamental_ii",
+  "coordenadora_medio",
 ] as const;
 
 @Controller(["semestre-relatorio", "semana-relatorio"])
@@ -94,7 +100,7 @@ export class SemestreRelatorioController {
   ) {
     if (!session.unitId) throw new BadRequestException("unitId ausente");
     if (!this.podeGerenciarEtapa(session.role, dto.etapa)) {
-      throw new ForbiddenException("Sem permissão para criar semestres desta etapa");
+      throw new ForbiddenException("Sem permissão para criar semestres");
     }
     const data = await this.service.criar(dto, session.unitId, session.userId);
     return { success: true, data };
@@ -110,7 +116,7 @@ export class SemestreRelatorioController {
     if (!session.unitId) throw new BadRequestException("unitId ausente");
     const semestre = await this.service.buscarPorId(id, session.unitId);
     if (!this.podeGerenciarEtapa(session.role, semestre.etapa)) {
-      throw new ForbiddenException("Sem permissão para editar semestres desta etapa");
+      throw new ForbiddenException("Sem permissão para editar semestres");
     }
     const data = await this.service.editar(id, dto, session.unitId);
     return { success: true, data };
@@ -125,20 +131,13 @@ export class SemestreRelatorioController {
     if (!session.unitId) throw new BadRequestException("unitId ausente");
     const semestre = await this.service.buscarPorId(id, session.unitId);
     if (!this.podeGerenciarEtapa(session.role, semestre.etapa)) {
-      throw new ForbiddenException("Sem permissão para excluir semestres desta etapa");
+      throw new ForbiddenException("Sem permissão para excluir semestres");
     }
     await this.service.excluir(id, session.unitId);
     return { success: true };
   }
 
-  private podeGerenciarEtapa(role: string, etapa: string): boolean {
-    if (["master", "diretora_geral", "gerente_unidade", "coordenadora_geral"].includes(role)) {
-      return true;
-    }
-    const mapeamento: Record<string, string[]> = {
-      coordenadora_bercario: ["BERCARIO"],
-      coordenadora_infantil: ["INFANTIL"],
-    };
-    return mapeamento[role]?.includes(etapa) ?? false;
+  private podeGerenciarEtapa(role: string, _etapa: string): boolean {
+    return (GERENCIAR_ROLES as readonly string[]).includes(role);
   }
 }

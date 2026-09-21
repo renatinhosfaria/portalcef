@@ -34,6 +34,9 @@ export const isCoordenadora = (role: string) =>
   [
     "coordenadora_bercario",
     "coordenadora_infantil",
+    "coordenadora_fundamental_i",
+    "coordenadora_fundamental_ii",
+    "coordenadora_medio",
     "coordenadora_geral",
     "gerente_unidade",
     "diretora_geral",
@@ -49,6 +52,9 @@ export const isGestao = (role: string) =>
     "coordenadora_geral",
     "coordenadora_bercario",
     "coordenadora_infantil",
+    "coordenadora_fundamental_i",
+    "coordenadora_fundamental_ii",
+    "coordenadora_medio",
     "analista_pedagogico",
   ].includes(role);
 

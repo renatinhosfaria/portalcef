@@ -78,6 +78,9 @@ const COORDENADORA_ACCESS = [
   "coordenadora_geral",
   "coordenadora_bercario",
   "coordenadora_infantil",
+  "coordenadora_fundamental_i",
+  "coordenadora_fundamental_ii",
+  "coordenadora_medio",
 ] as const;
 
 /** Roles de gestão (visualização ampla e configuração) */
@@ -89,6 +92,9 @@ const GESTAO_ACCESS = [
   "coordenadora_geral",
   "coordenadora_bercario",
   "coordenadora_infantil",
+  "coordenadora_fundamental_i",
+  "coordenadora_fundamental_ii",
+  "coordenadora_medio",
   "analista_pedagogico",
 ] as const;
 

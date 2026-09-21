@@ -122,11 +122,9 @@ export class ProvaCicloController {
     },
     @Body() dto: CriarCicloDto,
   ) {
-    // Validar permissao por etapa
+    // Validar permissao de gestao
     if (!this.podeEditarEtapa(session.role, dto.etapa)) {
-      throw new ForbiddenException(
-        "Sem permissao para criar ciclos desta etapa",
-      );
+      throw new ForbiddenException("Sem permissao para criar ciclos");
     }
 
     if (!session.unitId) {
@@ -162,11 +160,9 @@ export class ProvaCicloController {
     // Buscar ciclo e validar tenant
     const ciclo = await this.service.buscarPorId(id, session.unitId);
 
-    // Validar permissao por etapa
+    // Validar permissao de gestao
     if (!this.podeEditarEtapa(session.role, ciclo.etapa)) {
-      throw new ForbiddenException(
-        "Sem permissao para editar ciclos desta etapa",
-      );
+      throw new ForbiddenException("Sem permissao para editar ciclos");
     }
 
     const data = await this.service.editarCiclo(id, session.unitId, dto);
@@ -193,38 +189,16 @@ export class ProvaCicloController {
     // Buscar ciclo e validar tenant
     const ciclo = await this.service.buscarPorId(id, session.unitId);
 
-    // Validar permissao por etapa
+    // Validar permissao de gestao
     if (!this.podeEditarEtapa(session.role, ciclo.etapa)) {
-      throw new ForbiddenException(
-        "Sem permissao para excluir ciclos desta etapa",
-      );
+      throw new ForbiddenException("Sem permissao para excluir ciclos");
     }
 
     const result = await this.service.excluirCiclo(id, session.unitId);
     return { success: true, data: result };
   }
 
-  private podeEditarEtapa(role: string, etapa: string): boolean {
-    const mapeamento: Record<string, string[]> = {
-      coordenadora_infantil: ["INFANTIL"],
-      coordenadora_fundamental_i: ["FUNDAMENTAL_I"],
-      coordenadora_fundamental_ii: ["FUNDAMENTAL_II"],
-      coordenadora_bercario: ["BERCARIO"],
-      coordenadora_medio: ["MEDIO"],
-    };
-
-    // Roles globais podem editar qualquer etapa
-    if (
-      [
-        "master",
-        "diretora_geral",
-        "gerente_unidade",
-        "coordenadora_geral",
-      ].includes(role)
-    ) {
-      return true;
-    }
-
-    return mapeamento[role]?.includes(etapa) || false;
+  private podeEditarEtapa(role: string, _etapa: string): boolean {
+    return (GERENCIAR_CICLOS_ROLES as readonly string[]).includes(role);
   }
 }

@@ -107,6 +107,33 @@ describe("PlanoAulaPeriodoController", () => {
       );
     });
 
+    it.each([
+      "coordenadora_bercario",
+      "coordenadora_infantil",
+      "coordenadora_fundamental_i",
+      "coordenadora_fundamental_ii",
+      "coordenadora_medio",
+    ])("permite %s gerenciar qualquer etapa", async (role) => {
+      const session = {
+        role,
+        unitId: "session-unidade-id",
+        userId: "session-user-id",
+        schoolId: "school-id",
+        stageId: null,
+      };
+
+      jest.spyOn(service, "criarPeriodo").mockResolvedValue(periodoFixture());
+
+      await expect(
+        controller.criarPeriodo(session, {
+          etapa: "MEDIO",
+          dataInicio: "2026-03-01",
+          dataFim: "2026-03-15",
+          dataMaximaEntrega: "2026-02-25",
+        }),
+      ).resolves.toBeDefined();
+    });
+
     it("permite analista_pedagogico visualizar períodos, mas não gerenciar", () => {
       expect(rolesDe("listarPeriodos")).toContain("analista_pedagogico");
       expect(rolesDe("buscarPeriodo")).toContain("analista_pedagogico");
@@ -159,7 +186,7 @@ describe("PlanoAulaPeriodoController", () => {
       );
     });
 
-    it("deve bloquear coordenadora_infantil criando período de FUNDAMENTAL_I", async () => {
+    it("deve permitir coordenadora_infantil criando período de FUNDAMENTAL_I", async () => {
       const session = {
         role: "coordenadora_infantil",
         unitId: "unidade-id",
@@ -174,9 +201,9 @@ describe("PlanoAulaPeriodoController", () => {
         dataMaximaEntrega: "2026-02-25",
       };
 
-      await expect(controller.criarPeriodo(session, dto)).rejects.toThrow(
-        ForbiddenException,
-      );
+      jest.spyOn(service, "criarPeriodo").mockResolvedValue(periodoFixture());
+
+      await expect(controller.criarPeriodo(session, dto)).resolves.toBeDefined();
     });
 
     it("deve permitir coordenadora_infantil criando período de INFANTIL", async () => {
@@ -201,7 +228,7 @@ describe("PlanoAulaPeriodoController", () => {
       ).resolves.toBeDefined();
     });
 
-    it("deve bloquear coordenadora_fundamental_i criando período de INFANTIL", async () => {
+    it("deve permitir coordenadora_fundamental_i criando período de INFANTIL", async () => {
       const session = {
         role: "coordenadora_fundamental_i",
         unitId: "unidade-id",
@@ -216,9 +243,9 @@ describe("PlanoAulaPeriodoController", () => {
         dataMaximaEntrega: "2026-02-25",
       };
 
-      await expect(controller.criarPeriodo(session, dto)).rejects.toThrow(
-        ForbiddenException,
-      );
+      jest.spyOn(service, "criarPeriodo").mockResolvedValue(periodoFixture());
+
+      await expect(controller.criarPeriodo(session, dto)).resolves.toBeDefined();
     });
 
     it("deve permitir coordenadora_fundamental_i criando período de FUNDAMENTAL_I", async () => {

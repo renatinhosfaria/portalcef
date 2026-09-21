@@ -111,6 +111,33 @@ describe("ProvaCicloController", () => {
       );
     });
 
+    it.each([
+      "coordenadora_bercario",
+      "coordenadora_infantil",
+      "coordenadora_fundamental_i",
+      "coordenadora_fundamental_ii",
+      "coordenadora_medio",
+    ])("permite %s gerenciar qualquer etapa", async (role) => {
+      const session = {
+        role,
+        unitId: "unidade-id",
+        userId: "user-id",
+        schoolId: "school-id",
+        stageId: null,
+      };
+
+      jest.spyOn(service, "criarCiclo").mockResolvedValue(cicloFixture());
+
+      await expect(
+        controller.criarCiclo(session, {
+          etapa: "MEDIO",
+          dataInicio: "2026-03-01",
+          dataFim: "2026-03-15",
+          dataMaximaEntrega: "2026-02-25",
+        }),
+      ).resolves.toBeDefined();
+    });
+
     it("permite analista_pedagogico visualizar ciclos, mas não gerenciar", () => {
       expect(rolesDe("listarCiclos")).toContain("analista_pedagogico");
       expect(rolesDe("buscarCiclo")).toContain("analista_pedagogico");

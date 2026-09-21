@@ -514,4 +514,22 @@ describe("PlanoAulaController", () => {
       });
     });
   });
+
+  it("autoriza todas as coordenadoras a excluir planos como a gerente de unidade", () => {
+    const roles = Reflect.getMetadata(
+      ROLES_KEY,
+      PlanoAulaController.prototype.deletarPlano,
+    );
+
+    expect(roles).toEqual(
+      expect.arrayContaining([
+        "coordenadora_geral",
+        "coordenadora_bercario",
+        "coordenadora_infantil",
+        "coordenadora_fundamental_i",
+        "coordenadora_fundamental_ii",
+        "coordenadora_medio",
+      ]),
+    );
+  });
 });

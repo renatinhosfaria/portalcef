@@ -95,15 +95,15 @@ describe("CiclosContent", () => {
     expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
 
-  it("limita coordenadora_infantil a criar ciclo apenas em INFANTIL", async () => {
+  it("permite coordenadora_infantil criar ciclo em qualquer etapa", async () => {
     const user = userEvent.setup();
     mocks.tenant.role = "coordenadora_infantil";
 
     render(<CiclosContent />);
 
-    expect(
-      screen.getByRole("button", { name: "FUNDAMENTAL I" }),
-    ).toBeDisabled();
+    const etapa = screen.getByRole("button", { name: "FUNDAMENTAL I" });
+    expect(etapa).not.toBeDisabled();
+    await user.click(etapa);
 
     await user.click(screen.getByRole("button", { name: /adicionar prova/i }));
     await user.type(screen.getByLabelText(/data de inicio/i), "2026-06-10");
@@ -113,7 +113,7 @@ describe("CiclosContent", () => {
 
     await waitFor(() => {
       expect(mocks.criarCiclo).toHaveBeenCalledWith(
-        expect.objectContaining({ etapa: "INFANTIL" }),
+        expect.objectContaining({ etapa: "FUNDAMENTAL_I" }),
       );
     });
   });

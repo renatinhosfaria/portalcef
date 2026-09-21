@@ -80,7 +80,7 @@ export type DashboardQueryDto = z.infer<typeof dashboardQuerySchema>;
 export const ANALISTA_ROLES = ["analista_pedagogico"] as const;
 
 /**
- * Roles que atuam como coordenadora (por segmento)
+ * Roles de coordenadoras de etapa que participam do fluxo de aprovação.
  */
 export const COORDENADORA_ROLES = [
   "coordenadora_bercario",
@@ -99,6 +99,11 @@ export const GESTAO_ROLES = [
   "gerente_unidade",
   "gerente_financeiro",
   "coordenadora_geral",
+  "coordenadora_bercario",
+  "coordenadora_infantil",
+  "coordenadora_fundamental_i",
+  "coordenadora_fundamental_ii",
+  "coordenadora_medio",
 ] as const;
 
 /**
@@ -127,7 +132,8 @@ export const isProfessora = (role: string): boolean =>
 // ============================================
 
 /**
- * Mapeia role de coordenadora para código de etapa educacional
+ * Mapeia role de coordenadora para código de etapa educacional.
+ * Esse mapeamento não restringe as permissões de gestão do planejamento.
  */
 export const COORDENADORA_STAGE_MAP: Record<string, string> = {
   coordenadora_bercario: "BERCARIO",
@@ -138,16 +144,12 @@ export const COORDENADORA_STAGE_MAP: Record<string, string> = {
 };
 
 /**
- * Retorna os segmentos que uma coordenadora pode aprovar
- * Coordenadora geral pode aprovar todos os segmentos
+ * Retorna os segmentos que uma coordenadora pode aprovar.
+ * Todas as coordenadoras possuem a mesma visão gerencial da unidade.
  */
 export const getSegmentosPermitidos = (role: string): string[] | null => {
-  if (isGestao(role)) {
-    return null; // null = todos os segmentos
-  }
-  if (isCoordenadora(role)) {
-    const segmento = COORDENADORA_STAGE_MAP[role];
-    return segmento ? [segmento] : null;
+  if (isGestao(role) || isCoordenadora(role)) {
+    return null; // null = todos os segmentos da unidade
   }
   return []; // Sem permissão
 };
