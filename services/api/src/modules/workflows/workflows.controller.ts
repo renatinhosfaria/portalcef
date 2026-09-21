@@ -148,6 +148,10 @@ export class WorkflowsController {
         "workflows",
       );
     } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+
       this.logger.error(
         `Erro ao fazer upload de anexo de workflow: ${
           error instanceof Error ? error.message : String(error)

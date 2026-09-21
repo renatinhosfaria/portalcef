@@ -24,7 +24,11 @@ const tx = {
   set: jest.fn(),
   where: jest.fn(),
   delete: jest.fn(),
+  select: jest.fn(),
 };
+
+const txSelectWhere = jest.fn();
+const txSelectFrom = jest.fn(() => ({ where: txSelectWhere }));
 
 const db = {
   query: {
@@ -59,6 +63,7 @@ jest.mock("@essencia/db", () => ({
   workflowEtapaProgresso: {
     execucaoId: "workflowEtapaProgresso.execucaoId",
     etapaId: "workflowEtapaProgresso.etapaId",
+    concluida: "workflowEtapaProgresso.concluida",
   },
   workflowEtapas: {
     ordem: "workflowEtapas.ordem",
@@ -133,6 +138,7 @@ function configurarCadeias() {
   tx.set.mockReturnValue(tx);
   tx.where.mockReturnValue(tx);
   tx.delete.mockReturnValue(tx);
+  tx.select.mockReturnValue({ from: txSelectFrom });
   db.update.mockReturnValue(db);
   db.set.mockReturnValue(db);
   db.where.mockReturnValue(db);
@@ -163,6 +169,12 @@ describe("WorkflowsExecucoesService", () => {
     service = module.get(WorkflowsExecucoesService);
     jest.clearAllMocks();
     tx.returning.mockReset();
+    tx.select.mockClear();
+    txSelectWhere.mockReset();
+    txSelectWhere.mockResolvedValue([
+      { etapaId: "etapa-1", concluida: true },
+      { etapaId: "etapa-2", concluida: true },
+    ]);
     db.returning.mockReset();
     db.query.workflowModelos.findFirst.mockReset();
     db.query.workflowExecucoes.findFirst.mockReset();
@@ -510,6 +522,51 @@ describe("WorkflowsExecucoesService", () => {
       }),
       tx,
     );
+  });
+
+  it("protege atualizacao de etapa contra mudanca de status concorrente", async () => {
+    db.query.workflowExecucoes.findFirst.mockResolvedValue({
+      id: "execucao-1",
+      status: "EM_ANDAMENTO",
+      iniciadoPor: "prof-1",
+      schoolId: "school-1",
+      unitId: "unit-1",
+      teste: false,
+      modelo: modeloPublicado,
+      progresso: [{ etapaId: "etapa-1", concluida: false }],
+    });
+    tx.returning.mockResolvedValue([{ id: "progresso-1" }]);
+
+    await service.atualizarEtapa(professora, "execucao-1", "etapa-1", {
+      concluida: true,
+    });
+
+    expect(tx.update).toHaveBeenCalledWith(workflowExecucoes);
+    expect(mockEq).toHaveBeenCalledWith(
+      workflowExecucoes.status,
+      "EM_ANDAMENTO",
+    );
+  });
+
+  it("revalida o checklist dentro da transacao antes de concluir", async () => {
+    db.query.workflowExecucoes.findFirst.mockResolvedValue({
+      id: "execucao-1",
+      status: "EM_ANDAMENTO",
+      iniciadoPor: "prof-1",
+      schoolId: "school-1",
+      unitId: "unit-1",
+      teste: false,
+      modelo: modeloPublicado,
+      progresso: [
+        { etapaId: "etapa-1", concluida: true },
+        { etapaId: "etapa-2", concluida: true },
+      ],
+    });
+    tx.returning.mockResolvedValue([{ id: "execucao-1" }]);
+
+    await service.concluir(professora, "execucao-1");
+
+    expect(tx.select).toHaveBeenCalled();
   });
 
   it("bloqueia cancelamento de execucao concluida", async () => {

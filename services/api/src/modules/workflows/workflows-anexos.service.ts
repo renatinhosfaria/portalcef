@@ -33,35 +33,40 @@ export class WorkflowsAnexosService {
     execucaoId: string,
     arquivo: ArquivoWorkflowSalvo,
   ) {
-    const [anexo] = await this.database.db
-      .insert(workflowAnexos)
-      .values({
-        execucaoId,
-        nomeOriginal: arquivo.nomeOriginal,
-        storageKey: arquivo.storageKey,
-        url: arquivo.url,
-        mimeType: arquivo.mimetype,
-        tamanhoBytes: arquivo.tamanhoBytes,
-        enviadoPor: session.userId,
-      })
-      .returning();
+    return this.database.db.transaction(async (tx: DbTransaction) => {
+      const [anexo] = await tx
+        .insert(workflowAnexos)
+        .values({
+          execucaoId,
+          nomeOriginal: arquivo.nomeOriginal,
+          storageKey: arquivo.storageKey,
+          url: arquivo.url,
+          mimeType: arquivo.mimetype,
+          tamanhoBytes: arquivo.tamanhoBytes,
+          enviadoPor: session.userId,
+        })
+        .returning();
 
-    if (!anexo) {
-      throw new InternalServerErrorException("Falha ao registrar anexo");
-    }
+      if (!anexo) {
+        throw new InternalServerErrorException("Falha ao registrar anexo");
+      }
 
-    await this.historicoService.registrar({
-      execucaoId,
-      tipo: "ANEXO_ENVIADO",
-      descricao: "Anexo enviado",
-      autorId: session.userId,
-      metadata: {
-        anexoId: anexo.id,
-        nomeOriginal: anexo.nomeOriginal,
-      },
+      await this.historicoService.registrar(
+        {
+          execucaoId,
+          tipo: "ANEXO_ENVIADO",
+          descricao: "Anexo enviado",
+          autorId: session.userId,
+          metadata: {
+            anexoId: anexo.id,
+            nomeOriginal: anexo.nomeOriginal,
+          },
+        },
+        tx,
+      );
+
+      return anexo;
     });
-
-    return anexo;
   }
 
   async remover(

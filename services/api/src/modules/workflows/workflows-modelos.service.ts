@@ -664,8 +664,15 @@ export class WorkflowsModelosService {
     }
 
     const etapasAlteradas = this.identificarEtapasAlteradas(modelo, dto.fases);
+    const modeloFoiAtualizado =
+      dto.categoriaId !== undefined ||
+      dto.nome !== undefined ||
+      dto.descricaoCurta !== undefined ||
+      dto.status !== undefined ||
+      dto.orientacoes !== undefined ||
+      dto.fases !== undefined;
     const execucoesImpactadas =
-      etapasAlteradas.length > 0
+      modeloFoiAtualizado
         ? await this.buscarExecucoesAbertasImpactadas(session, modeloId)
         : [];
     const execucaoIds = execucoesImpactadas.map((execucao) => execucao.id);
@@ -706,7 +713,7 @@ export class WorkflowsModelosService {
         );
       }
 
-      if (execucaoIds.length > 0 && etapasAlteradas.length > 0) {
+      if (execucaoIds.length > 0 && modeloFoiAtualizado) {
         await this.resetarEtapasAlteradas(
           tx,
           modeloId,
@@ -784,16 +791,16 @@ export class WorkflowsModelosService {
     this.exigirGestao(session);
 
     const modelo = await this.buscarModeloDaUnidade(session, modeloId);
-    await this.buscarCategoriaDaUnidade(session, modelo.categoriaId);
 
     return this.database.db.transaction(async (tx: DbTransaction) => {
+      const prefixo = "Copia de ";
       const [modeloDuplicado] = await tx
         .insert(workflowModelos)
         .values({
           schoolId: session.schoolId,
           unitId: session.unitId,
           categoriaId: modelo.categoriaId,
-          nome: `Copia de ${modelo.nome}`,
+          nome: `${prefixo}${modelo.nome}`.slice(0, 180),
           descricaoCurta: modelo.descricaoCurta,
           status: "RASCUNHO",
           criadoPor: session.userId,

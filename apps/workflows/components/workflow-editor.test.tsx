@@ -302,6 +302,28 @@ describe("WorkflowEditor", () => {
     ).toBeTruthy();
   });
 
+  it("confirma antes de inativar um modelo", async () => {
+    const onInativar = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <WorkflowEditor
+        categorias={[categoriaEventos]}
+        modelo={modeloExistente}
+        onSalvar={vi.fn()}
+        onInativar={onInativar}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Inativar" }));
+
+    expect(onInativar).not.toHaveBeenCalled();
+    expect(screen.getByText(/Inativar workflow/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar inativação" }));
+
+    await waitFor(() => expect(onInativar).toHaveBeenCalledTimes(1));
+  });
+
   it("bloqueia mutacoes concorrentes durante salvamento e acao secundaria", async () => {
     let resolverSalvar: (() => void) | undefined;
     let resolverPublicar: (() => void) | undefined;

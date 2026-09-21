@@ -115,6 +115,11 @@ describe("EditarModeloPage", () => {
       render(<EditarModeloPage />);
 
       fireEvent.click(await screen.findByRole("button", { name: acao }));
+      if (acao === "Inativar") {
+        fireEvent.click(
+          await screen.findByRole("button", { name: "Confirmar inativação" }),
+        );
+      }
 
       await waitFor(() => expect(mocks.buscarModelo).toHaveBeenCalledTimes(2));
       expect(mocks.buscarModelo).toHaveBeenLastCalledWith("modelo-1");

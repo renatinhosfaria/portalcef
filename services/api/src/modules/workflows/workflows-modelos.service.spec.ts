@@ -308,6 +308,7 @@ describe("WorkflowsModelosService", () => {
 
   it("permite editar outros campos mantendo a categoria inativa atual", async () => {
     db.query.workflowModelos.findFirst.mockResolvedValue(modeloPublicado);
+    db.query.workflowExecucoes.findMany.mockResolvedValue([]);
 
     await expect(
       service.atualizar(gestao, "modelo-1", {
@@ -415,6 +416,27 @@ describe("WorkflowsModelosService", () => {
         execucaoId: "execucao-1",
         tipo: "MODELO_ATUALIZADO",
         autorId: "gestor-1",
+      }),
+      tx,
+    );
+  });
+
+  it("marca execucoes abertas quando um campo geral do modelo muda", async () => {
+    db.query.workflowModelos.findFirst.mockResolvedValue(modeloPublicado);
+    db.query.workflowExecucoes.findMany.mockResolvedValue([{ id: "execucao-1" }]);
+
+    await service.atualizar(gestao, "modelo-1", {
+      nome: "Evento atualizado",
+    });
+
+    expect(db.query.workflowExecucoes.findMany).toHaveBeenCalled();
+    expect(tx.set).toHaveBeenCalledWith(
+      expect.objectContaining({ modeloAtualizado: true }),
+    );
+    expect(historicoService.registrar).toHaveBeenCalledWith(
+      expect.objectContaining({
+        execucaoId: "execucao-1",
+        tipo: "MODELO_ATUALIZADO",
       }),
       tx,
     );
@@ -750,17 +772,42 @@ describe("WorkflowsModelosService", () => {
     expect(mockEq).toHaveBeenCalledWith(workflowModelos.unitId, "unit-1");
   });
 
-  it("bloqueia duplicação quando a categoria do modelo está inativa", async () => {
+  it("duplica modelo mesmo quando a categoria atual está inativa", async () => {
     db.query.workflowModelos.findFirst.mockResolvedValue(modeloPublicado);
     db.query.workflowCategorias.findFirst.mockResolvedValue({
       id: "cat-1",
       ativo: false,
     });
+    tx.returning
+      .mockResolvedValueOnce([{ id: "modelo-2" }])
+      .mockResolvedValueOnce([{ id: "fase-duplicada" }]);
 
-    await expect(service.duplicar(gestao, "modelo-1")).rejects.toThrow(
-      "Categoria inativa não pode ser atribuída ao modelo",
+    await expect(service.duplicar(gestao, "modelo-1")).resolves.toEqual({
+      id: "modelo-2",
+    });
+
+    expect(db.transaction).toHaveBeenCalled();
+  });
+
+  it("limita o nome ao duplicar modelo no tamanho máximo", async () => {
+    db.query.workflowModelos.findFirst.mockResolvedValue({
+      ...modeloPublicado,
+      nome: "a".repeat(180),
+    });
+    db.query.workflowCategorias.findFirst.mockResolvedValue({
+      id: "cat-1",
+      ativo: true,
+    });
+    tx.returning
+      .mockResolvedValueOnce([{ id: "modelo-2" }])
+      .mockResolvedValueOnce([{ id: "fase-duplicada" }]);
+
+    await service.duplicar(gestao, "modelo-1");
+
+    expect(tx.values).toHaveBeenCalledWith(
+      expect.objectContaining({ nome: expect.any(String) }),
     );
-
-    expect(db.transaction).not.toHaveBeenCalled();
+    const valores = tx.values.mock.calls[0]?.[0] as { nome: string };
+    expect(valores.nome.length).toBeLessThanOrEqual(180);
   });
 });

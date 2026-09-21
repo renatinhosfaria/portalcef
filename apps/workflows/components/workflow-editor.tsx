@@ -4,6 +4,16 @@ import type {
   WorkflowCategoria,
   WorkflowModeloDetalhe,
 } from "@essencia/shared/types/workflows";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@essencia/ui/components/alert-dialog";
 import { Button } from "@essencia/ui/components/button";
 import { Input } from "@essencia/ui/components/input";
 import { Textarea } from "@essencia/ui/components/textarea";
@@ -210,6 +220,8 @@ export function WorkflowEditor({
   const [criandoCategoria, setCriandoCategoria] = useState(false);
   const [formCategoriaAberto, setFormCategoriaAberto] = useState(false);
   const [novaCategoriaNome, setNovaCategoriaNome] = useState("");
+  const [confirmacaoInativacaoAberta, setConfirmacaoInativacaoAberta] =
+    useState(false);
 
   useEffect(() => {
     setEstado(criarEstadoDoModelo(modelo));
@@ -505,29 +517,35 @@ export function WorkflowEditor({
     }
   }
 
-  async function executarAcaoSecundaria(nome: string, acao?: () => void | Promise<void>) {
-    if (!acao) return;
-    if (mutacaoEmAndamento) return;
+  async function executarAcaoSecundaria(
+    nome: string,
+    acao?: () => void | Promise<void>,
+  ) {
+    if (!acao) return false;
+    if (mutacaoEmAndamento) return false;
     if (temAlteracoesPendentes) {
       setErro("Salve o rascunho antes de executar esta ação.");
-      return;
+      return false;
     }
 
     try {
       setErro(null);
       setAcaoSecundaria(nome);
       await acao();
+      return true;
     } catch (error) {
       setErro(
         error instanceof Error ? error.message : "Não foi possível concluir a ação.",
       );
+      return false;
     } finally {
       setAcaoSecundaria(null);
     }
   }
 
   return (
-    <form className="space-y-6" onSubmit={handleSalvar}>
+    <>
+      <form className="space-y-6" onSubmit={handleSalvar}>
       <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2 md:col-span-2">
@@ -973,7 +991,7 @@ export function WorkflowEditor({
             type="button"
             variant="outline"
             disabled={mutacaoEmAndamento}
-            onClick={() => void executarAcaoSecundaria("inativar", onInativar)}
+            onClick={() => setConfirmacaoInativacaoAberta(true)}
           >
             <EyeOff className="h-4 w-4" />
             {acaoSecundaria === "inativar" ? "Inativando..." : "Inativar"}
@@ -992,6 +1010,44 @@ export function WorkflowEditor({
           </Button>
         ) : null}
       </div>
-    </form>
+      </form>
+
+    <AlertDialog
+      open={confirmacaoInativacaoAberta}
+      onOpenChange={(aberto) => {
+        if (!mutacaoEmAndamento) setConfirmacaoInativacaoAberta(aberto);
+      }}
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Inativar workflow?</AlertDialogTitle>
+          <AlertDialogDescription>
+            O workflow deixará de aparecer para novas execuções. As execuções
+            existentes continuarão preservadas.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={mutacaoEmAndamento}>
+            Cancelar
+          </AlertDialogCancel>
+          <AlertDialogAction
+            disabled={mutacaoEmAndamento}
+            onClick={(event) => {
+              event.preventDefault();
+              void (async () => {
+                const sucesso = await executarAcaoSecundaria(
+                  "inativar",
+                  onInativar,
+                );
+                if (sucesso) setConfirmacaoInativacaoAberta(false);
+              })();
+            }}
+          >
+            Confirmar inativação
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }

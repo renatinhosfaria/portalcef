@@ -371,6 +371,31 @@ export class WorkflowsExecucoesService {
     );
   }
 
+  private async bloquearExecucaoEmAndamento(
+    tx: DbTransaction,
+    session: WorkflowUserContext & { schoolId: string; unitId: string },
+    execucaoId: string,
+  ) {
+    const [execucao] = (await tx
+      .update(workflowExecucoes)
+      .set({ updatedAt: new Date() })
+      .where(
+        and(
+          eq(workflowExecucoes.id, execucaoId),
+          eq(workflowExecucoes.schoolId, session.schoolId),
+          eq(workflowExecucoes.unitId, session.unitId),
+          eq(workflowExecucoes.status, "EM_ANDAMENTO"),
+        ),
+      )
+      .returning()) as Array<{ id: string }>;
+
+    if (!execucao) {
+      throw new BadRequestException(
+        "A execucao nao esta mais em andamento",
+      );
+    }
+  }
+
   async iniciar(
     session: WorkflowUserContext,
     modeloId: string,
@@ -583,6 +608,8 @@ export class WorkflowsExecucoesService {
     }
 
     await this.database.db.transaction(async (tx: DbTransaction) => {
+      await this.bloquearExecucaoEmAndamento(tx, session, execucaoId);
+
       const [progressoAtualizado] = (await tx
         .update(workflowEtapaProgresso)
         .set(dadosAtualizacao)
@@ -663,6 +690,25 @@ export class WorkflowsExecucoesService {
     }
 
     await this.database.db.transaction(async (tx: DbTransaction) => {
+      await this.bloquearExecucaoEmAndamento(tx, session, execucaoId);
+
+      const progressoTransacao = (await tx
+        .select({
+          etapaId: workflowEtapaProgresso.etapaId,
+          concluida: workflowEtapaProgresso.concluida,
+        })
+        .from(workflowEtapaProgresso)
+        .where(eq(workflowEtapaProgresso.execucaoId, execucaoId))) as ProgressoEtapa[];
+
+      if (
+        !execucao.modelo ||
+        !this.todasEtapasConcluidas(execucao.modelo, progressoTransacao)
+      ) {
+        throw new BadRequestException(
+          "Todas as etapas precisam estar concluidas para encerrar o workflow",
+        );
+      }
+
       const [atualizada] = (await tx
         .update(workflowExecucoes)
         .set({
@@ -675,6 +721,7 @@ export class WorkflowsExecucoesService {
             eq(workflowExecucoes.id, execucaoId),
             eq(workflowExecucoes.schoolId, session.schoolId),
             eq(workflowExecucoes.unitId, session.unitId),
+            eq(workflowExecucoes.status, "EM_ANDAMENTO"),
           ),
         )
         .returning()) as Array<{ id: string }>;
@@ -726,6 +773,7 @@ export class WorkflowsExecucoesService {
             eq(workflowExecucoes.id, execucaoId),
             eq(workflowExecucoes.schoolId, session.schoolId),
             eq(workflowExecucoes.unitId, session.unitId),
+            eq(workflowExecucoes.status, "EM_ANDAMENTO"),
           ),
         )
         .returning()) as Array<{ id: string }>;

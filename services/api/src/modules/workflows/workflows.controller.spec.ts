@@ -599,4 +599,31 @@ describe("WorkflowsController", () => {
       "workflows/arquivo.pdf",
     );
   });
+
+  it("preserva erro de validacao de tipo de arquivo", async () => {
+    execucoesService.buscarPorId.mockResolvedValue({ id: "exec-1" });
+    storageService.uploadBuffer.mockRejectedValue(
+      new BadRequestException({
+        code: "INVALID_FILE_TYPE",
+        message: "Tipo de arquivo não permitido",
+      }),
+    );
+    const req = {
+      user: usuarioBase,
+      isMultipart: () => true,
+      async *parts() {
+        yield {
+          type: "file",
+          fieldname: "arquivo",
+          filename: "arquivo.html",
+          mimetype: "text/html",
+          toBuffer: async () => Buffer.from("<script>alert(1)</script>"),
+        };
+      },
+    };
+
+    await expect(controller.enviarAnexo("exec-1", req as never)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+  });
 });

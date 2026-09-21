@@ -30,6 +30,9 @@ const db = {
 };
 
 const tx = {
+  insert: jest.fn().mockReturnThis(),
+  values: jest.fn().mockReturnThis(),
+  returning: jest.fn(),
   delete: jest.fn().mockReturnThis(),
   where: jest.fn().mockReturnThis(),
 };
@@ -66,6 +69,11 @@ describe("WorkflowsAnexosService", () => {
     db.transaction.mockClear();
     tx.delete.mockClear();
     tx.where.mockClear();
+    tx.insert.mockClear();
+    tx.values.mockClear();
+    tx.returning.mockReset();
+    tx.returning.mockResolvedValue([{ id: "anexo-1", nomeOriginal: "arquivo.pdf" }]);
+    historico.registrar.mockReset();
   });
 
   it("registra anexo e historico", async () => {
@@ -82,8 +90,9 @@ describe("WorkflowsAnexosService", () => {
       }),
     ).resolves.toEqual(anexo);
 
-    expect(db.insert).toHaveBeenCalledWith(workflowAnexos);
-    expect(db.values).toHaveBeenCalledWith({
+    expect(db.transaction).toHaveBeenCalled();
+    expect(tx.insert).toHaveBeenCalledWith(workflowAnexos);
+    expect(tx.values).toHaveBeenCalledWith({
       execucaoId: "exec-1",
       nomeOriginal: "arquivo.pdf",
       storageKey: "workflows/arquivo.pdf",
@@ -101,7 +110,25 @@ describe("WorkflowsAnexosService", () => {
         anexoId: "anexo-1",
         nomeOriginal: "arquivo.pdf",
       },
-    });
+    }, tx);
+  });
+
+  it("mantem banco consistente quando o historico do upload falha", async () => {
+    tx.returning = jest.fn().mockResolvedValue([{ id: "anexo-1" }]);
+    historico.registrar.mockRejectedValue(new Error("historico indisponivel"));
+
+    await expect(
+      service.registrarUpload(usuarioBase, "exec-1", {
+        url: "https://cdn/arquivo.pdf",
+        storageKey: "workflows/arquivo.pdf",
+        nomeOriginal: "arquivo.pdf",
+        mimetype: "application/pdf",
+        tamanhoBytes: 8,
+      }),
+    ).rejects.toThrow("historico indisponivel");
+
+    expect(db.insert).not.toHaveBeenCalled();
+    expect(tx.insert).toHaveBeenCalledWith(workflowAnexos);
   });
 
   it("remove anexo por id e execucao e registra historico", async () => {
