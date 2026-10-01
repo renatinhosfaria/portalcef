@@ -29,6 +29,8 @@ NC='\033[0m' # No Color
 # Diretório do projeto
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$PROJECT_DIR"
+# shellcheck source=dev-health-wait.sh
+source "$PROJECT_DIR/scripts/dev-health-wait.sh"
 
 echo -e "${YELLOW}[1/6]${NC} Verificando Docker..."
 if ! command -v docker &> /dev/null; then
@@ -47,9 +49,9 @@ echo ""
 echo -e "${YELLOW}[2/6]${NC} Criando volumes de dados (se não existirem)..."
 
 # Volumes de dados (persistentes)
-docker volume create essencia-postgres-data 2>/dev/null || echo "  Volume essencia-postgres-data já existe"
-docker volume create essencia-redis-data 2>/dev/null || echo "  Volume essencia-redis-data já existe"
-docker volume create essencia-minio-data 2>/dev/null || echo "  Volume essencia-minio-data já existe"
+docker volume create essencia-dev-postgres-data 2>/dev/null || echo "  Volume essencia-dev-postgres-data já existe"
+docker volume create essencia-dev-redis-data 2>/dev/null || echo "  Volume essencia-dev-redis-data já existe"
+docker volume create essencia-dev-minio-data 2>/dev/null || echo "  Volume essencia-dev-minio-data já existe"
 
 # Volumes de desenvolvimento
 docker volume create essencia-node-modules-dev 2>/dev/null || echo "  Volume essencia-node-modules-dev já existe"
@@ -62,17 +64,22 @@ echo ""
 echo -e "${YELLOW}[3/6]${NC} Subindo infraestrutura (postgres, redis, minio)..."
 docker compose -f docker-compose.dev.yml up -d postgres redis minio
 
-# Aguardar serviços ficarem healthy
-echo "  Aguardando serviços ficarem prontos..."
-sleep 5
+HEALTH_TIMEOUT="${DEV_HEALTH_TIMEOUT:-120}"
+HEALTH_INTERVAL="${DEV_HEALTH_INTERVAL:-2}"
 
-# Verificar health
+verificar_servico() {
+    local service="$1"
+    docker compose -f docker-compose.dev.yml ps "$service" | grep -q "healthy"
+}
+
+# Aguardar serviços ficarem healthy
+echo "  Aguardando serviços ficarem prontos (até ${HEALTH_TIMEOUT}s)..."
 for service in postgres redis minio; do
-    if docker compose -f docker-compose.dev.yml ps $service | grep -q "healthy"; then
+    if aguardar_servico_healthy verificar_servico "$HEALTH_TIMEOUT" "$HEALTH_INTERVAL" "$service"; then
         echo -e "  ${GREEN}✓ $service healthy${NC}"
     else
-        echo -e "  ${YELLOW}⏳ Aguardando $service...${NC}"
-        sleep 5
+        echo -e "  ${RED}✗ $service não ficou healthy dentro do timeout${NC}" >&2
+        exit 1
     fi
 done
 
