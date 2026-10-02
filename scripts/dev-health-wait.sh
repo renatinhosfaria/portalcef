@@ -7,6 +7,11 @@ aguardar_servico_healthy() {
     shift 3
     local decorrido=0
 
+    if [[ ! "$timeout_segundos" =~ ^[1-9][0-9]*$ || ! "$intervalo_segundos" =~ ^[1-9][0-9]*$ ]]; then
+        echo "Timeout e intervalo devem ser inteiros positivos." >&2
+        return 1
+    fi
+
     while (( decorrido < timeout_segundos )); do
         if "$comando_verificacao" "$@"; then
             return 0

@@ -69,7 +69,7 @@ HEALTH_INTERVAL="${DEV_HEALTH_INTERVAL:-2}"
 
 verificar_servico() {
     local service="$1"
-    docker compose -f docker-compose.dev.yml ps "$service" | grep -q "healthy"
+    docker compose -f docker-compose.dev.yml ps --format '{{.Health}}' "$service" | grep -qx "healthy"
 }
 
 # Aguardar serviços ficarem healthy

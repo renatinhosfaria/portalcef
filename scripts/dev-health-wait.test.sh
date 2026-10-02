@@ -23,3 +23,12 @@ if aguardar_servico_healthy never_healthy 2 1; then
 fi
 
 echo 'Espera de health check passou.'
+
+for valor in 0 -1 invalido; do
+  if aguardar_servico_healthy true "$valor" 1; then
+    echo "Timeout inválido aceito: $valor" >&2; exit 1
+  fi
+  if aguardar_servico_healthy true 2 "$valor"; then
+    echo "Intervalo inválido aceito: $valor" >&2; exit 1
+  fi
+done

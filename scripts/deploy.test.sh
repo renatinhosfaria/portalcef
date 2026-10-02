@@ -66,7 +66,7 @@ contem 'docker IMAGE_TAG=abc1234 TAG= compose -f docker-compose.prod.yml --env-f
 python3 - "$REGISTRO_TESTE" "$DIRETORIO_TESTE" <<'PY'
 import pathlib,sys
 linhas=pathlib.Path(sys.argv[1]).read_text().splitlines()
-etapas=['pnpm turbo lint','pnpm turbo typecheck','buildx bake','build landing-mae','pg_dump','migrate.js','health IMAGE_TAG']
+etapas=['pnpm turbo lint','pnpm turbo typecheck','pnpm turbo test --concurrency=1','buildx bake','build landing-mae','pg_dump','migrate.js','health IMAGE_TAG']
 indices=[next(i for i,l in enumerate(linhas) if etapa in l) for etapa in etapas]
 indices.insert(-1, max(i for i,l in enumerate(linhas) if ' up -d --no-build --pull never --wait --wait-timeout 180' in l))
 assert indices==sorted(indices), 'Ordem incorreta de operações'
@@ -78,12 +78,12 @@ assert (pathlib.Path(sys.argv[2])/'backup').stat().st_mode & 0o077 == 0, 'Diret�
 PY
 echo 'Cenário com migration, backup e mesma tag passou.'
 
-for etapa in 'turbo lint' 'turbo typecheck' 'buildx bake' 'build landing-mae' backup-vazio backup-parcial migrate.js 'up -d' health; do
+for etapa in 'turbo lint' 'turbo typecheck' 'turbo test --concurrency=1' 'buildx bake' 'build landing-mae' backup-vazio backup-parcial migrate.js 'up -d' health; do
   rm -rf "$DIRETORIO_TESTE/backup"
   export FALHA_TESTE="$etapa"
   if executar --migrar; then falhar "deveria abortar em $etapa"; fi
   case "$etapa" in
-    'turbo lint'|'turbo typecheck') nao_contem 'buildx bake' ;;
+    'turbo lint'|'turbo typecheck'|'turbo test --concurrency=1') nao_contem 'buildx bake' ;;
     'buildx bake'|'build landing-mae') nao_contem 'pg_dump' ;;
     backup-*)
       nao_contem 'migrate.js'

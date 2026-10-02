@@ -175,7 +175,7 @@ networks:
     name: essencia-dev
 
 # =============================================================================
-# VOLUMES (Reutiliza volumes existentes de produção para dados)
+# VOLUMES (Dados exclusivos de desenvolvimento)
 # =============================================================================
 
 volumes:
