@@ -43,7 +43,9 @@ export async function clientFetch<T>(
 
   const isFormData = body instanceof FormData;
   const headers: HeadersInit = {
-    ...(isFormData ? {} : { "Content-Type": "application/json" }),
+    ...(isFormData || body === undefined
+      ? {}
+      : { "Content-Type": "application/json" }),
     ...customHeaders,
   };
 

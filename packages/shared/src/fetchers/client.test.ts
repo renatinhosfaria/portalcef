@@ -34,4 +34,22 @@ describe("clientFetch", () => {
       message: "Payload Too Large",
     });
   });
+
+  it("não envia content-type JSON em requisição sem corpo", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ success: true, data: null }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await clientFetch("/turmas/turma-1/professora", { method: "DELETE" });
+
+    const [, config] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const headers = new Headers(config.headers);
+
+    expect(config.body).toBeUndefined();
+    expect(headers.has("content-type")).toBe(false);
+  });
 });
