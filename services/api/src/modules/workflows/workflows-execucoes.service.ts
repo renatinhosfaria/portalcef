@@ -82,6 +82,8 @@ type UsuarioRelacionado = {
   email?: string | null;
 };
 
+type MetadataHistorico = Record<string, unknown> | null;
+
 type AnexoExecucao = {
   storageKey?: string;
   enviadoPorUser?: UsuarioRelacionado | null;
@@ -101,6 +103,7 @@ type ExecucaoComRelacoes = {
   progresso?: ProgressoEtapa[];
   anexos?: AnexoExecucao[];
   historico?: Array<{
+    metadata?: string | null;
     autor?: UsuarioRelacionado | null;
   }>;
 };
@@ -280,6 +283,19 @@ export class WorkflowsExecucoesService {
     return usuario?.name ?? usuario?.nome ?? usuario?.email ?? null;
   }
 
+  private normalizarMetadata(metadata?: string | null): MetadataHistorico {
+    if (!metadata) return null;
+
+    try {
+      const valor = JSON.parse(metadata) as unknown;
+      return valor && typeof valor === "object" && !Array.isArray(valor)
+        ? (valor as Record<string, unknown>)
+        : null;
+    } catch {
+      return null;
+    }
+  }
+
   private normalizarExecucao<T extends ExecucaoComRelacoes>(execucao: T) {
     const modelo = execucao.modelo;
     const progresso = execucao.progresso ?? [];
@@ -296,10 +312,11 @@ export class WorkflowsExecucoesService {
         };
       }),
       historico: (execucao.historico ?? []).map((item) => {
-        const { autor, ...dadosHistorico } = item;
+        const { autor, metadata, ...dadosHistorico } = item;
 
         return {
           ...dadosHistorico,
+          metadata: this.normalizarMetadata(metadata),
           autorNome: this.nomeUsuario(autor),
         };
       }),
@@ -313,11 +330,15 @@ export class WorkflowsExecucoesService {
   private normalizarExecucaoResumo(execucao: ExecucaoComRelacoes) {
     const normalizada = this.normalizarExecucao(execucao);
     const modelo = normalizada.modelo;
-    const dados = { ...normalizada };
-    delete dados.modelo;
-    delete dados.progresso;
-    delete dados.anexos;
-    delete dados.historico;
+    const dados = Object.fromEntries(
+      Object.entries(normalizada).filter(
+        ([chave]) =>
+          chave !== "modelo" &&
+          chave !== "progresso" &&
+          chave !== "anexos" &&
+          chave !== "historico",
+      ),
+    );
 
     if (!modelo) {
       return { ...dados, modelo: null };

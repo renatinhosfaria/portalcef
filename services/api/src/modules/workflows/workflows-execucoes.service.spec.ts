@@ -310,6 +310,7 @@ describe("WorkflowsExecucoesService", () => {
           id: "historico-1",
           tipo: "WORKFLOW_INICIADO",
           descricao: "Execucao iniciada",
+          metadata: JSON.stringify({ etapaId: "etapa-1" }),
           autor: {
             id: "gestor-1",
             name: "Gestor",
@@ -332,6 +333,9 @@ describe("WorkflowsExecucoesService", () => {
     );
     expect(item).not.toHaveProperty("autor");
     expect(JSON.stringify(execucao)).not.toContain("hash-privado-ficticio");
+    expect(item).toEqual(
+      expect.objectContaining({ metadata: { etapaId: "etapa-1" } }),
+    );
   });
 
   it("bloqueia usuario comum iniciando teste de rascunho", async () => {

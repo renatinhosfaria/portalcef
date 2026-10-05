@@ -449,6 +449,26 @@ describe("WorkflowsController", () => {
     expect(anexosService.registrarUpload).not.toHaveBeenCalled();
   });
 
+  it("rejeita anexo para execucao encerrada", async () => {
+    execucoesService.buscarPorId.mockResolvedValue({
+      id: "exec-1",
+      status: "CONCLUIDA",
+    });
+    const req = {
+      user: usuarioBase,
+      isMultipart: () => true,
+      parts: jest.fn(),
+    };
+
+    await expect(
+      controller.enviarAnexo("exec-1", req as never),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(req.parts).not.toHaveBeenCalled();
+    expect(storageService.uploadBuffer).not.toHaveBeenCalled();
+    expect(anexosService.registrarUpload).not.toHaveBeenCalled();
+  });
+
   it("rejeita anexo quando nenhum arquivo e enviado", async () => {
     execucoesService.buscarPorId.mockResolvedValue({ id: "exec-1" });
     const req = {

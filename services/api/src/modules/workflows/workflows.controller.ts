@@ -164,6 +164,14 @@ export class WorkflowsController {
     }
   }
 
+  private exigirExecucaoEmAndamento(execucao: { status?: string }) {
+    if (execucao.status && execucao.status !== "EM_ANDAMENTO") {
+      throw new BadRequestException(
+        "Somente execucoes em andamento podem alterar anexos",
+      );
+    }
+  }
+
   @Get("categorias")
   @Roles(...WORKFLOW_ROLES_ACESSO)
   async listarCategorias(@Req() req: RequestComUsuario) {
@@ -417,7 +425,11 @@ export class WorkflowsController {
     @Param("execucaoId") execucaoId: string,
     @Req() req: FastifyMultipartRequest,
   ) {
-    await this.execucoesService.buscarPorId(req.user, execucaoId);
+    const execucao = await this.execucoesService.buscarPorId(
+      req.user,
+      execucaoId,
+    );
+    this.exigirExecucaoEmAndamento(execucao);
     const arquivo = await this.processarArquivoUnico(req);
     const resultado = await this.enviarArquivoParaStorage(arquivo);
 
@@ -461,7 +473,11 @@ export class WorkflowsController {
     @Param("execucaoId") execucaoId: string,
     @Param("anexoId") anexoId: string,
   ) {
-    await this.execucoesService.buscarPorId(req.user, execucaoId);
+    const execucao = await this.execucoesService.buscarPorId(
+      req.user,
+      execucaoId,
+    );
+    this.exigirExecucaoEmAndamento(execucao);
     await this.anexosService.remover(req.user, execucaoId, anexoId);
     return { success: true, data: null };
   }
