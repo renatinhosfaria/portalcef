@@ -1,7 +1,8 @@
 'use client';
 
 import { useTenant } from '@essencia/shared/providers/tenant';
-import { Search, Plus, Minus, Settings, History, Package, AlertTriangle, X } from 'lucide-react';
+import { Search, Plus, Minus, Package, AlertTriangle, X } from 'lucide-react';
+import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
 import { apiFetch } from '../../lib/api';
@@ -23,6 +24,7 @@ interface InventoryItem {
 
 export default function EstoquePage() {
     const { role } = useTenant();
+    const searchParams = useSearchParams();
     const [inventory, setInventory] = useState<InventoryItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -59,10 +61,12 @@ export default function EstoquePage() {
         }
     };
 
-    const filteredInventory = inventory.filter(item =>
-        item.productName.toLowerCase().includes(search.toLowerCase()) ||
-        item.variantSize.includes(search)
-    );
+    const lowStockOnly = searchParams.get('lowStock') === 'true';
+    const filteredInventory = inventory.filter(item => {
+        const matchesSearch = item.productName.toLowerCase().includes(search.toLowerCase()) ||
+            item.variantSize.toLowerCase().includes(search.toLowerCase());
+        return matchesSearch && (!lowStockOnly || item.needsRestock);
+    });
 
     const getStockStatus = (item: InventoryItem) => {
         if (item.available === 0) return { class: 'badge-danger', label: 'Sem Estoque' };
@@ -236,12 +240,6 @@ export default function EstoquePage() {
                                                             </button>
                                                         </>
                                                     )}
-                                                    <button className="btn-admin btn-admin-ghost btn-admin-sm">
-                                                        <Settings className="w-4 h-4" />
-                                                    </button>
-                                                    <button className="btn-admin btn-admin-ghost btn-admin-sm">
-                                                        <History className="w-4 h-4" />
-                                                    </button>
                                                 </div>
                                             </td>
                                         </tr>

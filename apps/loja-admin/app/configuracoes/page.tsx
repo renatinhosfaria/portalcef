@@ -22,7 +22,7 @@ interface ShopSettings {
 export default function ConfiguracoesPage() {
     const { unitId, role } = useTenant();
     const canEditSettings = canManageShopSettings(role);
-    const [_settings, setSettings] = useState<ShopSettings | null>(null);
+    const [settings, setSettings] = useState<ShopSettings | null>(null);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
@@ -44,24 +44,18 @@ export default function ConfiguracoesPage() {
 
             const data = await response.json();
 
-            if (data.success && data.data) {
+            if (response.ok && data.success && data.data) {
                 setSettings(data.data);
                 setMaxInstallments(data.data.maxInstallments || 1);
                 setIsShopEnabled(data.data.isShopEnabled ?? true);
                 setPickupInstructions(data.data.pickupInstructions || '');
             } else {
-                // Se não existir, usar defaults
-                setMaxInstallments(1);
-                setIsShopEnabled(true);
-                setPickupInstructions('Retirada na secretaria, de segunda a sexta, das 8h às 17h.');
+                throw new Error(data.error?.message || 'Erro ao carregar configurações');
             }
         } catch (err) {
             console.error('Error loading settings:', err);
+            setSettings(null);
             setError('Erro ao carregar configurações');
-            // Usar defaults em caso de erro
-            setMaxInstallments(1);
-            setIsShopEnabled(true);
-            setPickupInstructions('Retirada na secretaria, de segunda a sexta, das 8h às 17h.');
         } finally {
             setLoading(false);
         }
@@ -136,6 +130,25 @@ export default function ConfiguracoesPage() {
                             </p>
                         </div>
                     </div>
+                </div>
+            </div>
+        );
+    }
+
+    if (error && !settings) {
+        return (
+            <div className="admin-card">
+                <div className="admin-card-body flex flex-col items-start gap-4">
+                    <div role="alert" className="flex items-start gap-3 p-4 bg-red-50 border border-red-200 rounded-xl w-full">
+                        <Shield className="w-5 h-5 text-red-600 mt-0.5" />
+                        <div>
+                            <h1 className="font-semibold text-red-900">Não foi possível carregar as configurações</h1>
+                            <p className="text-sm text-red-700 mt-1">{error}</p>
+                        </div>
+                    </div>
+                    <button type="button" onClick={() => void loadSettings()} className="btn-admin btn-admin-primary">
+                        Tentar novamente
+                    </button>
                 </div>
             </div>
         );

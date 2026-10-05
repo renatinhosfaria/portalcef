@@ -35,10 +35,10 @@ describe('página de pré-venda (/interesse)', () => {
 });
 
 describe('sidebar de navegação', () => {
-    const source = readFileSync(join(process.cwd(), 'components/AdminSidebar.tsx'), 'utf8');
+    const source = readFileSync(join(process.cwd(), 'components/AdminShell.tsx'), 'utf8');
 
     it('mostra Pré-venda no menu e não mais Interesse', () => {
-        expect(source).toContain("label: 'Pré-venda'");
-        expect(source).not.toContain("label: 'Interesse'");
+        expect(source).toContain('label="Pré-venda"');
+        expect(source).not.toContain('label="Interesse"');
     });
 });
