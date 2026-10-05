@@ -309,6 +309,13 @@
       "when": 1789757172855,
       "tag": "0043_shop_order_refunds",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1789758000000,
+      "tag": "0044_planos_vinculados_turma",
+      "breakpoints": true
     }
   ]
 }

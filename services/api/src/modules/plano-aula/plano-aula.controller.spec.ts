@@ -68,6 +68,7 @@ describe("PlanoAulaController", () => {
       getPlanoById: jest.fn().mockResolvedValue({
         id: "plano-1",
         user: { id: usuario.userId },
+        turma: { professoraId: usuario.userId },
       }),
       getDocumentoById: jest.fn().mockResolvedValue(documentoWord),
       removerDocumento: jest.fn().mockResolvedValue(undefined),
