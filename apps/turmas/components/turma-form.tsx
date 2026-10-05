@@ -2,7 +2,7 @@
 
 import { clientFetch } from "@essencia/shared/fetchers/client";
 import { useTenant } from "@essencia/shared/providers/tenant";
-import type { Turma } from "@essencia/shared/types";
+import type { Turma, TurmaWithProfessora } from "@essencia/shared/types";
 import { Button } from "@essencia/ui/components/button";
 import { Input } from "@essencia/ui/components/input";
 import { Label } from "@essencia/ui/components/label";
@@ -17,15 +17,21 @@ import {
   Users,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 interface TurmaFormProps {
   isOpen: boolean;
   onClose: () => void;
-  turmaToEdit?: Turma | null;
+  turmaToEdit?: TurmaWithProfessora | null;
 }
 
 interface Unit {
+  id: string;
+  schoolId?: string;
+  name: string;
+}
+
+interface School {
   id: string;
   name: string;
 }
@@ -38,16 +44,20 @@ interface Stage {
 
 export function TurmaForm({ isOpen, onClose, turmaToEdit }: TurmaFormProps) {
   const router = useRouter();
-  const { schoolId } = useTenant();
+  const { role, schoolId } = useTenant();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
   // Available options
   const [units, setUnits] = useState<Unit[]>([]);
+  const [schools, setSchools] = useState<School[]>([]);
+  const [selectedSchoolId, setSelectedSchoolId] = useState(schoolId ?? "");
   const [stages, setStages] = useState<Stage[]>([]);
   const [loadingUnits, setLoadingUnits] = useState(false);
   const [loadingStages, setLoadingStages] = useState(false);
+  const unitsRequestId = useRef(0);
+  const stagesRequestId = useRef(0);
 
   // Form State
   const [formData, setFormData] = useState({
@@ -60,53 +70,100 @@ export function TurmaForm({ isOpen, onClose, turmaToEdit }: TurmaFormProps) {
     capacity: 30,
   });
 
-  const loadUnits = useCallback(async () => {
-    if (!schoolId) return;
+  const loadUnits = useCallback(async (targetSchoolId: string) => {
+    if (!targetSchoolId) return;
 
+    const requestId = ++unitsRequestId.current;
+    setUnits([]);
     setLoadingUnits(true);
     try {
-      const data = await clientFetch<Unit[]>(`/schools/${schoolId}/units`);
-      setUnits(data);
+      const data = await clientFetch<Unit[]>(
+        `/schools/${targetSchoolId}/units`,
+      );
+      if (requestId === unitsRequestId.current) {
+        setUnits(data);
+      }
     } catch (e) {
       console.error("Error loading units:", e);
-      setError("Erro ao carregar unidades");
+      if (requestId === unitsRequestId.current) {
+        setUnits([]);
+        setError("Erro ao carregar unidades");
+      }
+    } finally {
+      if (requestId === unitsRequestId.current) {
+        setLoadingUnits(false);
+      }
+    }
+  }, []);
+
+  const loadSchools = useCallback(async () => {
+    setLoadingUnits(true);
+    try {
+      const data = await clientFetch<School[]>("/schools");
+      setSchools(data);
+    } catch (e) {
+      console.error("Erro ao carregar escolas:", e);
+      setError("Erro ao carregar escolas");
     } finally {
       setLoadingUnits(false);
     }
-  }, [schoolId]);
+  }, []);
 
   const loadStages = useCallback(async (unitId: string) => {
+    const requestId = ++stagesRequestId.current;
+    setStages([]);
     setLoadingStages(true);
     try {
       const data = await clientFetch<Stage[]>(`/units/${unitId}/stages`);
-      setStages(data);
+      if (requestId === stagesRequestId.current) {
+        setStages(data);
+      }
     } catch (e) {
       console.error("Error loading stages:", e);
-      setError("Erro ao carregar etapas");
+      if (requestId === stagesRequestId.current) {
+        setStages([]);
+        setError("Erro ao carregar etapas");
+      }
     } finally {
-      setLoadingStages(false);
+      if (requestId === stagesRequestId.current) {
+        setLoadingStages(false);
+      }
     }
   }, []);
 
   // Load units when form opens
   useEffect(() => {
-    if (isOpen && schoolId) {
-      loadUnits();
+    if (!isOpen) return;
+    if (role === "master" && !schoolId) {
+      void loadSchools();
     }
-  }, [isOpen, schoolId, loadUnits]);
+  }, [isOpen, role, schoolId, loadSchools]);
+
+  useEffect(() => {
+    if (isOpen && selectedSchoolId) {
+      void loadUnits(selectedSchoolId);
+    }
+  }, [isOpen, selectedSchoolId, loadUnits]);
 
   // Load stages when unitId changes
   useEffect(() => {
     if (formData.unitId) {
       loadStages(formData.unitId);
     } else {
+      stagesRequestId.current += 1;
       setStages([]);
+      setLoadingStages(false);
       setFormData((prev) => ({ ...prev, stageId: "" }));
     }
   }, [formData.unitId, loadStages]);
 
   // Populate form when editing
   useEffect(() => {
+    if (isOpen) {
+      setError(null);
+      setSuccess(false);
+    }
+
     if (turmaToEdit) {
       setFormData({
         unitId: turmaToEdit.unitId,
@@ -120,6 +177,7 @@ export function TurmaForm({ isOpen, onClose, turmaToEdit }: TurmaFormProps) {
           | "integral",
         capacity: turmaToEdit.capacity || 30,
       });
+      setSelectedSchoolId(turmaToEdit.unit?.schoolId ?? schoolId ?? "");
     } else {
       setFormData({
         unitId: "",
@@ -130,8 +188,9 @@ export function TurmaForm({ isOpen, onClose, turmaToEdit }: TurmaFormProps) {
         shift: "matutino" as "matutino" | "vespertino" | "integral",
         capacity: 30,
       });
+      setSelectedSchoolId(schoolId ?? "");
     }
-  }, [turmaToEdit, isOpen]);
+  }, [turmaToEdit, isOpen, schoolId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -163,7 +222,7 @@ export function TurmaForm({ isOpen, onClose, turmaToEdit }: TurmaFormProps) {
       return;
     }
 
-    if (isNaN(formData.year) || formData.year < 2020) {
+    if (isNaN(formData.year) || formData.year < 2020 || formData.year > 2100) {
       setError("Ano inválido");
       setIsLoading(false);
       return;
@@ -177,35 +236,28 @@ export function TurmaForm({ isOpen, onClose, turmaToEdit }: TurmaFormProps) {
 
     try {
       // Ensure payload has correct types
-      const payload = {
-        unitId: formData.unitId,
-        stageId: formData.stageId,
-        name: formData.name.trim(),
-        code: formData.code.trim(),
-        year: Number(formData.year),
-        shift: formData.shift,
-        capacity: Number(formData.capacity),
-      };
-
-      console.log("Payload being sent:", payload);
-      console.log("Payload types:", {
-        unitId: typeof payload.unitId,
-        stageId: typeof payload.stageId,
-        name: typeof payload.name,
-        code: typeof payload.code,
-        year: typeof payload.year,
-        shift: typeof payload.shift,
-        capacity: typeof payload.capacity,
-      });
-
       if (turmaToEdit) {
-        // Update existing turma
+        const payload = {
+          name: formData.name.trim(),
+          code: formData.code.trim(),
+          year: Number(formData.year),
+          shift: formData.shift,
+          capacity: Number(formData.capacity),
+        };
         await clientFetch<Turma>(`/turmas/${turmaToEdit.id}`, {
           method: "PUT",
           body: payload,
         });
       } else {
-        // Create new turma
+        const payload = {
+          unitId: formData.unitId,
+          stageId: formData.stageId,
+          name: formData.name.trim(),
+          code: formData.code.trim(),
+          year: Number(formData.year),
+          shift: formData.shift,
+          capacity: Number(formData.capacity),
+        };
         await clientFetch<Turma>("/turmas", {
           method: "POST",
           body: payload,
@@ -228,16 +280,18 @@ export function TurmaForm({ isOpen, onClose, turmaToEdit }: TurmaFormProps) {
         errorMessage = e.message;
 
         // Check if it's a FetchError with validation details
-        if ('details' in e) {
+        if ("details" in e) {
           const details = (e as Error & { details?: unknown }).details;
-          console.log("Validation details:", details);
-
           // Extract field errors from Zod's flattened format
-          if (details && typeof details === 'object' && 'fieldErrors' in details) {
+          if (
+            details &&
+            typeof details === "object" &&
+            "fieldErrors" in details
+          ) {
             const fieldErrors = details.fieldErrors as Record<string, string[]>;
             const errorMessages = Object.entries(fieldErrors)
-              .map(([field, errors]) => `${field}: ${errors.join(', ')}`)
-              .join('\n');
+              .map(([field, errors]) => `${field}: ${errors.join(", ")}`)
+              .join("\n");
             errorMessage = `Erro de validação:\n${errorMessages}`;
           }
         }
@@ -277,17 +331,51 @@ export function TurmaForm({ isOpen, onClose, turmaToEdit }: TurmaFormProps) {
           <Label htmlFor="unitId">
             Unidade <span className="text-red-500">*</span>
           </Label>
+          {role === "master" && !schoolId && (
+            <select
+              id="schoolId"
+              required
+              disabled={loadingUnits || isEditing}
+              className="mb-3 w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
+              value={selectedSchoolId}
+              onChange={(e) => {
+                unitsRequestId.current += 1;
+                setUnits([]);
+                setSelectedSchoolId(e.target.value);
+                setFormData((prev) => ({
+                  ...prev,
+                  unitId: "",
+                  stageId: "",
+                }));
+              }}
+            >
+              <option value="">
+                {loadingUnits ? "Carregando..." : "Selecione uma escola"}
+              </option>
+              {schools.map((school) => (
+                <option key={school.id} value={school.id}>
+                  {school.name}
+                </option>
+              ))}
+            </select>
+          )}
           <div className="relative">
             <Building2 className="absolute left-3 top-3 h-5 w-5 text-slate-400" />
             <select
               id="unitId"
               required
-              disabled={loadingUnits}
+              disabled={loadingUnits || isEditing}
               className="w-full h-10 rounded-md border border-input bg-background pl-10 pr-3 py-2 text-sm"
               value={formData.unitId}
-              onChange={(e) =>
-                setFormData({ ...formData, unitId: e.target.value, stageId: "" })
-              }
+              onChange={(e) => {
+                stagesRequestId.current += 1;
+                setStages([]);
+                setFormData({
+                  ...formData,
+                  unitId: e.target.value,
+                  stageId: "",
+                });
+              }}
             >
               <option value="">
                 {loadingUnits ? "Carregando..." : "Selecione uma unidade"}
@@ -311,10 +399,12 @@ export function TurmaForm({ isOpen, onClose, turmaToEdit }: TurmaFormProps) {
             <select
               id="stageId"
               required
-              disabled={!formData.unitId || loadingStages}
+              disabled={!formData.unitId || loadingStages || isEditing}
               className="w-full h-10 rounded-md border border-input bg-background pl-10 pr-3 py-2 text-sm disabled:opacity-50"
               value={formData.stageId}
-              onChange={(e) => setFormData({ ...formData, stageId: e.target.value })}
+              onChange={(e) =>
+                setFormData({ ...formData, stageId: e.target.value })
+              }
             >
               <option value="">
                 {!formData.unitId
@@ -345,7 +435,9 @@ export function TurmaForm({ isOpen, onClose, turmaToEdit }: TurmaFormProps) {
               required
               className="pl-10"
               value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              onChange={(e) =>
+                setFormData({ ...formData, name: e.target.value })
+              }
             />
           </div>
         </div>
@@ -363,7 +455,9 @@ export function TurmaForm({ isOpen, onClose, turmaToEdit }: TurmaFormProps) {
               required
               className="pl-10"
               value={formData.code}
-              onChange={(e) => setFormData({ ...formData, code: e.target.value })}
+              onChange={(e) =>
+                setFormData({ ...formData, code: e.target.value })
+              }
             />
           </div>
         </div>

@@ -11,7 +11,6 @@ import type { TurmaWithProfessora } from "@essencia/shared/types";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
-
 import { TurmasPageContent } from "../components/turmas-page-content";
 
 // Roles permitidas para acessar o módulo de turmas
@@ -20,6 +19,7 @@ const ALLOWED_ROLES = [
   "diretora_geral",
   "gerente_unidade",
   "gerente_financeiro",
+  "coordenadora_geral",
 ];
 
 export default function TurmasPage() {

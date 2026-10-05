@@ -2,7 +2,7 @@
 
 import { api } from "@essencia/shared/fetchers/client";
 import { useTenant } from "@essencia/shared/providers/tenant";
-import type { Turma } from "@essencia/shared/types";
+import type { TurmaWithProfessora } from "@essencia/shared/types";
 import { Button } from "@essencia/ui/components/button";
 import {
   Dialog,
@@ -16,12 +16,14 @@ import { toast } from "@essencia/ui/components/toaster";
 import { AlertTriangle, Ban } from "lucide-react";
 import { useState } from "react";
 
+import { getTurmaCapabilities } from "../lib/capabilities";
+
 import { GerenciarProfessoraDialog } from "./gerenciar-professora-dialog";
 import { TurmaForm } from "./turma-form";
 import { TurmasList } from "./turmas-list";
 
 interface TurmasPageContentProps {
-  turmas: Turma[];
+  turmas: TurmaWithProfessora[];
   isLoading: boolean;
   onRefresh: () => void;
 }
@@ -32,25 +34,27 @@ const ALLOWED_ROLES = [
   "gerente_unidade",
   "gerente_financeiro",
   "coordenadora_geral",
-  "coordenadora_bercario",
-  "coordenadora_infantil",
-  "coordenadora_fundamental_i",
-  "coordenadora_fundamental_ii",
-  "coordenadora_medio",
-  "analista_pedagogico",
-  "professora", // Professors usually need to see classes
-  "auxiliar_administrativo",
 ];
 
-export function TurmasPageContent({ turmas, isLoading, onRefresh }: TurmasPageContentProps) {
+export function TurmasPageContent({
+  turmas,
+  isLoading,
+  onRefresh,
+}: TurmasPageContentProps) {
   const { role, isLoaded } = useTenant();
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [turmaToEdit, setTurmaToEdit] = useState<Turma | null>(null);
-  const [isGerenciarProfessoraOpen, setIsGerenciarProfessoraOpen] = useState(false);
-  const [turmaToManageProfessora, setTurmaToManageProfessora] = useState<Turma | null>(null);
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [turmaToDelete, setTurmaToDelete] = useState<Turma | null>(null);
-  const [isDeleting, setIsDeleting] = useState(false);
+  const [turmaToEdit, setTurmaToEdit] = useState<TurmaWithProfessora | null>(
+    null,
+  );
+  const [isGerenciarProfessoraOpen, setIsGerenciarProfessoraOpen] =
+    useState(false);
+  const [turmaToManageProfessora, setTurmaToManageProfessora] =
+    useState<TurmaWithProfessora | null>(null);
+  const [isArchiveDialogOpen, setIsArchiveDialogOpen] = useState(false);
+  const [turmaToArchive, setTurmaToArchive] =
+    useState<TurmaWithProfessora | null>(null);
+  const [isArchiving, setIsArchiving] = useState(false);
+  const capabilities = getTurmaCapabilities(role);
 
   if (!isLoaded) {
     return null;
@@ -79,7 +83,7 @@ export function TurmasPageContent({ turmas, isLoading, onRefresh }: TurmasPageCo
     setIsFormOpen(true);
   };
 
-  const handleEditClick = (turma: Turma) => {
+  const handleEditClick = (turma: TurmaWithProfessora) => {
     setTurmaToEdit(turma);
     setIsFormOpen(true);
   };
@@ -91,7 +95,7 @@ export function TurmasPageContent({ turmas, isLoading, onRefresh }: TurmasPageCo
     onRefresh();
   };
 
-  const handleGerenciarProfessoraClick = (turma: Turma) => {
+  const handleGerenciarProfessoraClick = (turma: TurmaWithProfessora) => {
     setTurmaToManageProfessora(turma);
     setIsGerenciarProfessoraOpen(true);
   };
@@ -106,31 +110,31 @@ export function TurmasPageContent({ turmas, isLoading, onRefresh }: TurmasPageCo
     onRefresh();
   };
 
-  const handleDeleteClick = (turma: Turma) => {
-    setTurmaToDelete(turma);
-    setIsDeleteDialogOpen(true);
+  const handleArchiveClick = (turma: TurmaWithProfessora) => {
+    setTurmaToArchive(turma);
+    setIsArchiveDialogOpen(true);
   };
 
-  const handleDeleteConfirm = async () => {
-    if (!turmaToDelete) return;
+  const handleArchiveConfirm = async () => {
+    if (!turmaToArchive) return;
 
-    setIsDeleting(true);
+    setIsArchiving(true);
     try {
-      await api.delete(`/turmas/${turmaToDelete.id}`);
-      toast.success("Turma excluída com sucesso");
-      setIsDeleteDialogOpen(false);
-      setTurmaToDelete(null);
+      await api.patch(`/turmas/${turmaToArchive.id}/arquivar`);
+      toast.success("Turma arquivada com sucesso");
+      setIsArchiveDialogOpen(false);
+      setTurmaToArchive(null);
       onRefresh();
     } catch {
-      toast.error("Erro ao excluir turma. Tente novamente.");
+      toast.error("Erro ao arquivar turma. Tente novamente.");
     } finally {
-      setIsDeleting(false);
+      setIsArchiving(false);
     }
   };
 
-  const handleDeleteCancel = () => {
-    setIsDeleteDialogOpen(false);
-    setTurmaToDelete(null);
+  const handleArchiveCancel = () => {
+    setIsArchiveDialogOpen(false);
+    setTurmaToArchive(null);
   };
 
   return (
@@ -151,7 +155,8 @@ export function TurmasPageContent({ turmas, isLoading, onRefresh }: TurmasPageCo
         onCreateClick={handleCreateClick}
         onEditClick={handleEditClick}
         onGerenciarProfessoraClick={handleGerenciarProfessoraClick}
-        onDeleteClick={handleDeleteClick}
+        onArchiveClick={handleArchiveClick}
+        {...capabilities}
       />
 
       <TurmaForm
@@ -167,7 +172,7 @@ export function TurmasPageContent({ turmas, isLoading, onRefresh }: TurmasPageCo
         onSuccess={handleGerenciarProfessoraSuccess}
       />
 
-      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+      <Dialog open={isArchiveDialogOpen} onOpenChange={setIsArchiveDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <div className="flex items-center gap-3">
@@ -175,39 +180,39 @@ export function TurmasPageContent({ turmas, isLoading, onRefresh }: TurmasPageCo
                 <AlertTriangle className="w-5 h-5 text-red-600" />
               </div>
               <div>
-                <DialogTitle>Excluir Turma</DialogTitle>
+                <DialogTitle>Arquivar Turma</DialogTitle>
                 <DialogDescription>
-                  Esta ação não pode ser desfeita.
+                  A turma ficará inativa e poderá ser restaurada futuramente.
                 </DialogDescription>
               </div>
             </div>
           </DialogHeader>
           <div className="py-4">
             <p className="text-sm text-slate-600">
-              Tem certeza que deseja excluir permanentemente a turma{" "}
+              Tem certeza que deseja arquivar a turma{" "}
               <span className="font-semibold text-slate-900">
-                {turmaToDelete?.name}
+                {turmaToArchive?.name}
               </span>
-              {turmaToDelete?.code && (
-                <span className="text-slate-500"> ({turmaToDelete.code})</span>
+              {turmaToArchive?.code && (
+                <span className="text-slate-500"> ({turmaToArchive.code})</span>
               )}
-              ? Todos os dados associados serão removidos.
+              ? Os planos e demais registros associados serão preservados.
             </p>
           </div>
           <DialogFooter className="gap-2">
             <Button
               variant="outline"
-              onClick={handleDeleteCancel}
-              disabled={isDeleting}
+              onClick={handleArchiveCancel}
+              disabled={isArchiving}
             >
               Cancelar
             </Button>
             <Button
               variant="destructive"
-              onClick={handleDeleteConfirm}
-              disabled={isDeleting}
+              onClick={handleArchiveConfirm}
+              disabled={isArchiving}
             >
-              {isDeleting ? "Excluindo..." : "Excluir Turma"}
+              {isArchiving ? "Arquivando..." : "Arquivar Turma"}
             </Button>
           </DialogFooter>
         </DialogContent>

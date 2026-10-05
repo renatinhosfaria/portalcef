@@ -3,13 +3,18 @@ import {
   Controller,
   Delete,
   Get,
+  Patch,
   Param,
   Post,
   Put,
   Query,
   UseGuards,
 } from "@nestjs/common";
-import { createTurmaSchema, updateTurmaSchema } from "@essencia/shared/schemas";
+import {
+  assignProfessoraSchema,
+  createTurmaSchema,
+  updateTurmaSchema,
+} from "@essencia/shared/schemas";
 
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { Roles } from "../../common/decorators/roles.decorator";
@@ -38,7 +43,13 @@ export class TurmasController {
    */
   @Get("turmas")
   @UseGuards(RolesGuard)
-  @Roles("master", "diretora_geral", "gerente_unidade", "gerente_financeiro")
+  @Roles(
+    "master",
+    "diretora_geral",
+    "gerente_unidade",
+    "gerente_financeiro",
+    "coordenadora_geral",
+  )
   async findAll(
     @CurrentUser()
     user: {
@@ -66,12 +77,42 @@ export class TurmasController {
     };
   }
 
+  @Patch("turmas/:id/arquivar")
+  @UseGuards(RolesGuard, TenantGuard)
+  @Roles("master", "diretora_geral", "gerente_unidade")
+  async archive(@Param("id") id: string) {
+    const turma = await this.turmasService.deactivate(id);
+
+    return {
+      success: true,
+      data: turma,
+    };
+  }
+
+  @Patch("turmas/:id/restaurar")
+  @UseGuards(RolesGuard, TenantGuard)
+  @Roles("master", "diretora_geral", "gerente_unidade")
+  async restore(@Param("id") id: string) {
+    const turma = await this.turmasService.activate(id);
+
+    return {
+      success: true,
+      data: turma,
+    };
+  }
+
   /**
    * Busca turma por ID
    */
   @Get("turmas/:id")
   @UseGuards(RolesGuard)
-  @Roles("master", "diretora_geral", "gerente_unidade", "gerente_financeiro")
+  @Roles(
+    "master",
+    "diretora_geral",
+    "gerente_unidade",
+    "gerente_financeiro",
+    "coordenadora_geral",
+  )
   async findById(@Param("id") id: string) {
     const turma = await this.turmasService.findById(id);
 
@@ -96,7 +137,13 @@ export class TurmasController {
    */
   @Get("units/:unitId/turmas")
   @UseGuards(TenantGuard, RolesGuard)
-  @Roles("master", "diretora_geral", "gerente_unidade", "gerente_financeiro")
+  @Roles(
+    "master",
+    "diretora_geral",
+    "gerente_unidade",
+    "gerente_financeiro",
+    "coordenadora_geral",
+  )
   async findByUnit(
     @Param("unitId") unitId: string,
     @Query("year") year?: string,
@@ -169,17 +216,17 @@ export class TurmasController {
   }
 
   /**
-   * Exclui turma permanentemente do banco de dados
+   * Compatibilidade legada: DELETE agora arquiva para não apagar dados pedagógicos.
    */
   @Delete("turmas/:id")
   @UseGuards(RolesGuard, TenantGuard)
   @Roles("master", "diretora_geral", "gerente_unidade")
   async delete(@Param("id") id: string) {
-    await this.turmasService.delete(id);
+    const turma = await this.turmasService.deactivate(id);
 
     return {
       success: true,
-      data: null,
+      data: turma,
     };
   }
 
@@ -189,13 +236,22 @@ export class TurmasController {
   @Put("turmas/:id/professora")
   @UseGuards(RolesGuard, TenantGuard)
   @Roles("master", "diretora_geral", "gerente_unidade", "coordenadora_geral")
-  async assignProfessora(
-    @Param("id") turmaId: string,
-    @Body() body: { professoraId: string },
-  ) {
+  async assignProfessora(@Param("id") turmaId: string, @Body() body: unknown) {
+    const result = assignProfessoraSchema.safeParse(body);
+    if (!result.success) {
+      return {
+        success: false,
+        error: {
+          code: "VALIDATION_ERROR",
+          message: "Dados inválidos",
+          details: result.error.flatten(),
+        },
+      };
+    }
+
     const turma = await this.turmasService.assignProfessora(
       turmaId,
-      body.professoraId,
+      result.data.professoraId,
     );
 
     return {
