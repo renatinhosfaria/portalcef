@@ -14,8 +14,8 @@ export function QuickStats() {
               Alunos
             </span>
           </div>
-          <div className="text-2xl font-black">1,245</div>
-          <div className="text-xs opacity-75 mt-1">Total Ativos</div>
+          <div className="text-lg font-bold">Dados indisponíveis</div>
+          <div className="text-xs opacity-75 mt-1">Aguardando integração</div>
         </div>
         <Users className="absolute -right-4 -bottom-4 w-24 h-24 opacity-10 rotate-12 group-hover:scale-110 transition-transform" />
       </Card>
@@ -28,10 +28,8 @@ export function QuickStats() {
               Frequência
             </span>
           </div>
-          <div className="text-2xl font-black text-slate-800">96.8%</div>
-          <div className="text-xs text-emerald-600 font-bold mt-1 flex items-center gap-1">
-            +2.4% <span className="text-slate-400 font-normal">vs. ontem</span>
-          </div>
+          <div className="text-lg font-bold text-slate-800">Dados indisponíveis</div>
+          <div className="text-xs text-slate-400 mt-1">Aguardando integração</div>
         </div>
       </Card>
     </div>
