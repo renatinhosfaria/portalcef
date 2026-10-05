@@ -126,6 +126,12 @@ export class WorkflowsModelosService {
     };
   }
 
+  private relacoesModeloResumo() {
+    return {
+      categoria: true,
+    };
+  }
+
   private async buscarCategoriaDaUnidade(
     session: WorkflowUserContext & { schoolId: string; unitId: string },
     categoriaId: string,
@@ -486,10 +492,11 @@ export class WorkflowsModelosService {
   }
 
   private async buscarExecucoesAbertasImpactadas(
+    executor: Pick<Database, "query">,
     session: WorkflowUserContext & { schoolId: string; unitId: string },
     modeloId: string,
   ) {
-    return (await this.database.db.query.workflowExecucoes.findMany({
+    return (await executor.query.workflowExecucoes.findMany({
       columns: { id: true },
       where: and(
         eq(workflowExecucoes.modeloId, modeloId),
@@ -593,7 +600,7 @@ export class WorkflowsModelosService {
 
     return this.database.db.query.workflowModelos.findMany({
       where: and(...filtros),
-      with: this.relacoesModelo(),
+      with: this.relacoesModeloResumo(),
       orderBy: [asc(workflowModelos.nome)],
     });
   }
@@ -664,20 +671,22 @@ export class WorkflowsModelosService {
     }
 
     const etapasAlteradas = this.identificarEtapasAlteradas(modelo, dto.fases);
-    const modeloFoiAtualizado =
-      dto.categoriaId !== undefined ||
-      dto.nome !== undefined ||
-      dto.descricaoCurta !== undefined ||
-      dto.status !== undefined ||
-      dto.orientacoes !== undefined ||
-      dto.fases !== undefined;
-    const execucoesImpactadas =
-      modeloFoiAtualizado
-        ? await this.buscarExecucoesAbertasImpactadas(session, modeloId)
-        : [];
-    const execucaoIds = execucoesImpactadas.map((execucao) => execucao.id);
-
     await this.database.db.transaction(async (tx: DbTransaction) => {
+      const alteracaoEstruturalDeRascunho =
+        modelo.status !== "PUBLICADO" && dto.fases !== undefined;
+      const precisaConsultarExecucoes =
+        etapasAlteradas.length > 0 || alteracaoEstruturalDeRascunho;
+      const execucoesImpactadas = precisaConsultarExecucoes
+        ? await this.buscarExecucoesAbertasImpactadas(tx, session, modeloId)
+        : [];
+      const execucaoIds = execucoesImpactadas.map((execucao) => execucao.id);
+
+      if (alteracaoEstruturalDeRascunho && execucaoIds.length > 0) {
+        throw new BadRequestException(
+          "Nao e possivel alterar as etapas enquanto existe uma execucao aberta",
+        );
+      }
+
       const dadosModelo: Partial<typeof workflowModelos.$inferInsert> = {
         updatedAt: new Date(),
       };
@@ -713,7 +722,7 @@ export class WorkflowsModelosService {
         );
       }
 
-      if (execucaoIds.length > 0 && modeloFoiAtualizado) {
+      if (execucaoIds.length > 0 && etapasAlteradas.length > 0) {
         await this.resetarEtapasAlteradas(
           tx,
           modeloId,

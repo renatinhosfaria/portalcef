@@ -57,6 +57,15 @@ type FaseDoModelo = {
 
 type ModeloComEtapas = {
   id: string;
+  schoolId?: string;
+  unitId?: string;
+  categoriaId?: string;
+  nome?: string;
+  descricaoCurta?: string;
+  criadoPor?: string;
+  createdAt?: Date | string;
+  updatedAt?: Date | string;
+  categoria?: unknown;
   status: WorkflowModeloStatus;
   fases?: FaseDoModelo[];
 };
@@ -202,7 +211,17 @@ export class WorkflowsExecucoesService {
   private relacoesExecucaoResumo() {
     return {
       modelo: {
-        with: this.relacoesModelo(),
+        with: {
+          categoria: true,
+          fases: {
+            orderBy: asc(workflowFases.ordem),
+            with: {
+              etapas: {
+                orderBy: asc(workflowEtapas.ordem),
+              },
+            },
+          },
+        },
       },
       progresso: true,
     };
@@ -288,6 +307,37 @@ export class WorkflowsExecucoesService {
       progressoPercentual: modelo
         ? this.calcularProgressoPercentual(modelo, progresso)
         : 0,
+    };
+  }
+
+  private normalizarExecucaoResumo(execucao: ExecucaoComRelacoes) {
+    const normalizada = this.normalizarExecucao(execucao);
+    const modelo = normalizada.modelo;
+    const dados = { ...normalizada };
+    delete dados.modelo;
+    delete dados.progresso;
+    delete dados.anexos;
+    delete dados.historico;
+
+    if (!modelo) {
+      return { ...dados, modelo: null };
+    }
+
+    return {
+      ...dados,
+      modelo: {
+        id: modelo.id,
+        schoolId: modelo.schoolId,
+        unitId: modelo.unitId,
+        categoriaId: modelo.categoriaId,
+        nome: modelo.nome,
+        descricaoCurta: modelo.descricaoCurta,
+        status: modelo.status,
+        criadoPor: modelo.criadoPor,
+        createdAt: modelo.createdAt,
+        updatedAt: modelo.updatedAt,
+        categoria: modelo.categoria,
+      },
     };
   }
 
@@ -497,7 +547,7 @@ export class WorkflowsExecucoesService {
       ],
     })) as ExecucaoComRelacoes[];
 
-    return execucoes.map((execucao) => this.normalizarExecucao(execucao));
+    return execucoes.map((execucao) => this.normalizarExecucaoResumo(execucao));
   }
 
   async buscarPorId(session: WorkflowUserContext, execucaoId: string) {

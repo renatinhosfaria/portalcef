@@ -452,6 +452,15 @@ describe("WorkflowsExecucoesService", () => {
     expect(mockEq).toHaveBeenCalledWith(workflowExecucoes.teste, false);
   });
 
+  it("nao carrega orientacoes na listagem resumida de execucoes", async () => {
+    db.query.workflowExecucoes.findMany.mockResolvedValue([]);
+
+    await service.listar(gestao, { status: "todos" });
+
+    const [opcoes] = db.query.workflowExecucoes.findMany.mock.calls[0] ?? [];
+    expect(opcoes.with.modelo.with).not.toHaveProperty("orientacoes");
+  });
+
   it("buscar por id filtra tenant antes de aplicar visibilidade", async () => {
     db.query.workflowExecucoes.findFirst.mockResolvedValue(null);
 
