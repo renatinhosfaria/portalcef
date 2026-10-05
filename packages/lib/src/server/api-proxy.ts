@@ -16,23 +16,34 @@ const CABECALHOS_REPASSADOS = [
   "x-request-id",
 ] as const;
 
-function caminhoBackend(request: ApiProxyRequest): string {
+function caminhoBackend(
+  request: ApiProxyRequest,
+  preservarPrefixoApi: boolean,
+): string {
   const indiceApi = request.nextUrl.pathname.indexOf("/api");
+  if (preservarPrefixoApi && indiceApi >= 0) {
+    return request.nextUrl.pathname.slice(indiceApi) || "/api";
+  }
+
   return indiceApi >= 0
     ? request.nextUrl.pathname.slice(indiceApi + "/api".length) || "/"
     : request.nextUrl.pathname;
 }
 
-function urlBackend(request: ApiProxyRequest): string {
+function urlBackend(
+  request: ApiProxyRequest,
+  preservarPrefixoApi: boolean,
+): string {
   const apiUrl = process.env.API_INTERNAL_URL || "http://localhost:3001";
-  return `${apiUrl}${caminhoBackend(request)}${request.nextUrl.search}`;
+  return `${apiUrl}${caminhoBackend(request, preservarPrefixoApi)}${request.nextUrl.search}`;
 }
 
 export async function proxyRequest(
   request: ApiProxyRequest,
   method: string,
+  proxyOptions: { preservarPrefixoApi?: boolean } = {},
 ): Promise<Response> {
-  const url = urlBackend(request);
+  const url = urlBackend(request, proxyOptions.preservarPrefixoApi ?? false);
   const correlationId = request.headers.get("x-correlation-id") || randomUUID();
   const contentType = request.headers.get("content-type");
   const headers: Record<string, string> = {

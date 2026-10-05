@@ -59,7 +59,7 @@ describe("AuthService — login bloqueia inativos", () => {
     await expect(
       service.login("inativa@example.com", "senha-correta"),
     ).rejects.toMatchObject({
-      message: "Credenciais invalidas",
+      message: "Credenciais inválidas",
     });
 
     expect(sessionServiceMock.createSession).not.toHaveBeenCalled();
@@ -101,6 +101,8 @@ describe("AuthService — login bloqueia inativos", () => {
     expect(set).toHaveBeenCalledWith(
       expect.objectContaining({ passwordHash: expect.any(String) }),
     );
-    expect(sessionServiceMock.deleteAllUserSessions).toHaveBeenCalledWith("u-3");
+    expect(sessionServiceMock.deleteAllUserSessions).toHaveBeenCalledWith(
+      "u-3",
+    );
   });
 });

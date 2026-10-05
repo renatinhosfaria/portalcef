@@ -30,18 +30,18 @@ export class AuthService {
     });
 
     if (!user) {
-      throw new UnauthorizedException("Credenciais invalidas");
+      throw new UnauthorizedException("Credenciais inválidas");
     }
 
     // Verify password with bcrypt
     const isValidPassword = await bcrypt.compare(password, user.passwordHash);
     if (!isValidPassword) {
-      throw new UnauthorizedException("Credenciais invalidas");
+      throw new UnauthorizedException("Credenciais inválidas");
     }
 
     // Block inactive users with same generic message (defense against account enumeration)
     if (user.inativadoEm !== null) {
-      throw new UnauthorizedException("Credenciais invalidas");
+      throw new UnauthorizedException("Credenciais inválidas");
     }
 
     // Create session with tenant context
@@ -79,7 +79,7 @@ export class AuthService {
     const session = await this.sessionService.getSession(token);
 
     if (!session) {
-      throw new UnauthorizedException("Sessao expirada");
+      throw new UnauthorizedException("Sessão expirada");
     }
 
     return session;
@@ -103,7 +103,7 @@ export class AuthService {
     });
 
     if (!user) {
-      throw new UnauthorizedException("Usuario nao encontrado");
+      throw new UnauthorizedException("Usuário não encontrado");
     }
 
     return user;
@@ -129,7 +129,7 @@ export class AuthService {
     });
 
     if (!user) {
-      throw new UnauthorizedException("Usuario nao encontrado");
+      throw new UnauthorizedException("Usuário não encontrado");
     }
 
     const isValidPassword = await bcrypt.compare(

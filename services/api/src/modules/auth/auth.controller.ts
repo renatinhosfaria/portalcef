@@ -14,6 +14,10 @@ import { loginSchema } from "@essencia/shared/schemas";
 
 import { z } from "zod";
 import { AuthService } from "./auth.service";
+import {
+  criarOpcoesCookieSessao,
+  criarOpcoesLimpezaCookieSessao,
+} from "./session-cookie";
 
 const COOKIE_NAME = "cef_session";
 
@@ -48,14 +52,14 @@ export class AuthController {
 
     // Set session cookie
     const cookieDomain = this.configService.get<string>("COOKIE_DOMAIN");
-    res.setCookie(COOKIE_NAME, loginResult.token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      path: "/",
-      domain: cookieDomain,
-      maxAge: 60 * 60 * 24, // 24 hours
-    });
+    const sessionTtlHours = this.configService.get<string | number>(
+      "SESSION_TTL_HOURS",
+    );
+    res.setCookie(
+      COOKIE_NAME,
+      loginResult.token,
+      criarOpcoesCookieSessao(cookieDomain, sessionTtlHours),
+    );
 
     return {
       success: true,
@@ -77,7 +81,8 @@ export class AuthController {
     }
 
     // Clear cookie
-    res.clearCookie(COOKIE_NAME, { path: "/" });
+    const cookieDomain = this.configService.get<string>("COOKIE_DOMAIN");
+    res.clearCookie(COOKIE_NAME, criarOpcoesLimpezaCookieSessao(cookieDomain));
 
     return {
       success: true,
