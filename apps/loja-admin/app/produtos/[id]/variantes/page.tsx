@@ -38,6 +38,7 @@ export default function VariantesPage() {
 
     const [product, setProduct] = useState<Product | null>(null);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [variantToEdit, setVariantToEdit] = useState<Variant | null>(null);
 
@@ -54,19 +55,22 @@ export default function VariantesPage() {
     const loadProduct = useCallback(async () => {
         try {
             setLoading(true);
+            setError(null);
             const response = await apiFetch(`/api/shop/admin/products/${productId}/variants`);
 
             if (!response.ok) {
-                console.warn('Produto não encontrado:', response.status);
-                setProduct(null);
-                return;
+                throw new Error(`API respondeu com status ${response.status}`);
             }
 
             const result = await response.json();
-            setProduct(result.data || null);
+            if (!result?.data) {
+                throw new Error('Resposta inválida da API de variantes');
+            }
+            setProduct(result.data);
         } catch (err) {
             console.warn('Erro ao carregar produto.', err);
             setProduct(null);
+            setError('Não foi possível carregar as variantes agora.');
         } finally {
             setLoading(false);
         }
@@ -196,6 +200,20 @@ export default function VariantesPage() {
         return (
             <div className="flex items-center justify-center min-h-[400px]">
                 <Loader2 className="w-8 h-8 text-[#A3D154] animate-spin" />
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div className="flex min-h-[400px] items-center justify-center">
+                <div role="alert" className="admin-card max-w-md p-6 text-center">
+                    <h1 className="text-lg font-semibold text-slate-800">Não foi possível carregar as variantes</h1>
+                    <p className="mt-2 text-sm text-slate-500">{error}</p>
+                    <button type="button" onClick={() => void loadProduct()} className="btn-admin btn-admin-primary mt-4">
+                        Tentar novamente
+                    </button>
+                </div>
             </div>
         );
     }

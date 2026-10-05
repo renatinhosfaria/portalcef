@@ -118,31 +118,34 @@ else
 fi
 echo ""
 
-echo "[1/7] Executando lint..."
+echo "[1/8] Executando lint..."
 "$PNPM_BIN" turbo lint
 
-echo "[2/7] Executando typecheck..."
+echo "[2/8] Executando typecheck..."
 "$PNPM_BIN" turbo typecheck
 
-echo "[3/7] Construindo imagens..."
+echo "[3/8] Executando testes..."
+"$PNPM_BIN" turbo test --concurrency=1
+
+echo "[4/8] Construindo imagens..."
 TAG="$RELEASE_TAG" PUBLISH=false "$DOCKER_BIN" buildx bake -f docker-bake.hcl --load
 
-echo "[4/7] Construindo landing-mae do Compose..."
+echo "[5/8] Construindo landing-mae do Compose..."
 "${COMPOSE[@]}" build landing-mae
 
 if [[ "$RUN_MIGRATIONS" -eq 1 ]]; then
-  echo "[5/7] Preparando infraestrutura para migration..."
+  echo "[6/8] Preparando infraestrutura para migration..."
   "${COMPOSE[@]}" up -d --no-build --pull never --wait --wait-timeout 180 postgres redis minio
   criar_backup
   echo "Executando migration da imagem $RELEASE_TAG..."
   "${COMPOSE[@]}" run --rm --no-deps --pull never api node /app/packages/db/dist/migrate.js
 else
-  echo "[5/7] Pulando migration (nenhuma solicitada)..."
+  echo "[6/8] Pulando migration (nenhuma solicitada)..."
 fi
 
-echo "[6/7] Subindo serviços da imagem $RELEASE_TAG..."
+echo "[7/8] Subindo serviços da imagem $RELEASE_TAG..."
 "${COMPOSE[@]}" up -d --no-build --pull never --wait --wait-timeout 180
 
-echo "[7/7] Verificando saúde dos serviços..."
+echo "[8/8] Verificando saúde dos serviços..."
 "$HEALTH_CHECK_SCRIPT"
 echo "Deploy concluído: $RELEASE_TAG"

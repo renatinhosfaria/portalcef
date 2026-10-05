@@ -32,6 +32,8 @@ COPY apps/eventos/package.json ./apps/eventos/
 COPY apps/loja/package.json ./apps/loja/
 COPY apps/loja-admin/package.json ./apps/loja-admin/
 COPY apps/tarefas/package.json ./apps/tarefas/
+COPY apps/suporte/package.json ./apps/suporte/
+COPY apps/workflows/package.json ./apps/workflows/
 
 COPY services/api/package.json ./services/api/
 
@@ -58,7 +60,7 @@ ENV CHOKIDAR_USEPOLLING=true
 ENV CHOKIDAR_INTERVAL=1000
 
 # Expor todas as portas dos apps
-EXPOSE 3000 3001 3003 3004 3005 3006 3007 3008 3010 3011 3012 3014
+EXPOSE 3000 3001 3003 3004 3005 3006 3007 3008 3010 3011 3012 3013 3014 3015
 
 # Comando padrão: rodar todos os apps em modo dev
 CMD ["pnpm", "turbo", "dev"]

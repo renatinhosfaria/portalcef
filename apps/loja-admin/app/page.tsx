@@ -12,7 +12,7 @@ import {
   ClipboardList,
 } from 'lucide-react';
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import { apiFetch } from '../lib/api';
 
@@ -38,56 +38,41 @@ export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    loadDashboard();
-  }, []);
-
-  const loadDashboard = async () => {
+  const loadDashboard = useCallback(async () => {
+    setError(null);
     try {
       setLoading(true);
 
-      // TODO: Implementar API /api/shop/admin/dashboard no backend
       const response = await apiFetch('/api/shop/admin/dashboard');
 
       if (!response.ok) {
-        console.warn('API de dashboard não disponível:', response.status);
-        setStats({
-          pendingPickups: 0,
-          lowStockAlerts: 0,
-          salesToday: { count: 0, total: 0 },
-          salesWeek: { count: 0, total: 0 },
-          pendingInterests: 0,
-        });
-        setRecentOrders([]);
-        return;
+        throw new Error(`API respondeu com status ${response.status}`);
       }
 
       const result = await response.json();
+      const data = result?.data;
 
-      setStats(result.data.stats || {
-        pendingPickups: 0,
-        lowStockAlerts: 0,
-        salesToday: { count: 0, total: 0 },
-        salesWeek: { count: 0, total: 0 },
-        pendingInterests: 0,
-      });
+      if (!data?.stats || !Array.isArray(data.recentOrders)) {
+        throw new Error('Resposta inválida da API de dashboard');
+      }
 
-      setRecentOrders(result.data.recentOrders || []);
+      setStats(data.stats);
+      setRecentOrders(data.recentOrders);
     } catch (err) {
-      console.warn('Não foi possível carregar dashboard. API ainda não implementada?', err);
-      setStats({
-        pendingPickups: 0,
-        lowStockAlerts: 0,
-        salesToday: { count: 0, total: 0 },
-        salesWeek: { count: 0, total: 0 },
-        pendingInterests: 0,
-      });
+      console.warn('Não foi possível carregar o dashboard:', err);
+      setStats(null);
       setRecentOrders([]);
+      setError('Não foi possível carregar o dashboard agora.');
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    void loadDashboard();
+  }, [loadDashboard]);
 
   const formatCurrency = (cents: number) => {
     return (cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -126,6 +111,26 @@ export default function DashboardPage() {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="loading-spinner-admin"></div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex min-h-[400px] items-center justify-center">
+        <div role="alert" className="admin-card max-w-md p-6 text-center">
+          <h1 className="text-lg font-semibold text-slate-800">
+            Não foi possível carregar o dashboard
+          </h1>
+          <p className="mt-2 text-sm text-slate-500">{error}</p>
+          <button
+            type="button"
+            onClick={() => void loadDashboard()}
+            className="btn-admin btn-admin-primary mt-4"
+          >
+            Tentar novamente
+          </button>
+        </div>
       </div>
     );
   }

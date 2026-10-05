@@ -28,7 +28,7 @@ NC='\033[0m'
 COMPOSE_FILE="docker-compose.prod.yml"
 ENV_FILE=".env.docker"
 TAG="${1:-}"
-HEALTH_TIMEOUT=60
+HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-180}"
 DOCKER_BIN="${DOCKER_BIN:-docker}"
 REGISTRY="${IMAGE_REGISTRY:-ghcr.io/renatinhosfaria/portalcef}"
 

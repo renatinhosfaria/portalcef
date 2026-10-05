@@ -18,6 +18,12 @@ case "$1" in
     exit 0
     ;;
   inspect)
+    if [[ "${INICIO_LENTO:-}" == 1 && "$*" == *essencia-api* ]]; then
+      tentativas=$(cat "$TESTE_CONTADOR" 2>/dev/null || echo 0)
+      tentativas=$((tentativas + 1))
+      echo "$tentativas" > "$TESTE_CONTADOR"
+      if (( tentativas <= 35 )); then echo starting; exit 0; fi
+    fi
     echo healthy
     exit 0
     ;;
@@ -70,3 +76,18 @@ if bash "$TEST_DIR/scripts/deploy-rolling.sh" > "$TEST_DIR/sem-tag.log" 2>&1; th
 fi
 test ! -s "$ROLLING_LOG"
 echo 'Validação de tag obrigatória passou.'
+
+cat > "$TEST_DIR/bin/sleep" <<'SIMULADOR'
+#!/usr/bin/env bash
+exit 0
+SIMULADOR
+chmod +x "$TEST_DIR/bin/sleep"
+export TESTE_CONTADOR="$TEST_DIR/contador"
+unset HEALTH_TIMEOUT
+INICIO_LENTO=1 bash "$TEST_DIR/scripts/deploy-rolling.sh" abc1234 > "$TEST_DIR/lento.log"
+rm -f "$TESTE_CONTADOR"
+if HEALTH_TIMEOUT=2 INICIO_LENTO=1 bash "$TEST_DIR/scripts/deploy-rolling.sh" abc1234 > "$TEST_DIR/timeout.log"; then
+  echo 'Falha: timeout configurado não foi respeitado.' >&2
+  exit 1
+fi
+echo 'Inicialização lenta e timeout configurável passaram.'

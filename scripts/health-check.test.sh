@@ -24,6 +24,8 @@ case "$*" in
       *) printf 'essencia-api\trunning\thealthy\nessencia-certbot\trunning\t\n' ;;
     esac
     ;;
+  exec*)
+    [[ -z "${CONTAINER_FALHO:-}" || "$2" != "$CONTAINER_FALHO" ]] ;;
   stats*) exit 0 ;;
   *) echo 0 ;;
 esac
@@ -56,3 +58,12 @@ fi
 grep -Fq 'https://www.portalcef.com.br/api/health' "$CURL_LOG"
 [[ "$(cat "$DIRETORIO_TESTE/.env.docker")" == CONFIGURACAO_FICTICIA=teste ]]
 echo 'Testes de saúde concluídos sem acessar produção.'
+
+for container in essencia-suporte essencia-landing-mae; do
+  if CONTAINER_FALHO="$container" bash "$DIRETORIO_TESTE/scripts/health-check.sh" > "$DIRETORIO_TESTE/saida.log"; then
+    echo "Falha: indisponibilidade HTTP de $container não foi detectada." >&2
+    exit 1
+  fi
+done
+grep -Fq 'https://www.portalcef.com.br/suporte' "$CURL_LOG"
+grep -Fq 'https://www.portalcef.com.br/evento-mae-por-inteiro/' "$CURL_LOG"

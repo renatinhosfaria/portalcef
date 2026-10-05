@@ -26,53 +26,15 @@ export function CalendarWidget() {
           {dateStr}
         </div>
 
-        <div className="space-y-3">
-          <div className="flex gap-3 group">
-            <div className="w-12 flex flex-col items-center justify-center bg-slate-100 rounded-lg p-1 shrink-0 group-hover:bg-indigo-50 transition-colors">
-              <span className="text-xs font-bold text-slate-500 group-hover:text-indigo-600">
-                09:00
-              </span>
-            </div>
-            <div>
-              <p className="text-sm font-bold text-slate-700 leading-tight">
-                Reunião Pedagógica
-              </p>
-              <p className="text-xs text-slate-500">Sala de Reuniões 1</p>
-            </div>
-          </div>
-
-          <div className="flex gap-3 group">
-            <div className="w-12 flex flex-col items-center justify-center bg-slate-100 rounded-lg p-1 shrink-0 group-hover:bg-indigo-50 transition-colors">
-              <span className="text-xs font-bold text-slate-500 group-hover:text-indigo-600">
-                14:30
-              </span>
-            </div>
-            <div>
-              <p className="text-sm font-bold text-slate-700 leading-tight">
-                Conselho de Classe (8º B)
-              </p>
-              <p className="text-xs text-slate-500">Auditório</p>
-            </div>
-          </div>
-
-          <div className="flex gap-3 group opacity-50">
-            <div className="w-12 flex flex-col items-center justify-center bg-slate-50 rounded-lg p-1 shrink-0">
-              <span className="text-xs font-bold text-slate-400">16:00</span>
-            </div>
-            <div>
-              <p className="text-sm font-bold text-slate-600 leading-tight">
-                Entrega de Notas
-              </p>
-              <p className="text-xs text-slate-400">Sistema</p>
-            </div>
-          </div>
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-500">
+          Nenhum evento disponível para hoje.
         </div>
 
         <div className="mt-4 pt-3 border-t border-slate-100 text-center">
-          <button className="text-xs font-bold text-indigo-600 hover:underline flex items-center justify-center gap-1 w-full">
+          <a href="/calendario" className="text-xs font-bold text-indigo-600 hover:underline flex items-center justify-center gap-1 w-full">
             <Clock className="w-3 h-3" />
             Ver agenda completa
-          </button>
+          </a>
         </div>
       </CardContent>
     </Card>
