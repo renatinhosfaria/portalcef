@@ -41,6 +41,7 @@ type PaymentMethod = 'DINHEIRO' | 'PIX' | 'CARTAO_CREDITO' | 'CARTAO_DEBITO';
 export default function PedidosPage() {
     const [orders, setOrders] = useState<Order[]>([]);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState('');
     const [orderSourceFilter, setOrderSourceFilter] = useState<OrderSource | ''>('');
@@ -70,6 +71,7 @@ export default function PedidosPage() {
     const loadOrders = useCallback(async (page: number = 1) => {
         try {
             setLoading(true);
+            setError(null);
 
             const params = new URLSearchParams();
             if (search) params.set('search', search);
@@ -81,13 +83,14 @@ export default function PedidosPage() {
             const response = await apiFetch(`/api/shop/admin/orders?${params.toString()}`);
 
             if (!response.ok) {
-                console.warn('API de pedidos não disponível:', response.status);
-                setOrders([]);
-                return;
+                throw new Error(`API respondeu com status ${response.status}`);
             }
 
             const result = await response.json();
-            const newOrders = result.data || [];
+            if (!Array.isArray(result?.data)) {
+                throw new Error('Resposta inválida da API de pedidos');
+            }
+            const newOrders = result.data;
             const pagination = result.meta?.pagination;
 
             setOrders(newOrders);
@@ -95,8 +98,9 @@ export default function PedidosPage() {
             setTotalPages(pagination?.totalPages || 1);
             setTotalOrders(pagination?.total || newOrders.length);
         } catch (err) {
-            console.warn('Não foi possível carregar pedidos. API ainda não implementada?', err);
+            console.warn('Não foi possível carregar pedidos.', err);
             setOrders([]);
+            setError('Não foi possível carregar os pedidos agora.');
         } finally {
             setLoading(false);
         }
@@ -421,6 +425,18 @@ export default function PedidosPage() {
                                 <tr>
                                     <td colSpan={8} className="text-center py-12">
                                         <div className="loading-spinner-admin mx-auto"></div>
+                                    </td>
+                                </tr>
+                            ) : error ? (
+                                <tr>
+                                    <td colSpan={8}>
+                                        <div role="alert" className="empty-state">
+                                            <div className="empty-state-title">Não foi possível carregar os pedidos</div>
+                                            <div className="empty-state-description">{error}</div>
+                                            <button type="button" onClick={() => void loadOrders(1)} className="btn-admin btn-admin-primary mt-4">
+                                                Tentar novamente
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
                             ) : orders.length === 0 ? (

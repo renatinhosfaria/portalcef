@@ -39,6 +39,7 @@ export default function ProdutosPage() {
     const { schoolId, role } = useTenant();
     const [products, setProducts] = useState<Product[]>([]);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [productToEdit, setProductToEdit] = useState<Product | null>(null);
 
@@ -61,19 +62,22 @@ export default function ProdutosPage() {
     const loadProducts = useCallback(async () => {
         try {
             setLoading(true);
+            setError(null);
             const response = await apiFetch('/api/shop/admin/products');
 
             if (!response.ok) {
-                console.warn('API de produtos não disponível:', response.status);
-                setProducts([]);
-                return;
+                throw new Error(`API respondeu com status ${response.status}`);
             }
 
             const result = await response.json();
-            setProducts(result.data || []);
+            if (!Array.isArray(result?.data)) {
+                throw new Error('Resposta inválida da API de produtos');
+            }
+            setProducts(result.data);
         } catch (err) {
             console.warn('Não foi possível carregar produtos.', err);
             setProducts([]);
+            setError('Não foi possível carregar os produtos agora.');
         } finally {
             setLoading(false);
         }
@@ -297,6 +301,18 @@ export default function ProdutosPage() {
                                 <tr>
                                     <td colSpan={6} className="text-center py-12">
                                         <div className="loading-spinner-admin mx-auto"></div>
+                                    </td>
+                                </tr>
+                            ) : error ? (
+                                <tr>
+                                    <td colSpan={6}>
+                                        <div role="alert" className="empty-state">
+                                            <div className="empty-state-title">Não foi possível carregar os produtos</div>
+                                            <div className="empty-state-description">{error}</div>
+                                            <button type="button" onClick={() => void loadProducts()} className="btn-admin btn-admin-primary mt-4">
+                                                Tentar novamente
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
                             ) : products.length === 0 ? (

@@ -10,4 +10,11 @@ describe('dashboard admin', () => {
         expect(source).toContain("apiFetch(`/api/shop/admin/orders/${orderId}/pickup`");
         expect(source).toContain('onClick={() => handleMarkPickedUp(order.id)}');
     });
+
+    it('mantém estado explícito de erro ao carregar métricas', () => {
+        const source = readFileSync(join(process.cwd(), 'app/page.tsx'), 'utf8');
+
+        expect(source).toContain('role="alert"');
+        expect(source).toContain('Tentar novamente');
+    });
 });
