@@ -47,7 +47,7 @@ pnpm turbo lint && pnpm turbo typecheck
 
 | Classe        | Área               | Invariante obrigatória                                                                           | Teste bloqueante              |
 | ------------- | ------------------ | ------------------------------------------------------------------------------------------------ | ----------------------------- |
-| `APP-HOME-01` | Conteúdo público   | A home renderiza sem sessão e nunca depende de cookies autenticados para SSR.                    | `apps/home/app/page.test.tsx` |
+| `APP-HOME-01` | Sessão e shell     | A home renderiza dentro do shell autenticado, hidrata o tenant pela sessão e apresenta fallback de carregamento previsível. | `apps/home/app/page.test.tsx` |
 | `APP-HOME-02` | Widgets e fallback | Falha em calendário, feed ou estatísticas não derruba a página; a UI mostra fallback previsível. | `apps/home/app/page.test.tsx` |
 
 Comando mínimo:
