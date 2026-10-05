@@ -25,6 +25,7 @@ export default function EstoquePage() {
     const { role } = useTenant();
     const [inventory, setInventory] = useState<InventoryItem[]>([]);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
     const [search, setSearch] = useState('');
     const [showEntryModal, setShowEntryModal] = useState(false);
     const [showExitModal, setShowExitModal] = useState(false);
@@ -37,19 +38,22 @@ export default function EstoquePage() {
     const loadInventory = async () => {
         try {
             setLoading(true);
+            setError(null);
             const response = await apiFetch('/api/shop/admin/inventory');
 
             if (!response.ok) {
-                console.warn('API de estoque não disponível:', response.status);
-                setInventory([]);
-                return;
+                throw new Error(`API respondeu com status ${response.status}`);
             }
 
             const result = await response.json();
-            setInventory(result.data || []);
+            if (!Array.isArray(result?.data)) {
+                throw new Error('Resposta inválida da API de estoque');
+            }
+            setInventory(result.data);
         } catch (err) {
-            console.warn('Não foi possível carregar estoque. API ainda não implementada?', err);
+            console.warn('Não foi possível carregar estoque.', err);
             setInventory([]);
+            setError('Não foi possível carregar o estoque agora.');
         } finally {
             setLoading(false);
         }
@@ -163,6 +167,18 @@ export default function EstoquePage() {
                                 <tr>
                                     <td colSpan={8} className="text-center py-12">
                                         <div className="loading-spinner-admin mx-auto"></div>
+                                    </td>
+                                </tr>
+                            ) : error ? (
+                                <tr>
+                                    <td colSpan={8}>
+                                        <div role="alert" className="empty-state">
+                                            <div className="empty-state-title">Não foi possível carregar o estoque</div>
+                                            <div className="empty-state-description">{error}</div>
+                                            <button type="button" onClick={() => void loadInventory()} className="btn-admin btn-admin-primary mt-4">
+                                                Tentar novamente
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
                             ) : filteredInventory.length === 0 ? (

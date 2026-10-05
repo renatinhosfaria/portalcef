@@ -16,4 +16,11 @@ describe('listagens administrativas da loja', () => {
         expect(source).toContain('Não foi possível carregar os pedidos');
         expect(source).toContain('Tentar novamente');
     });
+
+    it('não transforma falha da API de estoque em totais zerados silenciosos', () => {
+        const source = readFileSync(join(process.cwd(), 'app/estoque/page.tsx'), 'utf8');
+
+        expect(source).toContain('Não foi possível carregar o estoque');
+        expect(source).toContain('Tentar novamente');
+    });
 });
