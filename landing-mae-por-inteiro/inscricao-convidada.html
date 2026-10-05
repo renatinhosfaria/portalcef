@@ -156,12 +156,16 @@
           body: JSON.stringify(payload),
         });
 
+        const data = await resp.json().catch(() => ({}));
+
         if (resp.status === 201) {
-          window.location.href = 'confirmacao.html';
+          const numero = encodeURIComponent(data.numeroInscricao || '');
+          window.location.href = numero
+            ? 'confirmacao.html?numeroInscricao=' + numero
+            : 'confirmacao.html';
           return false;
         }
 
-        const data = await resp.json().catch(() => ({}));
         const apiMsg =
           (data && (data.message || (data.error && data.error.message))) || '';
         if (resp.status === 409) {

@@ -588,7 +588,7 @@ export default function InscricoesEventoPage() {
             Inscrições — Mãe por Inteiro
           </h1>
           <p className="text-slate-500 mt-1">
-            16 de Maio · Parque Una. Inscrições recebidas pela landing page.
+            16 de Maio · 9h30–12h30 · Parque Una. Inscrições recebidas pela landing page.
           </p>
         </div>
         <div className="flex items-center gap-2">

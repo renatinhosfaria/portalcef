@@ -42,6 +42,8 @@
         </div>
 
         <h1 class="title-script" style="font-size: clamp(2rem, 6vw, 3rem); margin-bottom: 20px; color: var(--primary);">💛 Inscrição confirmada com sucesso!</h1>
+
+        <p id="numero-inscricao" class="conf-text" style="display:none; margin-bottom:20px;"></p>
         
         <p class="conf-text">
           Estamos muito felizes em ter você conosco no <span class="conf-strong">Mãe por Inteiro ✨</span><br>
@@ -88,5 +90,13 @@
 
   <script src="https://unpkg.com/lucide@latest"></script>
   <script src="script.js"></script>
+  <script>
+    const numeroInscricao = new URLSearchParams(window.location.search).get('numeroInscricao');
+    const numeroInscricaoEl = document.getElementById('numero-inscricao');
+    if (numeroInscricao && numeroInscricaoEl) {
+      numeroInscricaoEl.textContent = 'Seu número de inscrição é ' + numeroInscricao + '.';
+      numeroInscricaoEl.style.display = 'block';
+    }
+  </script>
 </body>
 </html>

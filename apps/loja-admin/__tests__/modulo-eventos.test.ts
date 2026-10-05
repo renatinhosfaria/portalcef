@@ -107,4 +107,26 @@ describe("módulo eventos", () => {
     expect(eventosPage).toContain("ultimoSorteio.nome");
     expect(eventosPage).toContain("ultimoSorteio.telefone");
   });
+
+  it("entrega o número da inscrição na confirmação e alinha o horário do evento", () => {
+    const inscricao = lerArquivoRepositorio(
+      "landing-mae-por-inteiro/inscricao.html",
+    );
+    const inscricaoConvidada = lerArquivoRepositorio(
+      "landing-mae-por-inteiro/inscricao-convidada.html",
+    );
+    const confirmacao = lerArquivoRepositorio(
+      "landing-mae-por-inteiro/confirmacao.html",
+    );
+    const landing = lerArquivoRepositorio("landing-mae-por-inteiro/index.html");
+    const eventosPage = lerArquivoRepositorio(
+      "apps/eventos/app/inscricoes-evento/page.tsx",
+    );
+
+    expect(inscricao).toContain("numeroInscricao");
+    expect(inscricaoConvidada).toContain("numeroInscricao");
+    expect(confirmacao).toContain("numero-inscricao");
+    expect(landing).toContain("9h30");
+    expect(eventosPage).toContain("9h30–12h30");
+  });
 });
