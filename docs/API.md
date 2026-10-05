@@ -376,11 +376,12 @@ Body:
 
 #### GET `/plano-aula/meus`
 
-Lista planos do usuario logado.
+Lista os planos da turma selecionada. Os planos permanecem vinculados à turma
+quando a professora titular é trocada.
 
 Acesso: Professora.
 
-Query: `quinzenaId` (opcional).
+Query: `turmaId` (obrigatório), `quinzenaId` (opcional).
 
 ---
 

@@ -105,14 +105,9 @@ export const planoAula = pgTable(
     unitIdIdx: index("plano_aula_unit_id_idx").on(table.unitId),
     userIdx: index("plano_aula_user_idx").on(table.userId),
     periodoIdx: index("plano_aula_periodo_id_idx").on(table.planoAulaPeriodoId),
-    // Constraint: uma professora não pode ter 2 planos para mesma turma/quinzena.
-    // O userId é parte do índice por decisão pedagógica/histórica: durante uma
-    // troca de titular, o método transferirPlanosPendentes atualiza userId dos
-    // planos pendentes para a sucessora, e este índice permite que planos
-    // APROVADOS da antecessora coexistam com planos pendentes (transferidos)
-    // da sucessora para a mesma turma/quinzena.
-    uniquePlanoIdx: uniqueIndex("plano_aula_user_turma_quinzena_unique").on(
-      table.userId,
+    // O plano é localizado pela turma e pelo período. A aplicação escolhe o
+    // registro canônico enquanto os dados históricos duplicados são tratados.
+    turmaQuinzenaIdx: index("plano_aula_turma_quinzena_idx").on(
       table.turmaId,
       table.quinzenaId,
     ),

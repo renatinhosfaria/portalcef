@@ -1,19 +1,6 @@
 import { Test, TestingModule } from "@nestjs/testing";
 
-import { PlanoAulaService } from "../plano-aula/plano-aula.service";
 import { TurmasService } from "./turmas.service";
-
-const mockTx = {
-  query: {
-    users: {
-      findFirst: jest.fn(),
-    },
-  },
-  update: jest.fn().mockReturnThis(),
-  set: jest.fn().mockReturnThis(),
-  where: jest.fn().mockReturnThis(),
-  returning: jest.fn(),
-};
 
 const mockDb = {
   query: {
@@ -28,7 +15,6 @@ const mockDb = {
   set: jest.fn().mockReturnThis(),
   where: jest.fn().mockReturnThis(),
   returning: jest.fn(),
-  transaction: jest.fn(async (cb: (tx: typeof mockTx) => unknown) => cb(mockTx)),
 };
 
 jest.mock("@essencia/db", () => ({
@@ -50,15 +36,6 @@ jest.mock("@essencia/db/schema", () => ({
 
 describe("TurmasService — assignProfessora", () => {
   let service: TurmasService;
-  const planoAulaServiceMock = {
-    transferirPlanosPendentes: jest.fn(),
-  };
-
-  const ator = {
-    userId: "coord-1",
-    userRole: "coordenadora_geral",
-  };
-
   const turmaBase = {
     id: "turma-1",
     unitId: "unit-1",
@@ -80,7 +57,6 @@ describe("TurmasService — assignProfessora", () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         TurmasService,
-        { provide: PlanoAulaService, useValue: planoAulaServiceMock },
       ],
     }).compile();
 
@@ -88,37 +64,20 @@ describe("TurmasService — assignProfessora", () => {
     jest.clearAllMocks();
   });
 
-  it("dispara transferirPlanosPendentes quando há troca real (anterior diferente da nova)", async () => {
+  it("mantém os planos vinculados à turma sem transferi-los ao trocar a titular", async () => {
     mockDb.query.turmas.findFirst.mockResolvedValue({
       ...turmaBase,
       professoraId: "prof-antiga",
     });
     mockDb.query.users.findFirst.mockResolvedValue(profValida);
-    mockTx.query.users.findFirst.mockResolvedValue({ name: "Coordenadora Ana" });
-    mockTx.returning.mockResolvedValueOnce([
+    mockDb.returning.mockResolvedValueOnce([
       { ...turmaBase, professoraId: profValida.id },
     ]);
-    planoAulaServiceMock.transferirPlanosPendentes.mockResolvedValue({
-      planosTransferidos: ["plano-1"],
-    });
+    await service.assignProfessora("turma-1", profValida.id);
 
-    await service.assignProfessora("turma-1", profValida.id, ator);
-
-    expect(mockDb.transaction).toHaveBeenCalledTimes(1);
-    expect(planoAulaServiceMock.transferirPlanosPendentes).toHaveBeenCalledWith(
-      mockTx,
-      "turma-1",
-      "prof-antiga",
-      profValida.id,
-      {
-        userId: "coord-1",
-        userName: "Coordenadora Ana",
-        userRole: "coordenadora_geral",
-      },
-    );
   });
 
-  it("NÃO dispara transferirPlanosPendentes em atribuição inicial (turma sem professora anterior)", async () => {
+  it("atualiza a titularidade em uma atribuição inicial", async () => {
     mockDb.query.turmas.findFirst.mockResolvedValue({
       ...turmaBase,
       professoraId: null,
@@ -128,13 +87,11 @@ describe("TurmasService — assignProfessora", () => {
       { ...turmaBase, professoraId: profValida.id },
     ]);
 
-    await service.assignProfessora("turma-1", profValida.id, ator);
+    await service.assignProfessora("turma-1", profValida.id);
 
-    expect(mockDb.transaction).not.toHaveBeenCalled();
-    expect(planoAulaServiceMock.transferirPlanosPendentes).not.toHaveBeenCalled();
   });
 
-  it("NÃO dispara transferirPlanosPendentes quando a professora atribuída é a mesma já presente", async () => {
+  it("mantém a mesma titularidade sem movimentar planos", async () => {
     mockDb.query.turmas.findFirst.mockResolvedValue({
       ...turmaBase,
       professoraId: profValida.id,
@@ -144,9 +101,7 @@ describe("TurmasService — assignProfessora", () => {
       { ...turmaBase, professoraId: profValida.id },
     ]);
 
-    await service.assignProfessora("turma-1", profValida.id, ator);
+    await service.assignProfessora("turma-1", profValida.id);
 
-    expect(mockDb.transaction).not.toHaveBeenCalled();
-    expect(planoAulaServiceMock.transferirPlanosPendentes).not.toHaveBeenCalled();
   });
 });

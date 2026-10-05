@@ -230,10 +230,16 @@ export class PlanoAulaController {
   @Roles(...PROFESSORA_ACCESS)
   async listarMeusPlanos(
     @Req() req: { user: UserContext },
+    @Query("turmaId") turmaId?: string,
     @Query("quinzenaId") quinzenaId?: string,
   ) {
+    if (!turmaId) {
+      throw new BadRequestException("turmaId é obrigatório");
+    }
+
     const planos = await this.planoAulaService.listarMeusPlanos(
       req.user,
+      turmaId,
       quinzenaId,
     );
     return {
@@ -343,9 +349,9 @@ export class PlanoAulaController {
 
     // Verificar se plano existe e usuário tem acesso
     const plano = await this.planoAulaService.getPlanoById(user, planoId);
-    const isOwner = plano.user.id === user.userId;
+    const isTitular = plano.turma.professoraId === user.userId;
     const isAnalistaUser = ANALISTA_ROLES.includes(user.role as typeof ANALISTA_ROLES[number]);
-    if (!isOwner && !isAnalistaUser) {
+    if (!isTitular && !isAnalistaUser) {
       throw new BadRequestException({
         code: "NOT_AUTHORIZED",
         message: "Você não tem permissão para anexar documentos a este plano",
@@ -762,9 +768,9 @@ export class PlanoAulaController {
 
     const user = req.user;
     const plano = await this.planoAulaService.getPlanoById(user, planoId);
-    const isOwner = plano.user.id === user.userId;
+    const isTitular = plano.turma.professoraId === user.userId;
     const isAnalistaUser = ANALISTA_ROLES.includes(user.role as typeof ANALISTA_ROLES[number]);
-    if (!isOwner && !isAnalistaUser) {
+    if (!isTitular && !isAnalistaUser) {
       throw new BadRequestException({
         code: "NOT_AUTHORIZED",
         message: "Você não tem permissão para atualizar documentos deste plano",
@@ -942,9 +948,9 @@ export class PlanoAulaController {
 
     // Verificar se plano existe e usuário tem acesso
     const plano = await this.planoAulaService.getPlanoById(user, planoId);
-    const isOwner = plano.user.id === user.userId;
+    const isTitular = plano.turma.professoraId === user.userId;
     const isAnalistaUser = ANALISTA_ROLES.includes(user.role as typeof ANALISTA_ROLES[number]);
-    if (!isOwner && !isAnalistaUser) {
+    if (!isTitular && !isAnalistaUser) {
       throw new BadRequestException({
         code: "NOT_AUTHORIZED",
         message: "Você não tem permissão para anexar documentos a este plano",

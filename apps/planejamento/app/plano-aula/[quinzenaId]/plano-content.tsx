@@ -89,11 +89,8 @@ type DocumentoComComentarios = PlanoAula["documentos"][number] & {
   comentarios?: unknown[];
 };
 
-function planoPodeSerRecuperado(
-  plano: PlanoAula,
-  userId: string | null,
-): boolean {
-  if (plano.status !== "AGUARDANDO_ANALISTA" || plano.user?.id !== userId) {
+function planoPodeSerRecuperado(plano: PlanoAula): boolean {
+  if (plano.status !== "AGUARDANDO_ANALISTA") {
     return false;
   }
 
@@ -447,7 +444,7 @@ export function PlanoContent({
                   : "Seu plano esta aguardando aprovacao da Coordenadora."}
               </AlertDescription>
             </Alert>
-            {planoPodeSerRecuperado(plano, userId) && (
+            {planoPodeSerRecuperado(plano) && (
               <div className="mt-4">
                 <Button
                   variant="outline"

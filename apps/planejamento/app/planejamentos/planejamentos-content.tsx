@@ -26,6 +26,7 @@ interface Stage {
 
 interface PlanoExistente {
   id: string;
+  turmaId?: string;
   planoAulaPeriodoId?: string;
   quinzenaId?: string;
   status: string;
@@ -112,10 +113,15 @@ export function PlanejamentosContent() {
 
   // Buscar planos existentes da professora
   useEffect(() => {
+    const turmaId = turma?.id;
+    if (!turmaId) return;
+
     async function fetchPlanosExistentes() {
       try {
         setIsLoadingPlanos(true);
-        const response = await api.get<{ data: PlanoExistente[] }>("/plano-aula/meus");
+        const response = await api.get<{ data: PlanoExistente[] }>(
+          `/plano-aula/meus?turmaId=${encodeURIComponent(turmaId ?? "")}`,
+        );
         if (response && Array.isArray(response.data)) {
           setPlanosExistentes(response.data);
         } else if (Array.isArray(response)) {
@@ -132,7 +138,7 @@ export function PlanejamentosContent() {
     }
 
     fetchPlanosExistentes();
-  }, []);
+  }, [turma?.id]);
 
   // Buscar data de início das férias de julho
   useEffect(() => {
@@ -220,6 +226,7 @@ export function PlanejamentosContent() {
         <PlanoAulaGrid
           periodos={periodos}
           planosExistentes={planosExistentes}
+          turmaId={turma?.id}
           dataInicioFeriasJulho={dataInicioFeriasJulho}
         />
       )}

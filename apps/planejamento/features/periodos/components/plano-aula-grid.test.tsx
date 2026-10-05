@@ -46,4 +46,26 @@ describe("PlanoAulaGrid", () => {
       screen.getByRole("heading", { name: "2º Semestre" }).closest("section"),
     ).toHaveTextContent("inicio-das-ferias");
   });
+
+  it("ignora plano aprovado de outra turma ao calcular bloqueio", () => {
+    render(
+      <PlanoAulaGrid
+        turmaId="turma-1"
+        periodos={[
+          periodo("p1", "2026-01-01", 1),
+          periodo("p2", "2026-01-02", 2),
+        ]}
+        planosExistentes={[
+          {
+            id: "plano-outra-turma",
+            turmaId: "turma-2",
+            planoAulaPeriodoId: "p1",
+            status: "APROVADO",
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("Aprove o plano anterior para liberar")).toBeInTheDocument();
+  });
 });

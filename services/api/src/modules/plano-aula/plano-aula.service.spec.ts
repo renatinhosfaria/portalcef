@@ -209,6 +209,97 @@ describe("PlanoAulaService", () => {
         }),
       ).rejects.toThrow("Período não pertence à etapa da turma");
     });
+
+    it("reutiliza o plano da turma e período mesmo quando foi criado por outra professora", async () => {
+      const planoExistente = {
+        id: "plano-antigo",
+        turmaId: "turma-1",
+        unitId: "unit-1",
+        quinzenaId: "periodo-1",
+        planoAulaPeriodoId: "periodo-1",
+        userId: "professora-anterior",
+        status: "APROVADO",
+      };
+      mockDb.query.turmas.findFirst.mockResolvedValue({
+        id: "turma-1",
+        unitId: "unit-1",
+        professoraId: usuarioProfessoraUnit1.userId,
+        stage: { code: "INFANTIL" },
+      });
+      mockDb.query.planoAulaPeriodo.findFirst.mockResolvedValue({
+        id: "periodo-1",
+        unidadeId: "unit-1",
+        etapa: "INFANTIL",
+      });
+      mockDb.query.planoAula.findMany.mockResolvedValue([planoExistente]);
+
+      const resultado = await service.criarPlano(usuarioProfessoraUnit1, {
+        turmaId: "turma-1",
+        quinzenaId: "periodo-1",
+      });
+
+      expect(resultado).toEqual(planoExistente);
+      expect(mockDb.insert).not.toHaveBeenCalled();
+    });
+
+    it("lista planos somente da turma selecionada", async () => {
+      const professora = {
+        userId: "professora-1",
+        role: "professora",
+        schoolId: "school-1",
+        unitId: "unit-1",
+        stageId: "stage-1",
+      };
+      mockDb.query.turmas.findFirst.mockResolvedValue({
+        id: "turma-1",
+        unitId: "unit-1",
+        stageId: "stage-1",
+        professoraId: "professora-1",
+      });
+      mockDb.query.planoAula.findMany.mockResolvedValue([]);
+
+      await service.listarMeusPlanos(professora, "turma-1");
+
+      expect(mockDb.query.turmas.findFirst).toHaveBeenCalled();
+      expect(mockDb.query.planoAula.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          with: expect.objectContaining({ turma: true }),
+        }),
+      );
+    });
+  });
+
+  describe("acesso da titular atual", () => {
+    it("permite que a nova titular consulte um plano criado pela professora anterior", async () => {
+      mockDb.query.planoAula.findFirst.mockResolvedValue({
+        id: "plano-1",
+        userId: "professora-anterior",
+        unitId: "unit-1",
+        turmaId: "turma-1",
+        turma: {
+          id: "turma-1",
+          name: "Turma 1",
+          code: "T1",
+          stageId: "stage-1",
+          professoraId: "professora-atual",
+        },
+        user: { id: "professora-anterior", name: "Anterior" },
+        documentos: [],
+      });
+
+      await expect(
+        service.getPlanoById(
+          {
+            userId: "professora-atual",
+            role: "professora",
+            schoolId: "school-1",
+            unitId: "unit-1",
+            stageId: "stage-1",
+          },
+          "plano-1",
+        ),
+      ).resolves.toEqual(expect.objectContaining({ id: "plano-1" }));
+    });
   });
 
   describe("registrarImpressaoDocumento", () => {
@@ -1352,106 +1443,4 @@ describe("PlanoAulaService", () => {
     });
   });
 
-  describe("transferirPlanosPendentes", () => {
-    const ator = {
-      userId: "coord-1",
-      userName: "Coordenadora Ana",
-      userRole: "coordenadora_geral",
-    };
-
-    it("transfere planos não-aprovados, atualiza userId e cria histórico TRANSFERIDO", async () => {
-      // Planos pendentes da turma
-      mockTx.query.planoAula.findMany.mockResolvedValue([
-        { id: "plano-1", status: "RASCUNHO" },
-        { id: "plano-2", status: "DEVOLVIDO_ANALISTA" },
-      ]);
-
-      // Nomes das professoras
-      mockTx.query.users.findMany.mockResolvedValue([
-        { id: "prof-antiga", name: "Maria da Silva" },
-        { id: "prof-nova", name: "Joana Souza" },
-      ]);
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const result = await (service as any).transferirPlanosPendentes(
-        mockTx,
-        "turma-1",
-        "prof-antiga",
-        "prof-nova",
-        ator,
-      );
-
-      expect(result.planosTransferidos).toEqual(["plano-1", "plano-2"]);
-      // Confirma UPDATE
-      expect(mockTx.update).toHaveBeenCalled();
-      expect(mockTx.set).toHaveBeenCalledWith(
-        expect.objectContaining({ userId: "prof-nova" }),
-      );
-      // Confirma INSERT no histórico — uma chamada por plano transferido
-      expect(mockTx.insert).toHaveBeenCalledTimes(2);
-      expect(mockTx.values).toHaveBeenCalledWith(
-        expect.objectContaining({
-          planoId: "plano-1",
-          userId: "coord-1",
-          userName: "Coordenadora Ana",
-          userRole: "coordenadora_geral",
-          acao: "TRANSFERIDO",
-          statusAnterior: "RASCUNHO",
-          statusNovo: "RASCUNHO",
-          detalhes: expect.objectContaining({
-            professoraAnteriorId: "prof-antiga",
-            professoraAnteriorNome: "Maria da Silva",
-            novaProfessoraId: "prof-nova",
-            novaProfessoraNome: "Joana Souza",
-            motivo: "troca_titular_turma",
-          }),
-        }),
-      );
-    });
-
-    it("retorna lista vazia e não cria histórico quando turma não tem planos pendentes", async () => {
-      mockTx.query.planoAula.findMany.mockResolvedValue([]);
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const result = await (service as any).transferirPlanosPendentes(
-        mockTx,
-        "turma-1",
-        "prof-antiga",
-        "prof-nova",
-        ator,
-      );
-
-      expect(result.planosTransferidos).toEqual([]);
-      expect(mockTx.update).not.toHaveBeenCalled();
-      expect(mockTx.insert).not.toHaveBeenCalled();
-    });
-
-    it("chama findMany com filtro WHERE para excluir APROVADOS", async () => {
-      mockTx.query.planoAula.findMany.mockResolvedValue([
-        { id: "plano-1", status: "RASCUNHO" },
-      ]);
-      mockTx.query.users.findMany.mockResolvedValue([
-        { id: "prof-antiga", name: "Maria" },
-        { id: "prof-nova", name: "Joana" },
-      ]);
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (service as any).transferirPlanosPendentes(
-        mockTx,
-        "turma-1",
-        "prof-antiga",
-        "prof-nova",
-        ator,
-      );
-
-      expect(mockTx.query.planoAula.findMany).toHaveBeenCalledTimes(1);
-      expect(mockTx.query.planoAula.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          columns: expect.objectContaining({ id: true, status: true }),
-        }),
-      );
-      const callArg = mockTx.query.planoAula.findMany.mock.calls[0][0];
-      expect(callArg).toHaveProperty("where");
-    });
-  });
 });

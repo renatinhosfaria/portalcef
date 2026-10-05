@@ -22,6 +22,7 @@ interface Periodo {
 
 interface PlanoExistente {
   id: string;
+  turmaId?: string;
   planoAulaPeriodoId?: string;
   quinzenaId?: string;
   status: string;
@@ -30,6 +31,7 @@ interface PlanoExistente {
 interface PlanoAulaGridProps {
   periodos: Periodo[];
   planosExistentes?: PlanoExistente[];
+  turmaId?: string;
   /** Data de início das férias de julho (formato YYYY-MM-DD). Usado para dividir semestres. */
   dataInicioFeriasJulho?: string;
 }
@@ -99,8 +101,13 @@ function isPeriodoLocked(
 export function PlanoAulaGrid({
   periodos,
   planosExistentes = [],
+  turmaId,
   dataInicioFeriasJulho,
 }: PlanoAulaGridProps) {
+  const planosDaTurma = turmaId
+    ? planosExistentes.filter((plano) => plano.turmaId === turmaId)
+    : planosExistentes;
+
   // Separar períodos por semestre e ordenar por número
   const primeiroSemestre = periodos
     .filter((p) => getSemestre(p.dataInicio, dataInicioFeriasJulho) === 1)
@@ -112,8 +119,10 @@ export function PlanoAulaGrid({
 
   // Função para encontrar plano existente de um período
   const getPlanoExistente = (periodoId: string) => {
-    return planosExistentes.find(
-      (p) => p.planoAulaPeriodoId === periodoId || p.quinzenaId === periodoId,
+    return planosDaTurma.find(
+      (p) =>
+        (!turmaId || p.turmaId === turmaId) &&
+        (p.planoAulaPeriodoId === periodoId || p.quinzenaId === periodoId),
     );
   };
 
@@ -134,7 +143,7 @@ export function PlanoAulaGrid({
                 isLocked={isPeriodoLocked(
                   periodo,
                   primeiroSemestre,
-                  planosExistentes,
+                  planosDaTurma,
                 )}
               />
             ))}
@@ -157,7 +166,7 @@ export function PlanoAulaGrid({
                 isLocked={isPeriodoLocked(
                   periodo,
                   segundoSemestre,
-                  planosExistentes,
+                  planosDaTurma,
                 )}
               />
             ))}

@@ -14,14 +14,12 @@ import {
   eq,
   isNull,
   or,
-  ne,
   desc,
   gte,
   lte,
   inArray,
   isNotNull,
   planoAula,
-  planoAulaHistorico,
   planoDocumento,
   documentoComentario,
   planoAulaPeriodo,
@@ -107,7 +105,13 @@ export interface PlanoComDocumentos extends PlanoAula {
     }
   >;
   user: { id: string; name: string };
-  turma: { id: string; name: string; code: string; stageId: string };
+  turma: {
+    id: string;
+    name: string;
+    code: string;
+    stageId: string;
+    professoraId: string | null;
+  };
 }
 
 /**
@@ -188,14 +192,22 @@ export class PlanoAulaService {
       throw new BadRequestException("Período não pertence à etapa da turma");
     }
 
-    // Verificar se já existe plano para esta turma/quinzena
-    const existente = await db.query.planoAula.findFirst({
-      where: and(
-        eq(planoAula.userId, user.userId),
-        eq(planoAula.turmaId, dto.turmaId),
-        eq(planoAula.quinzenaId, dto.quinzenaId),
-      ),
-    });
+    // O plano pertence à turma e ao período. O userId identifica a professora
+    // que criou o registro, mas não cria um segundo plano após troca de titular.
+    const existentes: PlanoAula[] =
+      (await db.query.planoAula.findMany({
+        where: and(
+          eq(planoAula.turmaId, dto.turmaId),
+          eq(planoAula.quinzenaId, dto.quinzenaId),
+        ),
+        orderBy: [desc(planoAula.updatedAt)],
+      })) ?? [];
+
+    // Em dados antigos pode haver mais de um registro. Prefira o registro da
+    // titular atual e, na ausência dele, o mais recentemente atualizado.
+    const existente =
+      existentes.find((plano) => plano.userId === turma.professoraId) ??
+      existentes[0];
 
     if (existente) {
       return existente;
@@ -253,7 +265,7 @@ export class PlanoAulaService {
     }
 
     // Verificar acesso
-    const isOwner = plano.userId === user.userId;
+    const isTitular = plano.turma.professoraId === user.userId;
     const isGestaoUser = isGestao(user.role);
     const isAnalistaUser = isAnalista(user.role);
     const isCoordenadoraUser = isCoordenadora(user.role);
@@ -277,8 +289,8 @@ export class PlanoAulaService {
       );
     }
 
-    // Owner sempre pode ver
-    if (isOwner) {
+    // A titular atual sempre pode ver os planos vinculados à turma.
+    if (isTitular) {
       return this.formatPlanoResponse(plano);
     }
 
@@ -321,15 +333,15 @@ export class PlanoAulaService {
 
     const plano = await db.query.planoAula.findFirst({
       where: eq(planoAula.id, planoId),
-      with: { documentos: true },
+      with: { documentos: true, turma: true },
     });
 
     if (!plano) {
       throw new NotFoundException("Plano não encontrado");
     }
 
-    if (plano.userId !== user.userId) {
-      throw new ForbiddenException("Apenas o autor pode submeter o plano");
+    if (plano.turma.professoraId !== user.userId) {
+      throw new ForbiddenException("Apenas a titular da turma pode submeter o plano");
     }
 
     // Verificar se tem documentos anexados
@@ -393,14 +405,15 @@ export class PlanoAulaService {
 
     const plano = await db.query.planoAula.findFirst({
       where: eq(planoAula.id, planoId),
+      with: { turma: true },
     });
 
     if (!plano) {
       throw new NotFoundException("Plano não encontrado");
     }
 
-    if (plano.userId !== user.userId) {
-      throw new ForbiddenException("Apenas o autor pode recuperar o plano");
+    if (plano.turma.professoraId !== user.userId) {
+      throw new ForbiddenException("Apenas a titular da turma pode recuperar o plano");
     }
 
     if (plano.status !== "AGUARDANDO_ANALISTA") {
@@ -1563,7 +1576,13 @@ export class PlanoAulaService {
   private formatPlanoResponse(
     plano: PlanoAula & {
       user: { id: string; name: string };
-      turma: { id: string; name: string; code: string };
+      turma: {
+        id: string;
+        name: string;
+        code: string;
+        stageId: string;
+        professoraId: string | null;
+      };
       documentos?: Array<
         PlanoDocumento & {
           comentarios?: Array<
@@ -1597,6 +1616,7 @@ export class PlanoAulaService {
         name: plano.turma.name,
         code: plano.turma.code,
         stageId: plano.turma.stageId,
+        professoraId: plano.turma.professoraId,
       },
       documentos: (plano.documentos || []).map((doc: DocType) => ({
         ...doc,
@@ -1611,16 +1631,31 @@ export class PlanoAulaService {
     };
   }
 
-  /**
-   * Lista planos do usuário (para professora ver seus próprios planos)
-   */
+  /** Lista os planos da turma titular da professora logada. */
   async listarMeusPlanos(
     user: UserContext,
+    turmaId: string,
     quinzenaId?: string,
   ): Promise<PlanoAula[]> {
     const db = getDb();
 
-    const conditions = [eq(planoAula.userId, user.userId)];
+    if (!user.unitId) {
+      throw new BadRequestException("Usuário não possui unidade associada");
+    }
+
+    const turma = await db.query.turmas.findFirst({
+      where: and(
+        eq(turmas.id, turmaId),
+        eq(turmas.unitId, user.unitId),
+        eq(turmas.professoraId, user.userId),
+      ),
+    });
+
+    if (!turma) {
+      throw new ForbiddenException("Você não é a titular desta turma");
+    }
+
+    const conditions = [eq(planoAula.turmaId, turmaId)];
 
     if (quinzenaId) {
       conditions.push(eq(planoAula.quinzenaId, quinzenaId));
@@ -1995,85 +2030,4 @@ export class PlanoAulaService {
       .where(eq(planoDocumento.id, documentoId));
   }
 
-  /**
-   * Transfere todos os planos não-aprovados de uma turma para uma nova professora.
-   * Usado quando a professora titular da turma é trocada (assignProfessora).
-   *
-   * Mantém planos APROVADOS com a autora original (registro histórico fiel).
-   * Cria uma linha em plano_aula_historico para cada plano transferido.
-   *
-   * Deve ser chamado dentro de uma transação Drizzle (tx) iniciada pelo TurmasService.
-   *
-   * @param tx Transação Drizzle ativa
-   * @param turmaId Turma cuja titular foi trocada
-   * @param professoraAnteriorId Professora que estava na turma
-   * @param novaProfessoraId Nova professora titular
-   * @param ator Usuário que disparou a operação (normalmente coordenadora)
-   * @returns Lista de IDs de planos transferidos
-   */
-  async transferirPlanosPendentes(
-    tx: DbTransaction,
-    turmaId: string,
-    professoraAnteriorId: string,
-    novaProfessoraId: string,
-    ator: { userId: string; userName: string; userRole: string },
-  ): Promise<{ planosTransferidos: string[] }> {
-    // 1. Buscar planos pendentes da turma (status != APROVADO)
-    const planosPendentes: Array<{ id: string; status: PlanoAulaStatus }> =
-      await tx.query.planoAula.findMany({
-        where: and(
-          eq(planoAula.turmaId, turmaId),
-          ne(planoAula.status, "APROVADO"),
-        ),
-        columns: { id: true, status: true },
-      });
-
-    if (planosPendentes.length === 0) {
-      return { planosTransferidos: [] };
-    }
-
-    const planoIds = planosPendentes.map((p) => p.id);
-
-    // 2. Atualizar userId nos planos
-    await tx
-      .update(planoAula)
-      .set({ userId: novaProfessoraId, updatedAt: new Date() })
-      .where(inArray(planoAula.id, planoIds));
-
-    // 3. Buscar nomes das professoras (para histórico denormalizado)
-    const usuariosEnvolvidos: Array<{ id: string; name: string | null }> =
-      await tx.query.users.findMany({
-        where: inArray(users.id, [professoraAnteriorId, novaProfessoraId]),
-        columns: { id: true, name: true },
-      });
-
-    const nomeAnterior =
-      usuariosEnvolvidos.find((u) => u.id === professoraAnteriorId)?.name ??
-      "Professora anterior";
-    const nomeNovo =
-      usuariosEnvolvidos.find((u) => u.id === novaProfessoraId)?.name ??
-      "Nova professora";
-
-    // 4. Inserir histórico TRANSFERIDO para cada plano
-    for (const plano of planosPendentes) {
-      await tx.insert(planoAulaHistorico).values({
-        planoId: plano.id,
-        userId: ator.userId,
-        userName: ator.userName,
-        userRole: ator.userRole,
-        acao: "TRANSFERIDO",
-        statusAnterior: plano.status,
-        statusNovo: plano.status,
-        detalhes: {
-          professoraAnteriorId,
-          professoraAnteriorNome: nomeAnterior,
-          novaProfessoraId,
-          novaProfessoraNome: nomeNovo,
-          motivo: "troca_titular_turma",
-        },
-      });
-    }
-
-    return { planosTransferidos: planoIds };
-  }
 }
