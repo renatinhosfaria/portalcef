@@ -1,6 +1,12 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+} from "react";
 
 interface TenantContextType {
   schoolId: string | null;
@@ -10,7 +16,6 @@ interface TenantContextType {
   email?: string | null;
   isLoaded: boolean;
 }
-
 const TenantContext = createContext<TenantContextType | undefined>(undefined);
 
 export function TenantProvider({ children }: { children: React.ReactNode }) {
@@ -22,29 +27,62 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
     email: null,
     isLoaded: false,
   });
-
-  useEffect(() => {
-    fetch("/api/auth/me", { credentials: "include" })
-      .then(async (response) => {
-        if (!response.ok) throw new Error("Sessão inválida");
-        const body = (await response.json()) as { data?: { user?: TenantContextType } };
-        const user = body.data?.user;
-        if (!user || user.role?.toLowerCase() !== "master") throw new Error("Acesso negado");
-        setTenant({ ...user, role: user.role.toLowerCase(), isLoaded: true });
-      })
-      .catch(() => {
-        window.location.href = "https://www.portalcef.com.br/login";
-      });
+  const [erro, setErro] = useState<string | null>(null);
+  const carregar = useCallback(async () => {
+    setErro(null);
+    try {
+      const response = await fetch("/api/auth/me", { credentials: "include" });
+      if (!response.ok) throw new Error("Não foi possível validar a sessão");
+      const body = (await response.json()) as {
+        data?: { user?: TenantContextType };
+      };
+      const user = body.data?.user;
+      if (!user || user.role?.toLowerCase() !== "master")
+        throw new Error("Esta conta não tem acesso ao módulo");
+      setTenant({ ...user, role: user.role.toLowerCase(), isLoaded: true });
+    } catch (error) {
+      setTenant((anterior) => ({ ...anterior, isLoaded: false }));
+      setErro(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível carregar sua sessão",
+      );
+    }
   }, []);
+  useEffect(() => {
+    void carregar();
+  }, [carregar]);
 
-  if (!tenant.isLoaded) {
+  if (erro)
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
+        <div
+          role="alert"
+          className="max-w-md rounded-2xl bg-white p-8 text-center shadow-lg"
+        >
+          <h1 className="text-xl font-bold text-slate-900">
+            Não foi possível carregar sua sessão
+          </h1>
+          <p className="mt-2 text-slate-500">{erro}</p>
+          <button
+            type="button"
+            onClick={() => void carregar()}
+            className="mt-6 rounded-xl bg-slate-900 px-5 py-3 font-semibold text-white hover:bg-slate-700"
+          >
+            Tentar novamente
+          </button>
+        </div>
+      </div>
+    );
+  if (!tenant.isLoaded)
+    return (
+      <div
+        className="min-h-screen flex items-center justify-center bg-slate-50"
+        aria-busy="true"
+      >
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#A3D154]" />
       </div>
     );
-  }
-
   return (
     <TenantContext.Provider value={tenant}>{children}</TenantContext.Provider>
   );
@@ -52,8 +90,7 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
 
 export const useTenant = () => {
   const context = useContext(TenantContext);
-  if (context === undefined) {
+  if (context === undefined)
     throw new Error("useTenant must be used within a TenantProvider");
-  }
   return context;
 };

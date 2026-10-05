@@ -1,4 +1,10 @@
-import { pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import {
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from "drizzle-orm/pg-core";
 
 import { schools } from "./schools.js";
 
@@ -20,9 +26,9 @@ export const units = pgTable(
       .defaultNow(),
   },
   (table) => ({
-    idSchoolUnique: uniqueIndex("units_id_school_id_unique").on(
-      table.id,
+    schoolCodeUnique: uniqueIndex("units_school_code_unique").on(
       table.schoolId,
+      table.code,
     ),
   }),
 );

@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Building2, Landmark, School, Users2 } from "lucide-react";
+import { Landmark, School, Users2 } from "lucide-react";
 
 import { StatsCard } from "../stats/stats-card";
 
@@ -9,7 +9,6 @@ interface OverviewGridProps {
   schoolsCount: number;
   unitsCount: number;
   directorsCount: number;
-  studentsCount: number;
 }
 
 const stagger = {
@@ -20,7 +19,6 @@ export function OverviewGrid({
   schoolsCount,
   unitsCount,
   directorsCount,
-  studentsCount,
 }: OverviewGridProps) {
   return (
     <motion.div
@@ -49,15 +47,6 @@ export function OverviewGrid({
         icon={Users2}
         color="text-purple-600"
         description="Liderança designada"
-      />
-      <StatsCard
-        title="Total de Alunos"
-        value={
-          studentsCount === 0 ? "0" : `${(studentsCount / 1000).toFixed(1)}k`
-        }
-        icon={Building2}
-        color="text-orange-500"
-        description="Em toda a rede (Est.)"
       />
     </motion.div>
   );

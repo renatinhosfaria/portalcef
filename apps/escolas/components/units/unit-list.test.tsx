@@ -14,7 +14,7 @@ const baseUnit: UnitListItem = {
 };
 
 describe("UnitList", () => {
-  it("renders diretora geral and gerente da unidade names", () => {
+  it("renders o gerente da unidade", () => {
     render(
       <UnitList
         units={[baseUnit]}
@@ -24,9 +24,7 @@ describe("UnitList", () => {
       />,
     );
 
-    expect(screen.getByText("Diretora Geral")).toBeInTheDocument();
     expect(screen.getByText("Gerente da Unidade")).toBeInTheDocument();
-    expect(screen.getByText("Daviane")).toBeInTheDocument();
     expect(screen.getByText("Isabella")).toBeInTheDocument();
   });
 
@@ -40,7 +38,6 @@ describe("UnitList", () => {
       />,
     );
 
-    const pendingBadges = screen.getAllByText("Pendente");
-    expect(pendingBadges).toHaveLength(2);
+    expect(screen.getByText("Pendente")).toBeInTheDocument();
   });
 });

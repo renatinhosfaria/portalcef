@@ -118,7 +118,6 @@ export function UnitList({
               <TableHead className="pl-6">Unidade</TableHead>
               <TableHead>Código</TableHead>
               <TableHead>Endereço</TableHead>
-              <TableHead>Diretora Geral</TableHead>
               <TableHead>Gerente da Unidade</TableHead>
               <TableHead className="w-[50px]"></TableHead>
             </TableRow>
@@ -127,7 +126,7 @@ export function UnitList({
             {isLoading ? (
               <TableRow>
                 <TableCell
-                  colSpan={6}
+                  colSpan={5}
                   className="pl-6 py-8 text-center text-sm text-slate-500"
                 >
                   Carregando unidades...
@@ -136,7 +135,7 @@ export function UnitList({
             ) : units.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={6}
+                  colSpan={5}
                   className="pl-6 py-8 text-center text-sm text-slate-500"
                 >
                   Nenhuma unidade encontrada.
@@ -160,7 +159,6 @@ export function UnitList({
                       {unit.address || "Endereço não informado"}
                     </div>
                   </TableCell>
-                  <TableCell>{renderPerson(unit.directorGeneral)}</TableCell>
                   <TableCell>{renderPerson(unit.unitManager)}</TableCell>
                   <TableCell>
                     <DropdownMenu>

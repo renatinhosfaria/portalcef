@@ -20,8 +20,7 @@ describe("MasterSidebar", () => {
 
     const link = screen.getByRole("link", { name: /Voltar aos Apps/i });
 
-    expect(link).toHaveAttribute("href", "https://www.portalcef.com.br/");
-    expect(link).toHaveAttribute("rel", "external");
+    expect(link).toHaveAttribute("href", "/");
   });
 
   it("invalida a sessão no servidor antes de redirecionar", async () => {
@@ -43,9 +42,19 @@ describe("MasterSidebar", () => {
         }),
       );
       expect(localStorage.getItem("tenant")).toBeNull();
-      expect(redirecionar).toHaveBeenCalledWith(
-        "https://www.portalcef.com.br/login",
-      );
+      expect(redirecionar).toHaveBeenCalledWith("/login");
     });
+  });
+
+  it("abre o drawer mobile e fecha ao selecionar um item", () => {
+    const fechar = vi.fn();
+    render(<MasterSidebar abertoNoMobile onFecharMobile={fechar} />);
+
+    expect(screen.getByRole("complementary")).toHaveAttribute(
+      "data-mobile-open",
+      "true",
+    );
+    fireEvent.click(screen.getByRole("link", { name: /Visão Geral/i }));
+    expect(fechar).toHaveBeenCalled();
   });
 });

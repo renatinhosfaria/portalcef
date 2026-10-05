@@ -99,7 +99,6 @@ export class StatsService {
       schoolsCount: schools.length,
       unitsCount: units.length,
       directorsCount: directors.length,
-      studentsCount: 0, // Placeholder for future implementation
     };
 
     // Cache for 30 seconds to reduce DB load

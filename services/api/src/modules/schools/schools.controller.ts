@@ -1,5 +1,6 @@
 import {
   createSchoolSchema,
+  createSchoolProvisioningSchema,
   updateSchoolSchema,
 } from "@essencia/shared/schemas";
 import {
@@ -9,8 +10,10 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  NotFoundException,
   Param,
   Post,
+  Query,
   Put,
   UseGuards,
 } from "@nestjs/common";
@@ -20,18 +23,26 @@ import { Roles } from "../../common/decorators/roles.decorator";
 import { AuthGuard } from "../../common/guards/auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
 import { SchoolsService } from "./schools.service";
+import { SchoolsProvisioningService } from "./schools-provisioning.service";
 
 @Controller("schools")
 @UseGuards(AuthGuard, RolesGuard)
 export class SchoolsController {
-  constructor(private schoolsService: SchoolsService) {}
+  constructor(
+    private schoolsService: SchoolsService,
+    private provisioningService: SchoolsProvisioningService,
+  ) {}
 
   @Get()
   @Roles("master")
   async findAll(
     @CurrentUser() _currentUser: { role: string; schoolId: string | null },
+    @Query("summary") summary?: string,
   ) {
-    const schools = await this.schoolsService.findAll();
+    const schools =
+      summary === "true"
+        ? await this.schoolsService.findAllWithUnitCounts()
+        : await this.schoolsService.findAll();
     return {
       success: true,
       data: schools,
@@ -56,6 +67,9 @@ export class SchoolsController {
     }
 
     const school = await this.schoolsService.findById(id);
+    if (!school) {
+      throw new NotFoundException("Escola não encontrada");
+    }
     return {
       success: true,
       data: school,
@@ -81,6 +95,25 @@ export class SchoolsController {
       success: true,
       data: school,
     };
+  }
+
+  @Post("provision")
+  @Roles("master")
+  async provision(@Body() body: unknown) {
+    const result = createSchoolProvisioningSchema.safeParse(body);
+    if (!result.success) {
+      return {
+        success: false,
+        error: {
+          code: "VALIDATION_ERROR",
+          message: "Dados inválidos",
+          details: result.error.flatten(),
+        },
+      };
+    }
+
+    const provisioned = await this.provisioningService.create(result.data);
+    return { success: true, data: provisioned };
   }
 
   @Put(":id")

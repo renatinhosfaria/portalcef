@@ -1,7 +1,7 @@
 "use client";
 
 import { api } from "@essencia/shared/fetchers/client";
-import { createUserSchema, type UserRole } from "@essencia/shared/schemas";
+import { createUserSchema, updateUserSchema } from "@essencia/shared/schemas";
 import { Button } from "@essencia/ui/components/button";
 import { Input } from "@essencia/ui/components/input";
 import { Label } from "@essencia/ui/components/label";
@@ -13,7 +13,7 @@ import {
   ShieldCheck,
   User,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Sheet } from "../ui/sheet";
 
@@ -35,16 +35,77 @@ export function DirectorForm({
   onSaved,
 }: DirectorFormProps) {
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingExisting, setIsLoadingExisting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [directorId, setDirectorId] = useState<string | null>(null);
 
-  // Initialize with Diretora role locked
   const [formData, setFormData] = useState({
     name: "",
     email: "",
     password: "",
-    role: "diretora_geral" as UserRole,
   });
+
+  useEffect(() => {
+    if (!isOpen || !unit?.id) {
+      setDirectorId(null);
+      setFormData({ name: "", email: "", password: "" });
+      setError(null);
+      setSuccess(false);
+      return;
+    }
+
+    let ativo = true;
+    setIsLoadingExisting(true);
+    setError(null);
+    setSuccess(false);
+
+    void api
+      .get<
+        Array<{
+          id: string;
+          name: string;
+          email: string;
+          role: string;
+          unitId: string | null;
+        }>
+      >("/users")
+      .then((users) => {
+        if (!ativo) return;
+        const existing = users.find(
+          (user) => user.role === "gerente_unidade" && user.unitId === unit.id,
+        );
+        setDirectorId(existing?.id ?? null);
+        setFormData({
+          name: existing?.name ?? "",
+          email: existing?.email ?? "",
+          password: "",
+        });
+      })
+      .catch((err) => {
+        if (ativo) {
+          setError(
+            err instanceof Error
+              ? err.message
+              : "Erro ao carregar gerente da unidade.",
+          );
+        }
+      })
+      .finally(() => {
+        if (ativo) setIsLoadingExisting(false);
+      });
+
+    return () => {
+      ativo = false;
+    };
+  }, [isOpen, unit?.id]);
+
+  const resetForm = () => {
+    setDirectorId(null);
+    setFormData({ name: "", email: "", password: "" });
+    setError(null);
+    setSuccess(false);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -58,61 +119,51 @@ export function DirectorForm({
     }
 
     try {
-      // Logic for Diretora Geral: SchoolID is required, UnitID depends on business logic but usually
-      // a Diretora Geral is creating for a Unit or School?
-      // Re-reading logic: "Diretora Geral: SchoolId required, UnitId null" in shared schema (lines 124-125 of shared/index.ts).
-      // WAIT. If Diretora Geral is PER UNIT (as requested "Diretora Geral de cada unidade"),
-      // then the schema might be too restrictive or my understanding of the schema is strict.
-      // Let's check schema: "if role === diretora_geral -> schoolId !== null && unitId === null"
-      // If the user wants a Director FOR A UNIT, we might need "gerente_unidade"?
-      // OR maybe I should use "gerente_unidade" for the unit manager role?
-      // The user clearly said "Diretora Geral de cada unidade".
-      // In many schools, "Diretora" is the head of the specific unit.
-      // If the schema enforces unitId=null for diretora_geral, it implies Diretora Geral is SCHOOL WIDE.
-      // If so, implementing "Diretora Geral de cada unidade" might conflict with the existing schema validation or role definition.
-      // I will proceed assuming I should use "gerente_unidade" (Unit Manager) conceptually but label it "Diretora da Unidade" OR override the check if I can.
-      // HOWEVER, looking at roleEnum: "gerente_unidade" exists. "diretora_geral" seems higher up.
-      // Let's assume for this form I will try to create a "gerente_unidade" which allows unitId, but Display "Diretora da Unidade".
-      // OR I will assume the user wants `gerente_unidade` role but calls it Diretora.
-      // Let's try `gerente_unidade` to be safe with the schema (unitId required).
+      if (directorId) {
+        const result = updateUserSchema.safeParse({
+          name: formData.name.trim(),
+          email: formData.email.trim(),
+          ...(formData.password ? { password: formData.password } : {}),
+        });
 
-      const roleToUse = "gerente_unidade";
+        if (!result.success) {
+          const issue = result.error.issues[0];
+          setError(issue?.message ?? "Dados invalidos.");
+          setIsLoading(false);
+          return;
+        }
 
-      const payload = {
-        ...formData,
-        role: roleToUse as UserRole,
-        schoolId: schoolId,
-        unitId: unit.id,
-        stageId: null,
-      };
+        await api.put(`/users/${directorId}`, result.data);
+      } else {
+        const result = createUserSchema.safeParse({
+          name: formData.name.trim(),
+          email: formData.email.trim(),
+          password: formData.password,
+          role: "gerente_unidade",
+          schoolId,
+          unitId: unit.id,
+          stageId: null,
+        });
 
-      const result = createUserSchema.safeParse(payload);
+        if (!result.success) {
+          const issue = result.error.issues[0];
+          setError(issue?.message ?? "Dados invalidos.");
+          setIsLoading(false);
+          return;
+        }
 
-      if (!result.success) {
-        const issue = result.error.issues[0];
-        setError(issue?.message ?? "Dados invalidos.");
-        setIsLoading(false);
-        return;
+        await api.post("/users", result.data);
       }
-
-      await api.post("/users", result.data);
       await onSaved?.();
 
       setSuccess(true);
       setTimeout(() => {
         setSuccess(false);
         onClose();
-        setFormData({
-          name: "",
-          email: "",
-          password: "",
-          role: "diretora_geral",
-        });
+        resetForm();
       }, 1000);
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Erro ao cadastrar diretora.",
-      );
+      setError(err instanceof Error ? err.message : "Erro ao salvar gerente.");
     } finally {
       setIsLoading(false);
     }
@@ -122,7 +173,7 @@ export function DirectorForm({
     <Sheet
       isOpen={isOpen}
       onClose={onClose}
-      title={`Nova Diretora - ${unit?.name}`}
+      title={`${directorId ? "Editar" : "Novo"} Gerente da Unidade - ${unit?.name}`}
     >
       <form onSubmit={handleSubmit} className="space-y-6 mt-6">
         <div className="bg-amber-50 p-4 rounded-xl border border-amber-100 mb-6">
@@ -131,7 +182,7 @@ export function DirectorForm({
             Permissões de Acesso
           </h4>
           <p className="text-amber-700 text-xs text-pretty">
-            O usuário criado terá acesso administrativo total à unidade{" "}
+            O usuário terá acesso administrativo à unidade{" "}
             <strong>{unit?.name}</strong> e poderá gerenciar professores e
             alunos locais.
           </p>
@@ -187,12 +238,14 @@ export function DirectorForm({
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="dir-pass">Senha Temporária</Label>
+          <Label htmlFor="dir-pass">
+            {directorId ? "Nova Senha (opcional)" : "Senha Temporária"}
+          </Label>
           <Input
             id="dir-pass"
             type="password"
             placeholder="*******"
-            required
+            required={!directorId}
             value={formData.password}
             onChange={(e) =>
               setFormData({ ...formData, password: e.target.value })
@@ -207,7 +260,7 @@ export function DirectorForm({
           <Button
             type="submit"
             className="bg-slate-900 hover:bg-slate-800 text-white font-bold min-w-[140px]"
-            disabled={isLoading || success}
+            disabled={isLoading || isLoadingExisting || success}
           >
             {isLoading ? (
               <>
@@ -219,8 +272,10 @@ export function DirectorForm({
                 <Check className="mr-2 h-4 w-4" />
                 Feito!
               </>
+            ) : directorId ? (
+              "Salvar Alterações"
             ) : (
-              "Confirmar Cadastro"
+              "Cadastrar Gerente"
             )}
           </Button>
         </div>

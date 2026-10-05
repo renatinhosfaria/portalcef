@@ -8,6 +8,10 @@ import {
   Put,
   UseGuards,
 } from "@nestjs/common";
+import {
+  assignUnitStagesSchema,
+  replaceUnitStagesSchema,
+} from "@essencia/shared/schemas";
 
 import { AuthGuard } from "../../common/guards/auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
@@ -66,13 +70,22 @@ export class StagesController {
   @Post("units/:unitId/stages")
   @UseGuards(RolesGuard, TenantGuard)
   @Roles("master")
-  async assignToUnit(
-    @Param("unitId") unitId: string,
-    @Body() body: { stageIds: string[] },
-  ) {
+  async assignToUnit(@Param("unitId") unitId: string, @Body() body: unknown) {
+    const result = assignUnitStagesSchema.safeParse(body);
+    if (!result.success) {
+      return {
+        success: false,
+        error: {
+          code: "VALIDATION_ERROR",
+          message: "Dados inválidos",
+          details: result.error.flatten(),
+        },
+      };
+    }
+
     const unitStages = await this.stagesService.assignToUnit(
       unitId,
-      body.stageIds,
+      result.data.stageIds,
     );
     return {
       success: true,
@@ -90,11 +103,23 @@ export class StagesController {
   @Roles("master")
   async replaceUnitStages(
     @Param("unitId") unitId: string,
-    @Body() body: { stageIds: string[] },
+    @Body() body: unknown,
   ) {
+    const result = replaceUnitStagesSchema.safeParse(body);
+    if (!result.success) {
+      return {
+        success: false,
+        error: {
+          code: "VALIDATION_ERROR",
+          message: "Dados inválidos",
+          details: result.error.flatten(),
+        },
+      };
+    }
+
     const unitStages = await this.stagesService.replaceUnitStages(
       unitId,
-      body.stageIds,
+      result.data.stageIds,
     );
     return {
       success: true,
