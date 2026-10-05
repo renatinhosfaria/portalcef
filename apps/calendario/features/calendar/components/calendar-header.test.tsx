@@ -31,10 +31,7 @@ describe("CalendarHeader", () => {
       />,
     );
 
-    const buttons = screen.getAllByRole("button");
-    const prevButton = buttons[0];
-    expect(prevButton).toBeDefined();
-    await userEvent.click(prevButton!);
+    await userEvent.click(screen.getByRole("button", { name: "Mês anterior" }));
 
     expect(onPrevMonth).toHaveBeenCalledTimes(1);
   });
@@ -50,10 +47,7 @@ describe("CalendarHeader", () => {
       />,
     );
 
-    const buttons = screen.getAllByRole("button");
-    const nextButton = buttons[1];
-    expect(nextButton).toBeDefined();
-    await userEvent.click(nextButton!);
+    await userEvent.click(screen.getByRole("button", { name: "Próximo mês" }));
 
     expect(onNextMonth).toHaveBeenCalledTimes(1);
   });

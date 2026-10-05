@@ -1,9 +1,9 @@
 "use client";
 
-import { formatarDiaMes, formatarDataCurta } from "@essencia/shared/formatar-data";
+import { dataDoEvento, formatarDataEvento } from "@/lib/datas-calendario";
 import type { CalendarEvent } from "@essencia/shared/schemas/calendar";
 import { eventTypeConfig } from "@essencia/shared/types/calendar";
-import { isSameDay } from "date-fns";
+
 import { Pencil, Trash2 } from "lucide-react";
 
 import { Button } from "@essencia/ui/components/button";
@@ -28,9 +28,9 @@ export function EventCard({
 }: EventCardProps) {
   const config = eventTypeConfig[event.eventType];
 
-  const startDate = new Date(event.startDate);
-  const endDate = new Date(event.endDate);
-  const isSingleDay = isSameDay(startDate, endDate);
+  const startDate = dataDoEvento(event.startDate);
+  const endDate = dataDoEvento(event.endDate);
+  const isSingleDay = startDate === endDate;
 
   if (compact) {
     return (
@@ -64,8 +64,8 @@ export function EventCard({
           </h4>
           <p className="text-xs text-slate-500 mt-0.5">
             {isSingleDay
-              ? formatarDiaMes(startDate)
-              : `${formatarDataCurta(startDate)} - ${formatarDataCurta(endDate)}`}
+              ? formatarDataEvento(startDate, true)
+              : `${formatarDataEvento(startDate)} - ${formatarDataEvento(endDate)}`}
           </p>
           {event.description && (
             <p className="text-xs text-slate-600 mt-1 line-clamp-2">
@@ -81,6 +81,7 @@ export function EventCard({
                 variant="ghost"
                 size="icon"
                 className="h-7 w-7"
+                aria-label="Editar evento"
                 onClick={() => onEdit?.(event)}
               >
                 <Pencil className="h-3.5 w-3.5" />
@@ -91,6 +92,7 @@ export function EventCard({
                 variant="ghost"
                 size="icon"
                 className="h-7 w-7 text-red-600 hover:text-red-700 hover:bg-red-50"
+                aria-label="Excluir evento"
                 onClick={() => onDelete?.(event)}
               >
                 <Trash2 className="h-3.5 w-3.5" />

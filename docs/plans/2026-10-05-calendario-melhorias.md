@@ -13,6 +13,7 @@
 ### Tarefa 1: Corrigir consultas, estatísticas e validação de mutação
 
 **Arquivos:**
+
 - Modificar: `services/api/src/modules/calendar/calendar.service.ts`
 - Modificar: `services/api/src/modules/calendar/calendar.controller.ts`
 - Modificar: `packages/shared/src/schemas/calendar.ts`
@@ -30,6 +31,7 @@
 ### Tarefa 2: Implementar validação real de quinzena
 
 **Arquivos:**
+
 - Modificar: `services/api/src/modules/calendar/calendar.service.ts`
 - Testar: `services/api/src/modules/calendar/calendar.service.spec.ts`
 
@@ -43,6 +45,7 @@
 ### Tarefa 3: Corrigir estado e datas do frontend
 
 **Arquivos:**
+
 - Modificar: `apps/calendario/features/calendar/components/event-form.tsx`
 - Modificar: `apps/calendario/features/calendar/components/calendar-view.tsx`
 - Modificar: `apps/calendario/features/calendar/components/event-card.tsx`
@@ -64,6 +67,7 @@
 ### Tarefa 4: Fechar acessibilidade e cobertura crítica
 
 **Arquivos:**
+
 - Modificar: `apps/calendario/features/calendar/components/day-cell.tsx`
 - Modificar: `apps/calendario/features/calendar/components/calendar-header.tsx`
 - Modificar: `apps/calendario/features/calendar/components/event-card.tsx`

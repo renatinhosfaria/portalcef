@@ -4,7 +4,7 @@ import type {
   CalendarEvent,
   QueryCalendarEventsInput,
 } from "@essencia/shared/schemas/calendar";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { getCalendarEvents } from "@/lib/api";
 
@@ -28,8 +28,10 @@ export function useCalendarEvents(
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const requestId = useRef(0);
 
   const fetchEvents = useCallback(async () => {
+    const currentRequest = ++requestId.current;
     try {
       setIsLoading(true);
       setError(null);
@@ -39,19 +41,18 @@ export function useCalendarEvents(
       if (year) params.year = year;
       if (month) params.month = month;
 
-      console.log("[useCalendarEvents] Fetching with params:", params);
       const data = await getCalendarEvents(params);
-      console.log("[useCalendarEvents] API returned:", data.length, "events");
+      if (currentRequest !== requestId.current) return;
       setEvents(data);
     } catch (err) {
+      if (currentRequest !== requestId.current) return;
       if (err instanceof Error) {
         setError(err.message);
       } else {
         setError("Erro ao carregar eventos");
       }
-      setEvents([]);
     } finally {
-      setIsLoading(false);
+      if (currentRequest === requestId.current) setIsLoading(false);
     }
   }, [unitId, year, month]);
 

@@ -144,13 +144,21 @@ export function DayCell({
 
   return (
     <div
+      role="button"
+      tabIndex={isCurrentMonth ? 0 : -1}
       className={cn(
         "min-h-[100px] p-1 border-b border-r cursor-pointer transition-colors relative",
         getDayBackground(),
         isTodayDate && "ring-2 ring-inset ring-green-500",
         "hover:opacity-90",
       )}
-      onClick={() => onSelectDate?.(date)}
+      onClick={() => isCurrentMonth && onSelectDate?.(date)}
+      onKeyDown={(event) => {
+        if (isCurrentMonth && (event.key === "Enter" || event.key === " ")) {
+          event.preventDefault();
+          onSelectDate?.(date);
+        }
+      }}
     >
       {/* Day number */}
       <div className="flex items-center justify-between mb-1">
@@ -186,10 +194,19 @@ export function DayCell({
             "text-[10px] font-medium px-1 py-0.5 truncate cursor-pointer",
             eventTypeConfig[primaryEvent.eventType].textColor,
           )}
+          role="button"
+          tabIndex={0}
           title={primaryEvent.title}
           onClick={(e) => {
             e.stopPropagation();
             onSelectEvent?.(primaryEvent);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              e.stopPropagation();
+              onSelectEvent?.(primaryEvent);
+            }
           }}
         >
           {primaryEvent.title}
@@ -212,10 +229,19 @@ export function DayCell({
                   config.textColor,
                   "hover:opacity-80",
                 )}
+                role="button"
+                tabIndex={0}
                 title={event.title}
                 onClick={(e) => {
                   e.stopPropagation();
                   onSelectEvent?.(event);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onSelectEvent?.(event);
+                  }
                 }}
               >
                 {event.title}

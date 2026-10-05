@@ -18,6 +18,7 @@ import { RolesGuard } from "../../common/guards/roles.guard";
 import { TenantGuard } from "../../common/guards/tenant.guard";
 import {
   createCalendarEventSchema,
+  calendarStatsQuerySchema,
   updateCalendarEventSchema,
   queryCalendarEventsSchema,
   type CreateCalendarEventInput,
@@ -167,10 +168,22 @@ export class CalendarController {
     @Query("unitId") unitId?: string,
     @Query("year") year?: string,
   ) {
+    const result = calendarStatsQuerySchema.safeParse({ unitId, year });
+    if (!result.success) {
+      return {
+        success: false,
+        error: {
+          code: "VALIDATION_ERROR",
+          message: "Parâmetros inválidos",
+          details: result.error.flatten(),
+        },
+      };
+    }
+
     const stats = await this.calendarService.getStats(
       user,
-      unitId,
-      year ? parseInt(year, 10) : 2026,
+      result.data.unitId,
+      result.data.year ?? new Date().getFullYear(),
     );
     return { success: true, data: stats };
   }

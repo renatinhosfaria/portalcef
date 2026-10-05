@@ -1,5 +1,6 @@
 "use client";
 
+import { criarDataDoEvento, dataDoEvento } from "@/lib/datas-calendario";
 import { formatarDataISO } from "@essencia/shared/formatar-data";
 import type {
   CalendarEvent,
@@ -7,6 +8,7 @@ import type {
 } from "@essencia/shared/schemas/calendar";
 import { eventTypeConfig } from "@essencia/shared/types/calendar";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 
@@ -66,7 +68,7 @@ interface EventFormProps {
     endDate: Date;
     isSchoolDay: boolean;
     isRecurringAnnually: boolean;
-  }) => Promise<void>;
+  }) => Promise<boolean>;
   isLoading?: boolean;
 }
 
@@ -96,38 +98,49 @@ export function EventForm({
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
-    defaultValues: {
+    defaultValues: valoresIniciais(),
+  });
+
+  function valoresIniciais(): FormData {
+    return {
       title: event?.title ?? "",
       description: event?.description ?? "",
       eventType: event?.eventType ?? "DIA_LETIVO",
       startDate: event
-        ? formatarDataISO(event.startDate)
+        ? dataDoEvento(event.startDate)
         : defaultDate
           ? formatarDataISO(defaultDate)
           : formatarDataISO(new Date()),
       endDate: event
-        ? formatarDataISO(event.endDate)
+        ? dataDoEvento(event.endDate)
         : defaultDate
           ? formatarDataISO(defaultDate)
           : formatarDataISO(new Date()),
       isSchoolDay: event?.isSchoolDay ?? true,
       isRecurringAnnually: event?.isRecurringAnnually ?? false,
-    },
-  });
+    };
+  }
+
+  const { reset } = form;
+  useEffect(() => {
+    if (open) reset(valoresIniciais());
+    // O formulário deve acompanhar a seleção somente ao abrir/trocar evento.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, event, defaultDate, reset]);
 
   const handleSubmit = async (data: FormData) => {
     // Validate dates
-    const startDate = new Date(data.startDate);
-    const endDate = new Date(data.endDate);
+    const startDate = criarDataDoEvento(data.startDate);
+    const endDate = criarDataDoEvento(data.endDate);
 
     if (endDate < startDate) {
       form.setError("endDate", {
         message: "Data final deve ser maior ou igual à data inicial",
       });
-      return;
+      return false;
     }
 
-    await onSubmit({
+    const salvo = await onSubmit({
       unitId,
       title: data.title,
       description: data.description,
@@ -138,6 +151,7 @@ export function EventForm({
       isRecurringAnnually: data.isRecurringAnnually,
     });
 
+    if (!salvo) return false;
     form.reset();
     onOpenChange(false);
   };
@@ -173,7 +187,7 @@ export function EventForm({
               form.setValue("eventType", value as CalendarEventType)
             }
           >
-            <SelectTrigger>
+            <SelectTrigger id="eventType">
               <SelectValue placeholder="Selecione o tipo" />
             </SelectTrigger>
             <SelectContent>
@@ -224,6 +238,11 @@ export function EventForm({
           />
         </div>
 
+        {form.formState.errors.description && (
+          <p role="alert" className="text-xs text-red-500">
+            Descrição deve ter no máximo 1000 caracteres.
+          </p>
+        )}
         {/* Checkboxes */}
         <div className="space-y-3">
           <div className="flex items-center space-x-2">

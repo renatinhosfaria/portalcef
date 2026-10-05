@@ -229,6 +229,7 @@ export {
   createCalendarEventSchema,
   updateCalendarEventSchema,
   queryCalendarEventsSchema,
+  calendarStatsQuerySchema,
 } from "./calendar";
 export type {
   CalendarEventType,

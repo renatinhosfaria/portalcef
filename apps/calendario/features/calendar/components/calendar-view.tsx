@@ -10,6 +10,7 @@ import { useState } from "react";
 import {
   useCalendarEvents,
   useCalendarNavigation,
+  useCalendarStats,
   useEventMutations,
 } from "../hooks";
 import { CalendarGrid } from "./calendar-grid";
@@ -38,23 +39,16 @@ export function CalendarView({
     unitId,
     year: currentYear,
   });
-
-  // Debug: Log events
-  console.log(
-    "[CalendarView] Events loaded:",
-    events.length,
-    "unitId:",
-    unitId,
-    "year:",
-    currentYear,
-  );
-  if (events.length > 0) {
-    console.log("[CalendarView] First 3 events:", events.slice(0, 3));
-  }
+  const {
+    stats,
+    error: statsError,
+    refetch: refetchStats,
+  } = useCalendarStats({ unitId, year: currentYear });
 
   const mutations = useEventMutations({
     onSuccess: () => {
-      refetch();
+      void refetch();
+      void refetchStats();
       toast.success("Operação realizada com sucesso");
     },
     onError: (message) => {
@@ -74,7 +68,7 @@ export function CalendarView({
 
   const handleNewEvent = () => {
     setSelectedEvent(null);
-    setSelectedDate(new Date());
+    setSelectedDate(currentDate);
     setIsFormOpen(true);
   };
 
@@ -85,13 +79,13 @@ export function CalendarView({
 
   const handleDeleteEvent = async (event: CalendarEvent) => {
     if (window.confirm(`Tem certeza que deseja excluir "${event.title}"?`)) {
-      await mutations.remove(event.id);
-      setDetailEvent(null);
+      const removed = await mutations.remove(event.id);
+      if (removed) setDetailEvent(null);
     }
   };
 
   const handleSelectDate = (date: Date) => {
-    if (canEdit) {
+    if (canEdit && unitId) {
       setSelectedEvent(null);
       setSelectedDate(date);
       setIsFormOpen(true);
@@ -111,9 +105,9 @@ export function CalendarView({
     endDate: Date;
     isSchoolDay: boolean;
     isRecurringAnnually: boolean;
-  }) => {
+  }): Promise<boolean> => {
     if (selectedEvent) {
-      await mutations.update(selectedEvent.id, {
+      const updated = await mutations.update(selectedEvent.id, {
         title: data.title,
         description: data.description,
         eventType: data.eventType,
@@ -122,13 +116,15 @@ export function CalendarView({
         isSchoolDay: data.isSchoolDay,
         isRecurringAnnually: data.isRecurringAnnually,
       });
+      return updated !== null;
     } else {
-      await mutations.create(data);
+      const created = await mutations.create(data);
+      return created !== null;
     }
   };
 
   // Loading state
-  if (isLoading) {
+  if (isLoading && events.length === 0) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
@@ -140,7 +136,7 @@ export function CalendarView({
   }
 
   // Error state
-  if (error) {
+  if (error && events.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] text-center">
         <h2 className="font-semibold text-red-600 mb-2">
@@ -159,6 +155,15 @@ export function CalendarView({
 
   return (
     <div className="space-y-6">
+      {error && (
+        <div
+          className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
+          role="alert"
+        >
+          Não foi possível atualizar os eventos. Exibindo a última agenda
+          carregada.
+        </div>
+      )}
       {/* Header with navigation */}
       <CalendarHeader
         currentDate={currentDate}
@@ -166,7 +171,7 @@ export function CalendarView({
         onNextMonth={goToNextMonth}
         onToday={goToToday}
         onNewEvent={handleNewEvent}
-        canCreate={canEdit}
+        canCreate={canEdit && Boolean(unitId)}
       />
 
       {/* Main content */}
@@ -193,6 +198,7 @@ export function CalendarView({
                 <button
                   onClick={() => setDetailEvent(null)}
                   className="text-slate-400 hover:text-slate-600"
+                  aria-label="Fechar detalhes do evento"
                 >
                   ✕
                 </button>
@@ -208,10 +214,16 @@ export function CalendarView({
           )}
 
           {/* Month Stats */}
-          <MonthStats currentDate={currentDate} />
+          <MonthStats currentDate={currentDate} stats={stats} />
 
           {/* Year Summary */}
-          <YearSummary currentDate={currentDate} />
+          <YearSummary currentDate={currentDate} stats={stats} />
+
+          {statsError && (
+            <p className="text-xs text-amber-700" role="status">
+              Estatísticas indisponíveis no momento.
+            </p>
+          )}
 
           {/* Legend */}
           <Legend />

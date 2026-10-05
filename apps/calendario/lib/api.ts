@@ -5,10 +5,13 @@
 import { clientFetch } from "@essencia/shared/fetchers/client";
 import type {
   CalendarEvent,
+  CalendarStats,
   CreateCalendarEventInput,
   QueryCalendarEventsInput,
   UpdateCalendarEventInput,
 } from "@essencia/shared/schemas/calendar";
+
+export type { CalendarStats } from "@essencia/shared/schemas/calendar";
 
 /**
  * Fetch calendar events with optional filters
@@ -81,15 +84,7 @@ export async function deleteCalendarEvent(id: string): Promise<void> {
 export async function getCalendarStats(params?: {
   unitId?: string;
   year?: number;
-}): Promise<{
-  totalSchoolDays: number;
-  totalEvents: number;
-  byMonth: Array<{
-    month: number;
-    schoolDays: number;
-    events: number;
-  }>;
-}> {
+}): Promise<CalendarStats> {
   const searchParams = new URLSearchParams();
   if (params?.unitId) searchParams.set("unitId", params.unitId);
   if (params?.year) searchParams.set("year", String(params.year));
@@ -98,9 +93,5 @@ export async function getCalendarStats(params?: {
   const url = `/calendar/stats${query ? `?${query}` : ""}`;
 
   // clientFetch already extracts data.data from the response envelope
-  return clientFetch<{
-    totalSchoolDays: number;
-    totalEvents: number;
-    byMonth: Array<{ month: number; schoolDays: number; events: number }>;
-  }>(url);
+  return clientFetch<CalendarStats>(url);
 }

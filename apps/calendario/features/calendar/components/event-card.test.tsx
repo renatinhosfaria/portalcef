@@ -52,22 +52,34 @@ describe("EventCard", () => {
     expect(screen.getByText(/de fevereiro/i)).toBeInTheDocument();
   });
 
+  it("preserva a data civil recebida pela API", () => {
+    const eventWithDateString = {
+      ...mockEvent,
+      startDate: "2026-02-16",
+      endDate: "2026-02-16",
+    } as unknown as CalendarEvent;
+
+    render(<EventCard event={eventWithDateString} />);
+
+    expect(screen.getByText(/16 de fevereiro/i)).toBeInTheDocument();
+  });
+
   it("should show edit button when canEdit is true", () => {
     render(<EventCard event={mockEvent} canEdit={true} />);
 
     // Edit button has Pencil icon
-    const buttons = screen.getAllByRole("button");
-    expect(buttons.length).toBeGreaterThan(0);
+    expect(
+      screen.getByRole("button", { name: "Editar evento" }),
+    ).toBeInTheDocument();
   });
 
   it("should call onEdit when edit button is clicked", async () => {
     const onEdit = vi.fn();
     render(<EventCard event={mockEvent} canEdit={true} onEdit={onEdit} />);
 
-    const buttons = screen.getAllByRole("button");
-    const editButton = buttons[0];
-    expect(editButton).toBeDefined();
-    await userEvent.click(editButton!);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Editar evento" }),
+    );
 
     expect(onEdit).toHaveBeenCalledWith(mockEvent);
   });
@@ -75,8 +87,9 @@ describe("EventCard", () => {
   it("should show delete button when canDelete is true", () => {
     render(<EventCard event={mockEvent} canDelete={true} />);
 
-    const buttons = screen.getAllByRole("button");
-    expect(buttons.length).toBeGreaterThan(0);
+    expect(
+      screen.getByRole("button", { name: "Excluir evento" }),
+    ).toBeInTheDocument();
   });
 
   it("should call onDelete when delete button is clicked", async () => {
@@ -85,10 +98,9 @@ describe("EventCard", () => {
       <EventCard event={mockEvent} canDelete={true} onDelete={onDelete} />,
     );
 
-    const buttons = screen.getAllByRole("button");
-    const deleteButton = buttons[0];
-    expect(deleteButton).toBeDefined();
-    await userEvent.click(deleteButton!);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Excluir evento" }),
+    );
 
     expect(onDelete).toHaveBeenCalledWith(mockEvent);
   });
