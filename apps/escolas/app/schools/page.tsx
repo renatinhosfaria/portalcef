@@ -28,47 +28,21 @@ export default function Page() {
     setDeleteError(null);
 
     try {
-      const data =
-        await api.get<Array<{ id: string; name: string; code: string }>>(
-          "/schools",
-        );
+      const data = await api.get<
+        Array<{ id: string; name: string; code: string; unitsCount: number }>
+      >("/schools?summary=true");
 
       const baseSchools: SchoolListItem[] = data.map((school) => ({
         id: school.id,
         name: school.name,
         code: school.code,
-        unitsCount: 0,
+        unitsCount: school.unitsCount,
         activeStudents: 0,
-        status: "active",
+        status: school.unitsCount > 0 ? "active" : "pending",
       }));
 
       setSchools(baseSchools);
       setIsLoading(false);
-
-      const unitCounts = await Promise.all(
-        baseSchools.map(async (school) => {
-          try {
-            const units = await api.get<Array<{ id: string }>>(
-              `/schools/${school.id}/units`,
-            );
-            return { id: school.id, count: units.length };
-          } catch {
-            return { id: school.id, count: school.unitsCount };
-          }
-        }),
-      );
-
-      setSchools((current) =>
-        current.map((school) => {
-          const match = unitCounts.find((item) => item.id === school.id);
-          if (!match) return school;
-          return {
-            ...school,
-            unitsCount: match.count,
-            status: match.count > 0 ? "active" : "pending",
-          };
-        }),
-      );
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Erro ao carregar escolas.",

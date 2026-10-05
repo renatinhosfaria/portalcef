@@ -1,8 +1,8 @@
-const fs = require("fs");
-const path = require("path");
+import fs from "node:fs";
+import path from "node:path";
 
 describe("SchoolsController", () => {
-  it("allows gerente_financeiro to read school details", () => {
+  it("mantém a leitura de detalhes disponível para gerente financeiro", () => {
     const controllerPath = path.join(
       __dirname,
       "..",

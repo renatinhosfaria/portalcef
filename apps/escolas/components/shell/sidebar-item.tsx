@@ -10,6 +10,7 @@ interface SidebarItemProps {
   label: string;
   href: string;
   active?: boolean;
+  onNavigate?: () => void;
 }
 
 export function SidebarItem({
@@ -17,16 +18,15 @@ export function SidebarItem({
   label,
   href,
   active,
+  onNavigate,
 }: SidebarItemProps) {
   const pathname = usePathname();
-  // Simple active check: exact match or starts with href (if not root)
   const isActive =
     active !== undefined
       ? active
       : href === "/"
         ? pathname === "/"
         : pathname.startsWith(href);
-  const ehExterno = href.startsWith("http://") || href.startsWith("https://");
   const classes = cn(
     "flex items-center gap-4 px-4 py-4 rounded-2xl w-full transition-all duration-200 group relative overflow-hidden text-left",
     isActive
@@ -35,24 +35,17 @@ export function SidebarItem({
   );
   const conteudo = (
     <>
-      {isActive && (
-        <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-[#A3D154] rounded-r-full" />
-      )}
-      <Icon className="w-5 h-5 relative z-10" />
-      <span className="hidden lg:block relative z-10">{label}</span>
+      <Icon aria-hidden="true" className="w-5 h-5 relative z-10" />
+      <span className="relative z-10">{label}</span>
     </>
   );
-
-  if (ehExterno) {
-    return (
-      <a href={href} rel="external" className={classes}>
-        {conteudo}
-      </a>
-    );
-  }
-
   return (
-    <Link href={href} className={classes}>
+    <Link
+      href={href}
+      aria-current={isActive ? "page" : undefined}
+      className={classes}
+      onClick={onNavigate}
+    >
       {conteudo}
     </Link>
   );

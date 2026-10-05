@@ -9,7 +9,6 @@ interface MasterOverviewStats {
   schoolsCount: number;
   unitsCount: number;
   directorsCount: number;
-  studentsCount: number;
 }
 
 export default async function Page() {
@@ -38,7 +37,6 @@ export default async function Page() {
         schoolsCount={stats.schoolsCount}
         unitsCount={stats.unitsCount}
         directorsCount={stats.directorsCount}
-        studentsCount={stats.studentsCount}
       />
 
       <div className="p-8 rounded-3xl bg-gradient-to-br from-slate-900 to-slate-800 text-white shadow-xl shadow-slate-900/10">

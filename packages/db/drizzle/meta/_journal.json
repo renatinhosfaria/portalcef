@@ -316,6 +316,13 @@
       "when": 1789758000000,
       "tag": "0044_planos_vinculados_turma",
       "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1791220231661,
+      "tag": "0045_unidades_codigo_por_escola",
+      "breakpoints": true
     }
   ]
 }

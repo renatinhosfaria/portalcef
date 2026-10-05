@@ -3,9 +3,7 @@
 import { api } from "@essencia/shared/fetchers/client";
 import {
   createSchoolSchema,
-  createUnitSchema,
-  createUserSchema,
-  type UserRole,
+  createSchoolProvisioningSchema,
 } from "@essencia/shared/schemas";
 import { Button } from "@essencia/ui/components/button";
 import { Checkbox } from "@essencia/ui/components/checkbox";
@@ -43,9 +41,38 @@ interface SchoolFormProps {
   onSaved?: () => void | Promise<void>;
 }
 
-const DIRECTOR_ROLE: UserRole = "diretora_geral";
-const unitFieldsSchema = createUnitSchema.omit({ schoolId: true });
-const PLACEHOLDER_SCHOOL_ID = "00000000-0000-0000-0000-000000000000";
+interface SchoolProvisioningFormData {
+  school: { name: string; code: string };
+  unit: {
+    name: string;
+    code: string;
+    address: string;
+    stageIds: string[];
+  };
+  director: { name: string; email: string; password: string };
+}
+
+export function buildSchoolProvisioningPayload(
+  data: SchoolProvisioningFormData,
+) {
+  return {
+    school: {
+      name: data.school.name.trim(),
+      code: data.school.code.trim(),
+    },
+    unit: {
+      name: data.unit.name.trim(),
+      code: data.unit.code.trim(),
+      address: data.unit.address.trim() || undefined,
+    },
+    stageIds: data.unit.stageIds,
+    director: {
+      name: data.director.name.trim(),
+      email: data.director.email.trim(),
+      password: data.director.password,
+    },
+  };
+}
 
 const getInitialFormData = () => ({
   school: {
@@ -154,59 +181,18 @@ export function SchoolForm({
         return;
       }
 
-      const unitPayload = {
-        name: formData.unit.name.trim(),
-        code: formData.unit.code.trim(),
-        address: formData.unit.address.trim() || undefined,
-      };
-      const unitResult = unitFieldsSchema.safeParse(unitPayload);
+      const provisioningResult = createSchoolProvisioningSchema.safeParse(
+        buildSchoolProvisioningPayload(formData),
+      );
 
-      if (!unitResult.success) {
-        const issue = unitResult.error.issues[0];
+      if (!provisioningResult.success) {
+        const issue = provisioningResult.error.issues[0];
         setError(issue?.message ?? "Dados invalidos.");
         setIsLoading(false);
         return;
       }
 
-      const directorPayload = {
-        name: formData.director.name.trim(),
-        email: formData.director.email.trim(),
-        password: formData.director.password,
-        role: DIRECTOR_ROLE,
-        schoolId: PLACEHOLDER_SCHOOL_ID,
-        unitId: null,
-        stageId: null,
-      };
-      const directorResult = createUserSchema.safeParse(directorPayload);
-
-      if (!directorResult.success) {
-        const issue = directorResult.error.issues[0];
-        setError(issue?.message ?? "Dados invalidos.");
-        setIsLoading(false);
-        return;
-      }
-
-      const createdSchool = await api.post<{ id: string }>(
-        "/schools",
-        schoolResult.data,
-      );
-      const createdUnit = await api.post<{ id: string }>(
-        `/schools/${createdSchool.id}/units`,
-        unitResult.data,
-      );
-
-      if (formData.unit.stageIds.length > 0) {
-        await api.post(`/units/${createdUnit.id}/stages`, {
-          stageIds: formData.unit.stageIds,
-        });
-      }
-
-      const directorCreatePayload = {
-        ...directorResult.data,
-        schoolId: createdSchool.id,
-      };
-
-      await api.post("/users", directorCreatePayload);
+      await api.post("/schools/provision", provisioningResult.data);
       await onSaved?.();
 
       setSuccess(true);

@@ -1,11 +1,17 @@
-import { and, asc, eq, getDb, inArray } from "@essencia/db";
+import { and, asc, eq, getDb, inArray, type Database } from "@essencia/db";
 import {
   educationStages,
   unitStages,
   type EducationStage,
   type UnitStage,
 } from "@essencia/db/schema";
-import { Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
+
+type DatabaseExecutor = Pick<Database, "query" | "insert" | "update">;
 
 @Injectable()
 export class StagesService {
@@ -55,15 +61,40 @@ export class StagesService {
       return [];
     }
 
-    // Verificar se as etapas existem
+    this.assertUniqueStageIds(stageIds);
+
+    await this.assertStagesExist(db, stageIds);
+
+    return this.assignToUnitWithDb(db, unitId, stageIds);
+  }
+
+  private assertUniqueStageIds(stageIds: string[]) {
+    if (new Set(stageIds).size !== stageIds.length) {
+      throw new BadRequestException(
+        "Uma etapa não pode ser informada mais de uma vez",
+      );
+    }
+  }
+
+  private async assertStagesExist(
+    db: DatabaseExecutor,
+    stageIds: string[],
+  ): Promise<void> {
     const existingStages = await db.query.educationStages.findMany({
       where: inArray(educationStages.id, stageIds),
+      columns: { id: true },
     });
 
     if (existingStages.length !== stageIds.length) {
-      throw new NotFoundException("Uma ou mais etapas nao foram encontradas");
+      throw new NotFoundException("Uma ou mais etapas não foram encontradas");
     }
+  }
 
+  private async assignToUnitWithDb(
+    db: DatabaseExecutor,
+    unitId: string,
+    stageIds: string[],
+  ): Promise<UnitStage[]> {
     // Inserir ou atualizar (se ja existe, reativar)
     const results: UnitStage[] = [];
 
@@ -134,17 +165,22 @@ export class StagesService {
   ): Promise<UnitStage[]> {
     const db = getDb();
 
-    // Desativar todas as etapas atuais da unidade
-    await db
-      .update(unitStages)
-      .set({ isActive: false, updatedAt: new Date() })
-      .where(eq(unitStages.unitId, unitId));
-
-    // Atribuir as novas etapas
+    this.assertUniqueStageIds(stageIds);
     if (stageIds.length > 0) {
-      return this.assignToUnit(unitId, stageIds);
+      await this.assertStagesExist(db, stageIds);
     }
 
-    return [];
+    return db.transaction(async (tx: DatabaseExecutor) => {
+      await tx
+        .update(unitStages)
+        .set({ isActive: false, updatedAt: new Date() })
+        .where(eq(unitStages.unitId, unitId));
+
+      if (stageIds.length === 0) {
+        return [];
+      }
+
+      return this.assignToUnitWithDb(tx, unitId, stageIds);
+    });
   }
 }

@@ -8,6 +8,33 @@ import {
 
 @Injectable()
 export class SchoolsService {
+  async findAllWithUnitCounts(): Promise<
+    Array<School & { unitsCount: number }>
+  > {
+    const db = getDb();
+    const [schoolsList, unitsList] = (await Promise.all([
+      db.query.schools.findMany({
+        orderBy: [asc(schools.name)],
+      }),
+      db.query.units.findMany({
+        columns: { schoolId: true },
+      }),
+    ])) as [School[], Array<{ schoolId: string }>];
+
+    const unitsBySchool = new Map<string, number>();
+    for (const unit of unitsList) {
+      unitsBySchool.set(
+        unit.schoolId,
+        (unitsBySchool.get(unit.schoolId) ?? 0) + 1,
+      );
+    }
+
+    return schoolsList.map((school) => ({
+      ...school,
+      unitsCount: unitsBySchool.get(school.id) ?? 0,
+    }));
+  }
+
   async findAll(): Promise<School[]> {
     const db = getDb();
     return db.query.schools.findMany({
@@ -95,6 +122,20 @@ export class SchoolsService {
       throw new NotFoundException("Escola nao encontrada");
     }
 
-    await db.delete(schools).where(sql`${schools.id} = ${id}`);
+    try {
+      await db.delete(schools).where(sql`${schools.id} = ${id}`);
+    } catch (error) {
+      if (
+        typeof error === "object" &&
+        error !== null &&
+        "code" in error &&
+        error.code === "23503"
+      ) {
+        throw new ConflictException(
+          "Não é possível excluir a escola enquanto houver unidades ou usuários vinculados",
+        );
+      }
+      throw error;
+    }
   }
 }

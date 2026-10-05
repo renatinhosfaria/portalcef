@@ -116,6 +116,29 @@ export const updateUnitSchema = createUnitSchema
   .omit({ schoolId: true })
   .partial();
 
+const unitStageIdsSchema = z
+  .array(z.string().uuid("Etapa inválida"))
+  .refine((stageIds) => new Set(stageIds).size === stageIds.length, {
+    message: "Uma etapa não pode ser informada mais de uma vez",
+  });
+
+export const assignUnitStagesSchema = z.object({
+  stageIds: unitStageIdsSchema,
+});
+
+export const replaceUnitStagesSchema = assignUnitStagesSchema;
+
+export const createSchoolProvisioningSchema = z.object({
+  school: createSchoolSchema,
+  unit: createUnitSchema.omit({ schoolId: true }),
+  stageIds: unitStageIdsSchema,
+  director: z.object({
+    name: z.string().min(2, "Nome deve ter pelo menos 2 caracteres").max(100),
+    email: z.string().email("Email inválido"),
+    password: z.string().min(6, "Senha deve ter pelo menos 6 caracteres"),
+  }),
+});
+
 // User schemas
 export const userSchema = z.object({
   id: z.string().uuid(),
@@ -214,6 +237,11 @@ export type UpdateSchoolInput = z.infer<typeof updateSchoolSchema>;
 export type Unit = z.infer<typeof unitSchema>;
 export type CreateUnitInput = z.infer<typeof createUnitSchema>;
 export type UpdateUnitInput = z.infer<typeof updateUnitSchema>;
+export type AssignUnitStagesInput = z.infer<typeof assignUnitStagesSchema>;
+export type ReplaceUnitStagesInput = z.infer<typeof replaceUnitStagesSchema>;
+export type CreateSchoolProvisioningInput = z.infer<
+  typeof createSchoolProvisioningSchema
+>;
 export type User = z.infer<typeof userSchema>;
 export type EducationStage = z.infer<typeof educationStageSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
