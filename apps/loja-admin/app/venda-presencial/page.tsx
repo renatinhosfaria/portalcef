@@ -25,6 +25,7 @@ interface CartItem {
 export default function VendaPresencialPage() {
     const [products, setProducts] = useState<Product[]>([]);
     const [loadingProducts, setLoadingProducts] = useState(true);
+    const [productsError, setProductsError] = useState<string | null>(null);
 
     const [items, setItems] = useState<CartItem[]>([]);
     const [studentName, setStudentName] = useState('');
@@ -46,13 +47,16 @@ export default function VendaPresencialPage() {
     useEffect(() => {
         async function fetchProducts() {
             try {
+                setProductsError(null);
                 const res = await apiFetch('/api/shop/admin/products');
-                if (res.ok) {
-                    const data = await res.json();
-                    setProducts(data.data || []);
-                }
+                if (!res.ok) throw new Error(`API respondeu com status ${res.status}`);
+                const data = await res.json();
+                if (!Array.isArray(data?.data)) throw new Error('Resposta inválida da API de produtos');
+                setProducts(data.data);
             } catch (err) {
                 console.error("Failed to load products", err);
+                setProducts([]);
+                setProductsError('Não foi possível carregar os produtos para venda agora.');
             } finally {
                 setLoadingProducts(false);
             }
@@ -250,7 +254,15 @@ export default function VendaPresencialPage() {
 
                                 <div>
                                     <label className="form-label">Produto *</label>
-                                    <select
+                    {productsError && (
+                        <div role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                            <p>{productsError}</p>
+                            <button type="button" onClick={() => window.location.reload()} className="btn-admin btn-admin-primary mt-3">
+                                Tentar novamente
+                            </button>
+                        </div>
+                    )}
+                    <select
                                         value={selectedProduct}
                                         onChange={(e) => {
                                             setSelectedProduct(e.target.value);

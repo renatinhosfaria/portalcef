@@ -31,4 +31,11 @@ describe('listagens administrativas da loja', () => {
         expect(source).toContain('Não foi possível carregar os pedidos de pré-venda');
         expect(source).toContain('Tentar novamente');
     });
+
+    it('expõe falha ao carregar produtos para venda presencial', () => {
+        const source = readFileSync(join(process.cwd(), 'app/venda-presencial/page.tsx'), 'utf8');
+
+        expect(source).toContain('Não foi possível carregar os produtos para venda');
+        expect(source).toContain('Tentar novamente');
+    });
 });
