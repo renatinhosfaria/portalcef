@@ -12,27 +12,15 @@ import {
   Lock,
   Mail,
 } from "lucide-react";
-import Link from "next/link";
 import { useState } from "react";
 
-interface LoginResponse {
-  success: boolean;
-  data?: {
-    user: {
-      id: string;
-      email: string;
-      name: string;
-      role: string;
-      schoolId: string;
-      unitId: string;
-      stageId: string | null;
-    };
-  };
-  error?: {
-    code: string;
-    message: string;
-  };
-}
+import {
+  LOGIN_ENDPOINT,
+  LoginFlowError,
+  analisarRespostaLogin,
+  destinoAposLogin,
+  prepararDadosLogin,
+} from "./login-flow";
 
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
@@ -43,26 +31,34 @@ export default function LoginPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const dadosLogin = prepararDadosLogin(email, password);
+
+    if (!dadosLogin.email || !dadosLogin.password) {
+      setError("Informe seu e-mail e sua senha.");
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
 
     try {
-      const response = await fetch("/api/auth/login", {
+      const response = await fetch(LOGIN_ENDPOINT, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify(dadosLogin),
         credentials: "include",
       });
 
-      const data: LoginResponse = await response.json();
-
-      if (data.success && data.data) {
-        window.location.href = "https://www.portalcef.com.br/";
-      } else {
-        setError(data.error?.message || "Erro ao fazer login");
-      }
-    } catch {
-      setError("Erro de conexao. Tente novamente.");
+      await analisarRespostaLogin(response);
+      window.location.assign(
+        destinoAposLogin(window.location.search, window.location.origin),
+      );
+    } catch (erro) {
+      setError(
+        erro instanceof LoginFlowError
+          ? erro.message
+          : "Não foi possível conectar ao servidor. Tente novamente.",
+      );
     } finally {
       setIsLoading(false);
     }
@@ -83,7 +79,10 @@ export default function LoginPage() {
 
         <div className="relative z-20 flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
-            <GraduationCap className="h-6 w-6 text-[#A3D154]" />
+            <GraduationCap
+              aria-hidden="true"
+              className="h-6 w-6 text-[#A3D154]"
+            />
           </div>
           <span className="text-sm font-bold tracking-widest uppercase text-white/90">
             Colégio Essência Feliz
@@ -123,7 +122,10 @@ export default function LoginPage() {
       <div className="flex items-center justify-center p-8 lg:p-12 bg-white">
         <div className="mx-auto flex w-full flex-col justify-center space-y-8 sm:w-[400px]">
           <div className="flex flex-col space-y-2">
-            <h1 className="text-3xl font-bold tracking-tight text-slate-900">
+            <h1
+              id="titulo-login"
+              className="text-3xl font-bold tracking-tight text-slate-900"
+            >
               Olá, bem-vindo de volta!
             </h1>
             <p className="text-slate-500">
@@ -131,9 +133,18 @@ export default function LoginPage() {
             </p>
           </div>
 
-          <form className="grid gap-6" onSubmit={handleSubmit}>
+          <form
+            className="grid gap-6"
+            onSubmit={handleSubmit}
+            aria-labelledby="titulo-login"
+            aria-busy={isLoading}
+          >
             {error && (
-              <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-600 text-sm">
+              <div
+                className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-600 text-sm"
+                role="alert"
+                aria-live="assertive"
+              >
                 {error}
               </div>
             )}
@@ -143,11 +154,17 @@ export default function LoginPage() {
                 E-mail
               </Label>
               <div className="relative">
-                <Mail className="absolute left-3 top-3 h-5 w-5 text-slate-400" />
+                <Mail
+                  aria-hidden="true"
+                  className="absolute left-3 top-3 h-5 w-5 text-slate-400"
+                />
                 <Input
                   id="email"
+                  name="email"
                   placeholder="nome@escola.com.br"
                   type="email"
+                  required
+                  inputMode="email"
                   autoCapitalize="none"
                   autoComplete="email"
                   autoCorrect="off"
@@ -167,11 +184,18 @@ export default function LoginPage() {
                 Senha
               </Label>
               <div className="relative">
-                <Lock className="absolute left-3 top-3 h-5 w-5 text-slate-400" />
+                <Lock
+                  aria-hidden="true"
+                  className="absolute left-3 top-3 h-5 w-5 text-slate-400"
+                />
                 <Input
                   id="password"
+                  name="password"
                   type={showPassword ? "text" : "password"}
                   placeholder="••••••••"
+                  required
+                  minLength={6}
+                  autoComplete="current-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   disabled={isLoading}
@@ -180,37 +204,27 @@ export default function LoginPage() {
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-3 text-slate-400 hover:text-slate-600 focus:outline-none"
+                  disabled={isLoading}
+                  aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
+                  aria-pressed={showPassword}
+                  className="absolute right-3 top-3 text-slate-400 hover:text-slate-600 focus:outline-none disabled:opacity-50"
                 >
                   {showPassword ? (
-                    <EyeOff className="h-5 w-5" />
+                    <EyeOff aria-hidden="true" className="h-5 w-5" />
                   ) : (
-                    <Eye className="h-5 w-5" />
+                    <Eye aria-hidden="true" className="h-5 w-5" />
                   )}
                 </button>
               </div>
             </div>
 
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  id="remember"
-                  className="h-4 w-4 rounded border-slate-300 text-[#A3D154] focus:ring-[#A3D154]"
-                />
-                <label
-                  htmlFor="remember"
-                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-slate-600"
-                >
-                  Lembrar de mim
-                </label>
-              </div>
-              <Link
-                href="#"
+            <div className="flex justify-end">
+              <a
+                href="mailto:contato@portalcef.com.br?subject=Recuperação%20de%20acesso"
                 className="text-sm font-semibold text-[#FB923C] hover:text-[#e07b28] hover:underline"
               >
                 Esqueceu sua senha?
-              </Link>
+              </a>
             </div>
 
             <Button
@@ -220,13 +234,16 @@ export default function LoginPage() {
             >
               {isLoading ? (
                 <>
-                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                  <Loader2
+                    aria-hidden="true"
+                    className="mr-2 h-5 w-5 animate-spin"
+                  />
                   Entrando...
                 </>
               ) : (
                 <>
                   Entrar no Portal
-                  <ArrowRight className="ml-2 h-5 w-5" />
+                  <ArrowRight aria-hidden="true" className="ml-2 h-5 w-5" />
                 </>
               )}
             </Button>
@@ -234,17 +251,18 @@ export default function LoginPage() {
 
           <div className="text-center text-sm text-slate-500 mt-6">
             Não tem acesso?{" "}
-            <Link
-              href="#"
+            <a
+              href="mailto:contato@portalcef.com.br?subject=Acesso%20ao%20portal"
               className="font-semibold text-[#A3D154] hover:underline"
             >
               Contate a secretaria
-            </Link>
+            </a>
           </div>
 
           <div className="pt-10 mt-auto text-center">
             <p className="text-xs text-slate-400 font-medium">
-              © 2026 Colégio Essência Feliz. Portal Administrativo v2.0
+              © {new Date().getFullYear()} Colégio Essência Feliz. Portal
+              Administrativo v2.0
             </p>
           </div>
         </div>

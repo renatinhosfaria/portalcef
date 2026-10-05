@@ -44,13 +44,13 @@ export class AuthGuard implements CanActivate {
     const token = request.cookies?.[COOKIE_NAME];
 
     if (!token) {
-      throw new UnauthorizedException("Nao autenticado");
+      throw new UnauthorizedException("Não autenticado");
     }
 
     const session = await this.sessionService.getSession(token);
 
     if (!session) {
-      throw new UnauthorizedException("Sessao expirada");
+      throw new UnauthorizedException("Sessão expirada");
     }
 
     // Attach user info to request with tenant context

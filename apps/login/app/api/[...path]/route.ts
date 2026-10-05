@@ -1,24 +1,22 @@
+import { proxyRequest } from "@essencia/lib/server/api-proxy";
 import type { NextRequest } from "next/server";
 
-import { proxyRequest } from "@essencia/lib/server/api-proxy";
-
 export function GET(request: NextRequest) {
-  return proxyRequest(request, "GET");
+  return proxyRequest(request, "GET", { preservarPrefixoApi: true });
 }
 
 export function POST(request: NextRequest) {
-  return proxyRequest(request, "POST");
+  return proxyRequest(request, "POST", { preservarPrefixoApi: true });
 }
 
 export function PUT(request: NextRequest) {
-  return proxyRequest(request, "PUT");
+  return proxyRequest(request, "PUT", { preservarPrefixoApi: true });
 }
 
 export function PATCH(request: NextRequest) {
-  return proxyRequest(request, "PATCH");
+  return proxyRequest(request, "PATCH", { preservarPrefixoApi: true });
 }
 
 export function DELETE(request: NextRequest) {
-  return proxyRequest(request, "DELETE");
+  return proxyRequest(request, "DELETE", { preservarPrefixoApi: true });
 }
-
