@@ -49,6 +49,7 @@ export function PlanejamentosContent() {
   const [isLoadingTurma, setIsLoadingTurma] = useState(true);
   const [isLoadingPlanos, setIsLoadingPlanos] = useState(true);
   const [errorTurma, setErrorTurma] = useState<string | null>(null);
+  const [errorPlanos, setErrorPlanos] = useState<string | null>(null);
 
   // Buscar turma e etapa do usuário
   useEffect(() => {
@@ -115,6 +116,7 @@ export function PlanejamentosContent() {
     async function fetchPlanosExistentes() {
       try {
         setIsLoadingPlanos(true);
+        setErrorPlanos(null);
         const response = await api.get<{ data: PlanoExistente[] }>("/plano-aula/meus");
         if (response && Array.isArray(response.data)) {
           setPlanosExistentes(response.data);
@@ -126,6 +128,12 @@ export function PlanejamentosContent() {
       } catch (err) {
         console.error("Erro ao buscar planos existentes:", err);
         setPlanosExistentes([]);
+        setErrorPlanos(
+          obterMensagemErro(
+            err,
+            "Não foi possível carregar os planos de aula. Tente novamente.",
+          ),
+        );
       } finally {
         setIsLoadingPlanos(false);
       }
@@ -160,7 +168,7 @@ export function PlanejamentosContent() {
   } = usePeriodosDaTurma(turma?.id || "");
 
   const isLoading = isLoadingTurma || isLoadingPeriodos || isLoadingPlanos;
-  const error = errorTurma || errorPeriodos;
+  const error = errorTurma || errorPeriodos || errorPlanos;
 
   return (
     <div className="container mx-auto max-w-7xl px-4 py-8">
