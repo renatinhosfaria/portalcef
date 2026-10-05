@@ -55,4 +55,13 @@ describe('pedidos admin', () => {
         expect(source).not.toContain("} else {\n        setPreSaleReport([]);\n      }");
         expect(source).not.toContain("catch (error) {\n      console.error('Erro ao carregar relatórios:', error);\n      setPreSaleReport([]);");
     });
+
+    it('não mantém dados fictícios nem atraso artificial nos relatórios', () => {
+        const source = readFileSync(join(process.cwd(), 'app/relatorios/page.tsx'), 'utf8');
+
+        expect(source).not.toContain('Mock data para demonstração');
+        expect(source).not.toContain('totalOrders: 156');
+        expect(source).not.toContain('setTimeout(resolve, 800)');
+        expect(source).not.toContain('Funcionalidade de exportação será habilitada');
+    });
 });

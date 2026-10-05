@@ -1,5 +1,6 @@
 "use client";
 
+import { MobileDrawer } from "@essencia/components/shell/mobile-drawer";
 import { useTenant } from "@essencia/shared/providers/tenant";
 import { Button } from "@essencia/ui/components/button";
 import { cn } from "@essencia/ui/lib/utils";
@@ -19,7 +20,6 @@ import {
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { MobileDrawer } from "@essencia/components/shell/mobile-drawer";
 
 interface SidebarItemProps {
   icon: LucideIcon;
@@ -116,9 +116,15 @@ function AdminSidebar({ mobile = false }: { mobile?: boolean }) {
         />
         <SidebarItem
           icon={Sparkles}
-          label="Interesse"
+          label="Pré-venda"
           href="/interesse"
           active={pathname.startsWith("/interesse")}
+        />
+        <SidebarItem
+          icon={BarChart3}
+          label="Relatórios"
+          href="/relatorios"
+          active={pathname.startsWith("/relatorios")}
         />
         <SidebarItem
           icon={Settings}

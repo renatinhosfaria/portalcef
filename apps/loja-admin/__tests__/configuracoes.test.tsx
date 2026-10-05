@@ -28,6 +28,7 @@ describe('Configurações da loja-admin', () => {
             role: 'auxiliar_administrativo',
         };
         vi.mocked(apiFetch).mockResolvedValue({
+            ok: true,
             json: async () => ({
                 success: true,
                 data: {
@@ -72,5 +73,18 @@ describe('Configurações da loja-admin', () => {
         });
 
         expect(apiFetch).not.toHaveBeenCalled();
+    });
+
+    it('não oferece salvar defaults quando a leitura falha', async () => {
+        vi.mocked(apiFetch).mockRejectedValueOnce(new Error('API indisponível'));
+
+        render(<ConfiguracoesPage />);
+
+        await waitFor(() => {
+            expect(screen.getByRole('alert').textContent).toContain('Erro ao carregar configurações');
+        });
+
+        expect(screen.queryByText('Salvar Alterações')).toBeNull();
+        expect(screen.getByRole('button', { name: 'Tentar novamente' })).toBeTruthy();
     });
 });
