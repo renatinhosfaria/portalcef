@@ -97,4 +97,14 @@ describe("módulo eventos", () => {
     expect(eventosPage).toContain("/sorteios");
     expect(eventosPage).toContain("inscricaoId");
   });
+
+  it("restaura o último sorteio e exibe seus dados de contato", () => {
+    const eventosPage = lerArquivoRepositorio(
+      "apps/eventos/app/inscricoes-evento/page.tsx",
+    );
+
+    expect(eventosPage).toContain("setUltimoSorteio(data[0] ?? null)");
+    expect(eventosPage).toContain("ultimoSorteio.nome");
+    expect(eventosPage).toContain("ultimoSorteio.telefone");
+  });
 });

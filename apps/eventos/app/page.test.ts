@@ -7,4 +7,15 @@ describe("smoke de Eventos", () => {
     expect(source).toMatch(/export default function/);
     expect(source).toContain('redirect("/eventos/inscricoes-evento")');
   });
+
+  it("mantém paginação e exportação completa na tela de inscrições", () => {
+    const source = readFileSync(
+      new URL("./inscricoes-evento/page.tsx", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain("offset");
+    expect(source).toContain("Carregar todas as inscrições");
+    expect(source).toContain("Página");
+  });
 });
