@@ -71,9 +71,11 @@ interface GroupedProduct {
 export default function PreVendaPage() {
     const [summaryItems, setSummaryItems] = useState<PreSaleSummaryItem[]>([]);
     const [summaryLoading, setSummaryLoading] = useState(true);
+    const [summaryError, setSummaryError] = useState<string | null>(null);
 
     const [orders, setOrders] = useState<Order[]>([]);
     const [ordersLoading, setOrdersLoading] = useState(true);
+    const [ordersError, setOrdersError] = useState<string | null>(null);
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
@@ -112,13 +114,17 @@ export default function PreVendaPage() {
 
     const loadSummary = useCallback(async () => {
         setSummaryLoading(true);
+        setSummaryError(null);
         try {
             const res = await apiFetch('/api/shop/admin/orders/pre-venda/summary');
-            if (!res.ok) { setSummaryItems([]); return; }
+            if (!res.ok) throw new Error(`API respondeu com status ${res.status}`);
             const data = await res.json();
-            setSummaryItems(Array.isArray(data.data) ? data.data : []);
-        } catch {
+            if (!Array.isArray(data?.data)) throw new Error('Resposta inválida da API de pré-venda');
+            setSummaryItems(data.data);
+        } catch (error) {
+            console.warn('Não foi possível carregar a demanda de pré-venda.', error);
             setSummaryItems([]);
+            setSummaryError('Não foi possível carregar a demanda de pré-venda agora.');
         } finally {
             setSummaryLoading(false);
         }
@@ -126,6 +132,7 @@ export default function PreVendaPage() {
 
     const loadOrders = useCallback(async (page = 1) => {
         setOrdersLoading(true);
+        setOrdersError(null);
         try {
             const params = new URLSearchParams();
             params.set('orderSource', 'PRE_VENDA');
@@ -135,15 +142,18 @@ export default function PreVendaPage() {
             params.set('limit', '30');
 
             const res = await apiFetch(`/api/shop/admin/orders?${params.toString()}`);
-            if (!res.ok) { setOrders([]); return; }
+            if (!res.ok) throw new Error(`API respondeu com status ${res.status}`);
             const data = await res.json();
+            if (!Array.isArray(data?.data)) throw new Error('Resposta inválida da API de pedidos');
             const pagination = data.meta?.pagination;
-            setOrders(data.data || []);
+            setOrders(data.data);
             setCurrentPage(page);
             setTotalPages(pagination?.totalPages || 1);
-            setTotalOrders(pagination?.total || (data.data || []).length);
-        } catch {
+            setTotalOrders(pagination?.total || data.data.length);
+        } catch (error) {
+            console.warn('Não foi possível carregar pedidos de pré-venda.', error);
             setOrders([]);
+            setOrdersError('Não foi possível carregar os pedidos de pré-venda agora.');
         } finally {
             setOrdersLoading(false);
         }
@@ -412,6 +422,14 @@ export default function PreVendaPage() {
                     <div className="flex justify-center py-12">
                         <div className="loading-spinner-admin mx-auto" />
                     </div>
+                ) : summaryError ? (
+                    <div role="alert" className="empty-state">
+                        <div className="empty-state-title">Não foi possível carregar a demanda de pré-venda</div>
+                        <p className="text-sm text-slate-500 mt-1">{summaryError}</p>
+                        <button type="button" onClick={() => void loadSummary()} className="btn-admin btn-admin-primary mt-4">
+                            Tentar novamente
+                        </button>
+                    </div>
                 ) : sortedGroupedProducts.length === 0 ? (
                     <div className="empty-state">
                         <div className="empty-state-icon text-4xl">📦</div>
@@ -644,6 +662,18 @@ export default function PreVendaPage() {
                                     <tr>
                                         <td colSpan={7} className="text-center py-12">
                                             <div className="loading-spinner-admin mx-auto" />
+                                        </td>
+                                    </tr>
+                                ) : ordersError ? (
+                                    <tr>
+                                        <td colSpan={7}>
+                                            <div role="alert" className="empty-state">
+                                                <div className="empty-state-title">Não foi possível carregar os pedidos de pré-venda</div>
+                                                <div className="empty-state-description">{ordersError}</div>
+                                                <button type="button" onClick={() => void loadOrders(1)} className="btn-admin btn-admin-primary mt-4">
+                                                    Tentar novamente
+                                                </button>
+                                            </div>
                                         </td>
                                     </tr>
                                 ) : orders.length === 0 ? (

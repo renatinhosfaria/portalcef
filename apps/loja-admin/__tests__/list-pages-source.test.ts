@@ -23,4 +23,12 @@ describe('listagens administrativas da loja', () => {
         expect(source).toContain('Não foi possível carregar o estoque');
         expect(source).toContain('Tentar novamente');
     });
+
+    it('expõe falha da API na demanda de pré-venda e nos pedidos', () => {
+        const source = readFileSync(join(process.cwd(), 'app/interesse/page.tsx'), 'utf8');
+
+        expect(source).toContain('Não foi possível carregar a demanda de pré-venda');
+        expect(source).toContain('Não foi possível carregar os pedidos de pré-venda');
+        expect(source).toContain('Tentar novamente');
+    });
 });
