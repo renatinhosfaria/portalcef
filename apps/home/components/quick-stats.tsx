@@ -1,37 +1,96 @@
 "use client";
 
 import { Card } from "@essencia/ui/components/card";
-import { TrendingUp, Users } from "lucide-react";
+import { Clock, Shield, UserCheck, Users } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+
+import { getDashboardStats, type DashboardStats } from "../lib/home-api";
+
+const ESTADO_INICIAL: DashboardStats = {
+  totalUsers: 0,
+  activeNow: 0,
+  administrators: 0,
+  sessions24h: 0,
+};
+
+const FORMATADOR_NUMERO = new Intl.NumberFormat("pt-BR");
+
+const CAMPOS = [
+  { key: "totalUsers", label: "Usuários", icon: Users, color: "text-emerald-600" },
+  { key: "activeNow", label: "Ativos agora", icon: UserCheck, color: "text-blue-600" },
+  { key: "administrators", label: "Administradores", icon: Shield, color: "text-violet-600" },
+  { key: "sessions24h", label: "Sessões (24h)", icon: Clock, color: "text-orange-600" },
+] as const satisfies ReadonlyArray<{
+  key: keyof DashboardStats;
+  label: string;
+  icon: typeof Users;
+  color: string;
+}>;
 
 export function QuickStats() {
-  return (
-    <div className="grid grid-cols-2 gap-4">
-      <Card className="p-4 bg-emerald-500 text-white border-none shadow-lg shadow-emerald-500/20 relative overflow-hidden group hover:scale-[1.02] transition-transform">
-        <div className="relative z-10">
-          <div className="flex items-center gap-2 mb-2 opacity-90">
-            <Users className="w-4 h-4" />
-            <span className="text-xs font-bold uppercase tracking-wider">
-              Alunos
-            </span>
-          </div>
-          <div className="text-lg font-bold">Dados indisponíveis</div>
-          <div className="text-xs opacity-75 mt-1">Aguardando integração</div>
-        </div>
-        <Users className="absolute -right-4 -bottom-4 w-24 h-24 opacity-10 rotate-12 group-hover:scale-110 transition-transform" />
-      </Card>
+  const [stats, setStats] = useState<DashboardStats>(ESTADO_INICIAL);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(false);
 
-      <Card className="p-4 bg-white border-slate-200 shadow-sm relative overflow-hidden group hover:scale-[1.02] transition-transform">
-        <div className="relative z-10">
-          <div className="flex items-center gap-2 mb-2 text-slate-500">
-            <TrendingUp className="w-4 h-4" />
-            <span className="text-xs font-bold uppercase tracking-wider">
-              Frequência
-            </span>
+  const carregar = useCallback(async () => {
+    setIsLoading(true);
+    setError(false);
+
+    try {
+      setStats(await getDashboardStats());
+    } catch {
+      setError(true);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void carregar();
+  }, [carregar]);
+
+  if (isLoading) {
+    return (
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4" role="status">
+        <span className="sr-only">Carregando estatísticas...</span>
+        {CAMPOS.map(({ key }) => (
+          <Card key={key} className="h-28 animate-pulse bg-slate-100" />
+        ))}
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div
+        className="flex flex-col items-start gap-3 rounded-2xl border border-rose-100 bg-rose-50 p-4 text-sm text-rose-800"
+        role="alert"
+      >
+        <span>Não foi possível carregar as estatísticas.</span>
+        <button
+          type="button"
+          className="font-semibold underline underline-offset-2"
+          onClick={() => void carregar()}
+        >
+          Tentar novamente
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      {CAMPOS.map(({ key, label, icon: Icon, color }) => (
+        <Card key={key} className="relative overflow-hidden border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex items-center gap-2 text-slate-500">
+            <Icon className={`h-4 w-4 ${color}`} aria-hidden="true" />
+            <span className="text-xs font-bold uppercase tracking-wider">{label}</span>
           </div>
-          <div className="text-lg font-bold text-slate-800">Dados indisponíveis</div>
-          <div className="text-xs text-slate-400 mt-1">Aguardando integração</div>
-        </div>
-      </Card>
+          <div className="mt-3 text-2xl font-black text-slate-800">
+            {FORMATADOR_NUMERO.format(stats[key])}
+          </div>
+        </Card>
+      ))}
     </div>
   );
 }
