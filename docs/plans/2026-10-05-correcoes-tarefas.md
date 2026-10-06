@@ -69,3 +69,34 @@ Usar ator sistêmico válido, selecionar responsáveis dentro do contexto da uni
 - Testar: `apps/tarefas` e API
 
 Corrigir a semântica de atraso, evitar notificações antes do carregamento e reduzir consultas duplicadas. Executar testes direcionados, lint e typecheck do monorepo.
+
+
+## Resultado da análise e implementação
+
+As correções foram isoladas no worktree `.worktrees/fix-tarefas`, branch `fix/tarefas-core`.
+
+- Criação manual: contextos em lista, módulo normalizado, datas ISO com fuso e origem definida pela API.
+- Consulta: filtros de tipo, contexto e prazo, ordenação de prioridade, paginação navegável no painel e proteção contra respostas antigas no hook.
+- Estatísticas: contrato único consumido pelo painel e badge, com agregação no banco.
+- Estados: conclusão, cancelamento e edição condicionados a tarefas pendentes; falhas de histórico desfazem a transação.
+- Workflow: emissão dos eventos pelo planejamento; aprovação do analista mantém o plano aguardando a coordenadora; criação com usuário real; responsáveis ativos da unidade; vínculo exato com o plano.
+- Encerramento automático: seleciona tarefa automática pela fase e contexto do plano, registra quem executou a ação mesmo quando outra gestora assume a aprovação e encerra ajustes no reenvio.
+- Concorrência: entregas simultâneas com a mesma chave aguardam um lock transacional antes de consultar/inserir a tarefa pendente.
+- Interface: atraso considera hora/minuto; notificações aguardam carregamento e atualizam a lista; botão de conclusão aparece para o responsável e trata falhas.
+
+## Banco e publicação
+
+As migrations `0045` e `0046` devem preceder a execução desta versão da API. Elas não foram aplicadas ao banco de produção nesta tarefa.
+
+`quinzena_id` passa para `TEXT` com cast explícito, preservando os UUIDs já existentes e aceitando os identificadores textuais utilizados pelos formulários/contextos legados. `plano_id` é um vínculo adicional para distinguir planos da mesma turma e quinzena. Contextos existentes não recebem vínculo por inferência: não há informação suficiente para associá-los com segurança a um plano específico.
+
+## Limitações e melhorias futuras
+
+- Os eventos continuam em memória e posteriores à gravação do plano. Falha do processo ou do listener pode deixar uma tarefa sem sincronização; entrega durável exige uma outbox transacional e reprocessamento. O lock elimina criação concorrente durante a mesma pendência, mas não oferece idempotência permanente para replay de eventos antigos após conclusão. Para isso é necessário identificar cada transição/ciclo de workflow.
+- Notificações consultam até 100 pendências por atualização; filas maiores pedem consulta específica de alertas ou paginação completa. O painel oferece paginação para acessar todas as tarefas.
+- A identificação da fase automática utiliza os títulos padronizados do workflow; uma evolução deve persistir a fase em campo próprio para permitir títulos livremente editáveis sem afetar a sincronização.
+- A validação usa testes automatizados e builds locais. As migrations e o lock do PostgreSQL não foram exercitados contra um banco isolado nesta sessão; não houve teste manual autenticado no navegador.
+
+## Verificação
+
+Executar antes da integração: testes de tarefas e planejamento da API, testes do app tarefas, teste de qualidade das migrations, builds da API e do app tarefas, `pnpm turbo lint && pnpm turbo typecheck` e `git diff --check`.

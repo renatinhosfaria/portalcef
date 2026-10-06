@@ -21,6 +21,7 @@ import { z } from "zod";
 export const tarefaContextoSchema = z.object({
   modulo: z.enum(["PLANEJAMENTO", "CALENDARIO", "USUARIOS", "TURMAS", "LOJA"]),
   quinzenaId: z.string().optional(),
+  planoId: z.string().uuid().optional(),
   provaId: z.string().uuid().optional(),
   etapaId: z.string().uuid().optional(),
   turmaId: z.string().uuid().optional(),
@@ -28,6 +29,11 @@ export const tarefaContextoSchema = z.object({
 });
 
 export type TarefaContextoDto = z.infer<typeof tarefaContextoSchema>;
+
+const prazoSchema = z.string().datetime({
+  offset: true,
+  message: "Prazo deve ser uma data/hora ISO válida",
+});
 
 /**
  * Schema para criar nova tarefa
@@ -42,10 +48,9 @@ export const criarTarefaSchema = z.object({
     .max(1000, "Descrição não pode exceder 1000 caracteres")
     .optional(),
   prioridade: z.enum(["ALTA", "MEDIA", "BAIXA"]),
-  prazo: z.string().datetime("Prazo deve ser uma data/hora ISO válida"),
+  prazo: prazoSchema,
   responsavel: z.string().uuid("Responsável deve ser um UUID válido"),
-  tipoOrigem: z.enum(["AUTOMATICA", "MANUAL"]),
-  contextos: z.array(tarefaContextoSchema).optional(),
+  contextos: z.array(tarefaContextoSchema).default([]),
 });
 
 export type CriarTarefaDto = z.infer<typeof criarTarefaSchema>;
@@ -64,10 +69,7 @@ export const atualizarTarefaSchema = z.object({
     .max(1000, "Descrição não pode exceder 1000 caracteres")
     .optional(),
   prioridade: z.enum(["ALTA", "MEDIA", "BAIXA"]).optional(),
-  prazo: z
-    .string()
-    .datetime("Prazo deve ser uma data/hora ISO válida")
-    .optional(),
+  prazo: prazoSchema.optional(),
   responsavel: z
     .string()
     .uuid("Responsável deve ser um UUID válido")
@@ -83,19 +85,21 @@ export const listarTarefasSchema = z.object({
   // Filtros
   status: z.enum(["PENDENTE", "CONCLUIDA", "CANCELADA"]).optional(),
   prioridade: z.enum(["ALTA", "MEDIA", "BAIXA"]).optional(),
+  tipo: z.enum(["criadas", "atribuidas", "todas"]).default("todas"),
   responsavel: z.string().uuid().optional(),
   criadoPor: z.string().uuid().optional(),
   modulo: z
     .enum(["PLANEJAMENTO", "CALENDARIO", "USUARIOS", "TURMAS", "LOJA"])
     .optional(),
   quinzenaId: z.string().optional(),
+  planoId: z.string().uuid().optional(),
   provaId: z.string().uuid().optional(),
   etapaId: z.string().uuid().optional(),
   turmaId: z.string().uuid().optional(),
 
   // Data range
-  prazoInicio: z.string().datetime().optional(),
-  prazoFim: z.string().datetime().optional(),
+  prazoInicio: z.string().datetime({ offset: true }).optional(),
+  prazoFim: z.string().datetime({ offset: true }).optional(),
 
   // Paginação
   page: z.coerce.number().int().positive().optional().default(1),

@@ -28,7 +28,7 @@ export function validarContextosPorRole(
   }
 
   // Validação específica por role
-  if (role === "professora") {
+  if (role === "professora" || role === "auxiliar_sala") {
     // Professora precisa de modulo e um vinculo principal do planejamento.
     const camposFaltando = contextos.filter(
       (c) => !c.modulo || (!c.quinzenaId && !c.provaId),
@@ -45,18 +45,14 @@ export function validarContextosPorRole(
     role === "gerente_financeiro" ||
     role === "diretora_geral"
   ) {
-    // Gestores precisam de todos os campos exceto master
+    // Gestores podem criar tarefas gerais ou vinculadas a um contexto parcial.
+    // O vínculo completo é reservado às tarefas automáticas do workflow.
     const camposFaltando = contextos.filter(
-      (c) =>
-        !c.modulo ||
-        (!c.quinzenaId && !c.provaId) ||
-        !c.etapaId ||
-        !c.turmaId ||
-        !c.professoraId,
+      (c) => !c.modulo || (!c.quinzenaId && !c.provaId),
     );
     if (camposFaltando.length > 0) {
       throw new BadRequestException(
-        "Gestores devem fornecer módulo, quinzenaId ou provaId, etapaId, turmaId e professoraId em todos os contextos",
+        "Gestores devem fornecer módulo e quinzenaId ou provaId em todos os contextos",
       );
     }
   } else if (role === "master") {

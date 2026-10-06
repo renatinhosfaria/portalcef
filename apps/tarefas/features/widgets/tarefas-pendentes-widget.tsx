@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import type { TarefaContextoModulo } from "@essencia/shared/types";
 import {
   Card,
   CardHeader,
@@ -15,7 +16,7 @@ import { PrazoIndicator } from "../../components/prazo-indicator";
 import { calcularDiasRestantes, isAtrasada } from "../../lib/prazo-utils";
 
 export interface TarefasPendentesWidgetProps {
-  modulo?: string;
+  modulo?: TarefaContextoModulo;
   quinzenaId?: string;
 }
 
@@ -43,9 +44,7 @@ export function TarefasPendentesWidget({
     return (
       <Card>
         <CardContent className="p-6">
-          <div className="text-center text-muted-foreground">
-            Carregando...
-          </div>
+          <div className="text-center text-muted-foreground">Carregando...</div>
         </CardContent>
       </Card>
     );
@@ -75,10 +74,7 @@ export function TarefasPendentesWidget({
                 <div className="flex-1">
                   <div className="text-sm font-medium">{tarefa.titulo}</div>
                   <div className="flex gap-2 mt-1">
-                    <PrioridadeBadge
-                      prioridade={tarefa.prioridade}
-                      size="sm"
-                    />
+                    <PrioridadeBadge prioridade={tarefa.prioridade} size="sm" />
                     <PrazoIndicator prazo={tarefa.prazo} compact />
                   </div>
                 </div>

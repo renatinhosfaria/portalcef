@@ -1,15 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import type { TarefaStats } from "@essencia/shared/types";
 import { TarefaBadge } from "./tarefa-badge";
 import { montarUrlPortal } from "./url-utils";
-
-interface TarefasStats {
-  pendentes: number;
-  atrasadas: number;
-  concluidasHoje: number;
-  concluidasSemana: number;
-}
 
 /**
  * Container para TarefaBadge que busca dados da API
@@ -17,11 +11,13 @@ interface TarefasStats {
  * Versão genérica que pode ser usada por qualquer app
  */
 export function TarefaBadgeContainer() {
-  const [stats, setStats] = useState<TarefasStats>({
+  const [stats, setStats] = useState<TarefaStats>({
+    total: 0,
     pendentes: 0,
+    concluidas: 0,
+    canceladas: 0,
     atrasadas: 0,
-    concluidasHoje: 0,
-    concluidasSemana: 0,
+    proximasVencer: 0,
   });
 
   useEffect(() => {

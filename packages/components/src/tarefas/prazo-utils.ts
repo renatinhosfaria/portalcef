@@ -17,7 +17,8 @@ export function calcularDiasRestantes(prazo: string): number {
  * @returns true se o prazo já passou
  */
 export function isAtrasada(prazo: string): boolean {
-  return calcularDiasRestantes(prazo) < 0;
+  const prazoDate = new Date(prazo);
+  return !Number.isNaN(prazoDate.getTime()) && prazoDate.getTime() < Date.now();
 }
 
 /**
@@ -26,11 +27,11 @@ export function isAtrasada(prazo: string): boolean {
  * @returns Variante do badge: "default" | "warning" | "destructive"
  */
 export function getPrazoVariant(
-  prazo: string
+  prazo: string,
 ): "default" | "warning" | "destructive" {
   const dias = calcularDiasRestantes(prazo);
 
-  if (dias < 0) {
+  if (isAtrasada(prazo)) {
     return "destructive"; // Atrasada
   }
 

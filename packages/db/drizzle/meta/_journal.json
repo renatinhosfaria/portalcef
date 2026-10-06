@@ -316,6 +316,20 @@
       "when": 1789758000000,
       "tag": "0044_planos_vinculados_turma",
       "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1789759000000,
+      "tag": "0045_expand_tarefa_quinzena_id",
+      "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1789760000000,
+      "tag": "0046_vincula_tarefa_ao_plano",
+      "breakpoints": true
     }
   ]
 }

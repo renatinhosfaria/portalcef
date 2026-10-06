@@ -16,11 +16,19 @@ type TipoFiltro = "atribuidas" | "criadas" | "todas";
 
 export function DashboardContent() {
   const [tipo, setTipo] = useState<TipoFiltro>("todas");
+  const [pagina, setPagina] = useState(1);
+  const selecionarTipo = (novoTipo: TipoFiltro) => {
+    setTipo(novoTipo);
+    setPagina(1);
+  };
 
-  const { tarefas, stats, isLoading, concluir } = useTarefas({
-    status: "PENDENTE",
-    tipo,
-  });
+  const { tarefas, stats, pagination, isLoading, error, concluir } = useTarefas(
+    {
+      status: "PENDENTE",
+      tipo,
+      page: pagina,
+    },
+  );
 
   if (isLoading) {
     return (
@@ -30,9 +38,17 @@ export function DashboardContent() {
     );
   }
 
+  if (error) {
+    return (
+      <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+        Não foi possível carregar as tarefas. Tente novamente.
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
-      {/* Stats Cards Section */}
+      {/* Resumo das tarefas */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="pb-2">
@@ -85,26 +101,26 @@ export function DashboardContent() {
         </Card>
       </div>
 
-      {/* Filtros Section */}
+      {/* Filtros */}
       <div className="flex items-center gap-2 border-b pb-4">
         <Button
           variant={tipo === "todas" ? "default" : "outline"}
           size="sm"
-          onClick={() => setTipo("todas")}
+          onClick={() => selecionarTipo("todas")}
         >
           Todas
         </Button>
         <Button
           variant={tipo === "atribuidas" ? "default" : "outline"}
           size="sm"
-          onClick={() => setTipo("atribuidas")}
+          onClick={() => selecionarTipo("atribuidas")}
         >
           Minhas Tarefas
         </Button>
         <Button
           variant={tipo === "criadas" ? "default" : "outline"}
           size="sm"
-          onClick={() => setTipo("criadas")}
+          onClick={() => selecionarTipo("criadas")}
         >
           Criadas por Mim
         </Button>
@@ -112,6 +128,30 @@ export function DashboardContent() {
 
       {/* Grid de Tarefas */}
       <TarefasGrid tarefas={tarefas} onConcluir={concluir} />
+      {pagination.totalPages > 1 && (
+        <nav
+          aria-label="Paginação de tarefas"
+          className="flex items-center justify-between gap-4"
+        >
+          <Button
+            variant="outline"
+            disabled={pagina <= 1}
+            onClick={() => setPagina((atual) => atual - 1)}
+          >
+            Anterior
+          </Button>
+          <span className="text-sm text-muted-foreground">
+            Página {pagina} de {pagination.totalPages}
+          </span>
+          <Button
+            variant="outline"
+            disabled={pagina >= pagination.totalPages}
+            onClick={() => setPagina((atual) => atual + 1)}
+          >
+            Próxima
+          </Button>
+        </nav>
+      )}
     </div>
   );
 }

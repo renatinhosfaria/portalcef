@@ -2,7 +2,7 @@ import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
 import { OnEvent } from "@nestjs/event-emitter";
 import { TarefasService } from "./tarefas.service";
 import { DatabaseService } from "../../common/database/database.service";
-import { eq } from "@essencia/db";
+import { and, eq, isNull } from "@essencia/db";
 import { users, educationStages } from "@essencia/db";
 import type {
   TarefaPrioridade,
@@ -72,12 +72,17 @@ export class TarefasEventosService implements OnModuleInit {
    * Busca analista pedagógico responsável pela unidade
    */
   private async findAnalistaPedagogico(
-    _schoolId: string,
-    _unitId: string,
+    schoolId: string,
+    unitId: string,
   ): Promise<string | null> {
     const db = this.db.db;
     const analista = await db.query.users.findFirst({
-      where: eq(users.role, "analista_pedagogico"),
+      where: and(
+        eq(users.role, "analista_pedagogico"),
+        eq(users.schoolId, schoolId),
+        eq(users.unitId, unitId),
+        isNull(users.inativadoEm),
+      ),
       columns: { id: true },
     });
     return analista?.id ?? null;
@@ -87,8 +92,8 @@ export class TarefasEventosService implements OnModuleInit {
    * Busca coordenadora responsável pela etapa
    */
   private async findCoordenadora(
-    _schoolId: string,
-    _unitId: string,
+    schoolId: string,
+    unitId: string,
     stageId: string,
   ): Promise<string | null> {
     const stageCode = await this.getStageCode(stageId);
@@ -101,7 +106,12 @@ export class TarefasEventosService implements OnModuleInit {
     const db = this.db.db;
 
     const coordenadora = await db.query.users.findFirst({
-      where: eq(users.role, coordRole),
+      where: and(
+        eq(users.role, coordRole),
+        eq(users.schoolId, schoolId),
+        eq(users.unitId, unitId),
+        isNull(users.inativadoEm),
+      ),
       columns: { id: true },
     });
 
@@ -176,19 +186,34 @@ export class TarefasEventosService implements OnModuleInit {
       const prazo = this.calcularPrazo(3);
       const prioridade = this.calcularPrioridade(prazo);
 
+      // Um reenvio também encerra a tarefa de ajuste criada na devolução.
+      await this.tarefasService.concluirPorContexto({
+        planoId: payload.planoId,
+        quinzenaId: payload.quinzenaId,
+        professoraId: payload.professoraId,
+        turmaId: payload.turmaId,
+        etapaId: payload.etapaId,
+        schoolId: payload.schoolId,
+        unitId: payload.unitId,
+        usuarioId: payload.professoraId,
+        titulo: `Ajustar planejamento - Turma ${payload.turmaId}`,
+      });
+
       // Criar tarefa para analista revisar
       await this.tarefasService.criarAutomatica({
+        chaveIdempotencia: `plano:${payload.planoId}:submetido:${analistaId}`,
         schoolId: payload.schoolId,
         unitId: payload.unitId,
         titulo: `Revisar planejamento - Turma ${payload.turmaId}`,
         descricao: `Plano submetido pela professora para revisão`,
         prioridade,
         prazo,
-        criadoPor: "system",
+        criadoPor: payload.professoraId,
         responsavel: analistaId,
         contextos: [
           {
             modulo: "PLANEJAMENTO",
+            planoId: payload.planoId,
             quinzenaId: payload.quinzenaId,
             etapaId: payload.etapaId,
             turmaId: payload.turmaId,
@@ -246,23 +271,37 @@ export class TarefasEventosService implements OnModuleInit {
         return;
       }
 
+      await this.tarefasService.concluirPorContexto({
+        planoId: payload.planoId,
+        quinzenaId: payload.quinzenaId,
+        professoraId: payload.professoraId,
+        turmaId: payload.turmaId,
+        etapaId: payload.etapaId,
+        schoolId: payload.schoolId,
+        unitId: payload.unitId,
+        usuarioId: payload.analistaId,
+        titulo: `Revisar planejamento - Turma ${payload.turmaId}`,
+      });
+
       // Calcular prazo (2 dias para aprovação final)
       const prazo = this.calcularPrazo(2);
       const prioridade = this.calcularPrioridade(prazo);
 
       // Criar tarefa para coordenadora aprovar
       await this.tarefasService.criarAutomatica({
+        chaveIdempotencia: `plano:${payload.planoId}:aprovado-analista:${coordenadoraId}`,
         schoolId: payload.schoolId,
         unitId: payload.unitId,
         titulo: `Aprovar planejamento - Turma ${payload.turmaId}`,
         descricao: `Plano aprovado pelo analista, aguardando aprovação final`,
         prioridade,
         prazo,
-        criadoPor: "system",
+        criadoPor: payload.analistaId,
         responsavel: coordenadoraId,
         contextos: [
           {
             modulo: "PLANEJAMENTO",
+            planoId: payload.planoId,
             quinzenaId: payload.quinzenaId,
             etapaId: payload.etapaId,
             turmaId: payload.turmaId,
@@ -300,30 +339,49 @@ export class TarefasEventosService implements OnModuleInit {
     schoolId: string;
     unitId: string;
     revisorId: string;
+    fase: "REVISAO" | "APROVACAO";
     motivo: string;
+    responsavelId?: string;
   }): Promise<void> {
     this.logger.log(
       `Evento plano.devolvido recebido: planoId=${payload.planoId}`,
     );
 
     try {
+      const responsavelId = payload.responsavelId ?? payload.professoraId;
+      const tarefaParaAnalista = responsavelId !== payload.professoraId;
+
+      await this.tarefasService.concluirPorContexto({
+        planoId: payload.planoId,
+        quinzenaId: payload.quinzenaId,
+        professoraId: payload.professoraId,
+        turmaId: payload.turmaId,
+        etapaId: payload.etapaId,
+        schoolId: payload.schoolId,
+        unitId: payload.unitId,
+        usuarioId: payload.revisorId,
+        titulo: `${payload.fase === "REVISAO" ? "Revisar" : "Aprovar"} planejamento - Turma ${payload.turmaId}`,
+      });
+
       // Calcular prazo (3 dias para ajustar)
       const prazo = this.calcularPrazo(3);
       const prioridade = this.calcularPrioridade(prazo);
 
       // Criar tarefa para professora ajustar
       await this.tarefasService.criarAutomatica({
+        chaveIdempotencia: `plano:${payload.planoId}:devolvido:${responsavelId}`,
         schoolId: payload.schoolId,
         unitId: payload.unitId,
-        titulo: `Ajustar planejamento - Turma ${payload.turmaId}`,
+        titulo: `${tarefaParaAnalista ? "Revisar" : "Ajustar"} planejamento - Turma ${payload.turmaId}`,
         descricao: `Plano devolvido para ajustes: ${payload.motivo}`,
         prioridade,
         prazo,
-        criadoPor: "system",
-        responsavel: payload.professoraId,
+        criadoPor: payload.revisorId,
+        responsavel: responsavelId,
         contextos: [
           {
             modulo: "PLANEJAMENTO",
+            planoId: payload.planoId,
             quinzenaId: payload.quinzenaId,
             etapaId: payload.etapaId,
             turmaId: payload.turmaId,
@@ -367,12 +425,27 @@ export class TarefasEventosService implements OnModuleInit {
     );
 
     try {
-      // Workflow concluído - aprovação final
-      // NOTA: A tarefa da coordenadora deve ser marcada como concluída
-      // manualmente pela própria coordenadora via interface
-      this.logger.log(
-        `Plano aprovado com sucesso - workflow concluído: ${payload.planoId}`,
-      );
+      const tarefaConcluida = await this.tarefasService.concluirPorContexto({
+        planoId: payload.planoId,
+        quinzenaId: payload.quinzenaId,
+        professoraId: payload.professoraId,
+        turmaId: payload.turmaId,
+        etapaId: payload.etapaId,
+        schoolId: payload.schoolId,
+        unitId: payload.unitId,
+        usuarioId: payload.coordenadoraId,
+        titulo: `Aprovar planejamento - Turma ${payload.turmaId}`,
+      });
+
+      if (tarefaConcluida) {
+        this.logger.log(
+          `Plano aprovado com sucesso - workflow concluído: ${payload.planoId}`,
+        );
+      } else {
+        this.logger.warn(
+          `Nenhuma tarefa pendente encontrada para o plano aprovado: ${payload.planoId}`,
+        );
+      }
     } catch (error) {
       this.logger.error(
         `Erro ao processar evento plano.aprovado_final: ${error instanceof Error ? error.message : String(error)}`,

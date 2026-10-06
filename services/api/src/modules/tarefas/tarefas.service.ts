@@ -5,7 +5,18 @@ import {
   ConflictException,
   BadRequestException,
 } from "@nestjs/common";
-import { eq, and, or, desc, inArray, sql } from "@essencia/db";
+import {
+  eq,
+  and,
+  or,
+  asc,
+  desc,
+  gte,
+  lte,
+  inArray,
+  isNull,
+  sql,
+} from "@essencia/db";
 import {
   tarefas,
   tarefaContextos,
@@ -28,10 +39,14 @@ type ContextoComRelacoes = typeof tarefaContextos.$inferSelect & {
   etapa: typeof educationStages.$inferSelect | null;
   professora: typeof users.$inferSelect | null;
 };
-import type { AtualizarTarefaDto } from "./dto/tarefas.dto";
+import type { AtualizarTarefaDto, ListarTarefasDto } from "./dto/tarefas.dto";
 import { DatabaseService } from "../../common/database/database.service";
 import { validarContextosPorRole } from "./utils/validacoes";
 import { TarefaHistoricoService } from "./tarefa-historico.service";
+import {
+  normalizarEstatisticasTarefas,
+  type EstatisticasTarefas,
+} from "./tarefas-stats";
 
 /**
  * Tipos auxiliares para transações do Drizzle
@@ -43,6 +58,28 @@ type DbTransaction = Parameters<Db["transaction"]>[0] extends (
   ? T
   : never;
 type TarefaDb = typeof tarefas.$inferSelect;
+type TarefaContextoEntrada = {
+  modulo: TarefaContextoModulo;
+  quinzenaId?: string | null;
+  planoId?: string | null;
+  provaId?: string | null;
+  etapaId?: string | null;
+  turmaId?: string | null;
+  professoraId?: string | null;
+};
+type CriarTarefaParams = {
+  schoolId: string;
+  unitId: string | null;
+  titulo: string;
+  descricao: string | null;
+  prioridade: TarefaPrioridade;
+  prazo: Date;
+  criadoPor: string;
+  responsavel: string;
+  tipoOrigem: TarefaTipoOrigem;
+  contextos: TarefaContextoEntrada[];
+  session?: { userId: string; role: string };
+};
 
 /**
  * Interface de contexto do usuário (da sessão)
@@ -88,6 +125,7 @@ export class TarefasService {
       contextos: Array<{
         modulo: TarefaContextoModulo;
         quinzenaId?: string | null;
+        planoId?: string | null;
         provaId?: string | null;
         etapaId?: string | null;
         turmaId?: string | null;
@@ -107,19 +145,17 @@ export class TarefasService {
     validarContextosPorRole(session.role, dto.contextos);
 
     // Validar que professora só pode criar tarefas para ela mesma
-    if (session.role === "professora" && dto.responsavel !== session.userId) {
+    if (
+      (session.role === "professora" || session.role === "auxiliar_sala") &&
+      dto.responsavel !== session.userId
+    ) {
       throw new ForbiddenException(
         "Professoras só podem criar tarefas para si mesmas",
       );
     }
 
-    // Validar que prazo não está no passado (comparação em nível de dia)
-    const agoraInicioDoDia = new Date();
-    agoraInicioDoDia.setHours(0, 0, 0, 0);
-    const prazoInicioDoDia = new Date(dto.prazo);
-    prazoInicioDoDia.setHours(0, 0, 0, 0);
-
-    if (prazoInicioDoDia < agoraInicioDoDia) {
+    // O prazo representa um instante, inclusive quando a tarefa é criada no mesmo dia.
+    if (dto.prazo.getTime() < Date.now()) {
       throw new BadRequestException("Prazo não pode estar no passado");
     }
 
@@ -159,11 +195,13 @@ export class TarefasService {
     contextos: Array<{
       modulo: TarefaContextoModulo;
       quinzenaId?: string | null;
+      planoId?: string | null;
       provaId?: string | null;
       etapaId?: string | null;
       turmaId?: string | null;
       professoraId?: string | null;
     }>;
+    chaveIdempotencia?: string;
   }): Promise<Tarefa> {
     // Validar que todos os contextos têm módulo definido
     const contextosInvalidos = params.contextos.filter((c) => !c.modulo);
@@ -173,9 +211,64 @@ export class TarefasService {
       );
     }
 
-    return this.create({
-      ...params,
-      tipoOrigem: "AUTOMATICA",
+    return this.db.db.transaction(async (tx: DbTransaction) => {
+      // Serializa o par evento/plano durante a transação. Assim duas entregas
+      // simultâneas não passam pela mesma verificação de tarefa pendente.
+      if (params.chaveIdempotencia) {
+        await tx.execute(
+          sql`select pg_advisory_xact_lock(hashtext(${params.chaveIdempotencia}))`,
+        );
+      }
+
+      const tarefasPendentes = await tx.query.tarefas.findMany({
+        where: and(
+          eq(tarefas.schoolId, params.schoolId),
+          params.unitId
+            ? eq(tarefas.unitId, params.unitId)
+            : isNull(tarefas.unitId),
+          eq(tarefas.responsavel, params.responsavel),
+          eq(tarefas.titulo, params.titulo),
+          eq(tarefas.status, "PENDENTE"),
+          eq(tarefas.tipoOrigem, "AUTOMATICA"),
+        ),
+        with: { contextos: true },
+      });
+
+      const contextoIgual = (
+        atual: (typeof params.contextos)[number],
+        existente: typeof tarefaContextos.$inferSelect,
+      ) =>
+        atual.modulo === existente.modulo &&
+        (atual.quinzenaId ?? null) === existente.quinzenaId &&
+        (atual.planoId ?? null) === existente.planoId &&
+        (atual.provaId ?? null) === existente.provaId &&
+        (atual.etapaId ?? null) === existente.etapaId &&
+        (atual.turmaId ?? null) === existente.turmaId &&
+        (atual.professoraId ?? null) === existente.professoraId;
+
+      const tarefaExistente = (
+        tarefasPendentes as Array<
+          TarefaDb & { contextos: Array<typeof tarefaContextos.$inferSelect> }
+        >
+      ).find(
+        (tarefa) =>
+          tarefa.contextos.length === params.contextos.length &&
+          params.contextos.every((contexto) =>
+            tarefa.contextos.some(
+              (existente: typeof tarefaContextos.$inferSelect) =>
+                contextoIgual(contexto, existente),
+            ),
+          ),
+      );
+
+      if (tarefaExistente) {
+        return this.mapTarefaToDto(tarefaExistente);
+      }
+
+      return this.criarDentroDaTransacao(tx, {
+        ...params,
+        tipoOrigem: "AUTOMATICA",
+      });
     });
   }
 
@@ -185,80 +278,66 @@ export class TarefasService {
    * @param params Parâmetros da tarefa
    * @returns Tarefa criada
    */
-  async create(params: {
-    schoolId: string;
-    unitId: string | null;
-    titulo: string;
-    descricao: string | null;
-    prioridade: TarefaPrioridade;
-    prazo: Date;
-    criadoPor: string;
-    responsavel: string;
-    tipoOrigem: TarefaTipoOrigem;
-    contextos: Array<{
-      modulo: TarefaContextoModulo;
-      quinzenaId?: string | null;
-      provaId?: string | null;
-      etapaId?: string | null;
-      turmaId?: string | null;
-      professoraId?: string | null;
-    }>;
-    session?: { userId: string; role: string };
-  }): Promise<Tarefa> {
-    const db = this.db.db;
+  async create(params: CriarTarefaParams): Promise<Tarefa> {
+    return this.db.db.transaction((tx: DbTransaction) =>
+      this.criarDentroDaTransacao(tx, params),
+    );
+  }
 
-    // Usar transação para garantir atomicidade
-    return await db.transaction(async (tx: DbTransaction) => {
-      // Inserir tarefa
-      const [tarefaCriada] = await tx
-        .insert(tarefas)
-        .values({
-          schoolId: params.schoolId,
-          unitId: params.unitId,
-          titulo: params.titulo,
-          descricao: params.descricao,
-          prioridade: params.prioridade,
-          prazo: params.prazo,
-          criadoPor: params.criadoPor,
-          responsavel: params.responsavel,
-          tipoOrigem: params.tipoOrigem,
-          status: "PENDENTE",
-        })
-        .returning();
+  private async criarDentroDaTransacao(
+    tx: DbTransaction,
+    params: CriarTarefaParams,
+  ): Promise<Tarefa> {
+    // Inserir tarefa
+    const [tarefaCriada] = await tx
+      .insert(tarefas)
+      .values({
+        schoolId: params.schoolId,
+        unitId: params.unitId,
+        titulo: params.titulo,
+        descricao: params.descricao,
+        prioridade: params.prioridade,
+        prazo: params.prazo,
+        criadoPor: params.criadoPor,
+        responsavel: params.responsavel,
+        tipoOrigem: params.tipoOrigem,
+        status: "PENDENTE",
+      })
+      .returning();
 
-      if (!tarefaCriada) {
-        throw new ConflictException("Falha ao criar tarefa");
-      }
+    if (!tarefaCriada) {
+      throw new ConflictException("Falha ao criar tarefa");
+    }
 
-      // Inserir contextos em bulk se houver
-      if (params.contextos.length > 0) {
-        const contextosValues = params.contextos.map((contexto) => ({
-          tarefaId: tarefaCriada.id,
-          modulo: contexto.modulo,
-          quinzenaId: contexto.quinzenaId ?? null,
-          provaId: contexto.provaId ?? null,
-          etapaId: contexto.etapaId ?? null,
-          turmaId: contexto.turmaId ?? null,
-          professoraId: contexto.professoraId ?? null,
-        }));
+    // Inserir contextos em bulk se houver
+    if (params.contextos.length > 0) {
+      const contextosValues = params.contextos.map((contexto) => ({
+        tarefaId: tarefaCriada.id,
+        modulo: contexto.modulo,
+        quinzenaId: contexto.quinzenaId ?? null,
+        planoId: contexto.planoId ?? null,
+        provaId: contexto.provaId ?? null,
+        etapaId: contexto.etapaId ?? null,
+        turmaId: contexto.turmaId ?? null,
+        professoraId: contexto.professoraId ?? null,
+      }));
 
-        await tx.insert(tarefaContextos).values(contextosValues);
-      }
+      await tx.insert(tarefaContextos).values(contextosValues);
+    }
 
-      // Registrar historico de criacao
-      if (params.session) {
-        const userName = await this.getUserName(params.session.userId);
-        await this.historicoService.registrar(tx, {
-          tarefaId: tarefaCriada.id,
-          userId: params.session.userId,
-          userName,
-          userRole: params.session.role,
-          acao: "CRIADA",
-        });
-      }
+    // Registrar historico de criacao
+    if (params.session) {
+      const userName = await this.getUserName(params.session.userId);
+      await this.historicoService.registrar(tx, {
+        tarefaId: tarefaCriada.id,
+        userId: params.session.userId,
+        userName,
+        userRole: params.session.role,
+        acao: "CRIADA",
+      });
+    }
 
-      return this.mapTarefaToDto(tarefaCriada);
-    });
+    return this.mapTarefaToDto(tarefaCriada);
   }
 
   /**
@@ -330,6 +409,7 @@ export class TarefasService {
       tarefaId: c.tarefaId,
       modulo: c.modulo as TarefaContextoEnriquecido["modulo"],
       quinzenaId: c.quinzenaId ?? null,
+      planoId: c.planoId ?? null,
       provaId: c.provaId ?? null,
       etapaId: c.etapaId ?? null,
       turmaId: c.turmaId ?? null,
@@ -392,11 +472,7 @@ export class TarefasService {
     }
 
     if (dto.prazo) {
-      const agoraInicioDoDia = new Date();
-      agoraInicioDoDia.setHours(0, 0, 0, 0);
-      const prazoInicioDoDia = new Date(dto.prazo);
-      prazoInicioDoDia.setHours(0, 0, 0, 0);
-      if (prazoInicioDoDia < agoraInicioDoDia) {
+      if (new Date(dto.prazo).getTime() < Date.now()) {
         throw new BadRequestException("Prazo não pode estar no passado");
       }
     }
@@ -414,7 +490,7 @@ export class TarefasService {
       const [tarefaAtualizada] = await tx
         .update(tarefas)
         .set(setCampos)
-        .where(eq(tarefas.id, id))
+        .where(and(eq(tarefas.id, id), eq(tarefas.status, "PENDENTE")))
         .returning();
 
       if (!tarefaAtualizada) {
@@ -423,22 +499,55 @@ export class TarefasService {
 
       // Registrar historico para cada campo alterado
       const userName = await this.getUserName(userId);
-      const campos: Array<{ campo: string; anterior: string; novo: string }> = [];
+      const campos: Array<{ campo: string; anterior: string; novo: string }> =
+        [];
 
       if (dto.titulo !== undefined && dto.titulo !== tarefaDb.titulo) {
-        campos.push({ campo: "titulo", anterior: tarefaDb.titulo, novo: dto.titulo });
+        campos.push({
+          campo: "titulo",
+          anterior: tarefaDb.titulo,
+          novo: dto.titulo,
+        });
       }
-      if (dto.descricao !== undefined && (dto.descricao || "") !== (tarefaDb.descricao || "")) {
-        campos.push({ campo: "descricao", anterior: tarefaDb.descricao || "", novo: dto.descricao || "" });
+      if (
+        dto.descricao !== undefined &&
+        (dto.descricao || "") !== (tarefaDb.descricao || "")
+      ) {
+        campos.push({
+          campo: "descricao",
+          anterior: tarefaDb.descricao || "",
+          novo: dto.descricao || "",
+        });
       }
-      if (dto.prioridade !== undefined && dto.prioridade !== tarefaDb.prioridade) {
-        campos.push({ campo: "prioridade", anterior: tarefaDb.prioridade, novo: dto.prioridade });
+      if (
+        dto.prioridade !== undefined &&
+        dto.prioridade !== tarefaDb.prioridade
+      ) {
+        campos.push({
+          campo: "prioridade",
+          anterior: tarefaDb.prioridade,
+          novo: dto.prioridade,
+        });
       }
-      if (dto.prazo !== undefined && dto.prazo !== tarefaDb.prazo.toISOString()) {
-        campos.push({ campo: "prazo", anterior: tarefaDb.prazo.toISOString(), novo: dto.prazo });
+      if (
+        dto.prazo !== undefined &&
+        dto.prazo !== tarefaDb.prazo.toISOString()
+      ) {
+        campos.push({
+          campo: "prazo",
+          anterior: tarefaDb.prazo.toISOString(),
+          novo: dto.prazo,
+        });
       }
-      if (dto.responsavel !== undefined && dto.responsavel !== tarefaDb.responsavel) {
-        campos.push({ campo: "responsavel", anterior: tarefaDb.responsavel, novo: dto.responsavel });
+      if (
+        dto.responsavel !== undefined &&
+        dto.responsavel !== tarefaDb.responsavel
+      ) {
+        campos.push({
+          campo: "responsavel",
+          anterior: tarefaDb.responsavel,
+          novo: dto.responsavel,
+        });
       }
 
       for (const campo of campos) {
@@ -464,7 +573,11 @@ export class TarefasService {
    * @param tarefaId ID da tarefa
    * @returns Tarefa cancelada
    */
-  async cancelar(tarefaId: string, userId: string, userRole: string): Promise<Tarefa> {
+  async cancelar(
+    tarefaId: string,
+    userId: string,
+    userRole: string,
+  ): Promise<Tarefa> {
     const db = this.db.db;
 
     const tarefaDb = await db.query.tarefas.findFirst({
@@ -489,7 +602,7 @@ export class TarefasService {
       const [tarefaAtualizada] = await tx
         .update(tarefas)
         .set({ status: "CANCELADA", updatedAt: new Date() })
-        .where(eq(tarefas.id, tarefaId))
+        .where(and(eq(tarefas.id, tarefaId), eq(tarefas.status, "PENDENTE")))
         .returning();
 
       if (!tarefaAtualizada) {
@@ -517,7 +630,11 @@ export class TarefasService {
    * @param userId ID do usuário que está concluindo
    * @returns Tarefa atualizada
    */
-  async concluir(tarefaId: string, userId: string, userRole: string): Promise<Tarefa> {
+  async concluir(
+    tarefaId: string,
+    userId: string,
+    userRole: string,
+  ): Promise<Tarefa> {
     const db = this.db.db;
 
     // Usar transação para evitar race conditions
@@ -541,6 +658,10 @@ export class TarefasService {
         throw new ConflictException("Tarefa já foi concluída");
       }
 
+      if (tarefaDb.status === "CANCELADA") {
+        throw new ConflictException("Tarefa já foi cancelada");
+      }
+
       // Atualizar tarefa
       const [tarefaAtualizada] = await tx
         .update(tarefas)
@@ -549,7 +670,7 @@ export class TarefasService {
           concluidaEm: new Date(),
           updatedAt: new Date(),
         })
-        .where(eq(tarefas.id, tarefaId))
+        .where(and(eq(tarefas.id, tarefaId), eq(tarefas.status, "PENDENTE")))
         .returning();
 
       if (!tarefaAtualizada) {
@@ -570,6 +691,80 @@ export class TarefasService {
     });
   }
 
+  async concluirPorContexto(params: {
+    planoId: string;
+    quinzenaId: string;
+    professoraId: string;
+    turmaId: string;
+    etapaId: string;
+    schoolId: string;
+    unitId: string;
+    usuarioId: string;
+    titulo: string;
+  }): Promise<Tarefa | null> {
+    const tarefasAutomaticas = await this.db.db.query.tarefas.findMany({
+      where: and(
+        eq(tarefas.schoolId, params.schoolId),
+        eq(tarefas.unitId, params.unitId),
+        eq(tarefas.tipoOrigem, "AUTOMATICA"),
+        eq(tarefas.titulo, params.titulo),
+        eq(tarefas.status, "PENDENTE"),
+      ),
+      with: { contextos: true },
+    });
+
+    const tarefa = (
+      tarefasAutomaticas as Array<
+        TarefaDb & { contextos: Array<typeof tarefaContextos.$inferSelect> }
+      >
+    ).find(
+      (candidata) =>
+        candidata.tipoOrigem === "AUTOMATICA" &&
+        candidata.titulo === params.titulo &&
+        candidata.contextos.some(
+          (contexto: typeof tarefaContextos.$inferSelect) =>
+            contexto.modulo === "PLANEJAMENTO" &&
+            contexto.planoId === params.planoId &&
+            contexto.quinzenaId === params.quinzenaId &&
+            contexto.professoraId === params.professoraId &&
+            contexto.turmaId === params.turmaId &&
+            contexto.etapaId === params.etapaId,
+        ),
+    );
+
+    if (!tarefa) return null;
+
+    const usuario = await this.db.db.query.users.findFirst({
+      where: eq(users.id, params.usuarioId),
+      columns: { role: true, name: true },
+    });
+    if (!usuario)
+      throw new NotFoundException("Usuário do evento não encontrado");
+
+    return this.db.db.transaction(async (tx: DbTransaction) => {
+      const [atualizada] = await tx
+        .update(tarefas)
+        .set({
+          status: "CONCLUIDA",
+          concluidaEm: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(and(eq(tarefas.id, tarefa.id), eq(tarefas.status, "PENDENTE")))
+        .returning();
+
+      // Outra entrega pode ter encerrado a mesma tarefa enquanto o evento era processado.
+      if (!atualizada) return null;
+      await this.historicoService.registrar(tx, {
+        tarefaId: tarefa.id,
+        userId: params.usuarioId,
+        userName: usuario.name,
+        userRole: usuario.role,
+        acao: "CONCLUIDA",
+      });
+      return this.mapTarefaToDto(atualizada);
+    });
+  }
+
   /**
    * Lista tarefas com filtros e paginação
    *
@@ -579,15 +774,7 @@ export class TarefasService {
    */
   async listar(
     session: UserContext,
-    filtros: {
-      status?: "PENDENTE" | "CONCLUIDA" | "CANCELADA";
-      prioridade?: "ALTA" | "MEDIA" | "BAIXA";
-      modulo?: string;
-      quinzenaId?: string;
-      tipo?: "criadas" | "atribuidas" | "todas";
-      page?: number;
-      limit?: number;
-    },
+    filtros: ListarTarefasDto,
   ): Promise<{
     data: TarefaEnriquecida[];
     pagination: {
@@ -598,14 +785,17 @@ export class TarefasService {
     };
   }> {
     const db = this.db.db;
-    const page = filtros.page || 1;
-    const limit = Math.min(filtros.limit || 20, 100); // Max 100 por página
+    if (!session.schoolId) {
+      throw new BadRequestException("Sessão inválida: schoolId é obrigatório");
+    }
+    const page = filtros.page ?? 1;
+    const limit = Math.min(filtros.limit ?? 20, 100); // Max 100 por página
     const offset = (page - 1) * limit;
 
     // Construir condições de filtro
-    const conditions: ReturnType<typeof eq>[] = [
-      eq(tarefas.schoolId, session.schoolId),
-    ];
+    const conditions: Array<ReturnType<typeof eq>> = [];
+
+    conditions.push(eq(tarefas.schoolId, session.schoolId));
 
     // Filtro por tipo (criadas/atribuidas/todas)
     if (filtros.tipo === "criadas") {
@@ -633,12 +823,65 @@ export class TarefasService {
       conditions.push(eq(tarefas.prioridade, filtros.prioridade));
     }
 
+    if (filtros.responsavel) {
+      conditions.push(eq(tarefas.responsavel, filtros.responsavel));
+    }
+
+    if (filtros.criadoPor) {
+      conditions.push(eq(tarefas.criadoPor, filtros.criadoPor));
+    }
+
+    if (filtros.prazoInicio) {
+      conditions.push(gte(tarefas.prazo, new Date(filtros.prazoInicio)));
+    }
+
+    if (filtros.prazoFim) {
+      conditions.push(lte(tarefas.prazo, new Date(filtros.prazoFim)));
+    }
+
+    const filtrosContexto = [
+      filtros.modulo ? sql`tc.modulo = ${filtros.modulo}` : undefined,
+      filtros.quinzenaId
+        ? sql`tc.quinzena_id = ${filtros.quinzenaId}`
+        : undefined,
+      filtros.planoId ? sql`tc.plano_id = ${filtros.planoId}` : undefined,
+      filtros.provaId ? sql`tc.prova_id = ${filtros.provaId}` : undefined,
+      filtros.etapaId ? sql`tc.etapa_id = ${filtros.etapaId}` : undefined,
+      filtros.turmaId ? sql`tc.turma_id = ${filtros.turmaId}` : undefined,
+    ].filter((filtro): filtro is ReturnType<typeof sql> => Boolean(filtro));
+
+    if (filtrosContexto.length > 0) {
+      conditions.push(
+        sql`EXISTS (
+        SELECT 1
+        FROM tarefa_contextos tc
+        WHERE tc.tarefa_id = ${tarefas.id}
+          AND ${sql.join(filtrosContexto, sql` AND `)}
+      )` as ReturnType<typeof eq>,
+      );
+    }
+
+    const colunaOrdenacao =
+      filtros.orderBy === "prioridade"
+        ? sql<number>`CASE ${tarefas.prioridade}
+            WHEN 'ALTA' THEN 1
+            WHEN 'MEDIA' THEN 2
+            WHEN 'BAIXA' THEN 3
+            ELSE 4
+          END`
+        : {
+            prazo: tarefas.prazo,
+            createdAt: tarefas.createdAt,
+            updatedAt: tarefas.updatedAt,
+          }[filtros.orderBy ?? "prazo"];
+    const ordenar = filtros.orderDir === "desc" ? desc : asc;
+
     // Buscar tarefas com paginação
     const tarefasDb: TarefaDb[] = await db
       .select()
       .from(tarefas)
       .where(and(...conditions))
-      .orderBy(desc(tarefas.prazo))
+      .orderBy(ordenar(colunaOrdenacao), asc(tarefas.id))
       .limit(limit)
       .offset(offset);
 
@@ -657,11 +900,39 @@ export class TarefasService {
         ? ((await db
             .select({ id: users.id, name: users.name })
             .from(users)
-            .where(inArray(users.id, userIds))) as { id: string; name: string }[])
+            .where(inArray(users.id, userIds))) as {
+            id: string;
+            name: string;
+          }[])
         : [];
     const userMap = new Map<string, string>(
       usersData.map((u) => [u.id, u.name]),
     );
+
+    const contextosPorTarefa = new Map<string, TarefaContextoEnriquecido[]>();
+    const tarefaIds = tarefasDb.map((tarefa) => tarefa.id);
+    if (tarefaIds.length > 0) {
+      const contextos = await db
+        .select()
+        .from(tarefaContextos)
+        .where(inArray(tarefaContextos.tarefaId, tarefaIds));
+
+      for (const contexto of contextos) {
+        const lista = contextosPorTarefa.get(contexto.tarefaId) ?? [];
+        lista.push({
+          id: contexto.id,
+          tarefaId: contexto.tarefaId,
+          modulo: contexto.modulo as TarefaContextoEnriquecido["modulo"],
+          quinzenaId: contexto.quinzenaId ?? null,
+          planoId: contexto.planoId ?? null,
+          provaId: contexto.provaId ?? null,
+          etapaId: contexto.etapaId ?? null,
+          turmaId: contexto.turmaId ?? null,
+          professoraId: contexto.professoraId ?? null,
+        });
+        contextosPorTarefa.set(contexto.tarefaId, lista);
+      }
+    }
 
     const totalPages = Math.ceil(count / limit);
 
@@ -670,10 +941,10 @@ export class TarefasService {
         ...this.mapTarefaToDto(t),
         criadoPorNome: userMap.get(t.criadoPor) ?? "",
         responsavelNome: userMap.get(t.responsavel) ?? "",
-        contextos: [],
+        contextos: contextosPorTarefa.get(t.id) ?? [],
       })),
       pagination: {
-        total: count,
+        total: Number(count),
         page,
         limit,
         totalPages,
@@ -691,80 +962,29 @@ export class TarefasService {
   async getStats(
     userId: string,
     schoolId: string,
-  ): Promise<{
-    pendentes: number;
-    atrasadas: number;
-    concluidasHoje: number;
-    concluidasSemana: number;
-  }> {
+  ): Promise<EstatisticasTarefas> {
     const db = this.db.db;
     const agora = new Date();
-    const inicioHoje = new Date(
-      agora.getFullYear(),
-      agora.getMonth(),
-      agora.getDate(),
+    const limiteProximoVencimento = new Date(
+      agora.getTime() + 3 * 24 * 60 * 60 * 1000,
     );
-    const inicioDaSemana = new Date(agora.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-    // Query para tarefas pendentes
-    const [{ pendentes }] = await db
-      .select({ pendentes: sql<number>`count(*)::int` })
+    const [valores] = await db
+      .select({
+        total: sql<number>`count(*)::int`,
+        pendentes: sql<number>`count(*) FILTER (WHERE ${tarefas.status} = 'PENDENTE')::int`,
+        concluidas: sql<number>`count(*) FILTER (WHERE ${tarefas.status} = 'CONCLUIDA')::int`,
+        canceladas: sql<number>`count(*) FILTER (WHERE ${tarefas.status} = 'CANCELADA')::int`,
+        atrasadas: sql<number>`count(*) FILTER (WHERE ${tarefas.status} = 'PENDENTE' AND ${tarefas.prazo} < ${agora})::int`,
+        proximasVencer: sql<number>`count(*) FILTER (WHERE ${tarefas.status} = 'PENDENTE' AND ${tarefas.prazo} >= ${agora} AND ${tarefas.prazo} <= ${limiteProximoVencimento})::int`,
+      })
       .from(tarefas)
       .where(
-        and(
-          eq(tarefas.schoolId, schoolId),
-          eq(tarefas.responsavel, userId),
-          eq(tarefas.status, "PENDENTE"),
-        ),
+        and(eq(tarefas.schoolId, schoolId), eq(tarefas.responsavel, userId)),
       );
 
-    // Query para tarefas atrasadas (pendentes com prazo < hoje)
-    const [{ atrasadas }] = await db
-      .select({ atrasadas: sql<number>`count(*)::int` })
-      .from(tarefas)
-      .where(
-        and(
-          eq(tarefas.schoolId, schoolId),
-          eq(tarefas.responsavel, userId),
-          eq(tarefas.status, "PENDENTE"),
-          sql`${tarefas.prazo} < ${agora.toISOString()}`,
-        ),
-      );
-
-    // Query para tarefas concluídas hoje
-    const [{ concluidasHoje }] = await db
-      .select({ concluidasHoje: sql<number>`count(*)::int` })
-      .from(tarefas)
-      .where(
-        and(
-          eq(tarefas.schoolId, schoolId),
-          eq(tarefas.responsavel, userId),
-          eq(tarefas.status, "CONCLUIDA"),
-          sql`${tarefas.concluidaEm} >= ${inicioHoje.toISOString()}`,
-        ),
-      );
-
-    // Query para tarefas concluídas na última semana
-    const [{ concluidasSemana }] = await db
-      .select({ concluidasSemana: sql<number>`count(*)::int` })
-      .from(tarefas)
-      .where(
-        and(
-          eq(tarefas.schoolId, schoolId),
-          eq(tarefas.responsavel, userId),
-          eq(tarefas.status, "CONCLUIDA"),
-          sql`${tarefas.concluidaEm} >= ${inicioDaSemana.toISOString()}`,
-        ),
-      );
-
-    return {
-      pendentes,
-      atrasadas,
-      concluidasHoje,
-      concluidasSemana,
-    };
+    return normalizarEstatisticasTarefas(valores ?? {});
   }
-
 
   /**
    * Busca historico de acoes de uma tarefa

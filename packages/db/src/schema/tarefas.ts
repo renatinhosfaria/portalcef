@@ -1,15 +1,9 @@
 import { relations } from "drizzle-orm";
-import {
-  index,
-  pgTable,
-  text,
-  timestamp,
-  uuid,
-  varchar,
-} from "drizzle-orm/pg-core";
+import { index, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 
 import { educationStages } from "./education-stages.js";
+import { planoAula } from "./plano-aula.js";
 import { prova } from "./prova.js";
 import { schools } from "./schools.js";
 import { turmas } from "./turmas.js";
@@ -133,7 +127,10 @@ export const tarefaContextos = pgTable(
     modulo: text("modulo", { enum: tarefaContextoModuloEnum }).notNull(),
 
     // Contexto flexível (opcional)
-    quinzenaId: varchar("quinzena_id", { length: 10 }),
+    quinzenaId: text("quinzena_id"),
+    planoId: uuid("plano_id").references(() => planoAula.id, {
+      onDelete: "cascade",
+    }),
     provaId: uuid("prova_id").references(() => prova.id, {
       onDelete: "cascade",
     }),
@@ -147,6 +144,7 @@ export const tarefaContextos = pgTable(
     quinzenaIdIdx: index("idx_tarefa_contextos_quinzena_id").on(
       table.quinzenaId,
     ),
+    planoIdIdx: index("idx_tarefa_contextos_plano_id").on(table.planoId),
     provaIdIdx: index("idx_tarefa_contextos_prova_id").on(table.provaId),
     turmaIdIdx: index("idx_tarefa_contextos_turma_id").on(table.turmaId),
   }),
@@ -156,11 +154,15 @@ export const tarefaContextos = pgTable(
 export type TarefaContexto = typeof tarefaContextos.$inferSelect;
 export type NewTarefaContexto = typeof tarefaContextos.$inferInsert;
 
-
 // ============================================
 // Table: tarefa_historico
 // ============================================
-export const tarefaAcaoEnum = ["CRIADA", "EDITADA", "CONCLUIDA", "CANCELADA"] as const;
+export const tarefaAcaoEnum = [
+  "CRIADA",
+  "EDITADA",
+  "CONCLUIDA",
+  "CANCELADA",
+] as const;
 export type TarefaAcao = (typeof tarefaAcaoEnum)[number];
 
 export const tarefaHistorico = pgTable(
@@ -179,7 +181,9 @@ export const tarefaHistorico = pgTable(
     campoAlterado: text("campo_alterado"),
     valorAnterior: text("valor_anterior"),
     valorNovo: text("valor_novo"),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
   },
   (table) => ({
     tarefaIdIdx: index("idx_tarefa_historico_tarefa_id").on(table.tarefaId),
@@ -223,6 +227,10 @@ export const tarefaContextosRelations = relations(
       fields: [tarefaContextos.tarefaId],
       references: [tarefas.id],
     }),
+    plano: one(planoAula, {
+      fields: [tarefaContextos.planoId],
+      references: [planoAula.id],
+    }),
     etapa: one(educationStages, {
       fields: [tarefaContextos.etapaId],
       references: [educationStages.id],
@@ -242,17 +250,19 @@ export const tarefaContextosRelations = relations(
   }),
 );
 
-
-export const tarefaHistoricoRelations = relations(tarefaHistorico, ({ one }) => ({
-  tarefa: one(tarefas, {
-    fields: [tarefaHistorico.tarefaId],
-    references: [tarefas.id],
+export const tarefaHistoricoRelations = relations(
+  tarefaHistorico,
+  ({ one }) => ({
+    tarefa: one(tarefas, {
+      fields: [tarefaHistorico.tarefaId],
+      references: [tarefas.id],
+    }),
+    user: one(users, {
+      fields: [tarefaHistorico.userId],
+      references: [users.id],
+    }),
   }),
-  user: one(users, {
-    fields: [tarefaHistorico.userId],
-    references: [users.id],
-  }),
-}));
+);
 
 // ============================================
 // Zod Schemas (drizzle-zod)

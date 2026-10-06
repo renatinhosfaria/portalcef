@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
+import { toast } from "@essencia/ui/components/toaster";
 import { Button } from "@essencia/ui/components/button";
 import {
   Card,
@@ -14,6 +16,7 @@ import { PrioridadeBadge } from "@/components/prioridade-badge";
 import { StatusBadge } from "@/components/status-badge";
 import { PrazoIndicator } from "@/components/prazo-indicator";
 import { isAtrasada } from "@/lib/prazo-utils";
+import { useTenant } from "@essencia/shared/providers/tenant";
 
 interface TarefaCardProps {
   tarefa: TarefaEnriquecida;
@@ -21,12 +24,26 @@ interface TarefaCardProps {
 }
 
 export function TarefaCard({ tarefa, onConcluir }: TarefaCardProps) {
+  const { userId } = useTenant();
+  const [concluindo, setConcluindo] = useState(false);
   const atrasada = isAtrasada(tarefa.prazo);
+  const podeConcluir =
+    tarefa.status === "PENDENTE" && tarefa.responsavel === userId;
 
   const handleConcluir = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    await onConcluir(tarefa.id);
+    if (concluindo) return;
+    setConcluindo(true);
+    try {
+      await onConcluir(tarefa.id);
+    } catch (erro) {
+      toast.error("Não foi possível concluir a tarefa", {
+        description: erro instanceof Error ? erro.message : "Tente novamente.",
+      });
+    } finally {
+      setConcluindo(false);
+    }
   };
 
   return (
@@ -46,13 +63,14 @@ export function TarefaCard({ tarefa, onConcluir }: TarefaCardProps) {
                 <StatusBadge status={tarefa.status} />
               </div>
             </div>
-            {tarefa.status === "PENDENTE" && (
+            {podeConcluir && (
               <Button
                 size="sm"
                 onClick={handleConcluir}
+                disabled={concluindo}
                 variant="default"
               >
-                Concluir
+                {concluindo ? "Concluindo..." : "Concluir"}
               </Button>
             )}
           </div>
