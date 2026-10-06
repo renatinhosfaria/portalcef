@@ -10,19 +10,18 @@
 
 ---
 
-### Tarefa 1: Corrigir a transição de aprovação do analista
+### Tarefa 1: Consolidar a regra de aprovação vigente
 
 **Arquivos:**
-- Modificar: `services/api/src/modules/plano-aula/plano-aula.service.ts`
+- Revisar: `services/api/src/modules/plano-aula/plano-aula.service.ts`
+- Revisar: `apps/planejamento/app/gestao/planos/planos-content.tsx`
 - Testar: `services/api/src/modules/plano-aula/plano-aula.service.spec.ts`
-- Testar: `services/api/src/modules/plano-aula/plano-aula-historico.service.spec.ts`
 
 **Passos:**
-1. Escrever teste que exija `AGUARDANDO_COORDENADORA` após aprovação do analista.
-2. Executar o teste e confirmar a falha atual (`APROVADO`).
-3. Ajustar status, histórico e timestamps da transição.
+1. Confirmar no histórico de commits e no comportamento da tela se a aprovação do analista é final.
+2. Se for final, remover ou redirecionar estados, endpoints e hooks antigos de coordenação sem uso.
+3. Se for dupla, escrever teste falhando e ajustar a máquina de estados completa antes de alterar produção.
 4. Executar os testes específicos do plano de aula.
-5. Adicionar teste para rejeitar aprovação da coordenadora fora de `AGUARDANDO_COORDENADORA`, caso esteja ausente.
 
 ### Tarefa 2: Reforçar invariantes de períodos
 

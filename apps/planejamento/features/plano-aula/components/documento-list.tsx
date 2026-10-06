@@ -385,6 +385,12 @@ export function DocumentoList({
       await onAprovar(docId);
     } catch (error) {
       console.error("Erro ao aprovar documento:", error);
+      toast.error(
+        obterMensagemErro(
+          error,
+          "Não foi possível aprovar o documento. Tente novamente.",
+        ),
+      );
     } finally {
       setAprovandoId(null);
     }
@@ -397,6 +403,12 @@ export function DocumentoList({
       await onDesaprovar(docId);
     } catch (error) {
       console.error("Erro ao desfazer aprovação:", error);
+      toast.error(
+        obterMensagemErro(
+          error,
+          "Não foi possível desfazer a aprovação do documento. Tente novamente.",
+        ),
+      );
     } finally {
       setDesaprovandoId(null);
     }
@@ -423,8 +435,7 @@ export function DocumentoList({
   const handleImprimir = (documento: PlanoDocumento) => {
     if (!onImprimir) return;
 
-    const abriu = imprimirDocumento(documento);
-    if (!abriu) {
+    if (!getUrlParaImpressao(documento)) {
       toast.error(
         "PDF de impressão ainda não disponível. Desaprove e aprove novamente para gerar.",
       );
@@ -443,19 +454,31 @@ export function DocumentoList({
 
     try {
       setImprimindoId(documentoParaImprimir);
-      await onImprimir(documentoParaImprimir);
-      if (documento) {
-        registrarEventoDocumento(documento, {
-          evento: "arquivo_acao",
-          nivel: "info",
-          detalhes: {
-            acao: "imprimir",
-            status: "sucesso",
-          },
-        });
+
+      if (!documento || !imprimirDocumento(documento)) {
+        toast.error(
+          "PDF de impressão ainda não disponível. Desaprove e aprove novamente para gerar.",
+        );
+        return;
       }
+
+      await onImprimir(documentoParaImprimir);
+      registrarEventoDocumento(documento, {
+        evento: "arquivo_acao",
+        nivel: "info",
+        detalhes: {
+          acao: "imprimir",
+          status: "sucesso",
+        },
+      });
     } catch (error) {
       console.error("Erro ao registrar impressao do documento:", error);
+      toast.error(
+        obterMensagemErro(
+          error,
+          "Não foi possível registrar a impressão. Tente novamente.",
+        ),
+      );
       if (documento) {
         registrarEventoDocumento(documento, {
           evento: "arquivo_acao",

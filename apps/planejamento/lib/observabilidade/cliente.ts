@@ -475,12 +475,25 @@ export async function enviarEventosPendentes(): Promise<void> {
   }
 
   const lote = filaEventos.splice(0, TAMANHO_MAXIMO_LOTE);
+  let eventosParaReenfileirar: EventoObservabilidadeCliente[] = [];
   let temporizador: number | undefined;
 
   try {
-    const eventos = lote
-      .map(prepararEventoParaEnvio)
-      .filter((evento): evento is EventoObservabilidadeEnvio => evento !== null);
+    const eventosComOrigem = lote
+      .map((evento) => ({
+        origem: evento,
+        preparado: prepararEventoParaEnvio(evento),
+      }))
+      .filter(
+        (
+          item,
+        ): item is {
+          origem: EventoObservabilidadeCliente;
+          preparado: EventoObservabilidadeEnvio;
+        } => item.preparado !== null,
+      );
+    const eventos = eventosComOrigem.map((item) => item.preparado);
+    eventosParaReenfileirar = eventosComOrigem.map((item) => item.origem);
 
     if (eventos.length === 0) {
       return;
@@ -498,7 +511,7 @@ export async function enviarEventosPendentes(): Promise<void> {
       );
     }
 
-    await fetch(ENDPOINT_OBSERVABILIDADE, {
+    const resposta = await fetch(ENDPOINT_OBSERVABILIDADE, {
       method: "POST",
       credentials: "include",
       headers: {
@@ -509,7 +522,12 @@ export async function enviarEventosPendentes(): Promise<void> {
       }),
       signal: controlador?.signal,
     });
+
+    if (!resposta.ok) {
+      throw new Error(`Falha HTTP ${resposta.status}`);
+    }
   } catch {
+    filaEventos.unshift(...eventosParaReenfileirar);
     // Envio best effort: falhas de observabilidade não podem afetar a tela.
   } finally {
     if (temporizador !== undefined) {

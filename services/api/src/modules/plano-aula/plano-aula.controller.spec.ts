@@ -92,6 +92,12 @@ describe("PlanoAulaController", () => {
         key: documentoWord.storageKey,
         url: "https://storage.test/arquivo-assinado",
       }),
+      uploadBuffer: jest.fn().mockResolvedValue({
+        name: documentoWord.fileName,
+        key: documentoWord.storageKey,
+        url: "https://storage.test/arquivo-assinado",
+      }),
+      deleteFile: jest.fn().mockResolvedValue(undefined),
       replaceFile: jest.fn().mockResolvedValue(undefined),
     };
 
@@ -185,6 +191,32 @@ describe("PlanoAulaController", () => {
     }) as never;
 
   describe("uploadDocumento", () => {
+    it("reutiliza o buffer lido e remove o objeto quando a gravação falha", async () => {
+      const { controller, planoAulaService, storageService } = criarController();
+      const arquivo = criarArquivoMultipart(10, "application/pdf");
+      const buffer = await arquivo.toBuffer();
+      arquivo.toBuffer.mockResolvedValueOnce(buffer);
+      planoAulaService.adicionarDocumentoUpload.mockRejectedValueOnce(
+        new Error("falha ao gravar documento"),
+      );
+
+      await expect(
+        controller.uploadDocumento("plano-1", criarReqMultipart(arquivo)),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({ code: "UPLOAD_FAILED" }),
+      });
+
+      expect(storageService.uploadBuffer).toHaveBeenCalledWith(
+        buffer,
+        arquivo.filename,
+        arquivo.mimetype,
+      );
+      expect(arquivo.toBuffer).toHaveBeenCalledTimes(2);
+      expect(storageService.deleteFile).toHaveBeenCalledWith(
+        documentoWord.storageKey,
+      );
+    });
+
     it("deve aceitar arquivo com tamanho máximo de 500 MB", async () => {
       const { controller, planoAulaService, storageService } = criarController();
       const arquivo = criarArquivoMultipart(LIMITE_UPLOAD_BYTES, "application/pdf");
@@ -195,7 +227,11 @@ describe("PlanoAulaController", () => {
       );
 
       expect(resultado.success).toBe(true);
-      expect(storageService.uploadFile).toHaveBeenCalledWith(arquivo);
+      expect(storageService.uploadBuffer).toHaveBeenCalledWith(
+        expect.objectContaining({ length: LIMITE_UPLOAD_BYTES }),
+        arquivo.filename,
+        arquivo.mimetype,
+      );
       expect(planoAulaService.adicionarDocumentoUpload).toHaveBeenCalledWith(
         "plano-1",
         expect.objectContaining({

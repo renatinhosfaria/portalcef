@@ -110,6 +110,30 @@ describe("cliente de observabilidade", () => {
     expect(corpo.eventos[1]).not.toHaveProperty("nome");
   });
 
+  it("recoloca eventos quando o endpoint responde com erro HTTP", async () => {
+    const { registrarEventoObservabilidade, enviarEventosPendentes } =
+      await import("./cliente");
+    vi.mocked(fetch)
+      .mockResolvedValueOnce({ ok: false, status: 503 } as Response)
+      .mockResolvedValueOnce({ ok: true, status: 204 } as Response);
+
+    registrarEventoObservabilidade({
+      evento: "api_chamada",
+      detalhes: {
+        modulo: "planejamento",
+        acao: "listar",
+        status: "erro",
+      },
+    });
+
+    await enviarEventosPendentes();
+    await enviarEventosPendentes();
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+    const [, segundaChamada] = vi.mocked(fetch).mock.calls[1]!;
+    expect(JSON.parse(String(segundaChamada?.body)).eventos).toHaveLength(1);
+  });
+
   it("remove campos proibidos antes do envio em qualquer profundidade", async () => {
     const { registrarEventoObservabilidade, enviarEventosPendentes } =
       await import("./cliente");

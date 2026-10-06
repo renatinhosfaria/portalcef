@@ -1,5 +1,5 @@
 import { Injectable, BadRequestException } from "@nestjs/common";
-import { eq, and, asc, getDb, sql } from "@essencia/db";
+import { eq, and, asc, getDb, inArray } from "@essencia/db";
 import {
   planoAula,
   planoAulaPeriodo,
@@ -11,6 +11,13 @@ import {
   CriarPeriodoDto,
   EditarPeriodoDto,
 } from "./dto/plano-aula-periodo.dto";
+
+type DbInstance = ReturnType<typeof getDb>;
+type DbTransaction = Parameters<DbInstance["transaction"]>[0] extends (
+  tx: infer T,
+) => Promise<unknown>
+  ? T
+  : never;
 
 @Injectable()
 export class PlanoAulaPeriodoService {
@@ -25,12 +32,33 @@ export class PlanoAulaPeriodoService {
       .where(eq(planoAulaPeriodo.unidadeId, unidadeId))
       .orderBy(asc(planoAulaPeriodo.etapa), asc(planoAulaPeriodo.numero));
 
-    return Promise.all(
-      periodos.map(async (periodo) => ({
-        ...periodo,
-        planosVinculados: await this.contarPlanosVinculados(periodo.id),
-      })),
-    );
+    if (periodos.length === 0) {
+      return [];
+    }
+
+    const planos = await this.db
+      .select({ periodoId: planoAula.planoAulaPeriodoId })
+      .from(planoAula)
+      .where(
+        inArray(
+          planoAula.planoAulaPeriodoId,
+          periodos.map((periodo) => periodo.id),
+        ),
+      );
+    const quantidades = new Map<string, number>();
+    for (const plano of planos) {
+      if (plano.periodoId) {
+        quantidades.set(
+          plano.periodoId,
+          (quantidades.get(plano.periodoId) ?? 0) + 1,
+        );
+      }
+    }
+
+    return periodos.map((periodo) => ({
+      ...periodo,
+      planosVinculados: quantidades.get(periodo.id) ?? 0,
+    }));
   }
 
   async buscarPorId(id: string, unitId: string) {
@@ -121,32 +149,34 @@ export class PlanoAulaPeriodoService {
       );
     }
 
-    // Calcular número
-    const numero = await this.calcularProximoNumero(
-      unidadeId,
-      dto.etapa,
-      dataInicio,
-    );
-
-    // Criar período
-    const [periodo] = await this.db
-      .insert(planoAulaPeriodo)
-      .values({
+    return this.db.transaction(async (tx: DbTransaction) => {
+      const periodos = await this.buscarPeriodosPorEtapa(
         unidadeId,
-        etapa: dto.etapa,
-        numero,
-        descricao: dto.descricao,
-        dataInicio: dto.dataInicio,
-        dataFim: dto.dataFim,
-        dataMaximaEntrega: dto.dataMaximaEntrega,
-        criadoPor: userId,
-      })
-      .returning();
+        dto.etapa,
+        tx,
+      );
+      const numero = this.calcularNumeroNaLista(periodos, dataInicio);
+      const numeroTemporario = this.calcularNumeroTemporario(periodos);
 
-    // Renumerar se necessário
-    await this.renumerarPeriodosSeNecessario(unidadeId, dto.etapa);
+      // Inserir fora da faixa final evita colisão com o número que será deslocado.
+      const [periodo] = await tx
+        .insert(planoAulaPeriodo)
+        .values({
+          unidadeId,
+          etapa: dto.etapa,
+          numero: numeroTemporario,
+          descricao: dto.descricao,
+          dataInicio: dto.dataInicio,
+          dataFim: dto.dataFim,
+          dataMaximaEntrega: dto.dataMaximaEntrega,
+          criadoPor: userId,
+        })
+        .returning();
 
-    return periodo;
+      await this.renumerarPeriodosSeNecessario(unidadeId, dto.etapa, tx);
+
+      return { ...periodo, numero };
+    });
   }
 
   async editarPeriodo(id: string, unitId: string, dto: EditarPeriodoDto) {
@@ -191,48 +221,50 @@ export class PlanoAulaPeriodoService {
       }
     }
 
-    // Validar dataMaximaEntrega se fornecida
-    if (dto.dataMaximaEntrega) {
-      const dataMaximaEntrega = new Date(dto.dataMaximaEntrega);
-      const dataInicio = dto.dataInicio
-        ? new Date(dto.dataInicio)
-        : new Date(periodoExistente.dataInicio);
+    // Validar os valores efetivos, inclusive quando apenas outra data foi alterada.
+    const dataMaximaEntrega = new Date(
+      dto.dataMaximaEntrega ?? periodoExistente.dataMaximaEntrega,
+    );
+    const dataInicioEfetiva = new Date(
+      dto.dataInicio ?? periodoExistente.dataInicio,
+    );
 
-      if (isNaN(dataMaximaEntrega.getTime())) {
-        throw new BadRequestException("Data máxima de entrega inválida");
-      }
-
-      if (dataMaximaEntrega >= dataInicio) {
-        throw new BadRequestException(
-          "Data máxima de entrega deve ser anterior ao início do período",
-        );
-      }
+    if (isNaN(dataMaximaEntrega.getTime())) {
+      throw new BadRequestException("Data máxima de entrega inválida");
     }
 
-    // Atualizar período
-    const [periodoAtualizado] = await this.db
-      .update(planoAulaPeriodo)
-      .set({
-        ...dto,
-        atualizadoEm: new Date(),
-      })
-      .where(
-        and(
-          eq(planoAulaPeriodo.id, id),
-          eq(planoAulaPeriodo.unidadeId, unitId),
-        ),
-      )
-      .returning();
-
-    // Se as datas mudaram, renumerar
-    if (dto.dataInicio) {
-      await this.renumerarPeriodosSeNecessario(
-        periodoExistente.unidadeId,
-        periodoExistente.etapa,
+    if (dataMaximaEntrega >= dataInicioEfetiva) {
+      throw new BadRequestException(
+        "Data máxima de entrega deve ser anterior ao início do período",
       );
     }
 
-    return periodoAtualizado;
+    // Atualizar período
+    return this.db.transaction(async (tx: DbTransaction) => {
+      const [periodoAtualizado] = await tx
+        .update(planoAulaPeriodo)
+        .set({
+          ...dto,
+          atualizadoEm: new Date(),
+        })
+        .where(
+          and(
+            eq(planoAulaPeriodo.id, id),
+            eq(planoAulaPeriodo.unidadeId, unitId),
+          ),
+        )
+        .returning();
+
+      if (dto.dataInicio) {
+        await this.renumerarPeriodosSeNecessario(
+          periodoExistente.unidadeId,
+          periodoExistente.etapa,
+          tx,
+        );
+      }
+
+      return periodoAtualizado;
+    });
   }
 
   async excluirPeriodo(id: string, unitId: string) {
@@ -245,29 +277,33 @@ export class PlanoAulaPeriodoService {
       );
     }
 
-    // Excluir período
-    await this.db
-      .delete(planoAulaPeriodo)
-      .where(
-        and(
-          eq(planoAulaPeriodo.id, id),
-          eq(planoAulaPeriodo.unidadeId, unitId),
-        ),
-      );
+    await this.db.transaction(async (tx: DbTransaction) => {
+      await tx
+        .delete(planoAulaPeriodo)
+        .where(
+          and(
+            eq(planoAulaPeriodo.id, id),
+            eq(planoAulaPeriodo.unidadeId, unitId),
+          ),
+        );
 
-    // Renumerar períodos restantes
-    await this.renumerarPeriodosSeNecessario(periodo.unidadeId, periodo.etapa);
+      await this.renumerarPeriodosSeNecessario(
+        periodo.unidadeId,
+        periodo.etapa,
+        tx,
+      );
+    });
 
     return { success: true, message: "Período excluído com sucesso" };
   }
 
   private async contarPlanosVinculados(periodoId: string): Promise<number> {
-    const [resultado] = await this.db
-      .select({ total: sql<number>`count(*)::int` })
+    const planos = await this.db
+      .select({ periodoId: planoAula.planoAulaPeriodoId })
       .from(planoAula)
       .where(eq(planoAula.planoAulaPeriodoId, periodoId));
 
-    return Number(resultado?.total ?? 0);
+    return planos.length;
   }
 
   private async verificarSobreposicao(
@@ -293,8 +329,20 @@ export class PlanoAulaPeriodoService {
     });
   }
 
-  private async buscarPeriodosPorEtapa(unidadeId: string, etapa: string) {
-    return this.db
+  private async buscarPeriodosPorEtapa(
+    unidadeId: string,
+    etapa: string,
+    db: DbInstance | DbTransaction = this.db,
+  ) {
+    return this.buscarPeriodosPorEtapaNoBanco(unidadeId, etapa, db);
+  }
+
+  private async buscarPeriodosPorEtapaNoBanco(
+    unidadeId: string,
+    etapa: string,
+    db: DbInstance | DbTransaction,
+  ) {
+    return db
       .select()
       .from(planoAulaPeriodo)
       .where(
@@ -303,6 +351,35 @@ export class PlanoAulaPeriodoService {
           eq(planoAulaPeriodo.etapa, etapa),
         ),
       );
+  }
+
+  private calcularNumeroNaLista(
+    periodos: PlanoAulaPeriodo[],
+    dataInicio: Date,
+  ): number {
+    const periodosOrdenados = [...periodos].sort(
+      (a: PlanoAulaPeriodo, b: PlanoAulaPeriodo) =>
+        new Date(a.dataInicio).getTime() - new Date(b.dataInicio).getTime(),
+    );
+
+    let posicao = 1;
+    for (const periodo of periodosOrdenados) {
+      if (dataInicio < new Date(periodo.dataInicio)) {
+        break;
+      }
+      posicao++;
+    }
+
+    return posicao;
+  }
+
+  private calcularNumeroTemporario(periodos: PlanoAulaPeriodo[]): number {
+    const numeros = new Set(periodos.map((periodo) => periodo.numero));
+    let numero = -1;
+    while (numeros.has(numero)) {
+      numero -= 1;
+    }
+    return numero;
   }
 
   private async calcularProximoNumero(
@@ -335,8 +412,9 @@ export class PlanoAulaPeriodoService {
   private async renumerarPeriodosSeNecessario(
     unidadeId: string,
     etapa: string,
+    db: DbInstance | DbTransaction = this.db,
   ) {
-    const periodos = await this.db
+    const periodos: Array<Pick<PlanoAulaPeriodo, "id" | "numero">> = await db
       .select()
       .from(planoAulaPeriodo)
       .where(
@@ -347,10 +425,30 @@ export class PlanoAulaPeriodoService {
       )
       .orderBy(asc(planoAulaPeriodo.dataInicio));
 
+    const alteracoes = periodos.filter(
+      (periodo, indice) => periodo.numero !== indice + 1,
+    );
+
+    // Primeiro tira todos os registros da faixa final. Isso evita colisões com
+    // o índice único quando um período entra no meio ou muda de posição.
+    const numerosAtuais = new Set(periodos.map((periodo) => periodo.numero));
+    let numeroTemporario = -1;
+    for (let i = 0; i < alteracoes.length; i++) {
+      while (numerosAtuais.has(numeroTemporario)) {
+        numeroTemporario -= 1;
+      }
+      await db
+        .update(planoAulaPeriodo)
+        .set({ numero: numeroTemporario, atualizadoEm: new Date() })
+        .where(eq(planoAulaPeriodo.id, alteracoes[i].id));
+      numerosAtuais.add(numeroTemporario);
+      numeroTemporario -= 1;
+    }
+
     for (let i = 0; i < periodos.length; i++) {
       const numeroCorreto = i + 1;
       if (periodos[i].numero !== numeroCorreto) {
-        await this.db
+        await db
           .update(planoAulaPeriodo)
           .set({ numero: numeroCorreto, atualizadoEm: new Date() })
           .where(eq(planoAulaPeriodo.id, periodos[i].id));

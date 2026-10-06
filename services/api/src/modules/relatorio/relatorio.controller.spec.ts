@@ -68,6 +68,12 @@ describe("RelatorioController", () => {
         key: "relatorios/relatorio.docx",
         url: "https://cdn.exemplo.com/relatorio.docx",
       }),
+      uploadBuffer: jest.fn().mockResolvedValue({
+        name: "Relatorio.docx",
+        key: "relatorios/relatorio.docx",
+        url: "https://cdn.exemplo.com/relatorio.docx",
+      }),
+      deleteFile: jest.fn().mockResolvedValue(undefined),
     };
     const historicoService = {};
     const sharePointService = {
@@ -302,7 +308,11 @@ describe("RelatorioController", () => {
     );
 
     expect(resultado.success).toBe(true);
-    expect(storageService.uploadFile).toHaveBeenCalledWith(arquivo);
+    expect(storageService.uploadBuffer).toHaveBeenCalledWith(
+      expect.objectContaining({ length: LIMITE_UPLOAD_BYTES }),
+      arquivo.filename,
+      arquivo.mimetype,
+    );
     expect(relatorioService.adicionarDocumentoUpload).toHaveBeenCalledWith(
       "relatorio-1",
       expect.objectContaining({
@@ -310,6 +320,35 @@ describe("RelatorioController", () => {
         mimeType: "application/pdf",
       }),
       usuarioSessao,
+    );
+  });
+
+  it("reutiliza o buffer lido e remove o objeto quando a gravação falha", async () => {
+    const { controller, relatorioService, storageService } = criarController();
+    const arquivo = criarArquivoMultipart(10, "application/pdf");
+    const buffer = criarBufferComTamanho(10);
+    arquivo.toBuffer.mockResolvedValueOnce(buffer);
+    relatorioService.adicionarDocumentoUpload.mockRejectedValueOnce(
+      new Error("falha ao gravar documento"),
+    );
+
+    await expect(
+      controller.adicionarDocumentoUpload(
+        "relatorio-1",
+        criarReqMultipart(arquivo),
+      ),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({ code: "UPLOAD_FAILED" }),
+    });
+
+    expect(storageService.uploadBuffer).toHaveBeenCalledWith(
+      buffer,
+      arquivo.filename,
+      arquivo.mimetype,
+    );
+    expect(arquivo.toBuffer).toHaveBeenCalledTimes(1);
+    expect(storageService.deleteFile).toHaveBeenCalledWith(
+      documentoWord.storageKey,
     );
   });
 
