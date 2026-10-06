@@ -1,6 +1,7 @@
 import { and, asc, eq, getDb, inArray, isNull } from "@essencia/db";
 import {
   turmas,
+  unitStages,
   units,
   users,
   type Turma,
@@ -78,6 +79,12 @@ export class TurmasService {
             email: true,
           },
         },
+        stage: {
+          columns: { id: true, name: true, code: true },
+        },
+        unit: {
+          columns: { id: true, schoolId: true, name: true, code: true },
+        },
       },
     });
 
@@ -92,6 +99,17 @@ export class TurmasService {
 
     return db.query.turmas.findFirst({
       where: eq(turmas.id, id),
+      with: {
+        professora: {
+          columns: { id: true, name: true, email: true },
+        },
+        stage: {
+          columns: { id: true, name: true, code: true },
+        },
+        unit: {
+          columns: { id: true, schoolId: true, name: true, code: true },
+        },
+      },
     });
   }
 
@@ -120,6 +138,18 @@ export class TurmasService {
   async create(data: CreateTurmaDto): Promise<Turma> {
     const db = getDb();
 
+    const stageDaUnidade = await db.query.unitStages.findFirst({
+      where: and(
+        eq(unitStages.unitId, data.unitId),
+        eq(unitStages.stageId, data.stageId),
+        eq(unitStages.isActive, true),
+      ),
+    });
+
+    if (!stageDaUnidade) {
+      throw new BadRequestException("Etapa não está ativa nesta unidade");
+    }
+
     // Verificar se código já existe para esta unidade e ano
     const existing = await db.query.turmas.findFirst({
       where: and(
@@ -140,8 +170,8 @@ export class TurmasService {
       .values({
         unitId: data.unitId,
         stageId: data.stageId,
-        name: data.name,
-        code: data.code,
+        name: data.name.trim(),
+        code: data.code.trim(),
         year: data.year,
         shift: data.shift || null,
         capacity: data.capacity || null,
@@ -210,28 +240,10 @@ export class TurmasService {
   }
 
   /**
-   * Exclui turma permanentemente do banco de dados
-   * @throws NotFoundException se turma não existe
-   */
-  async delete(id: string): Promise<void> {
-    const db = getDb();
-
-    const existing = await db.query.turmas.findFirst({
-      where: eq(turmas.id, id),
-    });
-
-    if (!existing) {
-      throw new NotFoundException("Turma não encontrada");
-    }
-
-    await db.delete(turmas).where(eq(turmas.id, id));
-  }
-
-  /**
    * Desativa turma (soft delete) - mantido para compatibilidade
    * @throws NotFoundException se turma não existe
    */
-  async deactivate(id: string): Promise<void> {
+  async deactivate(id: string): Promise<Turma> {
     const db = getDb();
 
     const existing = await db.query.turmas.findFirst({
@@ -242,10 +254,32 @@ export class TurmasService {
       throw new NotFoundException("Turma não encontrada");
     }
 
-    await db
+    const [updated] = await db
       .update(turmas)
       .set({ isActive: false, updatedAt: new Date() })
-      .where(eq(turmas.id, id));
+      .where(eq(turmas.id, id))
+      .returning();
+
+    return updated;
+  }
+
+  async activate(id: string): Promise<Turma> {
+    const db = getDb();
+    const existing = await db.query.turmas.findFirst({
+      where: eq(turmas.id, id),
+    });
+
+    if (!existing) {
+      throw new NotFoundException("Turma não encontrada");
+    }
+
+    const [updated] = await db
+      .update(turmas)
+      .set({ isActive: true, updatedAt: new Date() })
+      .where(eq(turmas.id, id))
+      .returning();
+
+    return updated;
   }
 
   /**
@@ -271,6 +305,10 @@ export class TurmasService {
       throw new NotFoundException("Turma não encontrada");
     }
 
+    if (!turma.isActive) {
+      throw new BadRequestException("Turma está inativa");
+    }
+
     // Verificar se professora existe e tem role "professora"
     const professora = await db.query.users.findFirst({
       where: eq(users.id, professoraId),
@@ -282,6 +320,10 @@ export class TurmasService {
 
     if (professora.role !== "professora") {
       throw new BadRequestException("Usuário selecionado não é professora");
+    }
+
+    if (professora.inativadoEm) {
+      throw new BadRequestException("Professora está inativa");
     }
 
     if (professora.unitId !== turma.unitId) {
@@ -298,8 +340,7 @@ export class TurmasService {
 
     const professoraAnteriorId = turma.professoraId;
     const houveTrocaReal =
-      professoraAnteriorId !== null &&
-      professoraAnteriorId !== professoraId;
+      professoraAnteriorId !== null && professoraAnteriorId !== professoraId;
 
     if (!houveTrocaReal) {
       // Atribuição inicial ou mesma professora — não há planos para transferir

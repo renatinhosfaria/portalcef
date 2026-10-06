@@ -296,7 +296,16 @@ Atualiza turma.
 
 #### DELETE `/turmas/:id`
 
-Remove turma.
+Arquiva a turma para compatibilidade com clientes antigos. A exclusão física
+não faz parte da API operacional.
+
+#### PATCH `/turmas/:id/arquivar`
+
+Arquiva a turma (`is_active = false`) sem remover planos, provas ou relatórios.
+
+#### PATCH `/turmas/:id/restaurar`
+
+Reativa uma turma arquivada.
 
 #### PUT `/turmas/:id/professora`
 

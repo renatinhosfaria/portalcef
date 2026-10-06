@@ -73,7 +73,7 @@ export async function updateTurma(
     year?: number;
     shift?: string;
     capacity?: number;
-  }
+  },
 ) {
   return clientFetch<Turma>(`/turmas/${id}`, {
     method: "PUT",
@@ -85,7 +85,13 @@ export async function updateTurma(
  * Desativa turma (soft delete)
  */
 export async function deactivateTurma(id: string) {
-  return clientFetch<null>(`/turmas/${id}`, {
-    method: "DELETE",
+  return clientFetch<Turma>(`/turmas/${id}/arquivar`, {
+    method: "PATCH",
+  });
+}
+
+export async function activateTurma(id: string) {
+  return clientFetch<Turma>(`/turmas/${id}/restaurar`, {
+    method: "PATCH",
   });
 }

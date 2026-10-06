@@ -267,8 +267,16 @@ export type {
 } from "./calendar";
 
 // Turmas schemas
-export { createTurmaSchema, updateTurmaSchema } from "./turmas";
-export type { CreateTurmaInput, UpdateTurmaInput } from "./turmas";
+export {
+  assignProfessoraSchema,
+  createTurmaSchema,
+  updateTurmaSchema,
+} from "./turmas";
+export type {
+  AssignProfessoraInput,
+  CreateTurmaInput,
+  UpdateTurmaInput,
+} from "./turmas";
 
 // Plannings schemas
 export { turmaSchema } from "./plannings";

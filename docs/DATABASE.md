@@ -89,6 +89,9 @@ Shop (CEF Shop):
 | `stage_id` | uuid | FK -> education_stages.id |
 | `is_active` | boolean | Soft delete |
 
+Turmas arquivadas permanecem no banco para preservar os vínculos pedagógicos.
+O endpoint de exclusão física não faz parte do fluxo normal da aplicação.
+
 ### users
 
 | Coluna | Tipo | Descricao |
@@ -254,7 +257,7 @@ Shop (CEF Shop):
 - `plano_aula_unit_id_idx` on unit_id
 - `plano_aula_user_idx` on user_id
 - `plano_aula_periodo_id_idx` on plano_aula_periodo_id
-- UNIQUE `plano_aula_user_turma_quinzena_unique` on (user_id, turma_id, quinzena_id)
+- `plano_aula_turma_quinzena_idx` on (turma_id, quinzena_id)
 
 **Relações:**
 - `plano_documento.plano_id` FK -> `plano_aula.id` (documentos anexados)

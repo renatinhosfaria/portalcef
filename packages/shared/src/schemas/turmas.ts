@@ -5,10 +5,12 @@ export const createTurmaSchema = z.object({
   stageId: z.string().uuid("ID da etapa deve ser um UUID válido"),
   name: z
     .string()
+    .trim()
     .min(1, "Nome da turma é obrigatório")
     .max(100, "Nome não pode exceder 100 caracteres"),
   code: z
     .string()
+    .trim()
     .min(1, "Código é obrigatório")
     .max(50, "Código não pode exceder 50 caracteres"),
   year: z
@@ -34,5 +36,10 @@ export const updateTurmaSchema = createTurmaSchema
   .partial()
   .omit({ unitId: true, stageId: true });
 
+export const assignProfessoraSchema = z.object({
+  professoraId: z.string().uuid("ID da professora deve ser um UUID válido"),
+});
+
 export type CreateTurmaInput = z.infer<typeof createTurmaSchema>;
 export type UpdateTurmaInput = z.infer<typeof updateTurmaSchema>;
+export type AssignProfessoraInput = z.infer<typeof assignProfessoraSchema>;
