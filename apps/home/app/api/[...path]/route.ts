@@ -1,6 +1,5 @@
-import type { NextRequest } from "next/server";
-
 import { proxyRequest } from "@essencia/lib/server/api-proxy";
+import type { NextRequest } from "next/server";
 
 export function GET(request: NextRequest) {
   return proxyRequest(request, "GET");
@@ -21,4 +20,3 @@ export function PATCH(request: NextRequest) {
 export function DELETE(request: NextRequest) {
   return proxyRequest(request, "DELETE");
 }
-

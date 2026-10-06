@@ -2,6 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { getTodayCalendarEvents } from "../lib/home-api";
+
 import { AnnouncementBanner } from "./announcement-banner";
 import { CalendarWidget } from "./calendar-widget";
 import { SystemFeed } from "./system-feed";

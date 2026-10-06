@@ -4,7 +4,6 @@ import { Button } from "@essencia/ui/components/button";
 import { cn } from "@essencia/ui/lib/utils";
 import {
   Headset,
-  Lock,
   LogOut,
   PanelLeftClose,
   PanelLeftOpen,

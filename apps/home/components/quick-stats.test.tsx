@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { getDashboardStats } from "../lib/home-api";
+
 import { QuickStats } from "./quick-stats";
 
 vi.mock("../lib/home-api", () => ({
