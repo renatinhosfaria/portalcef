@@ -35,6 +35,7 @@ const GESTAO_ROLES = [
   "master",
   "diretora_geral",
   "gerente_unidade",
+  "gerente_financeiro",
   "coordenadora_geral",
 ] as const;
 
@@ -252,7 +253,11 @@ export class TarefasController {
     @Req() req: { user: UserContext },
     @Param("id") id: string,
   ) {
-    const tarefa = await this.tarefasService.concluir(id, req.user.userId, req.user.role);
+    const tarefa = await this.tarefasService.concluir(
+      id,
+      req.user.userId,
+      req.user.role,
+    );
 
     return {
       success: true,
@@ -272,7 +277,11 @@ export class TarefasController {
     @Req() req: { user: UserContext },
     @Param("id") id: string,
   ) {
-    const tarefa = await this.tarefasService.cancelar(id, req.user.userId, req.user.role);
+    const tarefa = await this.tarefasService.cancelar(
+      id,
+      req.user.userId,
+      req.user.role,
+    );
 
     return {
       success: true,

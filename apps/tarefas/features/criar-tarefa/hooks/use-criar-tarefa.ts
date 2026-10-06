@@ -11,13 +11,13 @@ export interface CriarTarefaData {
   prioridade: "ALTA" | "MEDIA" | "BAIXA";
   prazo: string;
   responsavel: string;
-  contextos: {
+  contextos: Array<{
     modulo: string;
     quinzenaId?: string;
     etapaId?: string;
     turmaId?: string;
     professoraId?: string;
-  };
+  }>;
 }
 
 export function useCriarTarefa() {
@@ -31,9 +31,11 @@ export function useCriarTarefa() {
 
     try {
       await apiPost<Tarefa>("tarefas", data);
+      window.dispatchEvent(new Event("tarefas:atualizada"));
       router.push("/");
     } catch (err) {
-      const error = err instanceof Error ? err : new Error("Erro ao criar tarefa");
+      const error =
+        err instanceof Error ? err : new Error("Erro ao criar tarefa");
       setError(error);
       throw error;
     } finally {

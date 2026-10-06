@@ -1,24 +1,51 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import type {
   TarefaEnriquecida,
   TarefaStats,
   TarefaStatus,
   TarefaPrioridade,
+  TarefaContextoModulo,
 } from "@essencia/shared/types";
 import { apiGet, apiPatch } from "../../../lib/api";
 
 export interface UseTarefasParams {
   status?: TarefaStatus;
   prioridade?: TarefaPrioridade;
-  modulo?: string;
+  modulo?: TarefaContextoModulo;
   quinzenaId?: string;
+  planoId?: string;
+  provaId?: string;
+  etapaId?: string;
+  turmaId?: string;
+  responsavel?: string;
+  criadoPor?: string;
+  prazoInicio?: string;
+  prazoFim?: string;
   tipo?: "criadas" | "atribuidas" | "todas";
+  page?: number;
+  limit?: number;
+  orderBy?: "prazo" | "prioridade" | "createdAt" | "updatedAt";
+  orderDir?: "asc" | "desc";
+  includeStats?: boolean;
+}
+
+interface PaginacaoTarefas {
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
 }
 
 export function useTarefas(params: UseTarefasParams = {}) {
   const [tarefas, setTarefas] = useState<TarefaEnriquecida[]>([]);
+  const [pagination, setPagination] = useState<PaginacaoTarefas>({
+    total: 0,
+    page: 1,
+    limit: 20,
+    totalPages: 0,
+  });
   const [stats, setStats] = useState<TarefaStats>({
     total: 0,
     pendentes: 0,
@@ -29,8 +56,10 @@ export function useTarefas(params: UseTarefasParams = {}) {
   });
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const requisicaoRef = useRef(0);
 
   const fetchTarefas = useCallback(async () => {
+    const requisicao = ++requisicaoRef.current;
     setIsLoading(true);
     setError(null);
 
@@ -49,30 +78,75 @@ export function useTarefas(params: UseTarefasParams = {}) {
       if (params.quinzenaId) {
         queryParams.append("quinzenaId", params.quinzenaId);
       }
+      for (const [nome, valor] of [
+        ["planoId", params.planoId],
+        ["provaId", params.provaId],
+        ["etapaId", params.etapaId],
+        ["turmaId", params.turmaId],
+        ["responsavel", params.responsavel],
+        ["criadoPor", params.criadoPor],
+        ["prazoInicio", params.prazoInicio],
+        ["prazoFim", params.prazoFim],
+        ["orderBy", params.orderBy],
+        ["orderDir", params.orderDir],
+      ] as const) {
+        if (valor) queryParams.append(nome, valor);
+      }
       if (params.tipo) {
         queryParams.append("tipo", params.tipo);
       }
+      if (params.page) queryParams.append("page", String(params.page));
+      if (params.limit) queryParams.append("limit", String(params.limit));
 
-      const response = await apiGet<{ data: TarefaEnriquecida[] }>(
+      const response = await apiGet<{
+        data: TarefaEnriquecida[];
+        pagination?: PaginacaoTarefas;
+      }>(
         `tarefas?${queryParams.toString()}`,
       );
 
-      setTarefas(response.data);
+      if (requisicao === requisicaoRef.current) {
+        setTarefas(response.data);
+        if (response.pagination) setPagination(response.pagination);
+      }
     } catch (err) {
-      setError(err instanceof Error ? err : new Error("Erro desconhecido"));
+      if (requisicao === requisicaoRef.current) {
+        setError(err instanceof Error ? err : new Error("Erro desconhecido"));
+      }
     } finally {
-      setIsLoading(false);
+      if (requisicao === requisicaoRef.current) setIsLoading(false);
     }
-  }, [params.status, params.prioridade, params.modulo, params.quinzenaId, params.tipo]);
+  }, [
+    params.status,
+    params.prioridade,
+    params.modulo,
+    params.quinzenaId,
+    params.tipo,
+    params.page,
+    params.limit,
+    params.planoId,
+    params.provaId,
+    params.etapaId,
+    params.turmaId,
+    params.responsavel,
+    params.criadoPor,
+    params.prazoInicio,
+    params.prazoFim,
+    params.orderBy,
+    params.orderDir,
+  ]);
 
   const fetchStats = useCallback(async () => {
+    if (params.includeStats === false) return;
     try {
-      const statsData = await apiGet<TarefaStats>("tarefas/stats/resumo");
-      setStats(statsData);
+      const statsData = await apiGet<{ data: TarefaStats }>(
+        "tarefas/stats/resumo",
+      );
+      setStats(statsData.data);
     } catch (err) {
       console.error("Erro ao buscar estatísticas:", err);
     }
-  }, []);
+  }, [params.includeStats]);
 
   const concluir = useCallback(
     async (tarefaId: string) => {
@@ -92,12 +166,23 @@ export function useTarefas(params: UseTarefasParams = {}) {
     void fetchStats();
   }, [fetchTarefas, fetchStats]);
 
+  useEffect(() => {
+    const atualizar = () => {
+      void fetchTarefas();
+      void fetchStats();
+    };
+    window.addEventListener("tarefas:atualizada", atualizar);
+    return () => window.removeEventListener("tarefas:atualizada", atualizar);
+  }, [fetchTarefas, fetchStats]);
+
   return {
     tarefas,
+    pagination,
     stats,
     isLoading,
     error,
     refetch: fetchTarefas,
+    refetchStats: fetchStats,
     concluir,
   };
 }

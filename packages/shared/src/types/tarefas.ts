@@ -43,6 +43,7 @@ export interface TarefaContexto {
   tarefaId: string;
   modulo: TarefaContextoModulo;
   quinzenaId: string | null;
+  planoId: string | null;
   provaId: string | null;
   etapaId: string | null;
   turmaId: string | null;

@@ -1,47 +1,44 @@
 "use client";
 
-import { useEffect, useState, type PropsWithChildren } from "react";
+import { useEffect, useRef, type PropsWithChildren } from "react";
 import { toast } from "@essencia/ui/components/toaster";
 import { useTarefas } from "../tarefas-list/hooks/use-tarefas";
 import { isAtrasada } from "@/lib/prazo-utils";
 
 export function TarefaNotificacaoProvider({ children }: PropsWithChildren) {
-  const [mostradas, setMostradas] = useState<Set<string>>(new Set());
-  const { stats, tarefas } = useTarefas({ status: "PENDENTE" });
+  const mostradas = useRef<Set<string>>(new Set());
+  const { tarefas, isLoading, refetch } = useTarefas({
+    status: "PENDENTE",
+    includeStats: false,
+    limit: 100,
+  });
 
-  // Notificação inicial ao montar
+  // Notifica tarefas atrasadas novas assim que a lista é atualizada.
   useEffect(() => {
-    if (stats.atrasadas > 0) {
-      toast.error(
-        `Você tem ${stats.atrasadas} tarefa(s) atrasada(s)`,
-        {
-          description: "Acesse o painel de tarefas para mais detalhes",
-        }
-      );
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Roda apenas uma vez na montagem
+    if (isLoading) return;
 
-  // Polling para novas tarefas atrasadas a cada 5 minutos
+    const novasAtrasadas = tarefas.filter(
+      (t) => isAtrasada(t.prazo) && !mostradas.current.has(t.id),
+    );
+    if (novasAtrasadas.length === 0) return;
+
+    novasAtrasadas.forEach((tarefa) => {
+      toast.error("⚠️ Tarefa Atrasada", { description: tarefa.titulo });
+    });
+    novasAtrasadas.forEach((tarefa) => mostradas.current.add(tarefa.id));
+  }, [isLoading, tarefas]);
+
+  // Atualiza a lista de tarefas a cada 5 minutos.
   useEffect(() => {
-    const interval = setInterval(() => {
-      // Filtrar tarefas atrasadas que ainda não foram mostradas
-      const novasAtrasadas = tarefas.filter(
-        (t) => isAtrasada(t.prazo) && !mostradas.has(t.id)
-      );
-
-      novasAtrasadas.forEach((tarefa) => {
-        toast.error("⚠️ Tarefa Atrasada", {
-          description: tarefa.titulo,
-        });
-
-        // Adicionar ao conjunto de tarefas já mostradas
-        setMostradas((prev) => new Set([...prev, tarefa.id]));
-      });
-    }, 5 * 60 * 1000); // 5 minutos
+    const interval = setInterval(
+      () => {
+        void refetch();
+      },
+      5 * 60 * 1000,
+    );
 
     return () => clearInterval(interval);
-  }, [tarefas, mostradas]);
+  }, [refetch]);
 
   return <>{children}</>;
 }

@@ -13,6 +13,10 @@ import { useState } from "react";
 
 import { TarefaFormFields } from "@/features/criar-tarefa/components/tarefa-form-fields";
 import { useCriarTarefa } from "@/features/criar-tarefa/hooks/use-criar-tarefa";
+import {
+  montarContextosFormulario,
+  normalizarDataHoraFormulario,
+} from "@/lib/tarefa-form-utils";
 
 export function CriarTarefaForm() {
   const { criar, isLoading, error } = useCriarTarefa();
@@ -35,6 +39,8 @@ export function CriarTarefaForm() {
     try {
       await criar({
         ...formData,
+        prazo: normalizarDataHoraFormulario(formData.prazo),
+        contextos: montarContextosFormulario(formData.contextos),
         prioridade: formData.prioridade,
       });
     } catch (err) {

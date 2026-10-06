@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common";
+import { EventEmitterModule } from "@nestjs/event-emitter";
 
 import { SharePointModule } from "../../common/sharepoint/sharepoint.module";
 import { StorageModule } from "../../common/storage/storage.module";
@@ -21,6 +22,7 @@ import { PlanoAulaService } from "./plano-aula.service";
  */
 @Module({
   imports: [
+    EventEmitterModule,
     AuthModule,
     StorageModule.forRoot(),
     SharePointModule,

@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import type { TarefaContextoModulo } from "@essencia/shared/types";
 import {
   TarefasPendentesWidget,
   calcularDiasRestantes,
@@ -9,7 +10,7 @@ import {
 import { useTarefas } from "../tarefas-list/hooks/use-tarefas";
 
 export interface TarefasPendentesWidgetContainerProps {
-  modulo?: string;
+  modulo?: TarefaContextoModulo;
   quinzenaId?: string;
 }
 

@@ -26,6 +26,10 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { apiGet, apiPost } from "@/lib/api";
+import {
+  montarContextosFormulario,
+  normalizarDataHoraFormulario,
+} from "@/lib/tarefa-form-utils";
 
 interface Usuario {
   id: string;
@@ -56,7 +60,7 @@ export function TarefaForm({ isOpen, onClose }: TarefaFormProps) {
       setIsLoadingUsuarios(true);
       try {
         const response = await apiGet<{ success: boolean; data: Usuario[] }>(
-          "users"
+          "users",
         );
         if (!abortController.signal.aborted) {
           setUsuarios(response.data);
@@ -113,7 +117,12 @@ export function TarefaForm({ isOpen, onClose }: TarefaFormProps) {
     setError(null);
 
     try {
-      await apiPost<Tarefa>("tarefas", formData);
+      await apiPost<Tarefa>("tarefas", {
+        ...formData,
+        prazo: normalizarDataHoraFormulario(formData.prazo),
+        contextos: montarContextosFormulario(formData.contextos),
+      });
+      window.dispatchEvent(new Event("tarefas:atualizada"));
       setSuccess(true);
       router.refresh();
 
@@ -125,7 +134,9 @@ export function TarefaForm({ isOpen, onClose }: TarefaFormProps) {
     } catch (err) {
       console.error("Erro ao criar tarefa:", err);
       setError(
-        err instanceof Error ? err.message : "Erro ao criar tarefa. Tente novamente."
+        err instanceof Error
+          ? err.message
+          : "Erro ao criar tarefa. Tente novamente.",
       );
     } finally {
       setIsLoading(false);

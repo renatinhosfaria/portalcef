@@ -8,12 +8,16 @@ const mockDb: Record<string, unknown> & {
   insert: jest.Mock;
   values: jest.Mock;
   returning: jest.Mock;
-  query: { tarefas: { findFirst: jest.Mock }; users: { findFirst: jest.Mock } };
+  query: {
+    tarefas: { findFirst: jest.Mock; findMany: jest.Mock };
+    users: { findFirst: jest.Mock };
+  };
   select: jest.Mock;
   from: jest.Mock;
   update: jest.Mock;
   set: jest.Mock;
   where: jest.Mock;
+  execute: jest.Mock;
   transaction: jest.Mock;
 } = {
   insert: jest.fn().mockReturnThis(),
@@ -22,6 +26,7 @@ const mockDb: Record<string, unknown> & {
   query: {
     tarefas: {
       findFirst: jest.fn(),
+      findMany: jest.fn().mockResolvedValue([]),
     },
     users: {
       findFirst: jest.fn().mockResolvedValue({ name: "Teste" }),
@@ -32,6 +37,7 @@ const mockDb: Record<string, unknown> & {
   from: jest.fn().mockReturnThis(),
   set: jest.fn().mockReturnThis(),
   where: jest.fn().mockReturnThis(),
+  execute: jest.fn(),
   transaction: jest.fn(),
 };
 
@@ -47,7 +53,19 @@ jest.mock("@essencia/db", () => ({
   users: { id: "users.id", name: "users.name" },
   eq: jest.fn(),
   and: jest.fn(),
+  or: jest.fn(),
+  asc: jest.fn(),
+  desc: jest.fn(),
+  gte: jest.fn(),
+  lte: jest.fn(),
   inArray: jest.fn(),
+  isNull: jest.fn(),
+  sql: Object.assign(
+    jest.fn(() => ({})),
+    {
+      join: jest.fn(() => ({})),
+    },
+  ),
 }));
 
 describe("TarefasService", () => {
@@ -258,6 +276,112 @@ describe("TarefasService", () => {
         "Falha ao criar tarefa",
       );
     });
+
+    it("deve falhar a criação quando não consegue registrar o histórico", async () => {
+      mockDb.returning.mockResolvedValue([
+        {
+          id: "tarefa-uuid-historico",
+          schoolId: "school-uuid-1",
+          unitId: "unit-uuid-1",
+          titulo: "Tarefa com histórico",
+          descricao: null,
+          status: "PENDENTE",
+          prioridade: "MEDIA",
+          prazo: new Date("2026-12-31T23:59:59Z"),
+          criadoPor: "user-uuid-1",
+          responsavel: "user-uuid-2",
+          tipoOrigem: "MANUAL",
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          concluidaEm: null,
+        },
+      ]);
+      const historico = (
+        service as unknown as { historicoService: { registrar: jest.Mock } }
+      ).historicoService;
+      historico.registrar.mockRejectedValueOnce(
+        new Error("histórico indisponível"),
+      );
+
+      await expect(
+        service.create({
+          schoolId: "school-uuid-1",
+          unitId: "unit-uuid-1",
+          titulo: "Tarefa com histórico",
+          descricao: null,
+          prioridade: "MEDIA",
+          prazo: new Date("2026-12-31T23:59:59Z"),
+          criadoPor: "user-uuid-1",
+          responsavel: "user-uuid-2",
+          tipoOrigem: "MANUAL",
+          contextos: [],
+          session: { userId: "user-uuid-1", role: "coordenadora_geral" },
+        }),
+      ).rejects.toThrow("histórico indisponível");
+    });
+  });
+
+  describe("criarAutomatica", () => {
+    it("reutiliza uma tarefa pendente do mesmo evento", async () => {
+      const existente = {
+        id: "tarefa-existente",
+        schoolId: "school-uuid-1",
+        unitId: "unit-uuid-1",
+        titulo: "Revisar planejamento - Turma 1",
+        descricao: "Plano submetido",
+        status: "PENDENTE",
+        prioridade: "MEDIA",
+        prazo: new Date("2026-12-31T23:59:59Z"),
+        criadoPor: "professora-1",
+        responsavel: "analista-1",
+        tipoOrigem: "AUTOMATICA",
+        createdAt: new Date("2026-12-01T10:00:00Z"),
+        updatedAt: new Date("2026-12-01T10:00:00Z"),
+        concluidaEm: null,
+        contextos: [
+          {
+            modulo: "PLANEJAMENTO",
+            planoId: "plano-1",
+            quinzenaId: "quinzena-1",
+            provaId: null,
+            etapaId: "etapa-1",
+            turmaId: "turma-1",
+            professoraId: "professora-1",
+          },
+        ],
+      };
+      mockDb.query.tarefas.findMany.mockResolvedValueOnce([existente]);
+
+      const resultado = await service.criarAutomatica({
+        chaveIdempotencia: "plano:plano-1:submetido:analista-1",
+        schoolId: "school-uuid-1",
+        unitId: "unit-uuid-1",
+        titulo: "Revisar planejamento - Turma 1",
+        descricao: "Plano submetido",
+        prioridade: "MEDIA",
+        prazo: new Date("2026-12-31T23:59:59Z"),
+        criadoPor: "professora-1",
+        responsavel: "analista-1",
+        contextos: [
+          {
+            modulo: "PLANEJAMENTO",
+            planoId: "plano-1",
+            quinzenaId: "quinzena-1",
+            etapaId: "etapa-1",
+            turmaId: "turma-1",
+            professoraId: "professora-1",
+          },
+        ],
+      });
+
+      expect(resultado.id).toBe("tarefa-existente");
+      expect(mockDb.execute).toHaveBeenCalledTimes(1);
+      expect(mockDb.execute.mock.invocationCallOrder[0]).toBeLessThan(
+        mockDb.query.tarefas.findMany.mock.invocationCallOrder[0]!,
+      );
+      expect(mockDb.transaction).toHaveBeenCalledTimes(1);
+      expect(mockDb.insert).not.toHaveBeenCalled();
+    });
   });
 
   describe("findById", () => {
@@ -350,7 +474,11 @@ describe("TarefasService", () => {
       mockDb.returning.mockResolvedValue([mockTarefaAtualizada]);
       mockDb.query.tarefas.findFirst.mockResolvedValue(mockTarefaDb);
 
-      const resultado = await service.concluir("tarefa-uuid-1", "user-uuid-2", "professora");
+      const resultado = await service.concluir(
+        "tarefa-uuid-1",
+        "user-uuid-2",
+        "professora",
+      );
 
       expect(resultado).toBeDefined();
       expect(resultado.status).toBe("CONCLUIDA");
@@ -367,7 +495,11 @@ describe("TarefasService", () => {
       mockDb.query.tarefas.findFirst.mockResolvedValue(null);
 
       await expect(
-        service.concluir("00000000-0000-0000-0000-999999999999", "user-uuid-1", "professora"),
+        service.concluir(
+          "00000000-0000-0000-0000-999999999999",
+          "user-uuid-1",
+          "professora",
+        ),
       ).rejects.toThrow("Tarefa não encontrada");
     });
 
@@ -419,6 +551,90 @@ describe("TarefasService", () => {
       await expect(
         service.concluir("tarefa-uuid-1", "user-uuid-2", "professora"),
       ).rejects.toThrow("Tarefa já foi concluída");
+    });
+
+    it("deve rejeitar conclusão de tarefa cancelada", async () => {
+      mockDb.query.tarefas.findFirst.mockResolvedValue({
+        id: "tarefa-uuid-cancelada",
+        responsavel: "user-uuid-2",
+        status: "CANCELADA",
+      });
+
+      await expect(
+        service.concluir("tarefa-uuid-cancelada", "user-uuid-2", "professora"),
+      ).rejects.toThrow("Tarefa já foi cancelada");
+    });
+  });
+
+  describe("concluirPorContexto", () => {
+    it("encerra apenas a automática da fase e plano corretos e registra a gestora", async () => {
+      const contexto = {
+        modulo: "PLANEJAMENTO",
+        planoId: "plano-1",
+        quinzenaId: "quinzena-1",
+        professoraId: "prof-1",
+        turmaId: "turma-1",
+        etapaId: "etapa-1",
+      };
+      const tarefa = {
+        id: "tarefa-correta",
+        status: "PENDENTE",
+        tipoOrigem: "AUTOMATICA",
+        titulo: "Aprovar planejamento - Turma turma-1",
+        responsavel: "coord-1",
+        prazo: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        concluidaEm: null,
+        contextos: [contexto],
+      };
+      mockDb.query.tarefas.findMany.mockResolvedValueOnce([
+        { ...tarefa, id: "manual", tipoOrigem: "MANUAL" },
+        {
+          ...tarefa,
+          id: "outra-fase",
+          titulo: "Revisar planejamento - Turma turma-1",
+        },
+        {
+          ...tarefa,
+          id: "outro-plano",
+          contextos: [{ ...contexto, planoId: "plano-2" }],
+        },
+        tarefa,
+      ]);
+      mockDb.query.users.findFirst.mockResolvedValueOnce({
+        name: "Gestora",
+        role: "gerente_unidade",
+      });
+      mockDb.returning.mockResolvedValueOnce([
+        { ...tarefa, status: "CONCLUIDA", concluidaEm: new Date() },
+      ]);
+
+      const resultado = await service.concluirPorContexto({
+        planoId: "plano-1",
+        quinzenaId: "quinzena-1",
+        professoraId: "prof-1",
+        turmaId: "turma-1",
+        etapaId: "etapa-1",
+        schoolId: "school-1",
+        unitId: "unit-1",
+        usuarioId: "gestora-1",
+        titulo: tarefa.titulo,
+      });
+
+      expect(resultado?.id).toBe("tarefa-correta");
+      const historico = (
+        service as unknown as { historicoService: { registrar: jest.Mock } }
+      ).historicoService;
+      expect(historico.registrar).toHaveBeenCalledWith(
+        mockDb,
+        expect.objectContaining({
+          tarefaId: "tarefa-correta",
+          userId: "gestora-1",
+          userName: "Gestora",
+          userRole: "gerente_unidade",
+        }),
+      );
     });
   });
 
@@ -576,7 +792,7 @@ describe("TarefasService", () => {
       ]);
     });
 
-    it("deve validar contextos completos para gestores", async () => {
+    it("deve aceitar contexto parcial para tarefa manual de gestor", async () => {
       const dto = {
         titulo: "Tarefa com contexto incompleto",
         descricao: null,
@@ -600,9 +816,33 @@ describe("TarefasService", () => {
         stageId: null,
       };
 
-      await expect(service.criarManual(dto, session)).rejects.toThrow(
-        "Gestores devem fornecer módulo, quinzenaId ou provaId, etapaId, turmaId e professoraId em todos os contextos",
-      );
+      await expect(service.criarManual(dto, session)).resolves.toBeDefined();
+    });
+  });
+
+  describe("getStats", () => {
+    it("retorna o contrato completo de estatísticas", async () => {
+      mockDb.where.mockResolvedValueOnce([
+        {
+          total: 6,
+          pendentes: 3,
+          concluidas: 2,
+          canceladas: 1,
+          atrasadas: 1,
+          proximasVencer: 2,
+        },
+      ]);
+
+      await expect(
+        service.getStats("user-uuid-1", "school-uuid-1"),
+      ).resolves.toEqual({
+        total: 6,
+        pendentes: 3,
+        concluidas: 2,
+        canceladas: 1,
+        atrasadas: 1,
+        proximasVencer: 2,
+      });
     });
   });
 });

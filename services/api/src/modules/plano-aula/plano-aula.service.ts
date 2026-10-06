@@ -7,7 +7,9 @@ import {
   ForbiddenException,
   ConflictException,
   ServiceUnavailableException,
+  Optional,
 } from "@nestjs/common";
+import { EventEmitter2 } from "@nestjs/event-emitter";
 import {
   getDb,
   and,
@@ -145,7 +147,12 @@ export class PlanoAulaService {
     private readonly planoAulaPdfQueueService: PlanoAulaPdfQueueService,
     private readonly storageService: StorageService,
     private readonly sharePointService: SharePointService,
+    @Optional() private readonly eventEmitter?: EventEmitter2,
   ) {}
+
+  private emitirEvento(nome: string, payload: Record<string, string>) {
+    this.eventEmitter?.emit(nome, payload);
+  }
 
   // ============================================
   // Métodos da Professora
@@ -341,7 +348,9 @@ export class PlanoAulaService {
     }
 
     if (plano.turma.professoraId !== user.userId) {
-      throw new ForbiddenException("Apenas a titular da turma pode submeter o plano");
+      throw new ForbiddenException(
+        "Apenas a titular da turma pode submeter o plano",
+      );
     }
 
     // Verificar se tem documentos anexados
@@ -393,6 +402,18 @@ export class PlanoAulaService {
       statusNovo: novoStatus,
     });
 
+    if (user.schoolId) {
+      this.emitirEvento("plano.submetido", {
+        planoId,
+        quinzenaId: plano.quinzenaId,
+        professoraId: plano.userId,
+        turmaId: plano.turmaId,
+        etapaId: plano.turma.stageId,
+        schoolId: user.schoolId,
+        unitId: plano.unitId,
+      });
+    }
+
     return atualizado;
   }
 
@@ -413,7 +434,9 @@ export class PlanoAulaService {
     }
 
     if (plano.turma.professoraId !== user.userId) {
-      throw new ForbiddenException("Apenas a titular da turma pode recuperar o plano");
+      throw new ForbiddenException(
+        "Apenas a titular da turma pode recuperar o plano",
+      );
     }
 
     if (plano.status !== "AGUARDANDO_ANALISTA") {
@@ -557,6 +580,7 @@ export class PlanoAulaService {
 
     const plano = await db.query.planoAula.findFirst({
       where: eq(planoAula.id, planoId),
+      with: { turma: true },
     });
 
     if (!plano) {
@@ -584,8 +608,7 @@ export class PlanoAulaService {
     const [atualizado] = await db
       .update(planoAula)
       .set({
-        status: "APROVADO",
-        approvedAt: new Date(),
+        status: "AGUARDANDO_COORDENADORA",
         updatedAt: new Date(),
       })
       .where(eq(planoAula.id, planoId))
@@ -600,8 +623,21 @@ export class PlanoAulaService {
       userRole: user.role,
       acao: "APROVADO_ANALISTA",
       statusAnterior,
-      statusNovo: "APROVADO",
+      statusNovo: "AGUARDANDO_COORDENADORA",
     });
+
+    if (user.schoolId) {
+      this.emitirEvento("plano.aprovado_analista", {
+        planoId,
+        quinzenaId: plano.quinzenaId,
+        professoraId: plano.userId,
+        turmaId: plano.turmaId,
+        etapaId: plano.turma.stageId,
+        schoolId: user.schoolId,
+        unitId: plano.unitId,
+        analistaId: user.userId,
+      });
+    }
 
     return atualizado;
   }
@@ -617,6 +653,7 @@ export class PlanoAulaService {
 
     const plano = await db.query.planoAula.findFirst({
       where: eq(planoAula.id, planoId),
+      with: { turma: true },
     });
 
     if (!plano) {
@@ -661,6 +698,21 @@ export class PlanoAulaService {
       statusAnterior,
       statusNovo: "DEVOLVIDO_ANALISTA",
     });
+
+    if (user.schoolId) {
+      this.emitirEvento("plano.devolvido", {
+        planoId,
+        quinzenaId: plano.quinzenaId,
+        professoraId: plano.userId,
+        turmaId: plano.turmaId,
+        etapaId: plano.turma.stageId,
+        schoolId: user.schoolId,
+        unitId: plano.unitId,
+        revisorId: user.userId,
+        fase: "REVISAO",
+        motivo: "Plano devolvido pelo analista para ajustes",
+      });
+    }
 
     return atualizado;
   }
@@ -786,6 +838,19 @@ export class PlanoAulaService {
       statusNovo: "APROVADO",
     });
 
+    if (user.schoolId) {
+      this.emitirEvento("plano.aprovado_final", {
+        planoId,
+        quinzenaId: plano.quinzenaId,
+        professoraId: plano.userId,
+        turmaId: plano.turmaId,
+        etapaId: plano.turma.stageId,
+        schoolId: user.schoolId,
+        unitId: plano.unitId,
+        coordenadoraId: user.userId,
+      });
+    }
+
     return atualizado;
   }
 
@@ -868,6 +933,29 @@ export class PlanoAulaService {
         destino: dto.destino,
       },
     });
+
+    if (user.schoolId) {
+      const responsavelId =
+        dto.destino === "ANALISTA"
+          ? await this.findAnalistaId(plano.unitId)
+          : plano.userId;
+
+      if (responsavelId) {
+        this.emitirEvento("plano.devolvido", {
+          planoId,
+          quinzenaId: plano.quinzenaId,
+          professoraId: plano.userId,
+          turmaId: plano.turmaId,
+          etapaId: plano.turma.stageId,
+          schoolId: user.schoolId,
+          unitId: plano.unitId,
+          revisorId: user.userId,
+          fase: "APROVACAO",
+          motivo: `Plano devolvido pela coordenadora para ${dto.destino === "ANALISTA" ? "reanálise" : "ajustes"}`,
+          responsavelId,
+        });
+      }
+    }
 
     return atualizado;
   }
@@ -1188,6 +1276,19 @@ export class PlanoAulaService {
       where: eq(users.id, userId),
     });
     return user?.name || "Usuário Desconhecido";
+  }
+
+  private async findAnalistaId(unitId: string): Promise<string | null> {
+    const db = getDb();
+    const analista = await db.query.users.findFirst({
+      where: and(
+        eq(users.unitId, unitId),
+        eq(users.role, "analista_pedagogico"),
+        isNull(users.inativadoEm),
+      ),
+      columns: { id: true },
+    });
+    return analista?.id ?? null;
   }
 
   /**
@@ -2029,5 +2130,4 @@ export class PlanoAulaService {
       .set(dados)
       .where(eq(planoDocumento.id, documentoId));
   }
-
 }

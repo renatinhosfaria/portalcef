@@ -34,6 +34,7 @@ export class TarefaHistoricoService {
         `Falha ao registrar histórico para tarefa ${params.tarefaId}`,
         err,
       );
+      throw err;
     }
   }
 }
