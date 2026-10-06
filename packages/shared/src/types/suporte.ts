@@ -14,6 +14,27 @@ export type OrdemServicoStatus =
   | "RESOLVIDA"
   | "FECHADA";
 
+/** Transições permitidas para o ciclo de vida de uma ordem de serviço. */
+export const STATUS_TRANSITIONS: Record<
+  OrdemServicoStatus,
+  readonly OrdemServicoStatus[]
+> = {
+  ABERTA: ["EM_ANDAMENTO", "RESOLVIDA", "FECHADA"],
+  EM_ANDAMENTO: ["RESOLVIDA", "FECHADA"],
+  RESOLVIDA: ["EM_ANDAMENTO", "FECHADA"],
+  FECHADA: [],
+};
+
+export function isTransicaoStatusPermitida(
+  statusAtual: OrdemServicoStatus,
+  novoStatus: OrdemServicoStatus,
+): boolean {
+  return STATUS_TRANSITIONS[statusAtual].includes(novoStatus);
+}
+
+/** Limite aplicado pelo endpoint multipart do suporte. */
+export const LIMITE_TOTAL_ANEXOS_SUPORTE = 5;
+
 export type MensagemTipo = "TEXTO" | "IMAGEM" | "VIDEO" | "AUDIO";
 
 // ============================================
@@ -72,6 +93,7 @@ export interface SuporteContagem {
   abertas: number;
   emAndamento: number;
   resolvidas: number;
+  fechadas: number;
 }
 
 // ============================================

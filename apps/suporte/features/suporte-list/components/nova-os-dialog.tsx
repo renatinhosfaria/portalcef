@@ -1,8 +1,11 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import type { OrdemServicoCategoria } from "@essencia/shared/types";
-import { CATEGORIA_LABELS } from "@essencia/shared/types";
+import {
+  CATEGORIA_LABELS,
+  LIMITE_TOTAL_ANEXOS_SUPORTE,
+} from "@essencia/shared/types";
 import { Button } from "@essencia/ui/components/button";
 import {
   Dialog,
@@ -33,6 +36,7 @@ import { Loader2, Paperclip } from "lucide-react";
 import { useCriarOs } from "@/hooks/use-criar-os";
 import { UploadArquivo } from "@/features/midia/components/upload-arquivo";
 import { GravadorAudio } from "@/features/midia/components/gravador-audio";
+import { adicionarArquivosComLimite } from "@/lib/anexos";
 
 // ============================================
 // Tipos
@@ -69,6 +73,7 @@ export function NovaOsDialog({
   const [descricao, setDescricao] = useState("");
   const [categoria, setCategoria] = useState<OrdemServicoCategoria | "">("");
   const [arquivos, setArquivos] = useState<File[]>([]);
+  const arquivosRef = useRef<File[]>([]);
   const [erros, setErros] = useState<FormErros>({});
 
   const { criar, isLoading } = useCriarOs();
@@ -81,6 +86,7 @@ export function NovaOsDialog({
     setTitulo("");
     setDescricao("");
     setCategoria("");
+    arquivosRef.current = [];
     setArquivos([]);
     setErros({});
   }, []);
@@ -99,21 +105,45 @@ export function NovaOsDialog({
   // Gerenciamento de arquivos
   // ============================================
 
-  const adicionarArquivos = useCallback((novosArquivos: File[]) => {
-    setArquivos((prev) => [...prev, ...novosArquivos]);
+  const adicionarArquivos = useCallback((novosArquivos: File[]): boolean => {
+    const resultado = adicionarArquivosComLimite(
+      arquivosRef.current,
+      novosArquivos,
+    );
+    const adicionados = resultado.arquivos.length;
+    const ignorados = resultado.quantidadeIgnorada;
+
+    if (adicionados === 0) {
+      toast.error(
+        `O limite de ${LIMITE_TOTAL_ANEXOS_SUPORTE} anexos foi atingido.`,
+      );
+      return false;
+    }
+
+    if (ignorados > 0) {
+      toast.error(
+        `Apenas ${adicionados} anexo(s) foram adicionados. O limite total é ${LIMITE_TOTAL_ANEXOS_SUPORTE}.`,
+      );
+    }
+
+    arquivosRef.current = [...arquivosRef.current, ...resultado.arquivos];
+    setArquivos(arquivosRef.current);
+    return true;
   }, []);
 
   const removerArquivo = useCallback((index: number) => {
-    setArquivos((prev) => prev.filter((_, i) => i !== index));
+    arquivosRef.current = arquivosRef.current.filter((_, i) => i !== index);
+    setArquivos(arquivosRef.current);
   }, []);
 
   const handleGravacaoCompleta = useCallback(
     (blob: Blob, filename: string) => {
       const file = new File([blob], filename, { type: blob.type });
-      setArquivos((prev) => [...prev, file]);
-      toast.success("Gravacao adicionada aos anexos.");
+      if (adicionarArquivos([file])) {
+        toast.success("Gravacao adicionada aos anexos.");
+      }
     },
-    [],
+    [adicionarArquivos],
   );
 
   // ============================================
@@ -131,12 +161,10 @@ export function NovaOsDialog({
     }
 
     if (!descricao.trim() || descricao.trim().length < 10) {
-      novosErros.descricao =
-        "A descricao deve ter pelo menos 10 caracteres.";
+      novosErros.descricao = "A descricao deve ter pelo menos 10 caracteres.";
     }
     if (descricao.length > 5000) {
-      novosErros.descricao =
-        "A descricao deve ter no maximo 5000 caracteres.";
+      novosErros.descricao = "A descricao deve ter no maximo 5000 caracteres.";
     }
 
     if (!categoria) {
@@ -167,9 +195,7 @@ export function NovaOsDialog({
       onSuccess();
       handleOpenChange(false);
     } catch {
-      toast.error(
-        "Erro ao criar ordem de servico. Tente novamente.",
-      );
+      toast.error("Erro ao criar ordem de servico. Tente novamente.");
     }
   }, [
     validar,
@@ -344,11 +370,9 @@ export function NovaOsDialog({
               <TabsContent value="imagens">
                 <UploadArquivo
                   accept="image/*"
-                  maxFiles={10}
+                  maxFiles={LIMITE_TOTAL_ANEXOS_SUPORTE}
                   maxSizeMB={10}
-                  arquivos={arquivos.filter((f) =>
-                    f.type.startsWith("image/"),
-                  )}
+                  arquivos={arquivos.filter((f) => f.type.startsWith("image/"))}
                   onFilesSelected={adicionarArquivos}
                   onRemove={(index) => {
                     const imagensIndices = arquivos
@@ -366,11 +390,9 @@ export function NovaOsDialog({
               <TabsContent value="video">
                 <UploadArquivo
                   accept="video/*"
-                  maxFiles={3}
+                  maxFiles={LIMITE_TOTAL_ANEXOS_SUPORTE}
                   maxSizeMB={100}
-                  arquivos={arquivos.filter((f) =>
-                    f.type.startsWith("video/"),
-                  )}
+                  arquivos={arquivos.filter((f) => f.type.startsWith("video/"))}
                   onFilesSelected={adicionarArquivos}
                   onRemove={(index) => {
                     const videosIndices = arquivos
@@ -399,11 +421,9 @@ export function NovaOsDialog({
                 </div>
                 <UploadArquivo
                   accept="audio/*"
-                  maxFiles={3}
+                  maxFiles={LIMITE_TOTAL_ANEXOS_SUPORTE}
                   maxSizeMB={50}
-                  arquivos={arquivos.filter((f) =>
-                    f.type.startsWith("audio/"),
-                  )}
+                  arquivos={arquivos.filter((f) => f.type.startsWith("audio/"))}
                   onFilesSelected={adicionarArquivos}
                   onRemove={(index) => {
                     const audiosIndices = arquivos
@@ -429,11 +449,7 @@ export function NovaOsDialog({
           >
             Cancelar
           </Button>
-          <Button
-            type="button"
-            onClick={handleSubmit}
-            disabled={isLoading}
-          >
+          <Button type="button" onClick={handleSubmit} disabled={isLoading}>
             {isLoading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />

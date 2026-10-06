@@ -35,6 +35,7 @@ export function useOrdensServico(params: UseOrdensServicoParams = {}) {
     abertas: 0,
     emAndamento: 0,
     resolvidas: 0,
+    fechadas: 0,
   });
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);

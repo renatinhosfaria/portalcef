@@ -9,6 +9,7 @@ interface ContagemSuporte {
   abertas: number;
   emAndamento: number;
   resolvidas: number;
+  fechadas: number;
 }
 
 /**
@@ -23,6 +24,7 @@ export function SuporteBadgeContainer() {
     abertas: 0,
     emAndamento: 0,
     resolvidas: 0,
+    fechadas: 0,
   });
 
   useEffect(() => {

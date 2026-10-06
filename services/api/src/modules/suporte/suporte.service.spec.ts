@@ -1,4 +1,4 @@
-import { ForbiddenException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
 
 import { DatabaseService } from "../../common/database/database.service";
@@ -40,7 +40,8 @@ describe("SuporteService", () => {
 
   const dbUpdateChain = {
     set: jest.fn().mockReturnThis(),
-    where: jest.fn(),
+    where: jest.fn().mockReturnThis(),
+    returning: jest.fn(),
   };
 
   const dbDeleteChain = {
@@ -131,7 +132,7 @@ describe("SuporteService", () => {
     dbInsertChain.returning
       .mockResolvedValueOnce([mensagemTextoDb])
       .mockResolvedValueOnce([mensagemArquivoDb]);
-    dbUpdateChain.where.mockResolvedValue(undefined);
+    dbUpdateChain.where.mockReturnThis();
     txInsertChain.returning
       .mockResolvedValueOnce([mensagemTextoDb])
       .mockResolvedValueOnce([mensagemArquivoDb]);
@@ -143,6 +144,7 @@ describe("SuporteService", () => {
       [
         {
           url: "https://exemplo.com/erro.png",
+          key: "suporte/erro.png",
           nome: "erro.png",
           mimetype: "image/png",
         },
@@ -185,5 +187,87 @@ describe("SuporteService", () => {
       ForbiddenException,
     );
     expect(dbMock.delete).not.toHaveBeenCalled();
+  });
+
+  it("deve rejeitar transicao de uma OS fechada", async () => {
+    dbSelectChain.where.mockResolvedValue([
+      {
+        id: "os-1",
+        status: "FECHADA",
+        schoolId: "school-1",
+      },
+    ]);
+
+    await expect(
+      service.alterarStatus(
+        "os-1",
+        { status: "EM_ANDAMENTO" },
+        { ...sessao, role: "master" },
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(dbMock.update).not.toHaveBeenCalled();
+  });
+
+  it("deve atualizar status somente quando a versao lida ainda esta vigente", async () => {
+    const dataCriacao = new Date("2026-02-20T12:00:00.000Z");
+    dbSelectChain.where.mockResolvedValue([
+      {
+        id: "os-1",
+        numero: 10,
+        titulo: "Falha no acesso",
+        descricao: "Nao consigo acessar o sistema desde cedo.",
+        categoria: "PROBLEMA_ACESSO",
+        status: "ABERTA",
+        criadoPor: "user-1",
+        schoolId: "school-1",
+        unitId: "unit-1",
+        createdAt: dataCriacao,
+        updatedAt: dataCriacao,
+      },
+    ]);
+    dbUpdateChain.returning.mockResolvedValueOnce([
+      {
+        id: "os-1",
+        numero: 10,
+        titulo: "Falha no acesso",
+        descricao: "Nao consigo acessar o sistema desde cedo.",
+        categoria: "PROBLEMA_ACESSO",
+        status: "EM_ANDAMENTO",
+        criadoPor: "user-1",
+        schoolId: "school-1",
+        unitId: "unit-1",
+        createdAt: dataCriacao,
+        updatedAt: dataCriacao,
+      },
+    ]);
+
+    await expect(
+      service.alterarStatus(
+        "os-1",
+        { status: "EM_ANDAMENTO" },
+        { ...sessao, role: "master" },
+      ),
+    ).resolves.toMatchObject({ status: "EM_ANDAMENTO" });
+    expect(dbUpdateChain.returning).toHaveBeenCalledTimes(1);
+  });
+
+  it("deve retornar a contagem de OS fechadas", async () => {
+    dbSelectChain.where.mockResolvedValue([
+      {
+        total: 4,
+        abertas: 1,
+        emAndamento: 1,
+        resolvidas: 1,
+        fechadas: 1,
+      },
+    ]);
+
+    await expect(service.contagem(sessao)).resolves.toEqual({
+      total: 4,
+      abertas: 1,
+      emAndamento: 1,
+      resolvidas: 1,
+      fechadas: 1,
+    });
   });
 });

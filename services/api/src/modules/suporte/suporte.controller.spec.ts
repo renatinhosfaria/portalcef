@@ -67,6 +67,7 @@ describe("SuporteController", () => {
 
   const storageServiceMock = {
     uploadBuffer: jest.fn(),
+    deleteFile: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -117,11 +118,149 @@ describe("SuporteController", () => {
       },
     ]);
 
-    await expect(controller.criarOrdemServico(req as never)).rejects.toBeInstanceOf(
-      BadRequestException,
-    );
+    await expect(
+      controller.criarOrdemServico(req as never),
+    ).rejects.toBeInstanceOf(BadRequestException);
     expect(storageServiceMock.uploadBuffer).not.toHaveBeenCalled();
     expect(suporteServiceMock.criar).not.toHaveBeenCalled();
+  });
+
+  it("deve rejeitar descricao composta apenas por espacos", async () => {
+    const req = criarRequestMultipart([
+      { type: "field", fieldname: "titulo", value: "Titulo valido" },
+      { type: "field", fieldname: "descricao", value: "          " },
+      { type: "field", fieldname: "categoria", value: "ERRO_SISTEMA" },
+    ]);
+
+    await expect(
+      controller.criarOrdemServico(req as never),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(suporteServiceMock.criar).not.toHaveBeenCalled();
+  });
+
+  it("deve rejeitar mais anexos do que o limite antes de fazer upload", async () => {
+    const arquivos = Array.from({ length: 6 }, (_, indice) => ({
+      type: "file" as const,
+      fieldname: "arquivos",
+      filename: `erro-${indice}.png`,
+      mimetype: "image/png",
+      toBuffer: async () => Buffer.from("conteudo"),
+    }));
+    const req = criarRequestMultipart([
+      { type: "field", fieldname: "titulo", value: "Titulo valido" },
+      {
+        type: "field",
+        fieldname: "descricao",
+        value: "Descricao valida para teste",
+      },
+      { type: "field", fieldname: "categoria", value: "ERRO_SISTEMA" },
+      ...arquivos,
+    ]);
+
+    await expect(
+      controller.criarOrdemServico(req as never),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(storageServiceMock.uploadBuffer).not.toHaveBeenCalled();
+  });
+
+  it("deve normalizar espacos externos antes de persistir a OS", async () => {
+    suporteServiceMock.criar.mockResolvedValue({ id: "os-1" });
+
+    const req = criarRequestMultipart([
+      { type: "field", fieldname: "titulo", value: "  Titulo valido  " },
+      {
+        type: "field",
+        fieldname: "descricao",
+        value: "  Descricao valida para teste  ",
+      },
+      { type: "field", fieldname: "categoria", value: "ERRO_SISTEMA" },
+    ]);
+
+    await controller.criarOrdemServico(req as never);
+
+    expect(suporteServiceMock.criar).toHaveBeenCalledWith(
+      {
+        titulo: "Titulo valido",
+        descricao: "Descricao valida para teste",
+        categoria: "ERRO_SISTEMA",
+      },
+      [],
+      usuarioBase,
+    );
+  });
+
+  it("deve remover anexos quando a persistencia da OS falhar", async () => {
+    storageServiceMock.uploadBuffer.mockResolvedValue({
+      url: "https://exemplo.com/arquivo.png",
+      key: "suporte/arquivo.png",
+      name: "arquivo.png",
+    });
+    suporteServiceMock.criar.mockRejectedValue(new Error("falha no banco"));
+
+    const req = criarRequestMultipart([
+      { type: "field", fieldname: "titulo", value: "Titulo valido" },
+      {
+        type: "field",
+        fieldname: "descricao",
+        value: "Descricao valida para teste",
+      },
+      { type: "field", fieldname: "categoria", value: "ERRO_SISTEMA" },
+      {
+        type: "file",
+        fieldname: "arquivos",
+        filename: "erro.png",
+        mimetype: "image/png",
+        toBuffer: async () => Buffer.from("conteudo"),
+      },
+    ]);
+
+    await expect(controller.criarOrdemServico(req as never)).rejects.toThrow(
+      "falha no banco",
+    );
+    expect(storageServiceMock.deleteFile).toHaveBeenCalledWith(
+      "suporte/arquivo.png",
+    );
+  });
+
+  it("deve remover anexos anteriores quando um upload posterior falhar", async () => {
+    storageServiceMock.uploadBuffer
+      .mockResolvedValueOnce({
+        url: "https://exemplo.com/primeiro.png",
+        key: "suporte/primeiro.png",
+        name: "primeiro.png",
+      })
+      .mockRejectedValueOnce(new Error("falha no storage"));
+
+    const req = criarRequestMultipart([
+      { type: "field", fieldname: "titulo", value: "Titulo valido" },
+      {
+        type: "field",
+        fieldname: "descricao",
+        value: "Descricao valida para teste",
+      },
+      { type: "field", fieldname: "categoria", value: "ERRO_SISTEMA" },
+      {
+        type: "file",
+        fieldname: "arquivos",
+        filename: "primeiro.png",
+        mimetype: "image/png",
+        toBuffer: async () => Buffer.from("primeiro"),
+      },
+      {
+        type: "file",
+        fieldname: "arquivos",
+        filename: "segundo.png",
+        mimetype: "image/png",
+        toBuffer: async () => Buffer.from("segundo"),
+      },
+    ]);
+
+    await expect(controller.criarOrdemServico(req as never)).rejects.toThrow(
+      "Erro ao fazer upload do arquivo",
+    );
+    expect(storageServiceMock.deleteFile).toHaveBeenCalledWith(
+      "suporte/primeiro.png",
+    );
   });
 
   it("nao deve fazer upload ao enviar mensagem sem permissao", async () => {

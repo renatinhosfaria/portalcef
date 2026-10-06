@@ -16,6 +16,7 @@ import {
 } from "@nestjs/common";
 import { FastifyRequest } from "fastify";
 import type { UserRole } from "@essencia/shared/types";
+import { LIMITE_TOTAL_ANEXOS_SUPORTE } from "@essencia/shared/types";
 
 import { Roles } from "../../common/decorators/roles.decorator";
 import { AuthGuard } from "../../common/guards/auth.guard";
@@ -132,6 +133,21 @@ export class SuporteController {
         // Campo de texto
         campos[part.fieldname] = String(part.value);
       } else if (part.type === "file") {
+        if (!this.isMimetypePermitido(part.mimetype)) {
+          throw new BadRequestException({
+            code: "INVALID_FILE_TYPE",
+            message:
+              "Tipo de arquivo nao permitido. Use apenas imagem, video ou audio.",
+          });
+        }
+
+        if (arquivos.length >= LIMITE_TOTAL_ANEXOS_SUPORTE) {
+          throw new BadRequestException({
+            code: "TOO_MANY_FILES",
+            message: `Envie no maximo ${LIMITE_TOTAL_ANEXOS_SUPORTE} arquivos.`,
+          });
+        }
+
         // Arquivo - ler para upload posterior
         const buffer = await part.toBuffer();
 
@@ -189,10 +205,12 @@ export class SuporteController {
 
         arquivosUpload.push({
           url: resultado.url,
+          key: resultado.key,
           nome: resultado.name,
           mimetype: arquivo.mimetype,
         });
       } catch (error) {
+        await this.removerArquivosUpload(arquivosUpload);
         this.logger.error(
           `Erro ao fazer upload de arquivo: ${error instanceof Error ? error.message : String(error)}`,
         );
@@ -204,6 +222,12 @@ export class SuporteController {
     }
 
     return arquivosUpload;
+  }
+
+  private async removerArquivosUpload(arquivos: ArquivoUpload[]) {
+    await Promise.allSettled(
+      arquivos.map((arquivo) => this.storageService.deleteFile(arquivo.key)),
+    );
   }
 
   // ============================================
@@ -253,11 +277,17 @@ export class SuporteController {
 
     const arquivosUpload = await this.uploadArquivos(arquivos);
 
-    const os = await this.suporteService.criar(
-      parsed.data,
-      arquivosUpload,
-      req.user,
-    );
+    let os;
+    try {
+      os = await this.suporteService.criar(
+        parsed.data,
+        arquivosUpload,
+        req.user,
+      );
+    } catch (error) {
+      await this.removerArquivosUpload(arquivosUpload);
+      throw error;
+    }
 
     return {
       success: true,
@@ -385,12 +415,18 @@ export class SuporteController {
 
     const arquivosUpload = await this.uploadArquivos(arquivos);
 
-    const mensagens = await this.suporteService.enviarMensagem(
-      id,
-      parsed.data,
-      arquivosUpload,
-      req.user,
-    );
+    let mensagens;
+    try {
+      mensagens = await this.suporteService.enviarMensagem(
+        id,
+        parsed.data,
+        arquivosUpload,
+        req.user,
+      );
+    } catch (error) {
+      await this.removerArquivosUpload(arquivosUpload);
+      throw error;
+    }
 
     return {
       success: true,

@@ -2,15 +2,49 @@
  * Funções auxiliares para chamadas à API
  */
 
+interface ErroApiEstruturado {
+  error?: {
+    code?: string;
+    message?: string;
+  };
+  message?: string;
+}
+
+async function criarErroApi(response: Response): Promise<Error> {
+  let payload: ErroApiEstruturado | null = null;
+
+  try {
+    payload = (await response.json()) as ErroApiEstruturado;
+  } catch {
+    // Algumas respostas de infraestrutura não possuem corpo JSON.
+  }
+
+  const message =
+    payload?.error?.message ??
+    payload?.message ??
+    (response.statusText || `Erro na requisição (${response.status})`);
+  const erro = new Error(message);
+
+  if (payload?.error?.code) {
+    Object.assign(erro, { code: payload.error.code });
+  }
+
+  return erro;
+}
+
+async function garantirRespostaOk(response: Response): Promise<void> {
+  if (!response.ok) {
+    throw await criarErroApi(response);
+  }
+}
+
 /**
  * Realiza uma requisição GET
  */
 export async function apiGet<T>(endpoint: string): Promise<T> {
   const response = await fetch(`/api/${endpoint}`);
 
-  if (!response.ok) {
-    throw new Error(`Erro na requisição: ${response.statusText}`);
-  }
+  await garantirRespostaOk(response);
 
   return response.json();
 }
@@ -31,9 +65,7 @@ export async function apiPost<T>(endpoint: string, body: unknown): Promise<T> {
         }),
   });
 
-  if (!response.ok) {
-    throw new Error(`Erro na requisição: ${response.statusText}`);
-  }
+  await garantirRespostaOk(response);
 
   return response.json();
 }
@@ -52,15 +84,13 @@ export async function apiPatch<T>(
     },
   };
 
-  if (body) {
+  if (body !== undefined) {
     options.body = JSON.stringify(body);
   }
 
   const response = await fetch(`/api/${endpoint}`, options);
 
-  if (!response.ok) {
-    throw new Error(`Erro na requisição: ${response.statusText}`);
-  }
+  await garantirRespostaOk(response);
 
   return response.json();
 }
@@ -75,9 +105,7 @@ export async function apiDelete<T = { success: boolean; data: null }>(
     method: "DELETE",
   });
 
-  if (!response.ok) {
-    throw new Error(`Erro na requisição: ${response.statusText}`);
-  }
+  await garantirRespostaOk(response);
 
   return response.json();
 }

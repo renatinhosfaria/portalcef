@@ -24,7 +24,10 @@ import type {
   AlterarStatusDto,
 } from "./dto/suporte.dto";
 import { DatabaseService } from "../../common/database/database.service";
-import type { UserRole } from "@essencia/shared/types";
+import {
+  isTransicaoStatusPermitida,
+  type UserRole,
+} from "@essencia/shared/types";
 
 // ============================================
 // Constantes
@@ -56,6 +59,7 @@ export interface UserContext {
  */
 export interface ArquivoUpload {
   url: string;
+  key: string;
   nome: string;
   mimetype: string;
 }
@@ -145,9 +149,7 @@ export class SuporteService {
     session: UserContext,
   ) {
     if (!session.schoolId) {
-      throw new BadRequestException(
-        "Sessao invalida: schoolId e obrigatorio",
-      );
+      throw new BadRequestException("Sessao invalida: schoolId e obrigatorio");
     }
 
     const db = this.database.db;
@@ -212,9 +214,7 @@ export class SuporteService {
     session: UserContext,
   ) {
     if (!session.schoolId) {
-      throw new BadRequestException(
-        "Sessao invalida: schoolId e obrigatorio",
-      );
+      throw new BadRequestException("Sessao invalida: schoolId e obrigatorio");
     }
 
     const db = this.database.db;
@@ -296,9 +296,7 @@ export class SuporteService {
     },
   ) {
     if (!session.schoolId) {
-      throw new BadRequestException(
-        "Sessao invalida: schoolId e obrigatorio",
-      );
+      throw new BadRequestException("Sessao invalida: schoolId e obrigatorio");
     }
 
     const db = this.database.db;
@@ -395,9 +393,7 @@ export class SuporteService {
    */
   async buscarPorId(id: string, session: UserContext) {
     if (!session.schoolId) {
-      throw new BadRequestException(
-        "Sessao invalida: schoolId e obrigatorio",
-      );
+      throw new BadRequestException("Sessao invalida: schoolId e obrigatorio");
     }
 
     const db = this.database.db;
@@ -609,9 +605,7 @@ export class SuporteService {
    */
   async alterarStatus(id: string, dto: AlterarStatusDto, session: UserContext) {
     if (!session.schoolId) {
-      throw new BadRequestException(
-        "Sessao invalida: schoolId e obrigatorio",
-      );
+      throw new BadRequestException("Sessao invalida: schoolId e obrigatorio");
     }
 
     // Apenas admins podem alterar status
@@ -638,6 +632,14 @@ export class SuporteService {
       throw new NotFoundException("Ordem de servico nao encontrada");
     }
 
+    if (
+      !isTransicaoStatusPermitida(osDb.status as OrdemServicoStatus, dto.status)
+    ) {
+      throw new BadRequestException(
+        `Transicao de status invalida: ${osDb.status} -> ${dto.status}`,
+      );
+    }
+
     // Atualizar status e updatedAt
     const [osAtualizada] = await db
       .update(ordemServico)
@@ -645,7 +647,13 @@ export class SuporteService {
         status: dto.status,
         updatedAt: new Date(),
       })
-      .where(eq(ordemServico.id, id))
+      .where(
+        and(
+          eq(ordemServico.id, id),
+          eq(ordemServico.schoolId, session.schoolId),
+          eq(ordemServico.status, osDb.status),
+        ),
+      )
       .returning();
 
     if (!osAtualizada) {
@@ -678,9 +686,7 @@ export class SuporteService {
    */
   async excluir(id: string, session: UserContext): Promise<void> {
     if (!session.schoolId) {
-      throw new BadRequestException(
-        "Sessao invalida: schoolId e obrigatorio",
-      );
+      throw new BadRequestException("Sessao invalida: schoolId e obrigatorio");
     }
 
     const db = this.database.db;
@@ -722,9 +728,7 @@ export class SuporteService {
    */
   async contagem(session: UserContext) {
     if (!session.schoolId) {
-      throw new BadRequestException(
-        "Sessao invalida: schoolId e obrigatorio",
-      );
+      throw new BadRequestException("Sessao invalida: schoolId e obrigatorio");
     }
 
     const db = this.database.db;
@@ -747,6 +751,7 @@ export class SuporteService {
         abertas: sql<number>`count(*) filter (where ${ordemServico.status} = 'ABERTA')::int`,
         emAndamento: sql<number>`count(*) filter (where ${ordemServico.status} = 'EM_ANDAMENTO')::int`,
         resolvidas: sql<number>`count(*) filter (where ${ordemServico.status} = 'RESOLVIDA')::int`,
+        fechadas: sql<number>`count(*) filter (where ${ordemServico.status} = 'FECHADA')::int`,
       })
       .from(ordemServico)
       .where(whereClause);
@@ -756,6 +761,7 @@ export class SuporteService {
       abertas: resultado?.abertas ?? 0,
       emAndamento: resultado?.emAndamento ?? 0,
       resolvidas: resultado?.resolvidas ?? 0,
+      fechadas: resultado?.fechadas ?? 0,
     };
   }
 }

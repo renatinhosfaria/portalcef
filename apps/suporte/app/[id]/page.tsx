@@ -2,14 +2,13 @@
 
 import { formatarDataHora } from "@essencia/shared/formatar-data";
 import { useTenant } from "@essencia/shared/providers/tenant";
-import type { OrdemServicoStatus } from "@essencia/shared/types";
-import { STATUS_LABELS } from "@essencia/shared/types";
-import { Button } from "@essencia/ui/components/button";
 import {
-  Card,
-  CardContent,
-  CardHeader,
-} from "@essencia/ui/components/card";
+  STATUS_LABELS,
+  STATUS_TRANSITIONS,
+  type OrdemServicoStatus,
+} from "@essencia/shared/types";
+import { Button } from "@essencia/ui/components/button";
+import { Card, CardContent, CardHeader } from "@essencia/ui/components/card";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -41,21 +40,7 @@ import { apiPatch } from "@/lib/api";
 // ============================================
 // Roles administrativas
 // ============================================
-const ADMIN_ROLES = [
-  "master",
-  "diretora_geral",
-  "gerente_unidade",
-];
-
-// ============================================
-// Transicoes de status disponiveis para admin
-// ============================================
-const STATUS_TRANSITIONS: Record<OrdemServicoStatus, OrdemServicoStatus[]> = {
-  ABERTA: ["EM_ANDAMENTO", "RESOLVIDA", "FECHADA"],
-  EM_ANDAMENTO: ["RESOLVIDA", "FECHADA"],
-  RESOLVIDA: ["EM_ANDAMENTO", "FECHADA"],
-  FECHADA: [],
-};
+const ADMIN_ROLES = ["master", "diretora_geral", "gerente_unidade"];
 
 // ============================================
 // Componente de Loading
@@ -295,10 +280,7 @@ export default function SuporteDetalhePage() {
           <h2 className="text-lg font-semibold">Mensagens</h2>
         </CardHeader>
         <CardContent>
-          <OsTimeline
-            mensagens={ordem.mensagens}
-            currentUserId={userId}
-          />
+          <OsTimeline mensagens={ordem.mensagens} currentUserId={userId} />
         </CardContent>
       </Card>
 

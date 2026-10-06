@@ -1,8 +1,15 @@
 /** @type {import('next').NextConfig} */
+const path = require("node:path");
+
 const nextConfig = {
   basePath: "/suporte",
   output: "standalone",
-  transpilePackages: ["@essencia/ui", "@essencia/shared", "@essencia/components"],
+  outputFileTracingRoot: path.join(__dirname, "../.."),
+  transpilePackages: [
+    "@essencia/ui",
+    "@essencia/shared",
+    "@essencia/components",
+  ],
   experimental: {
     serverActions: {
       bodySizeLimit: "10mb",

@@ -20,10 +20,12 @@ import { z } from "zod";
 export const criarOrdemServicoSchema = z.object({
   titulo: z
     .string()
+    .trim()
     .min(3, "Titulo deve ter pelo menos 3 caracteres")
     .max(200, "Titulo nao pode exceder 200 caracteres"),
   descricao: z
     .string()
+    .trim()
     .min(10, "Descricao deve ter pelo menos 10 caracteres")
     .max(5000, "Descricao nao pode exceder 5000 caracteres"),
   categoria: z.enum([
@@ -42,6 +44,8 @@ export type CriarOrdemServicoDto = z.infer<typeof criarOrdemServicoSchema>;
 export const enviarMensagemSchema = z.object({
   conteudo: z
     .string()
+    .trim()
+    .min(1, "Conteudo nao pode ser vazio")
     .max(5000, "Conteudo nao pode exceder 5000 caracteres")
     .optional(),
 });
@@ -62,9 +66,7 @@ export type AlterarStatusDto = z.infer<typeof alterarStatusSchema>;
  */
 export const listarOrdemServicoSchema = z.object({
   // Filtros
-  status: z
-    .enum(["ABERTA", "EM_ANDAMENTO", "RESOLVIDA", "FECHADA"])
-    .optional(),
+  status: z.enum(["ABERTA", "EM_ANDAMENTO", "RESOLVIDA", "FECHADA"]).optional(),
   categoria: z
     .enum([
       "ERRO_SISTEMA",

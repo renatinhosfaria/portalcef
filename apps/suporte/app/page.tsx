@@ -29,11 +29,7 @@ import { apiDelete } from "@/lib/api";
 // ============================================
 // Roles administrativas que veem o nome do criador
 // ============================================
-const ADMIN_ROLES = [
-  "master",
-  "diretora_geral",
-  "gerente_unidade",
-];
+const ADMIN_ROLES = ["master", "diretora_geral", "gerente_unidade"];
 
 // ============================================
 // Componente de Skeleton para carregamento
@@ -148,7 +144,8 @@ export default function SuportePage() {
             <h1 className="text-2xl font-bold">Suporte</h1>
             <p className="text-sm text-muted-foreground">
               {contagem.abertas} abertas &middot; {contagem.emAndamento} em
-              andamento &middot; {contagem.resolvidas} resolvidas
+              andamento &middot; {contagem.resolvidas} resolvidas &middot;{" "}
+              {contagem.fechadas} fechadas
             </p>
           </div>
           <Button
@@ -205,7 +202,7 @@ export default function SuportePage() {
               <p className="text-sm text-muted-foreground">
                 {statusFiltro || categoriaFiltro
                   ? "Tente ajustar os filtros para ver mais resultados."
-                  : "Clique em \"Nova OS\" para abrir uma solicitacao."}
+                  : 'Clique em "Nova OS" para abrir uma solicitacao.'}
               </p>
             </div>
           </div>
