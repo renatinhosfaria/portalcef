@@ -108,6 +108,15 @@ interface ResumoSorteios {
   totalElegiveis: number;
 }
 
+interface EventoStatus {
+  nome: string;
+  dataEvento: string;
+  horarioInicio: string;
+  horarioFim: string;
+  local: string;
+  inscricoesAbertas: boolean;
+}
+
 const RESUMO_SORTEIOS_INICIAL: ResumoSorteios = {
   totalInscricoes: 0,
   totalPresentes: 0,
@@ -132,6 +141,16 @@ function formatarDataNascimento(iso: string) {
   const [y, m, d] = iso.split("-");
   if (!y || !m || !d) return iso;
   return `${d}/${m}/${y}`;
+}
+
+function formatarDataEvento(iso: string) {
+  return new Date(`${iso}T00:00:00Z`)
+    .toLocaleDateString("pt-BR", {
+      day: "numeric",
+      month: "long",
+      timeZone: "UTC",
+    })
+    .replace(/^./, (letra) => letra.toUpperCase());
 }
 
 const EXPORT_HEADERS = [
@@ -312,6 +331,7 @@ export default function InscricoesEventoPage() {
   const [sorteando, setSorteando] = useState(false);
   const [exportando, setExportando] = useState(false);
   const [ultimoSorteio, setUltimoSorteio] = useState<Sorteio | null>(null);
+  const [eventoStatus, setEventoStatus] = useState<EventoStatus | null>(null);
   const [resumoSorteios, setResumoSorteios] = useState<ResumoSorteios>(
     RESUMO_SORTEIOS_INICIAL,
   );
@@ -435,6 +455,20 @@ export default function InscricoesEventoPage() {
     }
   }, [podeAcessar]);
 
+  const carregarEventoStatus = useCallback(async () => {
+    if (!podeAcessar) return;
+    try {
+      const resp = await fetch(`/api/eventos/${EVENTO_SLUG}/status`, {
+        credentials: "include",
+      });
+      if (!resp.ok) throw new Error(`Erro ${resp.status}`);
+      setEventoStatus((await resp.json()) as EventoStatus);
+    } catch (err) {
+      console.error(err);
+      setEventoStatus(null);
+    }
+  }, [podeAcessar]);
+
   const carregarSorteios = useCallback(async () => {
     if (!podeAcessar) return;
     try {
@@ -468,9 +502,10 @@ export default function InscricoesEventoPage() {
 
   useEffect(() => {
     if (!podeAcessar) return;
+    carregarEventoStatus();
     carregarSorteios();
     carregarResumoSorteios();
-  }, [carregarResumoSorteios, carregarSorteios, podeAcessar]);
+  }, [carregarEventoStatus, carregarResumoSorteios, carregarSorteios, podeAcessar]);
 
   const totalFilhos = useMemo(
     () => inscricoes.reduce((acc, i) => acc + i.filhos.length, 0),
@@ -587,7 +622,9 @@ export default function InscricoesEventoPage() {
             Inscrições — Mãe por Inteiro
           </h1>
           <p className="text-slate-500 mt-1">
-            16 de Maio · 9h30–12h30 · Parque Una. Inscrições recebidas pela landing page.
+            {eventoStatus
+              ? `${formatarDataEvento(eventoStatus.dataEvento)} · ${eventoStatus.horarioInicio.replace(":", "h")}–${eventoStatus.horarioFim.replace(":", "h")} · ${eventoStatus.local}.`
+              : "Carregando configuração do evento..."} Inscrições recebidas pela landing page.
           </p>
         </div>
         <div className="flex items-center gap-2">

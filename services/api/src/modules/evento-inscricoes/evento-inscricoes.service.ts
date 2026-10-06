@@ -217,18 +217,25 @@ export class EventoInscricoesService {
       );
     }
 
-    const { inscricao, filhosInseridos } = await this.db.transaction(
-      async (tx: typeof this.db) => {
-        // Inserir inscrição com retry em caso de colisão de número (race condition)
-        let inscricao: EventoInscricao | undefined;
-        let ultimoErro: unknown = null;
-        for (
-          let tentativa = 1;
-          tentativa <= EventoInscricoesService.MAX_TENTATIVAS_NUMERO;
-          tentativa++
-        ) {
-          const numeroInscricao = this.gerarNumeroInscricao();
-          try {
+    let inscricao: EventoInscricao | undefined;
+    let filhosInseridos: Array<{
+      id: string;
+      nomeFilho: string;
+      turmaFilho: string;
+    }> = [];
+    let ultimoErro: unknown = null;
+
+    // Cada tentativa usa uma transação nova: no PostgreSQL, uma violação de
+    // unicidade aborta a transação atual e impede qualquer retry dentro dela.
+    for (
+      let tentativa = 1;
+      tentativa <= EventoInscricoesService.MAX_TENTATIVAS_NUMERO;
+      tentativa++
+    ) {
+      const numeroInscricao = this.gerarNumeroInscricao();
+      try {
+        const resultado = await this.db.transaction(
+          async (tx: typeof this.db) => {
             const inserted = await tx
               .insert(eventoInscricoes)
               .values({
@@ -243,59 +250,66 @@ export class EventoInscricoesService {
                 userAgent: metadata.userAgent ?? null,
               })
               .returning();
-            inscricao = inserted[0];
-            break;
-          } catch (err) {
-            const code = (err as { code?: string })?.code;
-            const constraint = (err as { constraint?: string })?.constraint;
-            if (
-              code === "23505" &&
-              constraint === "uq_evento_inscricoes_evento_numero"
-            ) {
-              ultimoErro = err;
-              this.logger.warn(
-                `Colisão de número de inscrição (tentativa ${tentativa}); gerando outro.`,
-              );
-              continue;
-            }
-            if (
-              code === "23505" &&
-              constraint === "uq_evento_inscricoes_evento_cpf"
-            ) {
-              throw new ConflictException(
-                "Já existe uma inscrição para este CPF neste evento.",
+            const novaInscricao = inserted[0];
+            if (!novaInscricao) {
+              throw new ServiceUnavailableException(
+                "Falha ao criar inscrição",
               );
             }
-            throw err;
-          }
-        }
 
-        if (!inscricao) {
-          this.logger.error("Esgotadas as tentativas de gerar número único", {
-            ultimoErro,
-          });
-          throw new ServiceUnavailableException(
-            "Falha ao gerar número de inscrição único",
+            const novosFilhos =
+              dto.filhos.length > 0
+                ? await tx
+                    .insert(eventoInscricaoFilhos)
+                    .values(
+                      dto.filhos.map((f) => ({
+                        inscricaoId: novaInscricao.id,
+                        nomeFilho: f.nome,
+                        turmaFilho: f.turma,
+                      })),
+                    )
+                    .returning()
+                : [];
+
+            return { inscricao: novaInscricao, filhosInseridos: novosFilhos };
+          },
+        );
+        inscricao = resultado.inscricao;
+        filhosInseridos = resultado.filhosInseridos;
+        break;
+      } catch (err) {
+        const code = (err as { code?: string })?.code;
+        const constraint = (err as { constraint?: string })?.constraint;
+        if (
+          code === "23505" &&
+          constraint === "uq_evento_inscricoes_evento_numero"
+        ) {
+          ultimoErro = err;
+          this.logger.warn(
+            `Colisão de número de inscrição (tentativa ${tentativa}); gerando outro.`,
+          );
+          continue;
+        }
+        if (
+          code === "23505" &&
+          constraint === "uq_evento_inscricoes_evento_cpf"
+        ) {
+          throw new ConflictException(
+            "Já existe uma inscrição para este CPF neste evento.",
           );
         }
+        throw err;
+      }
+    }
 
-        const filhosInseridos =
-          dto.filhos.length > 0
-            ? await tx
-                .insert(eventoInscricaoFilhos)
-                .values(
-                  dto.filhos.map((f) => ({
-                    inscricaoId: inscricao!.id,
-                    nomeFilho: f.nome,
-                    turmaFilho: f.turma,
-                  })),
-                )
-                .returning()
-            : [];
-
-        return { inscricao, filhosInseridos };
-      },
-    );
+    if (!inscricao) {
+      this.logger.error("Esgotadas as tentativas de gerar número único", {
+        ultimoErro,
+      });
+      throw new ServiceUnavailableException(
+        "Falha ao gerar número de inscrição único",
+      );
+    }
 
     this.logger.log(
       `Nova inscrição: evento=${eventoSlug} numero=${inscricao.numeroInscricao} cpf=${dto.cpf} filhos=${dto.filhos.length}`,

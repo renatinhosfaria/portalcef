@@ -222,6 +222,34 @@ describe("EventoInscricoesService", () => {
       expect(db.transaction).toHaveBeenCalledTimes(1);
     });
 
+    it("reinicia a transação quando há colisão de número", async () => {
+      jest
+        .spyOn(Date, "now")
+        .mockReturnValue(new Date("2026-05-15T12:00:00.000Z").getTime());
+      db.selectResults.push([]);
+      db.insertErrors.push({
+        code: "23505",
+        constraint: "uq_evento_inscricoes_evento_numero",
+      });
+      db.insertResults.push([inscricaoBase]);
+
+      const result = await service.criar(
+        "mae-por-inteiro",
+        {
+          nome: "Maria Silva",
+          cpf: "123.456.789-00",
+          dataNascimento: "1990-01-15",
+          email: "maria@exemplo.com",
+          telefone: "(34) 99999-9999",
+          filhos: [],
+        },
+        {},
+      );
+
+      expect(result.numeroInscricao).toBe("123-456");
+      expect(db.transaction).toHaveBeenCalledTimes(2);
+    });
+
     it("retorna status fechado para evento encerrado", () => {
       jest.spyOn(Date, "now").mockReturnValue(new Date("2026-10-05T12:00:00Z").getTime());
       const status = service.obterStatus("mae-por-inteiro");
