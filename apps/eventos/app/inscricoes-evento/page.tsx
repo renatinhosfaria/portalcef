@@ -28,7 +28,6 @@ import {
 } from "@essencia/ui/components/table";
 import { toast } from "@essencia/ui/components/toaster";
 import {
-  Calendar,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -646,15 +645,6 @@ export default function InscricoesEventoPage() {
                 {resumoSorteios.totalPresentes}
               </p>
               <p className="text-sm text-slate-500">Presentes confirmadas</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-6 flex items-center gap-4">
-            <Calendar className="w-8 h-8 text-amber-500" />
-            <div>
-              <p className="text-2xl font-semibold text-slate-900">100</p>
-              <p className="text-sm text-slate-500">Vagas disponíveis</p>
             </div>
           </CardContent>
         </Card>

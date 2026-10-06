@@ -129,4 +129,12 @@ describe("módulo eventos", () => {
     expect(landing).toContain("9h30");
     expect(eventosPage).toContain("9h30–12h30");
   });
+
+  it("não exibe capacidade fixa que pode divergir do evento", () => {
+    const eventosPage = lerArquivoRepositorio(
+      "apps/eventos/app/inscricoes-evento/page.tsx",
+    );
+
+    expect(eventosPage).not.toContain("Vagas disponíveis");
+  });
 });
