@@ -13,12 +13,12 @@ O **CEF Shop** é um sistema de loja online para venda de uniformes escolares e 
 ### Características Principais
 
 - **Catálogo Público**: Produtos organizados por categoria, tamanho e disponibilidade
-- **Pedidos com Voucher**: Sistema de voucher presencial (sem pagamento online)
+- **Pedidos com Voucher e Checkout Online**: pagamento presencial ou Checkout hospedado via Stripe
 - **Gestão de Estoque**: Controle de estoque por unidade + variante (tamanho)
 - **Multi-Tenant**: Isolamento de produtos, estoque e pedidos por escola/unidade
 - **Lista de Interesse**: Registro de interesse em produtos sem estoque
 - **Administração**: Dashboard completo para gerentes administrarem produtos, estoque e pedidos
-- **Integração Stripe**: Preparado para futura implementação de pagamento online
+- **Integração Stripe**: Checkout online com reserva temporária e confirmação por webhook
 
 ---
 
@@ -624,9 +624,7 @@ Response:
 
 ### Implementação Futura
 
-- [ ] Integração completa com Stripe (pagamento online)
 - [ ] Notificações automáticas (SMS/Email) para vouchers
-- [ ] Cron job para expiração automática de vouchers
 - [ ] Sistema de cupons/descontos
 - [ ] Relatórios avançados (Excel/PDF)
 - [ ] App mobile para cliente

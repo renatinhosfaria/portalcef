@@ -44,6 +44,16 @@ describe('Configurações da loja-admin', () => {
         } as Response);
     });
 
+    it('informa que o parcelamento configurável ainda não está disponível no checkout', async () => {
+        render(<ConfiguracoesPage />);
+
+        await waitFor(() => {
+            expect(screen.getByText('Configurações')).toBeTruthy();
+        });
+
+        expect(screen.getByText(/parcelamento configurável ainda não está disponível/i)).toBeTruthy();
+    });
+
     it('permite editar configurações para auxiliar_administrativo como gerente_unidade', async () => {
         render(<ConfiguracoesPage />);
 
@@ -56,7 +66,7 @@ describe('Configurações da loja-admin', () => {
         const instructionsField = screen.getByDisplayValue('Retirada na secretaria.') as HTMLTextAreaElement;
 
         expect(installmentSelect.value).toBe('3');
-        expect(installmentSelect.disabled).toBe(false);
+        expect(installmentSelect.disabled).toBe(true);
         expect(instructionsField.disabled).toBe(false);
     });
 

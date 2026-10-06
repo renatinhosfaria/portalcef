@@ -50,6 +50,7 @@ export interface ShopProduct {
   basePrice: number; // em centavos
   category: ProductCategory;
   isActive: boolean;
+  isPreSale: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
