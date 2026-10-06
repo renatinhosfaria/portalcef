@@ -11,9 +11,13 @@ vi.mock("@essencia/shared/providers/tenant", () => ({
   useTenant: () => ({ unitId: "8d7e7f1f-4f2c-4f05-9ed3-c6db6c6e1a02" }),
 }));
 
-vi.mock("../lib/home-api", () => ({
-  getTodayCalendarEvents: vi.fn(),
-}));
+vi.mock("../lib/home-api", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../lib/home-api")>();
+  return {
+    ...actual,
+    getTodayCalendarEvents: vi.fn(),
+  };
+});
 
 const getTodayCalendarEventsMock = vi.mocked(getTodayCalendarEvents);
 
