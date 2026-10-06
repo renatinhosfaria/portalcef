@@ -1,6 +1,6 @@
 "use client";
 
-import { formatarDataDiaSemana, formatarData } from "@essencia/shared/formatar-data";
+import { formatarDataDiaSemana } from "@essencia/shared/formatar-data";
 import { useTenant } from "@essencia/shared/providers/tenant";
 import {
   Card,
@@ -10,7 +10,10 @@ import {
 import { Calendar as CalendarIcon, Clock } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
-import { getTodayCalendarEvents } from "../lib/home-api";
+import {
+  formatarDataCivil,
+  getTodayCalendarEvents,
+} from "../lib/home-api";
 
 interface HomeCalendarEvent {
   id: string;
@@ -97,7 +100,7 @@ export function CalendarWidget({ titleId = "agenda-titulo" }: CalendarWidgetProp
                 <div>
                   <p className="text-sm font-bold leading-tight text-slate-700">{event.title}</p>
                   <p className="text-xs text-slate-500">
-                    {formatarData(event.startDate)}
+                    {formatarDataCivil(event.startDate)}
                   </p>
                 </div>
               </div>

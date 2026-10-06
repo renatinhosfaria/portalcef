@@ -13,6 +13,11 @@ export function getDashboardStats(): Promise<DashboardStats> {
   return clientFetch<DashboardStats>("/stats/dashboard");
 }
 
+function obterDataCivil(data: string | Date): string {
+  if (typeof data === "string") return data.slice(0, 10);
+  return data.toISOString().slice(0, 10);
+}
+
 export async function getTodayCalendarEvents(
   unitId?: string,
 ): Promise<CalendarEvent[]> {
@@ -30,8 +35,13 @@ export async function getTodayCalendarEvents(
   );
 
   return eventos.filter((evento) => {
-    const inicio = formatarDataISO(evento.startDate);
-    const fim = formatarDataISO(evento.endDate);
+    const inicio = obterDataCivil(evento.startDate);
+    const fim = obterDataCivil(evento.endDate);
     return inicio <= hoje && fim >= hoje;
   });
+}
+
+export function formatarDataCivil(data: string | Date): string {
+  const [ano, mes, dia] = obterDataCivil(data).split("-");
+  return `${dia}/${mes}/${ano}`;
 }
