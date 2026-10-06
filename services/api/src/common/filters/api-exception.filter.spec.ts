@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   InternalServerErrorException,
+  UnprocessableEntityException,
 } from "@nestjs/common";
 
 import { ApiExceptionFilter } from "./api-exception.filter";
@@ -90,6 +91,32 @@ describe("ApiExceptionFilter", () => {
       error: {
         code: "INTERNAL_ERROR",
         message: "Erro interno do servidor",
+      },
+    });
+  });
+
+  it("preserva a lista de turmas em erro de vínculo", () => {
+    const filter = new ApiExceptionFilter();
+    const { host, response } = criarHost();
+
+    filter.catch(
+      new UnprocessableEntityException({
+        code: "USUARIO_TEM_VINCULOS_ATIVOS",
+        message: "A professora possui turmas vinculadas",
+        turmas: [{ id: "turma-1", name: "1A", code: "1A" }],
+      }),
+      host as never,
+    );
+
+    expect(response.statusCode).toBe(422);
+    expect(response.send).toHaveBeenCalledWith({
+      success: false,
+      error: {
+        code: "USUARIO_TEM_VINCULOS_ATIVOS",
+        message: "A professora possui turmas vinculadas",
+        details: {
+          turmas: [{ id: "turma-1", name: "1A", code: "1A" }],
+        },
       },
     });
   });

@@ -31,6 +31,7 @@ export default async function Page({
   const incluirInativos = params.inativos === "true";
 
   let users: UserSummary[] = [];
+  let loadError: string | null = null;
 
   try {
     const url = incluirInativos ? "/api/users?inativos=true" : "/api/users";
@@ -50,11 +51,21 @@ export default async function Page({
       stageId: user.stageId ?? null,
       status: user.inativadoEm ? "inactive" : "active",
       inativadoEm: user.inativadoEm ?? null,
-      lastActive: user.inativadoEm ?? "N/A",
+      lastActive: user.inativadoEm ?? null,
     }));
   } catch (error) {
     console.error("Failed to fetch users:", error);
+    loadError =
+      error instanceof Error
+        ? error.message
+        : "Não foi possível carregar os usuários.";
   }
 
-  return <UsersPageContent users={users} incluirInativos={incluirInativos} />;
+  return (
+    <UsersPageContent
+      users={users}
+      incluirInativos={incluirInativos}
+      loadError={loadError}
+    />
+  );
 }

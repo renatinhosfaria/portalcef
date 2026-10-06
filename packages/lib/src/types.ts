@@ -12,5 +12,5 @@ export type UserSummary = {
   stageId: string | null;
   status: "active" | "inactive";
   inativadoEm: string | null; // ISO string from API; null when active
-  lastActive: string;
+  lastActive: string | null;
 };

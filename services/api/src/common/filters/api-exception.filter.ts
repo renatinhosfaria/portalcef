@@ -73,6 +73,8 @@ export class ApiExceptionFilter implements ExceptionFilter {
         message = normalizeMessage(payload.message, fallbackMessage);
         if (payload.details && typeof payload.details === "object") {
           details = payload.details as Record<string, unknown>;
+        } else if ("turmas" in payload && Array.isArray(payload.turmas)) {
+          details = { turmas: payload.turmas };
         }
         code = normalizeErrorCode(payload.code ?? payload.error, status);
       } else {

@@ -24,7 +24,6 @@ import {
   Power,
   PowerOff,
   Search,
-  SlidersHorizontal,
   Trash2,
   UserCog,
 } from "lucide-react";
@@ -124,6 +123,7 @@ export function UserList({
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input
               type="text"
+              aria-label="Buscar usuários por nome ou e-mail"
               placeholder="Buscar por nome ou email..."
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
@@ -139,9 +139,6 @@ export function UserList({
             />
             Mostrar inativos
           </label>
-          <Button variant="outline" size="icon" className="shrink-0 rounded-xl">
-            <SlidersHorizontal className="w-4 h-4 text-slate-600" />
-          </Button>
           {canEdit && (
             <Button
               className="bg-[#A3D154] hover:bg-[#8ec33e] text-slate-900 font-bold rounded-xl shadow-lg shadow-[#A3D154]/20 gap-2 shrink-0"
@@ -164,7 +161,7 @@ export function UserList({
               <TableHead>Escola</TableHead>
               <TableHead>Unidade</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead>Último Acesso</TableHead>
+              <TableHead>Inativado em</TableHead>
               <TableHead className="w-[50px]"></TableHead>
             </TableRow>
           </TableHeader>
@@ -172,7 +169,7 @@ export function UserList({
             {filteredUsers.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={6}
+                  colSpan={7}
                   className="h-24 text-center text-slate-500"
                 >
                   Nenhum usuário encontrado.
@@ -234,7 +231,12 @@ export function UserList({
                     </div>
                   </TableCell>
                   <TableCell className="text-sm text-slate-500">
-                    {user.lastActive}
+                    {user.lastActive
+                      ? new Intl.DateTimeFormat("pt-BR", {
+                          dateStyle: "short",
+                          timeStyle: "short",
+                        }).format(new Date(user.lastActive))
+                      : "—"}
                   </TableCell>
                   <TableCell>
                     <DropdownMenu>
@@ -242,6 +244,7 @@ export function UserList({
                         <Button
                           variant="ghost"
                           size="icon"
+                          aria-label={`Ações para ${user.name}`}
                           className="h-8 w-8 text-slate-400 hover:text-slate-600"
                         >
                           <MoreHorizontal className="w-4 h-4" />
@@ -252,7 +255,8 @@ export function UserList({
                         className="w-48 rounded-xl"
                       >
                         <DropdownMenuLabel>Ações</DropdownMenuLabel>
-                        {canEdit && canManageRole(currentUserRole, user.role) ? (
+                        {canEdit &&
+                        canManageRole(currentUserRole, user.role) ? (
                           <>
                             <DropdownMenuItem
                               className="gap-2 cursor-pointer"
