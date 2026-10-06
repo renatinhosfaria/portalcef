@@ -150,4 +150,20 @@ describe("StorageService", () => {
       }),
     );
   });
+
+  it("mantem remocao tolerante para consumidores existentes", async () => {
+    const service = new StorageService(configService);
+    awsMocks.s3Send.mockRejectedValue(new Error("minio indisponivel"));
+
+    await expect(service.deleteFile("arquivo.pdf")).resolves.toBeUndefined();
+  });
+
+  it("propaga falha no metodo estrito de remocao", async () => {
+    const service = new StorageService(configService);
+    awsMocks.s3Send.mockRejectedValue(new Error("minio indisponivel"));
+
+    await expect(service.deleteFileStrict("arquivo.pdf")).rejects.toThrow(
+      "minio indisponivel",
+    );
+  });
 });

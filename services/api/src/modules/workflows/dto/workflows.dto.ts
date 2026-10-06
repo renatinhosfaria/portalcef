@@ -11,6 +11,11 @@ const booleanQuerySchema = z.preprocess((value) => {
   return value;
 }, z.boolean());
 
+const paginacaoQuerySchema = {
+  pagina: z.coerce.number().int().min(1).optional(),
+  limite: z.coerce.number().int().min(1).max(100).optional(),
+};
+
 export const criarCategoriaSchema = z.object({
   nome: z.string().trim().min(2).max(120),
   ordem: z.coerce.number().int().min(0).optional(),
@@ -69,6 +74,7 @@ export const atualizarModeloSchema = criarModeloSchema
 export type AtualizarModeloDto = z.infer<typeof atualizarModeloSchema>;
 
 export const listarModelosSchema = z.object({
+  ...paginacaoQuerySchema,
   status: z
     .enum(["RASCUNHO", "PUBLICADO", "INATIVO", "todos"])
     .default("PUBLICADO"),
@@ -84,6 +90,7 @@ export const iniciarExecucaoSchema = z.object({
 export type IniciarExecucaoDto = z.infer<typeof iniciarExecucaoSchema>;
 
 export const listarExecucoesSchema = z.object({
+  ...paginacaoQuerySchema,
   status: z
     .enum(["EM_ANDAMENTO", "CONCLUIDA", "CANCELADA", "todos"])
     .default("EM_ANDAMENTO"),

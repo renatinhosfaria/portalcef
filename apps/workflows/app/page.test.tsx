@@ -68,8 +68,18 @@ describe("WorkflowsPage", () => {
       userId: "user-1",
       isLoaded: true,
     });
-    mockListarModelos.mockResolvedValue([]);
-    mockListarExecucoes.mockResolvedValue([]);
+    mockListarModelos.mockResolvedValue({
+      itens: [],
+      pagina: 1,
+      limite: 20,
+      temMais: false,
+    });
+    mockListarExecucoes.mockResolvedValue({
+      itens: [],
+      pagina: 1,
+      limite: 20,
+      temMais: false,
+    });
     mockIniciarExecucao.mockResolvedValue({});
   });
 
@@ -86,10 +96,13 @@ describe("WorkflowsPage", () => {
     expect(screen.getByText("Concluídos")).toBeTruthy();
     expect(screen.getByText("Canceladas")).toBeTruthy();
     await waitFor(() =>
-      expect(mockListarModelos).toHaveBeenCalledWith("status=PUBLICADO"),
+      expect(mockListarModelos).toHaveBeenCalledWith({
+        status: "PUBLICADO",
+        pagina: 1,
+        limite: 20,
+      }),
     );
-    expect(mockListarExecucoes).toHaveBeenCalledTimes(1);
-    expect(mockListarExecucoes).toHaveBeenCalledWith("status=todos");
+    expect(mockListarExecucoes).not.toHaveBeenCalled();
   });
 
   it("mostra botao de criar modelo apenas para gestao", async () => {
@@ -101,7 +114,11 @@ describe("WorkflowsPage", () => {
     render(<WorkflowsPage />);
     expect(screen.queryByText("Novo workflow")).toBeNull();
     await waitFor(() =>
-      expect(mockListarModelos).toHaveBeenCalledWith("status=PUBLICADO"),
+      expect(mockListarModelos).toHaveBeenCalledWith({
+        status: "PUBLICADO",
+        pagina: 1,
+        limite: 20,
+      }),
     );
 
     cleanup();
@@ -121,20 +138,34 @@ describe("WorkflowsPage", () => {
       screen.getByRole("link", { name: "Gerenciar modelos" }),
     ).toHaveAttribute("href", "/modelos");
     await waitFor(() =>
-      expect(mockListarModelos).toHaveBeenCalledWith("status=PUBLICADO"),
+      expect(mockListarModelos).toHaveBeenCalledWith({
+        status: "PUBLICADO",
+        pagina: 1,
+        limite: 20,
+      }),
     );
   });
 
   it("mantém execuções canceladas acessíveis", async () => {
     const user = userEvent.setup();
-    mockListarExecucoes.mockResolvedValue([execucaoCancelada]);
+    mockListarExecucoes.mockResolvedValue({
+      itens: [execucaoCancelada],
+      pagina: 1,
+      limite: 20,
+      temMais: false,
+    });
 
     render(<WorkflowsPage />);
 
     await user.click(await screen.findByText("Canceladas"));
+    await waitFor(() =>
+      expect(mockListarExecucoes).toHaveBeenCalledWith({
+        status: "CANCELADA",
+        pagina: 1,
+        limite: 20,
+      }),
+    );
 
-    expect(
-      screen.getByText("Execução cancelada visível"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Execução cancelada visível")).toBeInTheDocument();
   });
 });

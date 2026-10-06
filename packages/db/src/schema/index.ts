@@ -25,3 +25,4 @@ export * from "./semestre-relatorio.js";
 export * from "./relatorio.js";
 export * from "./relatorio-historico.js";
 export * from "./workflows.js";
+export * from "./workflow-limpeza.js";

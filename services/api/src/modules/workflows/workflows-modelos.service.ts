@@ -495,15 +495,19 @@ export class WorkflowsModelosService {
     executor: Pick<Database, "query">,
     session: WorkflowUserContext & { schoolId: string; unitId: string },
     modeloId: string,
+    apenasTeste = false,
   ) {
+    const filtros = [
+      eq(workflowExecucoes.modeloId, modeloId),
+      eq(workflowExecucoes.schoolId, session.schoolId),
+      eq(workflowExecucoes.unitId, session.unitId),
+      eq(workflowExecucoes.status, "EM_ANDAMENTO"),
+    ];
+    if (apenasTeste) filtros.push(eq(workflowExecucoes.teste, true));
+
     return (await executor.query.workflowExecucoes.findMany({
       columns: { id: true },
-      where: and(
-        eq(workflowExecucoes.modeloId, modeloId),
-        eq(workflowExecucoes.schoolId, session.schoolId),
-        eq(workflowExecucoes.unitId, session.unitId),
-        eq(workflowExecucoes.status, "EM_ANDAMENTO"),
-      ),
+      where: and(...filtros),
     })) as Array<{ id: string }>;
   }
 
@@ -582,6 +586,9 @@ export class WorkflowsModelosService {
   async listar(session: WorkflowUserContext, dto: ListarModelosDto) {
     this.validarTenant(session);
 
+    const pagina = dto.pagina ?? 1;
+    const limite = dto.limite ?? 20;
+
     const status = this.ehGestao(session) ? dto.status : "PUBLICADO";
     const filtros = [
       eq(workflowModelos.schoolId, session.schoolId),
@@ -598,11 +605,20 @@ export class WorkflowsModelosService {
       filtros.push(ilike(workflowModelos.nome, `%${dto.busca}%`));
     }
 
-    return this.database.db.query.workflowModelos.findMany({
+    const modelos = await this.database.db.query.workflowModelos.findMany({
       where: and(...filtros),
       with: this.relacoesModeloResumo(),
       orderBy: [asc(workflowModelos.nome)],
+      limit: limite + 1,
+      offset: (pagina - 1) * limite,
     });
+
+    return {
+      itens: modelos.slice(0, limite),
+      pagina,
+      limite,
+      temMais: modelos.length > limite,
+    };
   }
 
   async criar(session: WorkflowUserContext, dto: CriarModeloDto) {
@@ -673,11 +689,16 @@ export class WorkflowsModelosService {
     const etapasAlteradas = this.identificarEtapasAlteradas(modelo, dto.fases);
     await this.database.db.transaction(async (tx: DbTransaction) => {
       const alteracaoEstruturalDeRascunho =
-        modelo.status !== "PUBLICADO" && dto.fases !== undefined;
+        modelo.status === "RASCUNHO" && dto.fases !== undefined;
       const precisaConsultarExecucoes =
         etapasAlteradas.length > 0 || alteracaoEstruturalDeRascunho;
       const execucoesImpactadas = precisaConsultarExecucoes
-        ? await this.buscarExecucoesAbertasImpactadas(tx, session, modeloId)
+        ? await this.buscarExecucoesAbertasImpactadas(
+            tx,
+            session,
+            modeloId,
+            alteracaoEstruturalDeRascunho,
+          )
         : [];
       const execucaoIds = execucoesImpactadas.map((execucao) => execucao.id);
 

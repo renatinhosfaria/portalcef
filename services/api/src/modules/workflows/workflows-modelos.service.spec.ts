@@ -736,6 +736,30 @@ describe("WorkflowsModelosService", () => {
     expect(opcoes.with).toEqual({ categoria: true });
   });
 
+  it("pagina a listagem de modelos e informa se existem mais itens", async () => {
+    db.query.workflowModelos.findMany.mockResolvedValue([
+      { id: "modelo-1" },
+      { id: "modelo-2" },
+      { id: "modelo-3" },
+    ]);
+
+    const resultado = await service.listar(gestao, {
+      status: "todos",
+      pagina: 2,
+      limite: 2,
+    });
+
+    expect(db.query.workflowModelos.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ limit: 3, offset: 2 }),
+    );
+    expect(resultado).toEqual({
+      itens: [{ id: "modelo-1" }, { id: "modelo-2" }],
+      pagina: 2,
+      limite: 2,
+      temMais: true,
+    });
+  });
+
   it("usuario comum nao busca modelo rascunho ou inativo por id", async () => {
     db.query.workflowModelos.findFirst.mockResolvedValue(null);
 

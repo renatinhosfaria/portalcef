@@ -26,7 +26,6 @@ import type {
 } from "@essencia/db";
 
 import { DatabaseService } from "../../common/database/database.service";
-import { StorageService } from "../../common/storage/storage.service";
 import type {
   AtualizarEtapaDto,
   EditarTituloExecucaoDto,
@@ -36,6 +35,7 @@ import type {
 } from "./dto/workflows.dto";
 import { WORKFLOW_GESTAO_ROLES } from "./workflows.constants";
 import { WorkflowsHistoricoService } from "./workflows-historico.service";
+import { WorkflowsLimpezaService } from "./workflows-limpeza.service";
 import type { WorkflowUserContext } from "./workflows.types";
 
 type DbTransaction = Parameters<Database["transaction"]>[0] extends (
@@ -113,7 +113,7 @@ export class WorkflowsExecucoesService {
   constructor(
     private readonly database: DatabaseService,
     private readonly historicoService: WorkflowsHistoricoService,
-    private readonly storageService: StorageService,
+    private readonly limpezaService: WorkflowsLimpezaService,
   ) {}
 
   private validarTenant(
@@ -538,6 +538,9 @@ export class WorkflowsExecucoesService {
   async listar(session: WorkflowUserContext, dto: ListarExecucoesDto) {
     this.validarTenant(session);
 
+    const pagina = dto.pagina ?? 1;
+    const limite = dto.limite ?? 20;
+
     const filtros = [
       eq(workflowExecucoes.schoolId, session.schoolId),
       eq(workflowExecucoes.unitId, session.unitId),
@@ -566,9 +569,18 @@ export class WorkflowsExecucoesService {
         desc(workflowExecucoes.updatedAt),
         desc(workflowExecucoes.createdAt),
       ],
+      limit: limite + 1,
+      offset: (pagina - 1) * limite,
     })) as ExecucaoComRelacoes[];
 
-    return execucoes.map((execucao) => this.normalizarExecucaoResumo(execucao));
+    return {
+      itens: execucoes
+        .slice(0, limite)
+        .map((execucao) => this.normalizarExecucaoResumo(execucao)),
+      pagina,
+      limite,
+      temMais: execucoes.length > limite,
+    };
   }
 
   async buscarPorId(session: WorkflowUserContext, execucaoId: string) {
@@ -954,16 +966,12 @@ export class WorkflowsExecucoesService {
             eq(workflowExecucoes.unitId, session.unitId),
           ),
         );
-    });
 
-    await Promise.all(
-      (execucao.anexos ?? [])
-        .filter(
-          (anexo): anexo is AnexoExecucao & { storageKey: string } =>
-            typeof anexo.storageKey === "string" && anexo.storageKey.length > 0,
-        )
-        .map((anexo) => this.storageService.deleteFile(anexo.storageKey)),
-    );
+      const storageKeys = (execucao.anexos ?? [])
+        .map((anexo) => anexo.storageKey)
+        .filter((storageKey): storageKey is string => Boolean(storageKey));
+      await this.limpezaService.enfileirar(storageKeys, tx);
+    });
 
     return undefined;
   }
