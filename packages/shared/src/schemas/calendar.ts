@@ -75,6 +75,25 @@ export const queryCalendarEventsSchema = z.object({
   eventType: calendarEventTypeSchema.optional(),
 });
 
+export const calendarStatsQuerySchema = z.object({
+  unitId: z.string().uuid().optional(),
+  year: z.coerce.number().int().min(2020).max(2100).optional(),
+});
+
+export const calendarStatsSchema = z.object({
+  year: z.number().int(),
+  totalSchoolDays: z.number().int().nonnegative(),
+  totalEvents: z.number().int().nonnegative(),
+  monthlyStats: z.array(
+    z.object({
+      month: z.number().int().min(1).max(12),
+      schoolDays: z.number().int().nonnegative(),
+      totalDays: z.number().int().min(28).max(31),
+      events: z.number().int().nonnegative(),
+    }),
+  ),
+});
+
 // Tipos exportados
 export type CalendarEventType = z.infer<typeof calendarEventTypeSchema>;
 export type CalendarEvent = z.infer<typeof calendarEventSchema>;
@@ -87,3 +106,4 @@ export type UpdateCalendarEventInput = z.infer<
 export type QueryCalendarEventsInput = z.infer<
   typeof queryCalendarEventsSchema
 >;
+export type CalendarStats = z.infer<typeof calendarStatsSchema>;

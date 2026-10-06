@@ -27,10 +27,20 @@ export function CalendarHeader({
   return (
     <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex items-center gap-2">
-        <Button variant="outline" size="icon" onClick={onPrevMonth}>
+        <Button
+          variant="outline"
+          size="icon"
+          aria-label="Mês anterior"
+          onClick={onPrevMonth}
+        >
           <ChevronLeft className="h-4 w-4" />
         </Button>
-        <Button variant="outline" size="icon" onClick={onNextMonth}>
+        <Button
+          variant="outline"
+          size="icon"
+          aria-label="Próximo mês"
+          onClick={onNextMonth}
+        >
           <ChevronRight className="h-4 w-4" />
         </Button>
         <h2 className="text-xl font-semibold capitalize ml-2">{monthYear}</h2>
