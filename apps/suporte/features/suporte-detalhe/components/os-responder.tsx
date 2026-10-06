@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useCallback, useRef, useState } from "react";
+import { LIMITE_TOTAL_ANEXOS_SUPORTE } from "@essencia/shared/types";
 import { Button } from "@essencia/ui/components/button";
 import { Textarea } from "@essencia/ui/components/textarea";
 import { toast } from "@essencia/ui/toaster";
@@ -8,6 +9,7 @@ import { Send, Paperclip, Mic, X, Loader2 } from "lucide-react";
 import { useEnviarMensagem } from "@/hooks/use-enviar-mensagem";
 import { UploadArquivo } from "@/features/midia/components/upload-arquivo";
 import { GravadorAudio } from "@/features/midia/components/gravador-audio";
+import { adicionarArquivosComLimite } from "@/lib/anexos";
 
 // ============================================
 // Props
@@ -26,6 +28,7 @@ export function OsResponder({
 }: OsResponderProps) {
   const [conteudo, setConteudo] = useState("");
   const [arquivos, setArquivos] = useState<File[]>([]);
+  const arquivosRef = useRef<File[]>([]);
   const [mostrarUpload, setMostrarUpload] = useState(false);
   const [mostrarGravador, setMostrarGravador] = useState(false);
 
@@ -34,22 +37,39 @@ export function OsResponder({
   // ============================================
   // Handlers de Arquivos
   // ============================================
-  const handleFilesSelected = useCallback((files: File[]) => {
-    setArquivos((prev) => [...prev, ...files]);
+  const handleFilesSelected = useCallback((files: File[]): boolean => {
+    const resultado = adicionarArquivosComLimite(arquivosRef.current, files);
+    if (resultado.arquivos.length === 0) {
+      toast.error(
+        `O limite de ${LIMITE_TOTAL_ANEXOS_SUPORTE} anexos foi atingido.`,
+      );
+      return false;
+    }
+
+    arquivosRef.current = [...arquivosRef.current, ...resultado.arquivos];
+    setArquivos(arquivosRef.current);
+    if (resultado.quantidadeIgnorada > 0) {
+      toast.error(
+        `Apenas ${resultado.arquivos.length} anexo(s) foram adicionados. O limite total é ${LIMITE_TOTAL_ANEXOS_SUPORTE}.`,
+      );
+    }
+    return true;
   }, []);
 
   const handleRemoveFile = useCallback((index: number) => {
-    setArquivos((prev) => prev.filter((_, i) => i !== index));
+    arquivosRef.current = arquivosRef.current.filter((_, i) => i !== index);
+    setArquivos(arquivosRef.current);
   }, []);
 
   const handleRecordingComplete = useCallback(
     (blob: Blob, filename: string) => {
       const file = new File([blob], filename, { type: "audio/webm" });
-      setArquivos((prev) => [...prev, file]);
-      setMostrarGravador(false);
-      toast.success("Gravacao adicionada aos anexos.");
+      if (handleFilesSelected([file])) {
+        setMostrarGravador(false);
+        toast.success("Gravacao adicionada aos anexos.");
+      }
     },
-    [],
+    [handleFilesSelected],
   );
 
   // ============================================
@@ -71,6 +91,7 @@ export function OsResponder({
 
       // Limpar formulario
       setConteudo("");
+      arquivosRef.current = [];
       setArquivos([]);
       setMostrarUpload(false);
       setMostrarGravador(false);
@@ -191,9 +212,7 @@ export function OsResponder({
       {!mostrarUpload && arquivos.length > 0 && (
         <div className="flex items-center gap-2 rounded-md bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
           <Paperclip className="h-4 w-4 flex-shrink-0" />
-          <span>
-            {arquivos.length} arquivo(s) anexado(s)
-          </span>
+          <span>{arquivos.length} arquivo(s) anexado(s)</span>
           <Button
             type="button"
             variant="ghost"
