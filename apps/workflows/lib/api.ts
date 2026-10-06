@@ -15,6 +15,39 @@ type WorkflowModeloMutacaoResultado = {
   status: WorkflowModeloStatus;
 };
 
+export type ResultadoPaginado<T> = {
+  itens: T[];
+  pagina: number;
+  limite: number;
+  temMais: boolean;
+};
+
+export type ListagemParametros = {
+  status?: string;
+  pagina?: number;
+  limite?: number;
+  busca?: string;
+  categoriaId?: string;
+};
+
+function montarParametros(
+  parametros: ListagemParametros | string | undefined,
+  padrao: ListagemParametros,
+) {
+  const valores =
+    typeof parametros === "string"
+      ? {
+          ...padrao,
+          ...Object.fromEntries(new URLSearchParams(parametros).entries()),
+        }
+      : { ...padrao, ...parametros };
+  const query = new URLSearchParams();
+  for (const [chave, valor] of Object.entries(valores)) {
+    if (valor !== undefined && valor !== "") query.set(chave, String(valor));
+  }
+  return query.toString();
+}
+
 type WorkflowModeloDuplicadoResultado = {
   id: string;
 };
@@ -28,20 +61,24 @@ export const criarCategoria = (body: { nome: string }) =>
 export const atualizarCategoria = (
   categoriaId: string,
   body: { nome?: string; ativo?: boolean; ordem?: number },
-) =>
-  api.patch<WorkflowCategoria>(
-    `/workflows/categorias/${categoriaId}`,
-    body,
-  );
+) => api.patch<WorkflowCategoria>(`/workflows/categorias/${categoriaId}`, body);
 
-export const listarModelos = (params = "status=PUBLICADO") =>
-  api.get<WorkflowModeloResumo[]>(`/workflows/modelos?${params}`);
+export const listarModelos = (
+  params: ListagemParametros | string = {
+    status: "PUBLICADO",
+    pagina: 1,
+    limite: 20,
+  },
+) =>
+  api.get<ResultadoPaginado<WorkflowModeloResumo>>(
+    `/workflows/modelos?${montarParametros(params, { status: "PUBLICADO", pagina: 1, limite: 20 })}`,
+  );
 
 export const buscarModelo = (modeloId: string) =>
   api.get<WorkflowModeloDetalhe>(`/workflows/modelos/${modeloId}`);
 
 export const criarModelo = (body: unknown) =>
-  api.post<WorkflowModeloDetalhe>("/workflows/modelos", body);
+  api.post<WorkflowModeloMutacaoResultado>("/workflows/modelos", body);
 
 export const atualizarModelo = (modeloId: string, body: unknown) =>
   api.patch<WorkflowModeloDetalhe>(`/workflows/modelos/${modeloId}`, body);
@@ -75,8 +112,16 @@ export const iniciarExecucao = (
     body,
   );
 
-export const listarExecucoes = (params = "status=EM_ANDAMENTO") =>
-  api.get<WorkflowExecucaoResumo[]>(`/workflows/execucoes?${params}`);
+export const listarExecucoes = (
+  params: ListagemParametros | string = {
+    status: "EM_ANDAMENTO",
+    pagina: 1,
+    limite: 20,
+  },
+) =>
+  api.get<ResultadoPaginado<WorkflowExecucaoResumo>>(
+    `/workflows/execucoes?${montarParametros(params, { status: "EM_ANDAMENTO", pagina: 1, limite: 20 })}`,
+  );
 
 export const buscarExecucao = (execucaoId: string) =>
   api.get<WorkflowExecucaoDetalhe>(`/workflows/execucoes/${execucaoId}`);
@@ -117,10 +162,7 @@ export const reabrirExecucao = (execucaoId: string, motivo: string) =>
     { motivo },
   );
 
-export const enviarAnexoExecucao = (
-  execucaoId: string,
-  formData: FormData,
-) =>
+export const enviarAnexoExecucao = (execucaoId: string, formData: FormData) =>
   api.post<WorkflowAnexo>(
     `/workflows/execucoes/${execucaoId}/anexos`,
     formData,

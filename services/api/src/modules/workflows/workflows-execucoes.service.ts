@@ -26,7 +26,6 @@ import type {
 } from "@essencia/db";
 
 import { DatabaseService } from "../../common/database/database.service";
-import { StorageService } from "../../common/storage/storage.service";
 import type {
   AtualizarEtapaDto,
   EditarTituloExecucaoDto,
@@ -36,6 +35,7 @@ import type {
 } from "./dto/workflows.dto";
 import { WORKFLOW_GESTAO_ROLES } from "./workflows.constants";
 import { WorkflowsHistoricoService } from "./workflows-historico.service";
+import { WorkflowsLimpezaService } from "./workflows-limpeza.service";
 import type { WorkflowUserContext } from "./workflows.types";
 
 type DbTransaction = Parameters<Database["transaction"]>[0] extends (
@@ -57,6 +57,15 @@ type FaseDoModelo = {
 
 type ModeloComEtapas = {
   id: string;
+  schoolId?: string;
+  unitId?: string;
+  categoriaId?: string;
+  nome?: string;
+  descricaoCurta?: string;
+  criadoPor?: string;
+  createdAt?: Date | string;
+  updatedAt?: Date | string;
+  categoria?: unknown;
   status: WorkflowModeloStatus;
   fases?: FaseDoModelo[];
 };
@@ -72,6 +81,8 @@ type UsuarioRelacionado = {
   nome?: string | null;
   email?: string | null;
 };
+
+type MetadataHistorico = Record<string, unknown> | null;
 
 type AnexoExecucao = {
   storageKey?: string;
@@ -92,6 +103,7 @@ type ExecucaoComRelacoes = {
   progresso?: ProgressoEtapa[];
   anexos?: AnexoExecucao[];
   historico?: Array<{
+    metadata?: string | null;
     autor?: UsuarioRelacionado | null;
   }>;
 };
@@ -101,7 +113,7 @@ export class WorkflowsExecucoesService {
   constructor(
     private readonly database: DatabaseService,
     private readonly historicoService: WorkflowsHistoricoService,
-    private readonly storageService: StorageService,
+    private readonly limpezaService: WorkflowsLimpezaService,
   ) {}
 
   private validarTenant(
@@ -202,7 +214,17 @@ export class WorkflowsExecucoesService {
   private relacoesExecucaoResumo() {
     return {
       modelo: {
-        with: this.relacoesModelo(),
+        with: {
+          categoria: true,
+          fases: {
+            orderBy: asc(workflowFases.ordem),
+            with: {
+              etapas: {
+                orderBy: asc(workflowEtapas.ordem),
+              },
+            },
+          },
+        },
       },
       progresso: true,
     };
@@ -261,6 +283,19 @@ export class WorkflowsExecucoesService {
     return usuario?.name ?? usuario?.nome ?? usuario?.email ?? null;
   }
 
+  private normalizarMetadata(metadata?: string | null): MetadataHistorico {
+    if (!metadata) return null;
+
+    try {
+      const valor = JSON.parse(metadata) as unknown;
+      return valor && typeof valor === "object" && !Array.isArray(valor)
+        ? (valor as Record<string, unknown>)
+        : null;
+    } catch {
+      return null;
+    }
+  }
+
   private normalizarExecucao<T extends ExecucaoComRelacoes>(execucao: T) {
     const modelo = execucao.modelo;
     const progresso = execucao.progresso ?? [];
@@ -277,10 +312,11 @@ export class WorkflowsExecucoesService {
         };
       }),
       historico: (execucao.historico ?? []).map((item) => {
-        const { autor, ...dadosHistorico } = item;
+        const { autor, metadata, ...dadosHistorico } = item;
 
         return {
           ...dadosHistorico,
+          metadata: this.normalizarMetadata(metadata),
           autorNome: this.nomeUsuario(autor),
         };
       }),
@@ -288,6 +324,41 @@ export class WorkflowsExecucoesService {
       progressoPercentual: modelo
         ? this.calcularProgressoPercentual(modelo, progresso)
         : 0,
+    };
+  }
+
+  private normalizarExecucaoResumo(execucao: ExecucaoComRelacoes) {
+    const normalizada = this.normalizarExecucao(execucao);
+    const modelo = normalizada.modelo;
+    const dados = Object.fromEntries(
+      Object.entries(normalizada).filter(
+        ([chave]) =>
+          chave !== "modelo" &&
+          chave !== "progresso" &&
+          chave !== "anexos" &&
+          chave !== "historico",
+      ),
+    );
+
+    if (!modelo) {
+      return { ...dados, modelo: null };
+    }
+
+    return {
+      ...dados,
+      modelo: {
+        id: modelo.id,
+        schoolId: modelo.schoolId,
+        unitId: modelo.unitId,
+        categoriaId: modelo.categoriaId,
+        nome: modelo.nome,
+        descricaoCurta: modelo.descricaoCurta,
+        status: modelo.status,
+        criadoPor: modelo.criadoPor,
+        createdAt: modelo.createdAt,
+        updatedAt: modelo.updatedAt,
+        categoria: modelo.categoria,
+      },
     };
   }
 
@@ -467,6 +538,9 @@ export class WorkflowsExecucoesService {
   async listar(session: WorkflowUserContext, dto: ListarExecucoesDto) {
     this.validarTenant(session);
 
+    const pagina = dto.pagina ?? 1;
+    const limite = dto.limite ?? 20;
+
     const filtros = [
       eq(workflowExecucoes.schoolId, session.schoolId),
       eq(workflowExecucoes.unitId, session.unitId),
@@ -495,9 +569,18 @@ export class WorkflowsExecucoesService {
         desc(workflowExecucoes.updatedAt),
         desc(workflowExecucoes.createdAt),
       ],
+      limit: limite + 1,
+      offset: (pagina - 1) * limite,
     })) as ExecucaoComRelacoes[];
 
-    return execucoes.map((execucao) => this.normalizarExecucao(execucao));
+    return {
+      itens: execucoes
+        .slice(0, limite)
+        .map((execucao) => this.normalizarExecucaoResumo(execucao)),
+      pagina,
+      limite,
+      temMais: execucoes.length > limite,
+    };
   }
 
   async buscarPorId(session: WorkflowUserContext, execucaoId: string) {
@@ -883,16 +966,12 @@ export class WorkflowsExecucoesService {
             eq(workflowExecucoes.unitId, session.unitId),
           ),
         );
-    });
 
-    await Promise.all(
-      (execucao.anexos ?? [])
-        .filter(
-          (anexo): anexo is AnexoExecucao & { storageKey: string } =>
-            typeof anexo.storageKey === "string" && anexo.storageKey.length > 0,
-        )
-        .map((anexo) => this.storageService.deleteFile(anexo.storageKey)),
-    );
+      const storageKeys = (execucao.anexos ?? [])
+        .map((anexo) => anexo.storageKey)
+        .filter((storageKey): storageKey is string => Boolean(storageKey));
+      await this.limpezaService.enfileirar(storageKeys, tx);
+    });
 
     return undefined;
   }

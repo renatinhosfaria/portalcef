@@ -7,8 +7,8 @@ import { and, eq, workflowAnexos } from "@essencia/db";
 import type { Database } from "@essencia/db";
 
 import { DatabaseService } from "../../common/database/database.service";
-import { StorageService } from "../../common/storage/storage.service";
 import { WorkflowsHistoricoService } from "./workflows-historico.service";
+import { WorkflowsLimpezaService } from "./workflows-limpeza.service";
 import type {
   ArquivoWorkflowSalvo,
   WorkflowUserContext,
@@ -24,8 +24,8 @@ type DbTransaction = Parameters<Database["transaction"]>[0] extends (
 export class WorkflowsAnexosService {
   constructor(
     private readonly database: DatabaseService,
-    private readonly storageService: StorageService,
     private readonly historicoService: WorkflowsHistoricoService,
+    private readonly limpezaService: WorkflowsLimpezaService,
   ) {}
 
   async registrarUpload(
@@ -102,8 +102,9 @@ export class WorkflowsAnexosService {
       );
 
       await tx.delete(workflowAnexos).where(filtro);
+      await this.limpezaService.enfileirar([anexo.storageKey], tx);
     });
 
-    await this.storageService.deleteFile(anexo.storageKey);
+    void this.limpezaService.processarPendentes().catch(() => undefined);
   }
 }

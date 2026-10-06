@@ -323,6 +323,13 @@
       "when": 1791220231661,
       "tag": "0045_unidades_codigo_por_escola",
       "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1791221000000,
+      "tag": "0046_workflow_limpeza",
+      "breakpoints": true
     }
   ]
 }

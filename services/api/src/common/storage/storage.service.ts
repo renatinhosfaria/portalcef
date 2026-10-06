@@ -307,15 +307,19 @@ export class StorageService {
     return this.s3Client.send(command);
   }
 
+  async deleteFileStrict(key: string): Promise<void> {
+    await this.s3Client.send(
+      new DeleteObjectCommand({
+        Bucket: this.bucketName,
+        Key: key,
+      }),
+    );
+    this.logger.log(`File deleted successfully: ${key}`);
+  }
+
   async deleteFile(key: string): Promise<void> {
     try {
-      await this.s3Client.send(
-        new DeleteObjectCommand({
-          Bucket: this.bucketName,
-          Key: key,
-        }),
-      );
-      this.logger.log(`File deleted successfully: ${key}`);
+      await this.deleteFileStrict(key);
     } catch (error) {
       const mensagem = error instanceof Error ? error.message : String(error);
       this.logger.warn(`Falha ao remover ${key} do MinIO: ${mensagem}`);

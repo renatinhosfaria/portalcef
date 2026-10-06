@@ -30,8 +30,7 @@ vi.mock("@/lib/api", () => ({
   listarModelos: (...args: unknown[]) => mocks.listarModelos(...args),
   listarCategorias: (...args: unknown[]) => mocks.listarCategorias(...args),
   criarCategoria: (...args: unknown[]) => mocks.criarCategoria(...args),
-  atualizarCategoria: (...args: unknown[]) =>
-    mocks.atualizarCategoria(...args),
+  atualizarCategoria: (...args: unknown[]) => mocks.atualizarCategoria(...args),
   iniciarExecucao: (...args: unknown[]) => mocks.iniciarExecucao(...args),
 }));
 
@@ -70,11 +69,22 @@ describe("ModelosPage", () => {
       role: "coordenadora_geral",
       isLoaded: true,
     });
-    mocks.listarModelos.mockResolvedValue([
+    const modelos = [
       criarModelo("RASCUNHO"),
       criarModelo("PUBLICADO"),
       criarModelo("INATIVO"),
-    ]);
+    ];
+    mocks.listarModelos.mockImplementation((params: { status?: string }) =>
+      Promise.resolve({
+        itens:
+          params.status === "todos"
+            ? modelos
+            : modelos.filter((modelo) => modelo.status === params.status),
+        pagina: 1,
+        limite: 20,
+        temMais: false,
+      }),
+    );
     mocks.listarCategorias.mockResolvedValue([categoria]);
     mocks.iniciarExecucao.mockResolvedValue({ id: "execucao-teste-1" });
   });
@@ -89,7 +99,13 @@ describe("ModelosPage", () => {
     render(<ModelosPage />);
 
     await waitFor(() =>
-      expect(mocks.listarModelos).toHaveBeenCalledWith("status=todos"),
+      expect(mocks.listarModelos).toHaveBeenCalledWith({
+        status: "todos",
+        pagina: 1,
+        limite: 20,
+        busca: undefined,
+        categoriaId: undefined,
+      }),
     );
     expect(await screen.findByText("Modelo RASCUNHO")).toBeInTheDocument();
     expect(screen.getByText("Modelo PUBLICADO")).toBeInTheDocument();
@@ -129,10 +145,7 @@ describe("ModelosPage", () => {
       screen.getByRole("heading", { name: "Iniciar teste" }),
     ).toBeInTheDocument();
 
-    await user.type(
-      screen.getByLabelText("Título"),
-      "Validação do rascunho",
-    );
+    await user.type(screen.getByLabelText("Título"), "Validação do rascunho");
     await user.click(screen.getByRole("button", { name: "Iniciar teste" }));
 
     await waitFor(() =>

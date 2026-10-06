@@ -3,9 +3,9 @@ import { Test, TestingModule } from "@nestjs/testing";
 import { and, eq, workflowAnexos } from "@essencia/db";
 
 import { DatabaseService } from "../../common/database/database.service";
-import { StorageService } from "../../common/storage/storage.service";
 import { WorkflowsAnexosService } from "./workflows-anexos.service";
 import { WorkflowsHistoricoService } from "./workflows-historico.service";
+import { WorkflowsLimpezaService } from "./workflows-limpeza.service";
 import type { WorkflowUserContext } from "./workflows.types";
 
 jest.mock("@essencia/db", () => ({
@@ -48,19 +48,19 @@ const usuarioBase: WorkflowUserContext = {
 describe("WorkflowsAnexosService", () => {
   let service: WorkflowsAnexosService;
   const historico = { registrar: jest.fn() };
-  const storage = { deleteFile: jest.fn() };
+  const limpeza = { enfileirar: jest.fn(), processarPendentes: jest.fn() };
 
   beforeEach(async () => {
-    db.transaction.mockImplementation(async (cb: (txParam: typeof tx) => unknown) =>
-      cb(tx),
+    db.transaction.mockImplementation(
+      async (cb: (txParam: typeof tx) => unknown) => cb(tx),
     );
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         WorkflowsAnexosService,
         { provide: DatabaseService, useValue: { db } },
-        { provide: StorageService, useValue: storage },
         { provide: WorkflowsHistoricoService, useValue: historico },
+        { provide: WorkflowsLimpezaService, useValue: limpeza },
       ],
     }).compile();
 
@@ -72,8 +72,13 @@ describe("WorkflowsAnexosService", () => {
     tx.insert.mockClear();
     tx.values.mockClear();
     tx.returning.mockReset();
-    tx.returning.mockResolvedValue([{ id: "anexo-1", nomeOriginal: "arquivo.pdf" }]);
+    tx.returning.mockResolvedValue([
+      { id: "anexo-1", nomeOriginal: "arquivo.pdf" },
+    ]);
     historico.registrar.mockReset();
+    limpeza.enfileirar.mockReset();
+    limpeza.processarPendentes.mockReset();
+    limpeza.processarPendentes.mockResolvedValue(1);
   });
 
   it("registra anexo e historico", async () => {
@@ -101,16 +106,19 @@ describe("WorkflowsAnexosService", () => {
       tamanhoBytes: 8,
       enviadoPor: "user-1",
     });
-    expect(historico.registrar).toHaveBeenCalledWith({
-      execucaoId: "exec-1",
-      tipo: "ANEXO_ENVIADO",
-      descricao: "Anexo enviado",
-      autorId: "user-1",
-      metadata: {
-        anexoId: "anexo-1",
-        nomeOriginal: "arquivo.pdf",
+    expect(historico.registrar).toHaveBeenCalledWith(
+      {
+        execucaoId: "exec-1",
+        tipo: "ANEXO_ENVIADO",
+        descricao: "Anexo enviado",
+        autorId: "user-1",
+        metadata: {
+          anexoId: "anexo-1",
+          nomeOriginal: "arquivo.pdf",
+        },
       },
-    }, tx);
+      tx,
+    );
   });
 
   it("mantem banco consistente quando o historico do upload falha", async () => {
@@ -148,17 +156,24 @@ describe("WorkflowsAnexosService", () => {
     expect(db.transaction).toHaveBeenCalled();
     expect(tx.delete).toHaveBeenCalledWith(workflowAnexos);
     expect(tx.where).toHaveBeenCalledWith("and-filtro");
-    expect(historico.registrar).toHaveBeenCalledWith({
-      execucaoId: "exec-1",
-      tipo: "ANEXO_REMOVIDO",
-      descricao: "Anexo removido",
-      autorId: "user-1",
-      metadata: {
-        anexoId: "anexo-1",
-        nomeOriginal: "arquivo.pdf",
+    expect(historico.registrar).toHaveBeenCalledWith(
+      {
+        execucaoId: "exec-1",
+        tipo: "ANEXO_REMOVIDO",
+        descricao: "Anexo removido",
+        autorId: "user-1",
+        metadata: {
+          anexoId: "anexo-1",
+          nomeOriginal: "arquivo.pdf",
+        },
       },
-    }, tx);
-    expect(storage.deleteFile).toHaveBeenCalledWith("workflows/arquivo.pdf");
+      tx,
+    );
+    expect(limpeza.enfileirar).toHaveBeenCalledWith(
+      ["workflows/arquivo.pdf"],
+      tx,
+    );
+    expect(limpeza.processarPendentes).toHaveBeenCalled();
   });
 
   it("nao remove storage nem registro quando historico falha", async () => {
@@ -174,7 +189,7 @@ describe("WorkflowsAnexosService", () => {
     ).rejects.toThrow("historico indisponivel");
 
     expect(tx.delete).not.toHaveBeenCalled();
-    expect(storage.deleteFile).not.toHaveBeenCalled();
+    expect(limpeza.processarPendentes).not.toHaveBeenCalled();
   });
 
   it("falha ao remover anexo inexistente", async () => {
@@ -184,7 +199,7 @@ describe("WorkflowsAnexosService", () => {
       service.remover(usuarioBase, "exec-1", "anexo-inexistente"),
     ).rejects.toBeInstanceOf(NotFoundException);
 
-    expect(storage.deleteFile).not.toHaveBeenCalled();
+    expect(limpeza.processarPendentes).not.toHaveBeenCalled();
     expect(db.delete).not.toHaveBeenCalled();
     expect(historico.registrar).not.toHaveBeenCalled();
   });

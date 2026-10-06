@@ -20,6 +20,9 @@ import { WorkflowsModelosService } from "./workflows-modelos.service";
 import type { WorkflowUserContext } from "./workflows.types";
 
 const tx = {
+  query: {
+    workflowExecucoes: { findMany: jest.fn() },
+  },
   insert: jest.fn(),
   values: jest.fn(),
   returning: jest.fn(),
@@ -249,11 +252,11 @@ describe("WorkflowsModelosService", () => {
     service = module.get(WorkflowsModelosService);
     jest.clearAllMocks();
     tx.returning.mockReset();
+    tx.query.workflowExecucoes.findMany.mockReset();
     db.returning.mockReset();
     db.query.workflowCategorias.findFirst.mockReset();
     db.query.workflowModelos.findFirst.mockReset();
     db.query.workflowModelos.findMany.mockReset();
-    db.query.workflowExecucoes.findMany.mockReset();
     historicoService.registrar.mockReset();
   });
 
@@ -308,7 +311,7 @@ describe("WorkflowsModelosService", () => {
 
   it("permite editar outros campos mantendo a categoria inativa atual", async () => {
     db.query.workflowModelos.findFirst.mockResolvedValue(modeloPublicado);
-    db.query.workflowExecucoes.findMany.mockResolvedValue([]);
+    tx.query.workflowExecucoes.findMany.mockResolvedValue([]);
 
     await expect(
       service.atualizar(gestao, "modelo-1", {
@@ -373,7 +376,7 @@ describe("WorkflowsModelosService", () => {
 
   it("reset etapa alterada em execucoes abertas de modelo publicado", async () => {
     db.query.workflowModelos.findFirst.mockResolvedValue(modeloPublicado);
-    db.query.workflowExecucoes.findMany.mockResolvedValue([
+    tx.query.workflowExecucoes.findMany.mockResolvedValue([
       { id: "execucao-1" },
       { id: "execucao-2" },
     ]);
@@ -421,25 +424,37 @@ describe("WorkflowsModelosService", () => {
     );
   });
 
-  it("marca execucoes abertas quando um campo geral do modelo muda", async () => {
+  it("bloqueia alterar estrutura de rascunho com execucao aberta", async () => {
+    db.query.workflowModelos.findFirst.mockResolvedValue({
+      ...modeloPublicado,
+      status: "RASCUNHO",
+    });
+    tx.query.workflowExecucoes.findMany.mockResolvedValue([{ id: "teste-1" }]);
+
+    await expect(
+      service.atualizar(gestao, "modelo-1", {
+        fases: dtoModelo.fases,
+      }),
+    ).rejects.toThrow(
+      "Nao e possivel alterar as etapas enquanto existe uma execucao aberta",
+    );
+
+    expect(tx.update).not.toHaveBeenCalledWith(workflowModelos);
+  });
+
+  it("nao marca execucoes abertas quando apenas um campo geral do modelo muda", async () => {
     db.query.workflowModelos.findFirst.mockResolvedValue(modeloPublicado);
-    db.query.workflowExecucoes.findMany.mockResolvedValue([{ id: "execucao-1" }]);
+    tx.query.workflowExecucoes.findMany.mockResolvedValue([{ id: "execucao-1" }]);
 
     await service.atualizar(gestao, "modelo-1", {
       nome: "Evento atualizado",
     });
 
-    expect(db.query.workflowExecucoes.findMany).toHaveBeenCalled();
-    expect(tx.set).toHaveBeenCalledWith(
+    expect(tx.query.workflowExecucoes.findMany).not.toHaveBeenCalled();
+    expect(tx.set).not.toHaveBeenCalledWith(
       expect.objectContaining({ modeloAtualizado: true }),
     );
-    expect(historicoService.registrar).toHaveBeenCalledWith(
-      expect.objectContaining({
-        execucaoId: "execucao-1",
-        tipo: "MODELO_ATUALIZADO",
-      }),
-      tx,
-    );
+    expect(historicoService.registrar).not.toHaveBeenCalled();
   });
 
   it("bloqueia remocao de etapa de modelo publicado sem apagar progresso", async () => {
@@ -710,6 +725,39 @@ describe("WorkflowsModelosService", () => {
 
     expect(db.query.workflowModelos.findMany).toHaveBeenCalled();
     expect(mockEq).toHaveBeenCalledWith(workflowModelos.status, "PUBLICADO");
+  });
+
+  it("usa apenas a categoria na listagem resumida de modelos", async () => {
+    db.query.workflowModelos.findMany.mockResolvedValue([]);
+
+    await service.listar(gestao, { status: "todos" });
+
+    const [opcoes] = db.query.workflowModelos.findMany.mock.calls[0] ?? [];
+    expect(opcoes.with).toEqual({ categoria: true });
+  });
+
+  it("pagina a listagem de modelos e informa se existem mais itens", async () => {
+    db.query.workflowModelos.findMany.mockResolvedValue([
+      { id: "modelo-1" },
+      { id: "modelo-2" },
+      { id: "modelo-3" },
+    ]);
+
+    const resultado = await service.listar(gestao, {
+      status: "todos",
+      pagina: 2,
+      limite: 2,
+    });
+
+    expect(db.query.workflowModelos.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ limit: 3, offset: 2 }),
+    );
+    expect(resultado).toEqual({
+      itens: [{ id: "modelo-1" }, { id: "modelo-2" }],
+      pagina: 2,
+      limite: 2,
+      temMais: true,
+    });
   });
 
   it("usuario comum nao busca modelo rascunho ou inativo por id", async () => {

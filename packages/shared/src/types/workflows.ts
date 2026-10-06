@@ -100,6 +100,7 @@ export interface WorkflowHistoricoItem {
   motivo: string | null;
   autorId: string;
   autorNome: string | null;
+  metadata?: Record<string, unknown> | null;
   createdAt: string;
 }
 

@@ -11,9 +11,9 @@ import {
 } from "@essencia/db";
 
 import { DatabaseService } from "../../common/database/database.service";
-import { StorageService } from "../../common/storage/storage.service";
 import { WorkflowsExecucoesService } from "./workflows-execucoes.service";
 import { WorkflowsHistoricoService } from "./workflows-historico.service";
+import { WorkflowsLimpezaService } from "./workflows-limpeza.service";
 import type { WorkflowUserContext } from "./workflows.types";
 
 const tx = {
@@ -151,7 +151,7 @@ function configurarCadeias() {
 describe("WorkflowsExecucoesService", () => {
   let service: WorkflowsExecucoesService;
   const historicoService = { registrar: jest.fn() };
-  const storageService = { deleteFile: jest.fn() };
+  const limpezaService = { enfileirar: jest.fn() };
   const mockEq = eq as unknown as jest.Mock;
 
   beforeEach(async () => {
@@ -162,7 +162,7 @@ describe("WorkflowsExecucoesService", () => {
         WorkflowsExecucoesService,
         { provide: DatabaseService, useValue: { db } },
         { provide: WorkflowsHistoricoService, useValue: historicoService },
-        { provide: StorageService, useValue: storageService },
+        { provide: WorkflowsLimpezaService, useValue: limpezaService },
       ],
     }).compile();
 
@@ -180,7 +180,7 @@ describe("WorkflowsExecucoesService", () => {
     db.query.workflowExecucoes.findFirst.mockReset();
     db.query.workflowExecucoes.findMany.mockReset();
     historicoService.registrar.mockReset();
-    storageService.deleteFile.mockReset();
+    limpezaService.enfileirar.mockReset();
   });
 
   it("inicia execucao real de modelo publicado para usuario comum", async () => {
@@ -310,6 +310,7 @@ describe("WorkflowsExecucoesService", () => {
           id: "historico-1",
           tipo: "WORKFLOW_INICIADO",
           descricao: "Execucao iniciada",
+          metadata: JSON.stringify({ etapaId: "etapa-1" }),
           autor: {
             id: "gestor-1",
             name: "Gestor",
@@ -332,6 +333,9 @@ describe("WorkflowsExecucoesService", () => {
     );
     expect(item).not.toHaveProperty("autor");
     expect(JSON.stringify(execucao)).not.toContain("hash-privado-ficticio");
+    expect(item).toEqual(
+      expect.objectContaining({ metadata: { etapaId: "etapa-1" } }),
+    );
   });
 
   it("bloqueia usuario comum iniciando teste de rascunho", async () => {
@@ -450,6 +454,42 @@ describe("WorkflowsExecucoesService", () => {
     );
     expect(mockEq).toHaveBeenCalledWith(workflowExecucoes.iniciadoPor, "prof-1");
     expect(mockEq).toHaveBeenCalledWith(workflowExecucoes.teste, false);
+  });
+
+  it("nao carrega orientacoes na listagem resumida de execucoes", async () => {
+    db.query.workflowExecucoes.findMany.mockResolvedValue([]);
+
+    await service.listar(gestao, { status: "todos" });
+
+    const [opcoes] = db.query.workflowExecucoes.findMany.mock.calls[0] ?? [];
+    expect(opcoes.with.modelo.with).not.toHaveProperty("orientacoes");
+  });
+
+  it("pagina a listagem de execucoes e informa se existem mais itens", async () => {
+    db.query.workflowExecucoes.findMany.mockResolvedValue([
+      { id: "execucao-1" },
+      { id: "execucao-2" },
+      { id: "execucao-3" },
+    ]);
+
+    const resultado = await service.listar(gestao, {
+      status: "todos",
+      pagina: 2,
+      limite: 2,
+    });
+
+    expect(db.query.workflowExecucoes.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ limit: 3, offset: 2 }),
+    );
+    expect(resultado).toEqual({
+      itens: [
+        expect.objectContaining({ id: "execucao-1" }),
+        expect.objectContaining({ id: "execucao-2" }),
+      ],
+      pagina: 2,
+      limite: 2,
+      temMais: true,
+    });
   });
 
   it("buscar por id filtra tenant antes de aplicar visibilidade", async () => {
@@ -696,8 +736,9 @@ describe("WorkflowsExecucoesService", () => {
       }),
       tx,
     );
-    expect(storageService.deleteFile).toHaveBeenCalledWith(
-      "workflows/arquivo.pdf",
+    expect(limpezaService.enfileirar).toHaveBeenCalledWith(
+      ["workflows/arquivo.pdf"],
+      tx,
     );
   });
 });
