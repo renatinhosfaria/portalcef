@@ -29,6 +29,7 @@ import type {
   CriarInscricaoDto,
   ListarInscricoesDto,
 } from "./dto/evento-inscricoes.dto";
+import { obterEventoConfig, type EventoConfig } from "./evento-config";
 
 export interface InscricaoComFilhos {
   id: string;
@@ -72,12 +73,6 @@ export interface ResumoSorteiosEvento {
   totalElegiveis: number;
 }
 
-/**
- * Deadlines de inscrição por evento (em ISO 8601 com fuso horário).
- * Após esse instante, novas inscrições são recusadas com 403.
- */
-const DEADLINES_INSCRICAO: Record<string, string> = {};
-
 @Injectable()
 export class EventoInscricoesService {
   private readonly logger = new Logger(EventoInscricoesService.name);
@@ -87,6 +82,14 @@ export class EventoInscricoesService {
 
   private get db() {
     return this.databaseService.db;
+  }
+
+  private obterConfig(eventoSlug: string): EventoConfig {
+    const config = obterEventoConfig(eventoSlug);
+    if (!config) {
+      throw new NotFoundException("Evento não encontrado");
+    }
+    return config;
   }
 
   private async listarFilhos(
@@ -129,7 +132,7 @@ export class EventoInscricoesService {
    * Retorna o timestamp (ms) do deadline do evento, ou null se não houver.
    */
   private getDeadlineMs(eventoSlug: string): number | null {
-    const iso = DEADLINES_INSCRICAO[eventoSlug];
+    const iso = this.obterConfig(eventoSlug).encerramentoInscricoes;
     if (!iso) return null;
     const ms = Date.parse(iso);
     return Number.isFinite(ms) ? ms : null;
@@ -140,14 +143,31 @@ export class EventoInscricoesService {
    */
   obterStatus(eventoSlug: string): {
     eventoSlug: string;
+    nome: string;
+    dataEvento: string;
+    horarioInicio: string;
+    horarioFim: string;
+    local: string;
+    endereco: string;
     deadline: string | null;
     inscricoesAbertas: boolean;
   } {
-    const deadlineIso = DEADLINES_INSCRICAO[eventoSlug] ?? null;
+    const config = this.obterConfig(eventoSlug);
+    const deadlineIso = config.encerramentoInscricoes || null;
     const deadlineMs = this.getDeadlineMs(eventoSlug);
     const inscricoesAbertas =
       deadlineMs === null ? true : Date.now() <= deadlineMs;
-    return { eventoSlug, deadline: deadlineIso, inscricoesAbertas };
+    return {
+      eventoSlug,
+      nome: config.nome,
+      dataEvento: config.dataEvento,
+      horarioInicio: config.horarioInicio,
+      horarioFim: config.horarioFim,
+      local: config.local,
+      endereco: config.endereco,
+      deadline: deadlineIso,
+      inscricoesAbertas,
+    };
   }
 
   /**
@@ -169,6 +189,8 @@ export class EventoInscricoesService {
     dto: CriarInscricaoDto,
     metadata: { ipAddress?: string; userAgent?: string },
   ): Promise<InscricaoComFilhos> {
+    this.obterConfig(eventoSlug);
+
     // Validar deadline de inscrição
     const deadline = this.getDeadlineMs(eventoSlug);
     if (deadline !== null && Date.now() > deadline) {
@@ -195,9 +217,16 @@ export class EventoInscricoesService {
       );
     }
 
-    // Inserir inscrição com retry em caso de colisão de número (race condition)
     let inscricao: EventoInscricao | undefined;
+    let filhosInseridos: Array<{
+      id: string;
+      nomeFilho: string;
+      turmaFilho: string;
+    }> = [];
     let ultimoErro: unknown = null;
+
+    // Cada tentativa usa uma transação nova: no PostgreSQL, uma violação de
+    // unicidade aborta a transação atual e impede qualquer retry dentro dela.
     for (
       let tentativa = 1;
       tentativa <= EventoInscricoesService.MAX_TENTATIVAS_NUMERO;
@@ -205,25 +234,50 @@ export class EventoInscricoesService {
     ) {
       const numeroInscricao = this.gerarNumeroInscricao();
       try {
-        const inserted = await this.db
-          .insert(eventoInscricoes)
-          .values({
-            eventoSlug,
-            numeroInscricao,
-            nome: dto.nome,
-            cpf: dto.cpf,
-            dataNascimento: dto.dataNascimento,
-            email: dto.email,
-            telefone: dto.telefone,
-            ipAddress: metadata.ipAddress ?? null,
-            userAgent: metadata.userAgent ?? null,
-          })
-          .returning();
-        inscricao = inserted[0];
+        const resultado = await this.db.transaction(
+          async (tx: typeof this.db) => {
+            const inserted = await tx
+              .insert(eventoInscricoes)
+              .values({
+                eventoSlug,
+                numeroInscricao,
+                nome: dto.nome,
+                cpf: dto.cpf,
+                dataNascimento: dto.dataNascimento,
+                email: dto.email,
+                telefone: dto.telefone,
+                ipAddress: metadata.ipAddress ?? null,
+                userAgent: metadata.userAgent ?? null,
+              })
+              .returning();
+            const novaInscricao = inserted[0];
+            if (!novaInscricao) {
+              throw new ServiceUnavailableException(
+                "Falha ao criar inscrição",
+              );
+            }
+
+            const novosFilhos =
+              dto.filhos.length > 0
+                ? await tx
+                    .insert(eventoInscricaoFilhos)
+                    .values(
+                      dto.filhos.map((f) => ({
+                        inscricaoId: novaInscricao.id,
+                        nomeFilho: f.nome,
+                        turmaFilho: f.turma,
+                      })),
+                    )
+                    .returning()
+                : [];
+
+            return { inscricao: novaInscricao, filhosInseridos: novosFilhos };
+          },
+        );
+        inscricao = resultado.inscricao;
+        filhosInseridos = resultado.filhosInseridos;
         break;
       } catch (err) {
-        // Postgres unique violation = 23505. Se for o índice de numero,
-        // tentamos de novo com outro número aleatório.
         const code = (err as { code?: string })?.code;
         const constraint = (err as { constraint?: string })?.constraint;
         if (
@@ -236,7 +290,6 @@ export class EventoInscricoesService {
           );
           continue;
         }
-        // Outras violações (ex: cpf duplicado por race condition) sobem
         if (
           code === "23505" &&
           constraint === "uq_evento_inscricoes_evento_cpf"
@@ -253,23 +306,10 @@ export class EventoInscricoesService {
       this.logger.error("Esgotadas as tentativas de gerar número único", {
         ultimoErro,
       });
-      throw new Error("Falha ao gerar número de inscrição único");
+      throw new ServiceUnavailableException(
+        "Falha ao gerar número de inscrição único",
+      );
     }
-
-    // Inserir filhos (array pode ser vazio para convidadas externas)
-    const filhosInseridos =
-      dto.filhos.length > 0
-        ? await this.db
-            .insert(eventoInscricaoFilhos)
-            .values(
-              dto.filhos.map((f) => ({
-                inscricaoId: inscricao!.id,
-                nomeFilho: f.nome,
-                turmaFilho: f.turma,
-              })),
-            )
-            .returning()
-        : [];
 
     this.logger.log(
       `Nova inscrição: evento=${eventoSlug} numero=${inscricao.numeroInscricao} cpf=${dto.cpf} filhos=${dto.filhos.length}`,

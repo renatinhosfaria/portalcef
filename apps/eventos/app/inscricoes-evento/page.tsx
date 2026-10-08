@@ -28,8 +28,8 @@ import {
 } from "@essencia/ui/components/table";
 import { toast } from "@essencia/ui/components/toaster";
 import {
-  Calendar,
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
   FileSpreadsheet,
   FileText,
@@ -45,6 +45,7 @@ import {
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 
 const EVENTO_SLUG = "mae-por-inteiro";
+const LIMITE_PAGINA = 200;
 const ALLOWED_ROLES = [
   "master",
   "diretora_geral",
@@ -107,6 +108,15 @@ interface ResumoSorteios {
   totalElegiveis: number;
 }
 
+interface EventoStatus {
+  nome: string;
+  dataEvento: string;
+  horarioInicio: string;
+  horarioFim: string;
+  local: string;
+  inscricoesAbertas: boolean;
+}
+
 const RESUMO_SORTEIOS_INICIAL: ResumoSorteios = {
   totalInscricoes: 0,
   totalPresentes: 0,
@@ -131,6 +141,16 @@ function formatarDataNascimento(iso: string) {
   const [y, m, d] = iso.split("-");
   if (!y || !m || !d) return iso;
   return `${d}/${m}/${y}`;
+}
+
+function formatarDataEvento(iso: string) {
+  return new Date(`${iso}T00:00:00Z`)
+    .toLocaleDateString("pt-BR", {
+      day: "numeric",
+      month: "long",
+      timeZone: "UTC",
+    })
+    .replace(/^./, (letra) => letra.toUpperCase());
 }
 
 const EXPORT_HEADERS = [
@@ -173,7 +193,19 @@ function downloadBlob(blob: Blob, filename: string) {
 }
 
 function dataHoje() {
-  return new Date().toISOString().slice(0, 10);
+  const partes = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  })
+    .formatToParts(new Date())
+    .reduce<Record<string, string>>((acc, parte) => {
+      if (parte.type !== "literal") acc[parte.type] = parte.value;
+      return acc;
+    }, {});
+
+  return `${partes.year}-${partes.month}-${partes.day}`;
 }
 
 function exportarCSV(items: Inscricao[]) {
@@ -280,9 +312,10 @@ async function exportarXLSX(items: Inscricao[]) {
 }
 
 export default function InscricoesEventoPage() {
-  const { role } = useTenant();
+  const { isLoaded, role } = useTenant();
   const [inscricoes, setInscricoes] = useState<Inscricao[]>([]);
   const [totalLista, setTotalLista] = useState(0);
+  const [offset, setOffset] = useState(0);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
   const [q, setQ] = useState("");
@@ -296,7 +329,9 @@ export default function InscricoesEventoPage() {
   const [loadingSorteios, setLoadingSorteios] = useState(false);
   const [brinde, setBrinde] = useState("");
   const [sorteando, setSorteando] = useState(false);
+  const [exportando, setExportando] = useState(false);
   const [ultimoSorteio, setUltimoSorteio] = useState<Sorteio | null>(null);
+  const [eventoStatus, setEventoStatus] = useState<EventoStatus | null>(null);
   const [resumoSorteios, setResumoSorteios] = useState<ResumoSorteios>(
     RESUMO_SORTEIOS_INICIAL,
   );
@@ -312,6 +347,8 @@ export default function InscricoesEventoPage() {
       if (q.trim()) params.set("q", q.trim());
       if (turma && turma !== "__all__") params.set("turma", turma);
       if (somentePresentes) params.set("somentePresentes", "true");
+      params.set("limit", String(LIMITE_PAGINA));
+      params.set("offset", String(offset));
       const url = `/api/eventos/${EVENTO_SLUG}/inscricoes${
         params.toString() ? `?${params.toString()}` : ""
       }`;
@@ -337,7 +374,65 @@ export default function InscricoesEventoPage() {
     } finally {
       setLoading(false);
     }
-  }, [podeAcessar, q, somentePresentes, turma]);
+  }, [offset, podeAcessar, q, somentePresentes, turma]);
+
+  const carregarTodasParaExportacao = useCallback(async () => {
+    const itens: Inscricao[] = [];
+    let deslocamento = 0;
+    let total = Number.POSITIVE_INFINITY;
+
+    while (itens.length < total) {
+      const params = new URLSearchParams({
+        limit: "500",
+        offset: String(deslocamento),
+      });
+      if (q.trim()) params.set("q", q.trim());
+      if (turma && turma !== "__all__") params.set("turma", turma);
+      if (somentePresentes) params.set("somentePresentes", "true");
+
+      const resp = await fetch(
+        `/api/eventos/${EVENTO_SLUG}/inscricoes?${params.toString()}`,
+        { credentials: "include" },
+      );
+      if (!resp.ok) {
+        throw new Error(`Erro ${resp.status} ao preparar exportação.`);
+      }
+
+      const data = (await resp.json()) as {
+        items?: Inscricao[];
+        total?: number;
+      };
+      const pagina = data.items ?? [];
+      total = data.total ?? itens.length + pagina.length;
+      itens.push(...pagina);
+
+      if (pagina.length === 0) break;
+      deslocamento += pagina.length;
+    }
+
+    return itens;
+  }, [q, somentePresentes, turma]);
+
+  async function exportarFiltradas(formato: "csv" | "xlsx") {
+    try {
+      setExportando(true);
+      const itens = await carregarTodasParaExportacao();
+      if (formato === "csv") {
+        exportarCSV(itens);
+      } else {
+        await exportarXLSX(itens);
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : "Não foi possível concluir a exportação.",
+      );
+    } finally {
+      setExportando(false);
+    }
+  }
 
   const carregarResumoSorteios = useCallback(async () => {
     if (!podeAcessar) return;
@@ -360,6 +455,20 @@ export default function InscricoesEventoPage() {
     }
   }, [podeAcessar]);
 
+  const carregarEventoStatus = useCallback(async () => {
+    if (!podeAcessar) return;
+    try {
+      const resp = await fetch(`/api/eventos/${EVENTO_SLUG}/status`, {
+        credentials: "include",
+      });
+      if (!resp.ok) throw new Error(`Erro ${resp.status}`);
+      setEventoStatus((await resp.json()) as EventoStatus);
+    } catch (err) {
+      console.error(err);
+      setEventoStatus(null);
+    }
+  }, [podeAcessar]);
+
   const carregarSorteios = useCallback(async () => {
     if (!podeAcessar) return;
     try {
@@ -372,6 +481,7 @@ export default function InscricoesEventoPage() {
       }
       const data = (await resp.json()) as Sorteio[];
       setSorteios(data);
+      setUltimoSorteio(data[0] ?? null);
     } catch (err) {
       console.error(err);
       toast.error("Não foi possível carregar o histórico de sorteios.");
@@ -381,24 +491,29 @@ export default function InscricoesEventoPage() {
   }, [podeAcessar]);
 
   useEffect(() => {
+    if (!isLoaded) return;
     if (!podeAcessar) {
       setLoading(false);
       return;
     }
     const id = setTimeout(carregar, 250); // debounce do search
     return () => clearTimeout(id);
-  }, [carregar, podeAcessar]);
+  }, [carregar, isLoaded, podeAcessar]);
 
   useEffect(() => {
     if (!podeAcessar) return;
+    carregarEventoStatus();
     carregarSorteios();
     carregarResumoSorteios();
-  }, [carregarResumoSorteios, carregarSorteios, podeAcessar]);
+  }, [carregarEventoStatus, carregarResumoSorteios, carregarSorteios, podeAcessar]);
 
   const totalFilhos = useMemo(
     () => inscricoes.reduce((acc, i) => acc + i.filhos.length, 0),
     [inscricoes],
   );
+  const paginaAtual = Math.floor(offset / LIMITE_PAGINA) + 1;
+  const totalPaginas = Math.max(1, Math.ceil(totalLista / LIMITE_PAGINA));
+  const podeAvancar = offset + inscricoes.length < totalLista;
 
   async function atualizarPresenca(inscricao: Inscricao, presente: boolean) {
     try {
@@ -477,6 +592,10 @@ export default function InscricoesEventoPage() {
     }
   }
 
+  if (!isLoaded) {
+    return null;
+  }
+
   if (!podeAcessar) {
     return (
       <div className="space-y-6">
@@ -503,24 +622,26 @@ export default function InscricoesEventoPage() {
             Inscrições — Mãe por Inteiro
           </h1>
           <p className="text-slate-500 mt-1">
-            16 de Maio · Parque Una. Inscrições recebidas pela landing page.
+            {eventoStatus
+              ? `${formatarDataEvento(eventoStatus.dataEvento)} · ${eventoStatus.horarioInicio.replace(":", "h")}–${eventoStatus.horarioFim.replace(":", "h")} · ${eventoStatus.local}.`
+              : "Carregando configuração do evento..."} Inscrições recebidas pela landing page.
           </p>
         </div>
         <div className="flex items-center gap-2">
           <Button
             variant="outline"
-            onClick={() => exportarXLSX(inscricoes)}
-            disabled={inscricoes.length === 0}
-            title="Excel (.xlsx) com formatação"
+            onClick={() => exportarFiltradas("xlsx")}
+            disabled={exportando || inscricoes.length === 0}
+            title="Carregar todas as inscrições e exportar em Excel (.xlsx)"
           >
             <FileSpreadsheet className="w-4 h-4 mr-2" />
             Exportar Excel
           </Button>
           <Button
             variant="outline"
-            onClick={() => exportarCSV(inscricoes)}
-            disabled={inscricoes.length === 0}
-            title="CSV separado por ponto-e-vírgula"
+            onClick={() => exportarFiltradas("csv")}
+            disabled={exportando || inscricoes.length === 0}
+            title="Carregar todas as inscrições e exportar CSV"
           >
             <FileText className="w-4 h-4 mr-2" />
             Exportar CSV
@@ -561,15 +682,6 @@ export default function InscricoesEventoPage() {
                 {resumoSorteios.totalPresentes}
               </p>
               <p className="text-sm text-slate-500">Presentes confirmadas</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-6 flex items-center gap-4">
-            <Calendar className="w-8 h-8 text-amber-500" />
-            <div>
-              <p className="text-2xl font-semibold text-slate-900">100</p>
-              <p className="text-sm text-slate-500">Vagas disponíveis</p>
             </div>
           </CardContent>
         </Card>
@@ -632,7 +744,10 @@ export default function InscricoesEventoPage() {
                     {ultimoSorteio.numeroInscricao}
                   </p>
                   <p className="text-xs text-slate-500">
-                    {ultimoSorteio.brinde}
+                    {ultimoSorteio.nome} · {ultimoSorteio.brinde}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    {ultimoSorteio.telefone}
                   </p>
                 </div>
               ) : (
@@ -720,11 +835,20 @@ export default function InscricoesEventoPage() {
               <Input
                 placeholder="Buscar por nome, CPF, email..."
                 value={q}
-                onChange={(e) => setQ(e.target.value)}
+                onChange={(e) => {
+                  setQ(e.target.value);
+                  setOffset(0);
+                }}
                 className="pl-9 w-full sm:w-72"
               />
             </div>
-            <Select value={turma} onValueChange={setTurma}>
+            <Select
+              value={turma}
+              onValueChange={(value) => {
+                setTurma(value);
+                setOffset(0);
+              }}
+            >
               <SelectTrigger className="w-full sm:w-56">
                 <SelectValue placeholder="Filtrar por turma do filho" />
               </SelectTrigger>
@@ -740,9 +864,10 @@ export default function InscricoesEventoPage() {
             <label className="flex h-10 items-center gap-2 rounded-md border border-slate-200 px-3 text-sm text-slate-700">
               <Checkbox
                 checked={somentePresentes}
-                onCheckedChange={(checked) =>
-                  setSomentePresentes(checked === true)
-                }
+                onCheckedChange={(checked) => {
+                  setSomentePresentes(checked === true);
+                  setOffset(0);
+                }}
               />
               Somente presentes
             </label>
@@ -886,6 +1011,31 @@ export default function InscricoesEventoPage() {
                 ))}
               </TableBody>
             </Table>
+          )}
+          {!loading && !erro && totalLista > 0 && (
+            <div className="mt-6 flex items-center justify-between gap-3 border-t border-slate-200 pt-4">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={offset === 0}
+                onClick={() => setOffset((atual) => Math.max(0, atual - LIMITE_PAGINA))}
+              >
+                <ChevronLeft className="mr-1 h-4 w-4" />
+                Anterior
+              </Button>
+              <span className="text-sm text-slate-500">
+                Página {paginaAtual} de {totalPaginas}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={!podeAvancar}
+                onClick={() => setOffset((atual) => atual + LIMITE_PAGINA)}
+              >
+                Próxima
+                <ChevronRight className="ml-1 h-4 w-4" />
+              </Button>
+            </div>
           )}
         </CardContent>
       </Card>

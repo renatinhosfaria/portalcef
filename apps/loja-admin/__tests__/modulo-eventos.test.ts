@@ -97,4 +97,51 @@ describe("módulo eventos", () => {
     expect(eventosPage).toContain("/sorteios");
     expect(eventosPage).toContain("inscricaoId");
   });
+
+  it("restaura o último sorteio e exibe seus dados de contato", () => {
+    const eventosPage = lerArquivoRepositorio(
+      "apps/eventos/app/inscricoes-evento/page.tsx",
+    );
+
+    expect(eventosPage).toContain("setUltimoSorteio(data[0] ?? null)");
+    expect(eventosPage).toContain("ultimoSorteio.nome");
+    expect(eventosPage).toContain("ultimoSorteio.telefone");
+  });
+
+  it("entrega o número da inscrição na confirmação e alinha o horário do evento", () => {
+    const inscricao = lerArquivoRepositorio(
+      "landing-mae-por-inteiro/inscricao.html",
+    );
+    const inscricaoConvidada = lerArquivoRepositorio(
+      "landing-mae-por-inteiro/inscricao-convidada.html",
+    );
+    const confirmacao = lerArquivoRepositorio(
+      "landing-mae-por-inteiro/confirmacao.html",
+    );
+    const landing = lerArquivoRepositorio("landing-mae-por-inteiro/index.html");
+    const script = lerArquivoRepositorio("landing-mae-por-inteiro/script.js");
+    const eventosPage = lerArquivoRepositorio(
+      "apps/eventos/app/inscricoes-evento/page.tsx",
+    );
+
+    expect(inscricao).toContain("numeroInscricao");
+    expect(inscricaoConvidada).toContain("numeroInscricao");
+    expect(confirmacao).toContain("numero-inscricao");
+    expect(landing).toContain("9h30");
+    expect(script).toContain("/api/eventos/mae-por-inteiro/status");
+    expect(eventosPage).toContain("eventoStatus");
+    expect(eventosPage).toContain("/status");
+    expect(eventosPage).toContain("eventoStatus.horarioInicio");
+    expect(eventosPage).toContain("eventoStatus.local");
+    expect(landing).not.toContain("às 9h no Parque Una");
+    expect(inscricaoConvidada).not.toContain("às 9h no Parque Una");
+  });
+
+  it("não exibe capacidade fixa que pode divergir do evento", () => {
+    const eventosPage = lerArquivoRepositorio(
+      "apps/eventos/app/inscricoes-evento/page.tsx",
+    );
+
+    expect(eventosPage).not.toContain("Vagas disponíveis");
+  });
 });

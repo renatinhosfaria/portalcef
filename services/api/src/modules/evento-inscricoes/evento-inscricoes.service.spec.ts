@@ -1,4 +1,9 @@
-import { BadRequestException, ConflictException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from "@nestjs/common";
 
 import type { DatabaseService } from "../../common/database/database.service";
 import { EventoInscricoesService } from "./evento-inscricoes.service";
@@ -180,11 +185,105 @@ describe("EventoInscricoesService", () => {
   let service: EventoInscricoesService;
 
   beforeEach(() => {
+    jest.restoreAllMocks();
     jest.clearAllMocks();
     db = criarDbMock();
     service = new EventoInscricoesService({
       db,
     } as unknown as DatabaseService);
+  });
+
+  afterEach(() => jest.restoreAllMocks());
+
+  describe("cadastro", () => {
+    it("usa uma transação única para inscrição e filhos", async () => {
+      jest
+        .spyOn(Date, "now")
+        .mockReturnValue(new Date("2026-05-15T12:00:00.000Z").getTime());
+      db.selectResults.push([]);
+      db.insertErrors.push(null, new Error("falha ao inserir filho"));
+      db.insertResults.push([inscricaoBase]);
+
+      await expect(
+        service.criar(
+          "mae-por-inteiro",
+          {
+            nome: "Maria Silva",
+            cpf: "123.456.789-00",
+            dataNascimento: "1990-01-15",
+            email: "maria@exemplo.com",
+            telefone: "(34) 99999-9999",
+            filhos: [{ nome: "Ana Silva", turma: "Infantil 1" }],
+          },
+          {},
+        ),
+      ).rejects.toThrow("falha ao inserir filho");
+
+      expect(db.transaction).toHaveBeenCalledTimes(1);
+    });
+
+    it("reinicia a transação quando há colisão de número", async () => {
+      jest
+        .spyOn(Date, "now")
+        .mockReturnValue(new Date("2026-05-15T12:00:00.000Z").getTime());
+      db.selectResults.push([]);
+      db.insertErrors.push({
+        code: "23505",
+        constraint: "uq_evento_inscricoes_evento_numero",
+      });
+      db.insertResults.push([inscricaoBase]);
+
+      const result = await service.criar(
+        "mae-por-inteiro",
+        {
+          nome: "Maria Silva",
+          cpf: "123.456.789-00",
+          dataNascimento: "1990-01-15",
+          email: "maria@exemplo.com",
+          telefone: "(34) 99999-9999",
+          filhos: [],
+        },
+        {},
+      );
+
+      expect(result.numeroInscricao).toBe("123-456");
+      expect(db.transaction).toHaveBeenCalledTimes(2);
+    });
+
+    it("retorna status fechado para evento encerrado", () => {
+      jest.spyOn(Date, "now").mockReturnValue(new Date("2026-10-05T12:00:00Z").getTime());
+      const status = service.obterStatus("mae-por-inteiro");
+
+      expect(status.inscricoesAbertas).toBe(false);
+      expect(status).toMatchObject({ horarioInicio: "09:30", horarioFim: "12:30" });
+    });
+
+    it("rejeita slug de evento inexistente", () => {
+      expect(() => service.obterStatus("evento-inexistente")).toThrow(
+        NotFoundException,
+      );
+    });
+
+    it("rejeita cadastro depois do encerramento", async () => {
+      jest
+        .spyOn(Date, "now")
+        .mockReturnValue(new Date("2026-10-05T12:00:00.000Z").getTime());
+
+      await expect(
+        service.criar(
+          "mae-por-inteiro",
+          {
+            nome: "Maria Silva",
+            cpf: "123.456.789-00",
+            dataNascimento: "1990-01-15",
+            email: "maria@exemplo.com",
+            telefone: "(34) 99999-9999",
+            filhos: [],
+          },
+          {},
+        ),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+    });
   });
 
   describe("presença", () => {

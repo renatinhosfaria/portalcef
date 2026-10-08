@@ -2,6 +2,45 @@
 document.addEventListener('DOMContentLoaded', () => {
   if (window.lucide) lucide.createIcons();
 
+  /* ========== STATUS DAS INSCRIÇÕES ========== */
+  async function atualizarStatusEvento() {
+    try {
+      const resp = await fetch('/api/eventos/mae-por-inteiro/status', {
+        credentials: 'omit'
+      });
+      if (!resp.ok) return;
+
+      const status = await resp.json();
+      if (status.inscricoesAbertas !== false) return;
+
+      document.querySelectorAll('a[href="#inscricao"], a[href*="inscricao"]').forEach((link) => {
+        link.setAttribute('aria-disabled', 'true');
+        link.classList.add('inscricoes-encerradas');
+        link.addEventListener('click', (event) => event.preventDefault());
+        const texto = link.querySelector('span');
+        if (texto) {
+          texto.textContent = 'Inscrições encerradas';
+        } else {
+          link.textContent = 'Inscrições encerradas';
+        }
+      });
+
+      document.querySelectorAll('.stat').forEach((stat) => {
+        const rotulo = stat.querySelector('.stat-label')?.textContent?.trim();
+        if (rotulo === 'Vagas') stat.setAttribute('hidden', 'true');
+      });
+
+      const titulo = document.querySelector('#inscricao .cta-title');
+      const descricao = document.querySelector('#inscricao .cta-desc');
+      if (titulo) titulo.textContent = 'Inscrições encerradas';
+      if (descricao) descricao.textContent = 'O período de inscrições para este evento terminou.';
+    } catch {
+      // A landing continua navegável se a consulta pública estiver indisponível.
+    }
+  }
+
+  atualizarStatusEvento();
+
   /* ========== NAVBAR & FAB SCROLL ========== */
   const navbar = document.getElementById('navbar');
   const backToTop = document.getElementById('backToTop');
