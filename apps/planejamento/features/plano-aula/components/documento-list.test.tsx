@@ -557,6 +557,7 @@ describe("DocumentoList", () => {
   it("nao chama callback onImprimir ao cancelar confirmacao de impressao", async () => {
     const user = userEvent.setup();
     const onImprimir = vi.fn().mockResolvedValue(undefined);
+    const criarElemento = vi.spyOn(document, "createElement");
 
     render(
       <DocumentoList
@@ -571,6 +572,98 @@ describe("DocumentoList", () => {
     await user.click(screen.getByRole("button", { name: /nao, cancelar/i }));
 
     expect(onImprimir).not.toHaveBeenCalled();
+    expect(criarElemento).not.toHaveBeenCalledWith("iframe");
+    criarElemento.mockRestore();
+  });
+
+  it("exibe erro quando o registro de impressão falha", async () => {
+    const user = userEvent.setup();
+    const onImprimir = vi.fn().mockRejectedValue(new Error("Falha ao registrar"));
+
+    render(
+      <DocumentoList
+        documentos={[mockDocumentoPdfAprovado]}
+        onImprimir={onImprimir}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /imprimir/i }));
+    await user.click(
+      screen.getByRole("button", { name: /sim, foi impresso/i }),
+    );
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith("Falha ao registrar");
+    });
+  });
+
+  it("inicia a impressão somente depois da confirmação", async () => {
+    const user = userEvent.setup();
+    const onImprimir = vi.fn().mockResolvedValue(undefined);
+    const criarElemento = vi.spyOn(document, "createElement");
+
+    render(
+      <DocumentoList
+        documentos={[mockDocumentoPdfAprovado]}
+        onImprimir={onImprimir}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /imprimir/i }));
+    expect(criarElemento).not.toHaveBeenCalledWith("iframe");
+
+    await user.click(
+      screen.getByRole("button", { name: /sim, foi impresso/i }),
+    );
+
+    expect(criarElemento).toHaveBeenCalledWith("iframe");
+    criarElemento.mockRestore();
+  });
+
+  it("exibe erro quando onAprovar falha", async () => {
+    const user = userEvent.setup();
+    const onAprovar = vi
+      .fn()
+      .mockRejectedValue(new Error("Falha ao aprovar"));
+
+    render(
+      <DocumentoList
+        documentos={[mockDocumentoWord]}
+        canAprovar
+        onAprovar={onAprovar}
+      />,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: /aprovar documento/i }),
+    );
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith("Falha ao aprovar");
+    });
+  });
+
+  it("exibe erro quando onDesaprovar falha", async () => {
+    const user = userEvent.setup();
+    const onDesaprovar = vi
+      .fn()
+      .mockRejectedValue(new Error("Falha ao desfazer aprovação"));
+
+    render(
+      <DocumentoList
+        documentos={[mockDocumentoAprovado]}
+        canAprovar
+        onDesaprovar={onDesaprovar}
+      />,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: /desfazer aprovacao/i }),
+    );
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith("Falha ao desfazer aprovação");
+    });
   });
 
   it("exibe as acoes de documento inline sem menu de overflow", () => {

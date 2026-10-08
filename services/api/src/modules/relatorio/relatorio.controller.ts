@@ -471,9 +471,17 @@ export class RelatorioController {
       });
     }
 
+    let storageKey: string | undefined;
+
     try {
-      // Upload para MinIO
-      const uploadResult = await this.storageService.uploadFile(data);
+      // O buffer já foi lido para validar o limite; reutilizá-lo evita uma
+      // segunda leitura do multipart e mantém uma única representação em memória.
+      const uploadResult = await this.storageService.uploadBuffer(
+        buffer,
+        data.filename,
+        data.mimetype,
+      );
+      storageKey = uploadResult.key;
 
       // Persistir documento via service
       const documento = await this.relatorioService.adicionarDocumentoUpload(
@@ -502,6 +510,19 @@ export class RelatorioController {
         data: documento,
       };
     } catch (error) {
+      if (storageKey) {
+        try {
+          await this.storageService.deleteFile(storageKey);
+        } catch (cleanupError) {
+          this.logger.warn(
+            `Não foi possível remover o arquivo órfão ${storageKey}: ${
+              cleanupError instanceof Error
+                ? cleanupError.message
+                : String(cleanupError)
+            }`,
+          );
+        }
+      }
       this.logger.error(
         `Erro ao fazer upload: ${
           error instanceof Error ? error.message : String(error)

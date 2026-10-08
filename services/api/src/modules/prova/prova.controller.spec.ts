@@ -90,6 +90,12 @@ describe("ProvaController", () => {
         key: documentoWord.storageKey,
         url: "https://storage.test/prova-assinada",
       }),
+      uploadBuffer: jest.fn().mockResolvedValue({
+        name: documentoWord.fileName,
+        key: documentoWord.storageKey,
+        url: "https://storage.test/prova-assinada",
+      }),
+      deleteFile: jest.fn().mockResolvedValue(undefined),
       replaceFile: jest.fn().mockResolvedValue(undefined),
     };
 
@@ -187,6 +193,32 @@ describe("ProvaController", () => {
     }) as never;
 
   describe("uploadDocumento", () => {
+    it("reutiliza o buffer lido e remove o objeto quando a gravação falha", async () => {
+      const { controller, provaService, storageService } = criarController();
+      const arquivo = criarArquivoMultipart(10, "application/pdf");
+      const buffer = criarBufferComTamanho(10);
+      arquivo.toBuffer.mockResolvedValueOnce(buffer);
+      provaService.adicionarDocumentoUpload.mockRejectedValueOnce(
+        new Error("falha ao gravar documento"),
+      );
+
+      await expect(
+        controller.uploadDocumento("prova-1", criarReqMultipart(arquivo)),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({ code: "UPLOAD_FAILED" }),
+      });
+
+      expect(storageService.uploadBuffer).toHaveBeenCalledWith(
+        buffer,
+        arquivo.filename,
+        arquivo.mimetype,
+      );
+      expect(arquivo.toBuffer).toHaveBeenCalledTimes(1);
+      expect(storageService.deleteFile).toHaveBeenCalledWith(
+        documentoWord.storageKey,
+      );
+    });
+
     it("deve aceitar arquivo com tamanho máximo de 500 MB", async () => {
       const { controller, provaService, storageService } = criarController();
       const arquivo = criarArquivoMultipart(LIMITE_UPLOAD_BYTES, "application/pdf");
@@ -197,7 +229,11 @@ describe("ProvaController", () => {
       );
 
       expect(resultado.success).toBe(true);
-      expect(storageService.uploadFile).toHaveBeenCalledWith(arquivo);
+      expect(storageService.uploadBuffer).toHaveBeenCalledWith(
+        expect.objectContaining({ length: LIMITE_UPLOAD_BYTES }),
+        arquivo.filename,
+        arquivo.mimetype,
+      );
       expect(provaService.adicionarDocumentoUpload).toHaveBeenCalledWith(
         "prova-1",
         expect.objectContaining({

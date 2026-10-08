@@ -16,12 +16,18 @@ const mockDb = {
   update: jest.fn().mockReturnThis(),
   set: jest.fn().mockReturnThis(),
   orderBy: jest.fn().mockResolvedValue([]),
+  transaction: jest.fn(),
 };
+
+mockDb.transaction.mockImplementation(
+  async (callback: (tx: typeof mockDb) => unknown) => callback(mockDb),
+);
 
 jest.mock("@essencia/db", () => ({
   getDb: jest.fn(() => mockDb),
-  eq: jest.fn(),
-  and: jest.fn(),
+  eq: jest.fn((column: unknown, value: unknown) => ({ column, value })),
+  and: jest.fn((...conditions: unknown[]) => conditions),
+  inArray: jest.fn((column: unknown, values: unknown[]) => ({ column, values })),
   asc: jest.fn(),
   sql: jest.fn(() => "sql-count"),
 }));
@@ -97,6 +103,7 @@ describe("PlanoAulaPeriodoService", () => {
     mockDb.where.mockResolvedValue([]);
     mockDb.orderBy.mockReset();
     mockDb.orderBy.mockResolvedValue([]);
+    mockDb.transaction.mockClear();
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [PlanoAulaPeriodoService],
@@ -314,7 +321,11 @@ describe("PlanoAulaPeriodoService", () => {
           dataMaximaEntrega: "2026-02-25",
         },
       ]);
-      mockDb.where.mockResolvedValueOnce([{ total: 3 }]);
+      mockDb.where.mockResolvedValueOnce([
+        { periodoId: "periodo-1" },
+        { periodoId: "periodo-1" },
+        { periodoId: "periodo-1" },
+      ]);
 
       const resultado = await service.listarPorUnidade("unidade-id");
 
@@ -337,7 +348,10 @@ describe("PlanoAulaPeriodoService", () => {
             etapa: "INFANTIL",
           },
         ])
-        .mockResolvedValueOnce([{ total: 2 }]);
+        .mockResolvedValueOnce([
+          { periodoId: "periodo-id" },
+          { periodoId: "periodo-id" },
+        ]);
       jest
         .spyOn(serviceInterno, "renumerarPeriodosSeNecessario")
         .mockResolvedValue(undefined);
@@ -358,7 +372,7 @@ describe("PlanoAulaPeriodoService", () => {
             etapa: "INFANTIL",
           },
         ])
-        .mockResolvedValueOnce([{ total: 0 }]);
+        .mockResolvedValueOnce([]);
       jest
         .spyOn(serviceInterno, "renumerarPeriodosSeNecessario")
         .mockResolvedValue(undefined);
@@ -373,7 +387,7 @@ describe("PlanoAulaPeriodoService", () => {
       expect(mockDelete).toHaveBeenCalled();
       expect(
         serviceInterno.renumerarPeriodosSeNecessario,
-      ).toHaveBeenCalledWith("unidade-id", "INFANTIL");
+      ).toHaveBeenCalledWith("unidade-id", "INFANTIL", expect.anything());
     });
 
     it("deve bloquear exclusão quando o período não pertence à unidade informada", async () => {
@@ -381,7 +395,7 @@ describe("PlanoAulaPeriodoService", () => {
         .spyOn(service, "buscarPorId")
         .mockRejectedValue(new BadRequestException("Período não encontrado"));
       mockDb.where
-        .mockResolvedValueOnce([{ total: 0 }])
+        .mockResolvedValueOnce([])
         .mockResolvedValueOnce([
           {
             id: "periodo-id",
@@ -401,7 +415,88 @@ describe("PlanoAulaPeriodoService", () => {
     });
   });
 
+  describe("renumerarPeriodosSeNecessario", () => {
+    it("deve liberar os números atuais antes de aplicar a nova ordem", async () => {
+      const periodos = [
+        {
+          id: "periodo-antes",
+          numero: 1,
+          dataInicio: "2026-03-01",
+          dataFim: "2026-03-05",
+        },
+        {
+          id: "periodo-novo",
+          numero: -1,
+          dataInicio: "2026-03-10",
+          dataFim: "2026-03-15",
+        },
+        {
+          id: "periodo-depois",
+          numero: 2,
+          dataInicio: "2026-03-20",
+          dataFim: "2026-03-25",
+        },
+      ];
+      const numerosPorId = new Map(
+        periodos.map((periodo) => [periodo.id, periodo.numero]),
+      );
+
+      mockDb.where.mockReturnValueOnce({ orderBy: mockDb.orderBy });
+      mockDb.orderBy.mockResolvedValueOnce(periodos);
+      mockDb.update.mockImplementation(() => ({
+        set: jest.fn((valores: { numero: number }) => ({
+          where: jest.fn(async (condicao: { value: string }) => {
+            const id = condicao.value;
+            if (
+              valores.numero > 0 &&
+              Array.from(numerosPorId.entries()).some(
+                ([idAtual, numero]) =>
+                  idAtual !== id && numero === valores.numero,
+              )
+            ) {
+              throw new Error("violação do índice único");
+            }
+            numerosPorId.set(id, valores.numero);
+          }),
+        })),
+      }));
+
+      await serviceInterno.renumerarPeriodosSeNecessario(
+        "unidade-id",
+        "INFANTIL",
+      );
+
+      const chamadas = mockDb.update.mock.results.map(
+        (resultado: { value: unknown }) => resultado.value,
+      );
+      expect(chamadas.length).toBe(4);
+      expect(Array.from(numerosPorId.values()).sort()).toEqual([1, 2, 3]);
+      mockDb.update.mockImplementation(() => mockDb);
+    });
+  });
+
   describe("editarPeriodo", () => {
+    it("deve validar a data máxima de entrega existente ao editar apenas o início", async () => {
+      const periodoExistente = {
+        id: "periodo-id",
+        unidadeId: "unidade-id",
+        etapa: "INFANTIL",
+        dataInicio: "2026-03-10",
+        dataFim: "2026-03-20",
+        dataMaximaEntrega: "2026-03-08",
+      };
+
+      jest.spyOn(service, "buscarPorId").mockResolvedValue(periodoExistente as never);
+
+      await expect(
+        service.editarPeriodo("periodo-id", "unidade-id", {
+          dataInicio: "2026-03-05",
+        }),
+      ).rejects.toThrow("Data máxima de entrega deve ser anterior ao início do período");
+
+      expect(mockDb.update).not.toHaveBeenCalled();
+    });
+
     it("deve bloquear edição quando o período não pertence à unidade informada", async () => {
       jest
         .spyOn(service, "buscarPorId")
