@@ -882,6 +882,67 @@ describe("Regressões da loja", () => {
     ]);
   });
 
+  it("rejeita pedido de pronta-entrega acima do limite por produto e aluno", async () => {
+    const inventoryService = {
+      withInventoryLocks: jest.fn(async (_items, callback) => callback()),
+      reserveStockInTransaction: jest.fn(),
+      reserveStock: jest.fn(),
+      releaseReservation: jest.fn(),
+    };
+    const paymentsService = { refundPayment: jest.fn() };
+    const service = new ShopOrdersService(
+      inventoryService as never,
+      paymentsService as never,
+    );
+
+    mockDb.query.shopProductVariants.findFirst
+      .mockResolvedValueOnce({
+        id: "variant-1",
+        isActive: true,
+        priceOverride: null,
+        product: {
+          id: "product-1",
+          schoolId: "school-1",
+          basePrice: 4500,
+          isActive: true,
+          isPreSale: false,
+        },
+      })
+      .mockResolvedValueOnce({
+        id: "variant-2",
+        isActive: true,
+        priceOverride: null,
+        product: {
+          id: "product-1",
+          schoolId: "school-1",
+          basePrice: 4500,
+          isActive: true,
+          isPreSale: false,
+        },
+      });
+
+    await expect(
+      service.createOrder({
+        schoolId: "school-1",
+        unitId: "unit-1",
+        customerName: "Maria Silva",
+        customerPhone: "11987654321",
+        items: [
+          { variantId: "variant-1", quantity: 1, studentName: "João Silva" },
+          { variantId: "variant-2", quantity: 2, studentName: " joão silva " },
+        ],
+      }),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        code: "QUANTITY_LIMIT_EXCEEDED",
+        details: expect.objectContaining({ limit: 2 }),
+      }),
+    });
+
+    expect(inventoryService.withInventoryLocks).not.toHaveBeenCalled();
+    expect(mockDb.transaction).not.toHaveBeenCalled();
+  });
+
   it("cria pedido de pré-venda para produto manualmente marcado mesmo com estoque disponível", async () => {
     const inventoryService = {
       withInventoryLocks: jest.fn(async (_items, callback) => callback()),

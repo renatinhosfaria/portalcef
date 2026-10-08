@@ -254,8 +254,7 @@ export default function ConfiguracoesPage() {
                             </label>
                             <select
                                 value={maxInstallments}
-                                onChange={(e) => setMaxInstallments(parseInt(e.target.value))}
-                                disabled={!canEditSettings}
+                                disabled
                                 className="form-input"
                             >
                                 {installmentOptions.map((n) => (
@@ -265,7 +264,7 @@ export default function ConfiguracoesPage() {
                                 ))}
                             </select>
                             <p className="text-sm text-slate-500 mt-2">
-                                Define até quantas parcelas os clientes podem dividir no cartão de crédito.
+                                O parcelamento configurável ainda não está disponível no checkout hospedado atual. O valor salvo será mantido para uso quando essa integração estiver disponível.
                             </p>
                         </div>
                     </div>

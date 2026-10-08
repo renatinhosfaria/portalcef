@@ -9,22 +9,19 @@ import { LoadingSkeleton } from '@/components/Loading';
 import { ProductCard } from '@/components/ProductCard';
 import { ShopHeader } from '@/components/ShopHeader';
 import { ShopHero } from '@/components/ShopHero';
-import { getCatalogCardPrice } from '@/lib/catalog';
+import {
+  transformarProdutosDoCatalogo,
+  type CatalogProduct,
+  type ProdutoCardCatalogo,
+} from '@/lib/catalog';
 import {
   resolveStorefrontParams,
   type ResolvedStorefrontParams,
   type StorefrontSchoolLocation,
 } from '@/lib/storefront-url';
 
-interface Product {
-  id: string;
-  name: string;
-  price: number;
-  imageUrl?: string;
-  category: string;
-  availableStock: number;
-  modoVenda: 'PRONTA_ENTREGA' | 'PRE_VENDA';
-}
+type Product = ProdutoCardCatalogo;
+type ApiProduct = CatalogProduct;
 
 const normalizarBuscaProduto = (valor: string) =>
   valor.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
@@ -33,29 +30,6 @@ const produtoCombinaComBusca = (produto: Product, termoBuscaNormalizado: string)
   if (!termoBuscaNormalizado) return true;
   return normalizarBuscaProduto(produto.name).includes(termoBuscaNormalizado);
 };
-
-// API response types
-interface ApiInventory {
-  quantity: number;
-  reservedQuantity: number;
-}
-
-interface ApiVariant {
-  inventory?: ApiInventory[];
-  availableStock?: number;
-  price?: number;
-  priceOverride?: number | null;
-  modoVenda?: 'PRONTA_ENTREGA' | 'PRE_VENDA';
-}
-
-interface ApiProduct {
-  id: string;
-  name: string;
-  basePrice: number;
-  imageUrl?: string;
-  category: string;
-  variants?: ApiVariant[];
-}
 
 interface CatalogPageProps {
   params: Promise<{ schoolId: string; unitId: string }>;
@@ -170,35 +144,8 @@ export default function CatalogPageContent({
         preSaleResponse.json(),
       ]);
 
-      const transformProducts = (
-        data: ApiProduct[] | undefined,
-        modoVenda: 'PRONTA_ENTREGA' | 'PRE_VENDA',
-      ): Product[] => {
-        return (data || []).map((product: ApiProduct) => {
-          // Calculate total available stock across all variants
-          const totalStock = product.variants?.reduce((sum: number, variant: ApiVariant) => {
-            // Backend returns pre-calculated availableStock per variant
-            if (typeof variant.availableStock === 'number') {
-              return sum + variant.availableStock;
-            }
-            // Fallback for direct inventory access (if backend changes)
-            const inventoryStock = variant.inventory?.reduce((invSum: number, inv: ApiInventory) => {
-              return invSum + (inv.quantity - inv.reservedQuantity);
-            }, 0) || 0;
-            return sum + inventoryStock;
-          }, 0) || 0;
-
-          return {
-            id: product.id,
-            name: product.name,
-            price: getCatalogCardPrice(product),
-            imageUrl: product.imageUrl || undefined,
-            category: product.category,
-            availableStock: totalStock,
-            modoVenda,
-          };
-        });
-      };
+      const transformProducts = (data: ApiProduct[], modoVenda: Product['modoVenda']): Product[] =>
+        transformarProdutosDoCatalogo(data, modoVenda);
 
       setProducts(readyResult.success ? transformProducts(readyResult.data, 'PRONTA_ENTREGA') : []);
       setPreSaleProducts(preSaleResult.success ? transformProducts(preSaleResult.data, 'PRE_VENDA') : []);

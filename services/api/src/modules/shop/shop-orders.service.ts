@@ -32,6 +32,9 @@ import {
 import { ShopInventoryService } from "./shop-inventory.service";
 import { PaymentsService } from "../payments/payments.service";
 import {
+  validarLimiteQuantidadePorProdutoAluno,
+} from "./shop-order-rules";
+import {
   CreateOrderDto,
   CreatePresentialSaleDto,
   ListOrdersDto,
@@ -112,8 +115,6 @@ type PreSaleSummaryItem = {
 type PreSaleSummaryAccumulator = PreSaleSummaryItem & {
   customersByKey: Map<string, { name: string; phone: string }>;
 };
-
-const LIMITE_PRE_VENDA_POR_PRODUTO_ALUNO = 2;
 
 /**
  * ShopOrdersService
@@ -270,6 +271,14 @@ export class ShopOrdersService {
       );
     }
 
+    validarLimiteQuantidadePorProdutoAluno(
+      dto.items.map((item) => ({
+        productId: variantsById.get(item.variantId)!.product.id,
+        studentName: item.studentName,
+        quantity: item.quantity,
+      })),
+    );
+
     const orderNumber = await this.generateOrderNumber();
 
     let totalAmount = 0;
@@ -396,44 +405,13 @@ export class ShopOrdersService {
           );
         }
 
-        const quantitiesByProductAndStudent = new Map<
-          string,
-          {
-            productId: string;
-            studentName: string;
-            quantity: number;
-          }
-        >();
-
-        for (const item of dto.items) {
-          const variant = variantsById.get(item.variantId)!;
-          const normalizedStudentName = item.studentName
-            .trim()
-            .toLocaleLowerCase("pt-BR");
-          const key = `${variant.product.id}:${normalizedStudentName}`;
-          const current = quantitiesByProductAndStudent.get(key) ?? {
-            productId: variant.product.id,
+        validarLimiteQuantidadePorProdutoAluno(
+          dto.items.map((item) => ({
+            productId: variantsById.get(item.variantId)!.product.id,
             studentName: item.studentName,
-            quantity: 0,
-          };
-
-          current.quantity += item.quantity;
-          quantitiesByProductAndStudent.set(key, current);
-
-          if (current.quantity > LIMITE_PRE_VENDA_POR_PRODUTO_ALUNO) {
-            throw new BadRequestException({
-              code: "QUANTITY_LIMIT_EXCEEDED",
-              message:
-                "Limite de 2 unidades por produto por aluno atingido na pré-venda.",
-              details: {
-                limit: LIMITE_PRE_VENDA_POR_PRODUTO_ALUNO,
-                productId: current.productId,
-                studentName: current.studentName,
-                requestedQuantity: current.quantity,
-              },
-            });
-          }
-        }
+            quantity: item.quantity,
+          })),
+        );
 
         for (const item of dto.items) {
           const variant = variantsById.get(item.variantId)!;
