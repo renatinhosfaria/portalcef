@@ -1,6 +1,5 @@
 import { Shell } from "@essencia/components/shell/shell";
 import { TenantProvider } from "@essencia/shared/providers/tenant";
-import "@essencia/ui/globals.css";
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 

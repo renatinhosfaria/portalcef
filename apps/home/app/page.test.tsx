@@ -6,6 +6,7 @@ import Home from "./page";
 vi.mock("@essencia/shared/providers/tenant", () => ({
   useTenant: () => ({
     name: "Equipe",
+    role: "professora",
     isLoaded: true,
   }),
 }));
@@ -27,25 +28,29 @@ vi.mock("../components/system-feed", () => ({
 }));
 
 describe("Home", () => {
-  it("marca links dos modulos como externos", () => {
+  it("mostra apenas módulos disponíveis para o perfil atual", () => {
     render(<Home />);
 
     const links = [
       {
         nome: /Planejamento/i,
-        href: "https://www.portalcef.com.br/planejamento",
+        href: "/planejamento",
       },
-      { nome: /Escolas/i, href: "https://www.portalcef.com.br/escolas" },
-      { nome: /Turmas/i, href: "https://www.portalcef.com.br/turmas" },
-      { nome: /Usu/i, href: "https://www.portalcef.com.br/usuarios" },
-      { nome: /Cal/i, href: "https://www.portalcef.com.br/calendario" },
+      { nome: /Cal/i, href: "/calendario" },
     ];
 
     links.forEach(({ nome, href }) => {
       const link = screen.getByRole("link", { name: nome });
 
       expect(link).toHaveAttribute("href", href);
-      expect(link).toHaveAttribute("rel", "external");
+      expect(link).not.toHaveAttribute("rel");
     });
+
+    expect(screen.queryByRole("link", { name: /Escolas/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Turmas/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Usuários/i })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Ver todos os módulos/i }),
+    ).not.toBeInTheDocument();
   });
 });

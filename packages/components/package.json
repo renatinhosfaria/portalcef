@@ -12,6 +12,7 @@
     "./users-page-content": "./src/users-page-content.tsx",
     "./shell/shell": "./src/shell/shell.tsx",
     "./shell/mobile-drawer": "./src/shell/mobile-drawer.tsx",
+    "./shell/module-config": "./src/shell/module-config.ts",
     "./tarefas": "./src/tarefas/index.ts",
     "./suporte": "./src/suporte/index.ts"
   },

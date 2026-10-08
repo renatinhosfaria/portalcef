@@ -3,20 +3,10 @@
 import { Button } from "@essencia/ui/components/button";
 import { cn } from "@essencia/ui/lib/utils";
 import {
-  BookOpen,
-  Calendar,
-  CheckSquare,
-  ClipboardList,
-  GraduationCap,
-  HeartHandshake,
   Headset,
-  LayoutDashboard,
   LogOut,
   PanelLeftClose,
   PanelLeftOpen,
-  School,
-  ShoppingBag,
-  Users,
   type LucideIcon,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -24,6 +14,10 @@ import { usePathname } from "next/navigation";
 
 import { useTenant } from "@essencia/shared/providers/tenant";
 import { SIDEBAR_KEY } from "./shell";
+import {
+  PORTAL_MODULES,
+  hasModuleAccess,
+} from "./module-config";
 
 type ActivePage =
   | "home"
@@ -37,57 +31,6 @@ type ActivePage =
   | "workflows"
   | "suporte"
   | "loja-admin";
-
-// Regras de acesso por módulo
-const MODULE_ACCESS_RULES = {
-  home: "ALL", // Todos os usuários
-  usuarios: ["master", "diretora_geral", "gerente_unidade", "gerente_financeiro"],
-  escolas: ["master"],
-  turmas: ["master", "diretora_geral", "gerente_unidade", "gerente_financeiro"],
-  planejamento: "ALL", // Todos os perfis pedagógicos
-  calendario: "ALL", // Todos os usuários
-  eventos: [
-    "master",
-    "diretora_geral",
-    "gerente_unidade",
-    "auxiliar_administrativo",
-  ],
-  tarefas: [
-    "master",
-    "diretora_geral",
-    "gerente_unidade",
-    "coordenadora_geral",
-    "coordenadora_bercario",
-    "coordenadora_infantil",
-    "coordenadora_fundamental_i",
-    "coordenadora_fundamental_ii",
-    "coordenadora_medio",
-    "analista_pedagogico",
-    "professora",
-    "auxiliar_sala",
-  ],
-  workflows: "ALL",
-  suporte: "ALL",
-  lojaAdmin: ["master", "diretora_geral", "gerente_unidade", "gerente_financeiro", "auxiliar_administrativo"],
-} as const;
-
-type ModuleKey = keyof typeof MODULE_ACCESS_RULES;
-
-/**
- * Verifica se o usuário tem acesso a um módulo específico
- * @param userRole - Role do usuário atual
- * @param moduleKey - Chave do módulo a verificar
- * @returns true se o usuário tem acesso ao módulo
- */
-function hasModuleAccess(userRole: string, moduleKey: ModuleKey): boolean {
-  const allowedRoles = MODULE_ACCESS_RULES[moduleKey];
-
-  // Se for "ALL", todos têm acesso
-  if (allowedRoles === "ALL") return true;
-
-  // Verificar se o role do usuário está na lista
-  return (allowedRoles as readonly string[]).includes(userRole);
-}
 
 function getActivePageFromPath(pathname: string): ActivePage | null {
   const normalizedPath = pathname.replace(/\/+$/, "");
@@ -160,93 +103,12 @@ export function AppSidebar({ tarefasBadge, suporteBadge, collapsed = false, onTo
   const pathname = usePathname();
   const [activePage, setActivePage] = useState<ActivePage | null>(null);
 
-  // Configuração de itens do menu
-  const menuItems = useMemo(() => [
-    {
-      key: "home" as ModuleKey,
-      icon: LayoutDashboard,
-      label: "Visão Geral",
-      href: "https://www.portalcef.com.br/",
-      activePage: "home" as ActivePage,
-    },
-    {
-      key: "usuarios" as ModuleKey,
-      icon: Users,
-      label: "Usuários",
-      href: "https://www.portalcef.com.br/usuarios",
-      activePage: "usuarios" as ActivePage,
-    },
-    {
-      key: "escolas" as ModuleKey,
-      icon: School,
-      label: "Gestão Escolar",
-      href: "https://www.portalcef.com.br/escolas",
-      activePage: "escolas" as ActivePage,
-    },
-    {
-      key: "turmas" as ModuleKey,
-      icon: GraduationCap,
-      label: "Turmas",
-      href: "https://www.portalcef.com.br/turmas",
-      activePage: "turmas" as ActivePage,
-    },
-    {
-      key: "planejamento" as ModuleKey,
-      icon: BookOpen,
-      label: "Planejamento",
-      href: "https://www.portalcef.com.br/planejamento",
-      activePage: "planejamento" as ActivePage,
-    },
-    {
-      key: "calendario" as ModuleKey,
-      icon: Calendar,
-      label: "Calendário",
-      href: "https://www.portalcef.com.br/calendario",
-      activePage: "calendario" as ActivePage,
-    },
-    {
-      key: "eventos" as ModuleKey,
-      icon: HeartHandshake,
-      label: "Eventos",
-      href: "https://www.portalcef.com.br/eventos/inscricoes-evento",
-      activePage: "eventos" as ActivePage,
-    },
-    {
-      key: "tarefas" as ModuleKey,
-      icon: CheckSquare,
-      label: "Tarefas",
-      href: "https://www.portalcef.com.br/tarefas",
-      activePage: "tarefas" as ActivePage,
-    },
-    {
-      key: "workflows" as ModuleKey,
-      icon: ClipboardList,
-      label: "Workflows",
-      href: "https://www.portalcef.com.br/workflows",
-      activePage: "workflows" as ActivePage,
-    },
-    {
-      key: "suporte" as ModuleKey,
-      icon: Headset,
-      label: "Suporte",
-      href: "https://www.portalcef.com.br/suporte",
-      activePage: "suporte" as ActivePage,
-    },
-    {
-      key: "lojaAdmin" as ModuleKey,
-      icon: ShoppingBag,
-      label: "Loja",
-      href: "https://www.portalcef.com.br/loja-admin",
-      activePage: "loja-admin" as ActivePage,
-    },
-  ], []);
-
   // Filtrar itens do menu baseado nas permissões do usuário
   const visibleMenuItems = useMemo(() => {
     if (!role) return [];
 
-    return menuItems.filter(item => hasModuleAccess(role, item.key));
-  }, [role, menuItems]);
+    return PORTAL_MODULES.filter((item) => hasModuleAccess(role, item.key));
+  }, [role]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -277,7 +139,7 @@ export function AppSidebar({ tarefasBadge, suporteBadge, collapsed = false, onTo
   const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
 
   const handleGoToSupport = () => {
-    window.location.href = "https://www.portalcef.com.br/suporte";
+    window.location.href = "/suporte";
   };
 
   const handleLogout = async () => {
@@ -289,7 +151,7 @@ export function AppSidebar({ tarefasBadge, suporteBadge, collapsed = false, onTo
     } finally {
       localStorage.removeItem("tenant");
       localStorage.removeItem(SIDEBAR_KEY);
-      window.location.href = "https://www.portalcef.com.br/login";
+      window.location.href = "/login";
     }
   };
 
@@ -340,7 +202,7 @@ export function AppSidebar({ tarefasBadge, suporteBadge, collapsed = false, onTo
               icon={item.icon}
               label={item.label}
               href={item.href}
-              active={activePage === item.activePage}
+              active={activePage === (item.activePage as ActivePage)}
               collapsed={collapsed}
               onNavigate={onNavigate ?? onCollapse}
               mobile={mobile}
