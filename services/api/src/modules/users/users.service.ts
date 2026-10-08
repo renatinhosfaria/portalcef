@@ -1,4 +1,4 @@
-import { and, asc, eq, getDb, isNull, sql } from "@essencia/db";
+import { and, asc, eq, getDb, ilike, inArray, isNull, sql } from "@essencia/db";
 import {
   turmas as turmasTable,
   unitStages as unitStagesTable,
@@ -46,7 +46,11 @@ export class UsersService {
     currentUser: CurrentUser,
   ): Promise<void> {
     if (data.role === "master") {
-      if (data.schoolId !== null || data.unitId !== null || data.stageId !== null) {
+      if (
+        data.schoolId !== null ||
+        data.unitId !== null ||
+        data.stageId !== null
+      ) {
         throw new UnprocessableEntityException(
           "Usuário master não pode possuir escola, unidade ou etapa",
         );
@@ -55,7 +59,9 @@ export class UsersService {
     }
 
     if (!data.schoolId) {
-      throw new UnprocessableEntityException("Escola é obrigatória para este role");
+      throw new UnprocessableEntityException(
+        "Escola é obrigatória para este role",
+      );
     }
 
     if (
@@ -344,7 +350,8 @@ export class UsersService {
       db,
       {
         role: data.role ?? (existing.role as UserRole),
-        schoolId: data.schoolId === undefined ? existing.schoolId : data.schoolId,
+        schoolId:
+          data.schoolId === undefined ? existing.schoolId : data.schoolId,
         unitId: data.unitId === undefined ? existing.unitId : data.unitId,
         stageId: data.stageId === undefined ? existing.stageId : data.stageId,
       },
@@ -393,26 +400,25 @@ export class UsersService {
   }): Promise<{ id: string; nome: string; role: string }[]> {
     const db = getDb();
     const conditions = [eq(usersTable.schoolId, params.schoolId)];
+    const busca = params.busca?.trim();
+    if (busca) {
+      conditions.push(ilike(usersTable.name, `%${busca}%`));
+    }
+    if (params.roles?.length) {
+      conditions.push(inArray(usersTable.role, params.roles as UserRole[]));
+    }
     const resultado: { id: string; name: string; role: string }[] =
       await db.query.users.findMany({
         columns: { id: true, name: true, role: true },
-        where: and(...conditions),
+        where: and(...conditions, isNull(usersTable.inativadoEm)),
         orderBy: [asc(usersTable.name)],
+        limit: 50,
       });
-    return resultado
-      .filter((u: { id: string; name: string; role: string }) => {
-        const matchRole =
-          !params.roles?.length || params.roles.includes(u.role);
-        const matchBusca =
-          !params.busca ||
-          u.name.toLowerCase().includes(params.busca.toLowerCase());
-        return matchRole && matchBusca;
-      })
-      .map((u: { id: string; name: string; role: string }) => ({
-        id: u.id,
-        nome: u.name,
-        role: u.role,
-      }));
+    return resultado.map((u: { id: string; name: string; role: string }) => ({
+      id: u.id,
+      nome: u.name,
+      role: u.role,
+    }));
   }
 
   async delete(id: string, currentUser: CurrentUser): Promise<void> {
@@ -485,7 +491,10 @@ export class UsersService {
 
     if (target.role === "professora") {
       const turmasVinculadas = await db.query.turmas.findMany({
-        where: eq(turmasTable.professoraId, targetId),
+        where: and(
+          eq(turmasTable.professoraId, targetId),
+          eq(turmasTable.isActive, true),
+        ),
         columns: { id: true, name: true, code: true },
       });
 

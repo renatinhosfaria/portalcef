@@ -38,13 +38,15 @@ jest.mock("@essencia/db", () => ({
   and: jest.fn((...args: unknown[]) => ({ __and: args })),
   asc: jest.fn(),
   eq: jest.fn((col: unknown, val: unknown) => ({ __eq: [col, val] })),
+  ilike: jest.fn((col: unknown, val: unknown) => ({ __ilike: [col, val] })),
+  inArray: jest.fn((col: unknown, val: unknown) => ({ __inArray: [col, val] })),
   isNull: jest.fn((col: unknown) => ({ __isNull: col })),
   sql: jest.fn(),
 }));
 
 jest.mock("@essencia/db/schema", () => ({
-  users: {},
-  turmas: {},
+  users: { schoolId: "users.schoolId", inativadoEm: "users.inativadoEm" },
+  turmas: { professoraId: "turmas.professoraId", isActive: "turmas.isActive" },
   units: {},
   unitStages: {},
 }));
@@ -130,16 +132,18 @@ describe("UsersService — inativar", () => {
         inativadoPor: ator.userId,
       }),
     );
-    expect(sessionServiceMock.deleteAllUserSessions).toHaveBeenCalledWith("prof-1");
+    expect(sessionServiceMock.deleteAllUserSessions).toHaveBeenCalledWith(
+      "prof-1",
+    );
     expect(result.inativadoEm).toBeInstanceOf(Date);
     expect(result.inativadoPor).toBe(ator.userId);
   });
 
   it("rejeita auto-inativação", async () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await expect((service as any).inativar(ator.userId, ator)).rejects.toBeInstanceOf(
-      ForbiddenException,
-    );
+    await expect(
+      (service as any).inativar(ator.userId, ator),
+    ).rejects.toBeInstanceOf(ForbiddenException);
     expect(mockDb.update).not.toHaveBeenCalled();
   });
 
@@ -150,9 +154,9 @@ describe("UsersService — inativar", () => {
     mockDb.query.users.findFirst.mockResolvedValue(alvoAlto);
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await expect((service as any).inativar("diretora-1", atorBaixo)).rejects.toBeInstanceOf(
-      ForbiddenException,
-    );
+    await expect(
+      (service as any).inativar("diretora-1", atorBaixo),
+    ).rejects.toBeInstanceOf(ForbiddenException);
     expect(mockDb.update).not.toHaveBeenCalled();
   });
 
@@ -164,9 +168,9 @@ describe("UsersService — inativar", () => {
     });
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await expect((service as any).inativar("prof-1", ator)).rejects.toBeInstanceOf(
-      ConflictException,
-    );
+    await expect(
+      (service as any).inativar("prof-1", ator),
+    ).rejects.toBeInstanceOf(ConflictException);
     expect(mockDb.update).not.toHaveBeenCalled();
   });
 
@@ -197,13 +201,31 @@ describe("UsersService — inativar", () => {
   it("não consulta turmas quando alvo é coordenadora (não-professora)", async () => {
     const alvoCoord = { ...alvoAtivo, role: "coordenadora_geral" };
     mockDb.query.users.findFirst.mockResolvedValue(alvoCoord);
-    mockDb.returning.mockResolvedValue([{ ...alvoCoord, inativadoEm: new Date() }]);
+    mockDb.returning.mockResolvedValue([
+      { ...alvoCoord, inativadoEm: new Date() },
+    ]);
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await (service as any).inativar("prof-1", ator);
 
     expect(mockDb.query.turmas.findMany).not.toHaveBeenCalled();
     expect(mockDb.update).toHaveBeenCalled();
+  });
+
+  it("consulta apenas turmas ativas antes de inativar professora", async () => {
+    mockDb.query.users.findFirst.mockResolvedValue(alvoAtivo);
+    mockDb.query.turmas.findMany.mockResolvedValue([]);
+    mockDb.returning.mockResolvedValue([
+      { ...alvoAtivo, inativadoEm: new Date(), inativadoPor: ator.userId },
+    ]);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (service as any).inativar("prof-1", ator);
+
+    const [consulta] = mockDb.query.turmas.findMany.mock.calls;
+    expect(consulta[0].where.__and).toEqual(
+      expect.arrayContaining([{ __eq: ["turmas.isActive", true] }]),
+    );
   });
 });
 
@@ -255,14 +277,16 @@ describe("UsersService — reativar", () => {
       }),
     );
     expect(result.inativadoEm).toBeNull();
-    expect(sessionServiceMock.deleteAllUserSessions).toHaveBeenCalledWith("prof-1");
+    expect(sessionServiceMock.deleteAllUserSessions).toHaveBeenCalledWith(
+      "prof-1",
+    );
   });
 
   it("rejeita auto-reativação", async () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await expect((service as any).reativar(ator.userId, ator)).rejects.toBeInstanceOf(
-      ForbiddenException,
-    );
+    await expect(
+      (service as any).reativar(ator.userId, ator),
+    ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it("rejeita reativação de usuário já ativo", async () => {
@@ -273,9 +297,9 @@ describe("UsersService — reativar", () => {
     });
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await expect((service as any).reativar("prof-1", ator)).rejects.toBeInstanceOf(
-      ConflictException,
-    );
+    await expect(
+      (service as any).reativar("prof-1", ator),
+    ).rejects.toBeInstanceOf(ConflictException);
   });
 });
 
@@ -376,6 +400,48 @@ describe("UsersService — consistência escola-unidade", () => {
       ),
     ).rejects.toBeInstanceOf(UnprocessableEntityException);
     expect(mockDb.update).not.toHaveBeenCalled();
+  });
+});
+
+describe("UsersService — busca para atribuição", () => {
+  let service: UsersService;
+  const sessionServiceMock = { deleteAllUserSessions: jest.fn() };
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        UsersService,
+        { provide: SessionService, useValue: sessionServiceMock },
+      ],
+    }).compile();
+    service = module.get<UsersService>(UsersService);
+    mockDb.query.users.findMany.mockReset().mockResolvedValue([]);
+  });
+
+  it("exclui usuários inativos na consulta para atribuição", async () => {
+    await service.buscarParaAtribuicao({ schoolId: "s-1" });
+
+    const [consulta] = mockDb.query.users.findMany.mock.calls;
+    expect(consulta[0].where.__and).toEqual(
+      expect.arrayContaining([{ __isNull: "users.inativadoEm" }]),
+    );
+  });
+
+  it("aplica busca, roles e limite no banco para atribuição", async () => {
+    await service.buscarParaAtribuicao({
+      schoolId: "s-1",
+      busca: "  Maria ",
+      roles: ["professora"],
+    });
+
+    const [consulta] = mockDb.query.users.findMany.mock.calls;
+    expect(consulta[0].where.__and).toEqual(
+      expect.arrayContaining([
+        { __ilike: [undefined, "%Maria%"] },
+        { __inArray: [undefined, ["professora"]] },
+      ]),
+    );
+    expect(consulta[0].limit).toBe(50);
   });
 });
 

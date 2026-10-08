@@ -47,7 +47,9 @@ Documentacao da API REST do Portal Digital Colegio Essencia Feliz.
 }
 ```
 
-**Observacao importante:** alguns controllers usam Zod `safeParse` e retornam `success: false` sem lancar excecao, o que resulta em **status 200** mesmo para erro de validacao. Os endpoints que lancam `HttpException` seguem status 4xx/5xx normal.
+Os endpoints do módulo de usuários lançam `HttpException` para erros de validação,
+escopo e inexistência; nesses casos o status HTTP é 4xx e o corpo segue o formato
+de erro acima.
 
 ### Headers Padrao
 
@@ -254,23 +256,42 @@ Acesso: `master`.
 
 #### GET `/users`
 
-Acesso: `diretora_geral`, `gerente_unidade`, `gerente_financeiro`.
+Acesso: `master`, `diretora_geral`, `gerente_unidade`, `gerente_financeiro`,
+coordenadoras, `analista_pedagogico`, `professora` e `auxiliar_sala`.
+
+Query opcional: `inativos=true` inclui usuários inativos. Por padrão, apenas
+usuários ativos são retornados.
+
+#### GET `/users/buscar`
+
+Busca usuários ativos da escola para atribuições.
+
+Query opcional: `busca` (nome) e `roles` (lista separada por vírgulas).
 
 #### GET `/users/:id`
 
-Acesso: `diretora_geral`, `gerente_unidade`, `gerente_financeiro` (com validacoes de tenant/etapa).
+Acesso: `master`, `diretora_geral`, `gerente_unidade` e `gerente_financeiro`.
 
 #### POST `/users`
 
-Acesso: `diretora_geral`, `gerente_unidade`, `gerente_financeiro`.
+Acesso: `master`, `diretora_geral`, `gerente_unidade` e `gerente_financeiro`.
 
 #### PUT `/users/:id`
 
-Acesso: `diretora_geral`, `gerente_unidade`, `gerente_financeiro`.
+Acesso: `master`, `diretora_geral`, `gerente_unidade` e `gerente_financeiro`.
 
 #### DELETE `/users/:id`
 
-Acesso: `diretora_geral`, `gerente_unidade`, `gerente_financeiro`.
+Acesso: `master`, `diretora_geral`, `gerente_unidade` e `gerente_financeiro`.
+
+#### PUT `/users/:id/inativar`
+
+Inativa o usuário, encerra sessões ativas e retorna `422` com
+`error.details.turmas` quando uma professora ainda possui turmas ativas.
+
+#### PUT `/users/:id/reativar`
+
+Reativa um usuário previamente inativado.
 
 ---
 

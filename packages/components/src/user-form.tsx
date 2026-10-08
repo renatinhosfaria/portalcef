@@ -30,6 +30,7 @@ import { useTenant } from "@essencia/shared/providers/tenant";
 import { ROLE_HIERARCHY } from "@essencia/shared/roles";
 import type { School, Unit } from "@essencia/shared/schemas";
 import { Sheet } from "@essencia/ui/components/sheet";
+import { deveCarregarDadosFormulario } from "./user-form-utils";
 
 interface UserFormProps {
   isOpen: boolean;
@@ -75,6 +76,7 @@ export function UserForm({ isOpen, onClose, userToEdit }: UserFormProps) {
     const abortController = new AbortController();
 
     async function fetchData() {
+      if (!deveCarregarDadosFormulario(isOpen)) return;
       setIsLoadingSchool(true);
       try {
         // If user is master, fetch all schools
@@ -133,14 +135,19 @@ export function UserForm({ isOpen, onClose, userToEdit }: UserFormProps) {
     return () => {
       abortController.abort();
     };
-  }, [schoolId, userToEdit, currentUserRole]);
+  }, [isOpen, schoolId, userToEdit, currentUserRole]);
 
   // Fetch units when master selects a school
   useEffect(() => {
     const abortController = new AbortController();
 
     async function fetchUnits() {
-      if (currentUserRole === "master" && selectedSchoolId && !userToEdit) {
+      if (
+        deveCarregarDadosFormulario(isOpen) &&
+        currentUserRole === "master" &&
+        selectedSchoolId &&
+        !userToEdit
+      ) {
         try {
           const [schoolData, unitsData] = await Promise.all([
             api.get<School>(`/schools/${selectedSchoolId}`, {
@@ -164,12 +171,13 @@ export function UserForm({ isOpen, onClose, userToEdit }: UserFormProps) {
     return () => {
       abortController.abort();
     };
-  }, [selectedSchoolId, currentUserRole, userToEdit]);
+  }, [isOpen, selectedSchoolId, currentUserRole, userToEdit]);
 
   useEffect(() => {
     const abortController = new AbortController();
 
     async function fetchStages() {
+      if (!deveCarregarDadosFormulario(isOpen)) return;
       setIsLoadingStages(true);
       try {
         const stagesData = await api.get<EducationStage[]>("/stages", {
@@ -194,7 +202,7 @@ export function UserForm({ isOpen, onClose, userToEdit }: UserFormProps) {
     return () => {
       abortController.abort();
     };
-  }, []);
+  }, [isOpen]);
 
   // Form State
   const [formData, setFormData] = useState({

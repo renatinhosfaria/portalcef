@@ -1,9 +1,11 @@
 "use client";
 
 import { Ban } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import type { UserSummary } from "@essencia/lib/types";
+import { api, FetchError } from "@essencia/shared/fetchers/client";
 import { useTenant } from "@essencia/shared/providers/tenant";
 import { Button } from "@essencia/ui/components/button";
 import {
@@ -18,10 +20,12 @@ import { toast } from "@essencia/ui/components/toaster";
 import { DashboardStats } from "./dashboard-stats";
 import { UserForm } from "./user-form";
 import { UserList } from "./user-list";
+import { criarUrlUsuarios } from "./users-page-utils";
 
 interface UsersPageContentProps {
   users: UserSummary[];
   incluirInativos: boolean;
+  loadError?: string | null;
 }
 
 const ALLOWED_ROLES = [
@@ -31,14 +35,23 @@ const ALLOWED_ROLES = [
   "gerente_financeiro",
 ];
 
-export function UsersPageContent({ users, incluirInativos }: UsersPageContentProps) {
+export function UsersPageContent({
+  users,
+  incluirInativos,
+  loadError = null,
+}: UsersPageContentProps) {
   const { role, isLoaded } = useTenant();
+  const router = useRouter();
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [userToEdit, setUserToEdit] = useState<UserSummary | null>(null);
   const [userToDelete, setUserToDelete] = useState<UserSummary | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [userToInativar, setUserToInativar] = useState<UserSummary | null>(null);
-  const [userToReativar, setUserToReativar] = useState<UserSummary | null>(null);
+  const [userToInativar, setUserToInativar] = useState<UserSummary | null>(
+    null,
+  );
+  const [userToReativar, setUserToReativar] = useState<UserSummary | null>(
+    null,
+  );
   const [vinculoError, setVinculoError] = useState<{
     user: UserSummary;
     turmas: Array<{ id: string; name: string; code: string }>;
@@ -91,21 +104,13 @@ export function UsersPageContent({ users, incluirInativos }: UsersPageContentPro
 
     setIsDeleting(true);
     try {
-      const response = await fetch(`/api/users/${userToDelete.id}`, {
-        method: "DELETE",
-        credentials: "include",
-      });
-
-      if (!response.ok) {
-        throw new Error("Falha ao excluir usuário");
-      }
+      await api.delete(`/users/${userToDelete.id}`);
 
       toast.success("Usuário excluído", {
         description: `${userToDelete.name} foi removido do sistema.`,
       });
 
-      // Recarregar a página para atualizar a lista
-      window.location.reload();
+      router.refresh();
     } catch {
       toast.error("Erro ao excluir", {
         description: "Não foi possível excluir o usuário. Tente novamente.",
@@ -127,32 +132,22 @@ export function UsersPageContent({ users, incluirInativos }: UsersPageContentPro
     if (!userToInativar) return;
     setIsProcessing(true);
     try {
-      const response = await fetch(`/api/users/${userToInativar.id}/inativar`, {
-        method: "PUT",
-        credentials: "include",
-      });
-
-      if (response.status === 422) {
-        const body = await response.json();
-        const turmas = (body?.message?.turmas ?? body?.error?.turmas ?? []) as Array<{
-          id: string;
-          name: string;
-          code: string;
-        }>;
-        setUserToInativar(null);
-        setVinculoError({ user: userToInativar, turmas });
-        return;
-      }
-
-      if (!response.ok) {
-        throw new Error("Falha ao inativar usuário");
-      }
+      await api.put(`/users/${userToInativar.id}/inativar`);
 
       toast.success("Usuário inativado", {
         description: `${userToInativar.name} não conseguirá mais fazer login.`,
       });
-      window.location.reload();
-    } catch {
+      router.refresh();
+    } catch (error) {
+      if (error instanceof FetchError && error.status === 422) {
+        const turmas = (error.details?.turmas ?? []) as Array<{
+          id: string;
+          name: string;
+          code: string;
+        }>;
+        setVinculoError({ user: userToInativar, turmas });
+        return;
+      }
       toast.error("Erro ao inativar", {
         description: "Não foi possível inativar o usuário. Tente novamente.",
       });
@@ -166,19 +161,12 @@ export function UsersPageContent({ users, incluirInativos }: UsersPageContentPro
     if (!userToReativar) return;
     setIsProcessing(true);
     try {
-      const response = await fetch(`/api/users/${userToReativar.id}/reativar`, {
-        method: "PUT",
-        credentials: "include",
-      });
-
-      if (!response.ok) {
-        throw new Error("Falha ao reativar usuário");
-      }
+      await api.put(`/users/${userToReativar.id}/reativar`);
 
       toast.success("Usuário reativado", {
         description: `${userToReativar.name} pode fazer login novamente.`,
       });
-      window.location.reload();
+      router.refresh();
     } catch {
       toast.error("Erro ao reativar", {
         description: "Não foi possível reativar o usuário. Tente novamente.",
@@ -190,13 +178,7 @@ export function UsersPageContent({ users, incluirInativos }: UsersPageContentPro
   };
 
   const handleToggleInativos = (incluir: boolean) => {
-    const url = new URL(window.location.href);
-    if (incluir) {
-      url.searchParams.set("inativos", "true");
-    } else {
-      url.searchParams.delete("inativos");
-    }
-    window.location.href = url.toString();
+    router.push(criarUrlUsuarios(window.location.href, incluir));
   };
 
   return (
@@ -213,16 +195,32 @@ export function UsersPageContent({ users, incluirInativos }: UsersPageContentPro
       <DashboardStats />
 
       {/* Pass real users to UserList */}
-      <UserList
-        users={users}
-        onCreateClick={handleCreateClick}
-        onEditClick={handleEditClick}
-        onDeleteClick={handleDeleteClick}
-        onInativarClick={handleInativarClick}
-        onReativarClick={handleReativarClick}
-        incluirInativos={incluirInativos}
-        onToggleInativos={handleToggleInativos}
-      />
+      {loadError ? (
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-red-700">
+          <p className="font-semibold">
+            Não foi possível carregar os usuários.
+          </p>
+          <p className="mt-1 text-sm">{loadError}</p>
+          <Button
+            className="mt-4"
+            variant="outline"
+            onClick={() => router.refresh()}
+          >
+            Tentar novamente
+          </Button>
+        </div>
+      ) : (
+        <UserList
+          users={users}
+          onCreateClick={handleCreateClick}
+          onEditClick={handleEditClick}
+          onDeleteClick={handleDeleteClick}
+          onInativarClick={handleInativarClick}
+          onReativarClick={handleReativarClick}
+          incluirInativos={incluirInativos}
+          onToggleInativos={handleToggleInativos}
+        />
+      )}
 
       <UserForm
         isOpen={isFormOpen}
@@ -231,7 +229,10 @@ export function UsersPageContent({ users, incluirInativos }: UsersPageContentPro
       />
 
       {/* Delete Confirmation Dialog */}
-      <Dialog open={!!userToDelete} onOpenChange={(open) => !open && cancelDelete()}>
+      <Dialog
+        open={!!userToDelete}
+        onOpenChange={(open) => !open && cancelDelete()}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Confirmar Exclusão</DialogTitle>
@@ -262,7 +263,10 @@ export function UsersPageContent({ users, incluirInativos }: UsersPageContentPro
       </Dialog>
 
       {/* Inativar Confirmation Dialog */}
-      <Dialog open={!!userToInativar} onOpenChange={(open) => !open && setUserToInativar(null)}>
+      <Dialog
+        open={!!userToInativar}
+        onOpenChange={(open) => !open && setUserToInativar(null)}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Confirmar Inativação</DialogTitle>
@@ -270,8 +274,8 @@ export function UsersPageContent({ users, incluirInativos }: UsersPageContentPro
               Tem certeza que deseja inativar o usuário{" "}
               <strong>{userToInativar?.name}</strong>?
               <br />
-              Sessões ativas serão encerradas imediatamente. O usuário não conseguirá
-              mais fazer login até ser reativado.
+              Sessões ativas serão encerradas imediatamente. O usuário não
+              conseguirá mais fazer login até ser reativado.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -294,15 +298,17 @@ export function UsersPageContent({ users, incluirInativos }: UsersPageContentPro
       </Dialog>
 
       {/* Reativar Confirmation Dialog */}
-      <Dialog open={!!userToReativar} onOpenChange={(open) => !open && setUserToReativar(null)}>
+      <Dialog
+        open={!!userToReativar}
+        onOpenChange={(open) => !open && setUserToReativar(null)}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Confirmar Reativação</DialogTitle>
             <DialogDescription>
               Tem certeza que deseja reativar o usuário{" "}
               <strong>{userToReativar?.name}</strong>?
-              <br />
-              O usuário poderá fazer login novamente após esta ação.
+              <br />O usuário poderá fazer login novamente após esta ação.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -325,14 +331,17 @@ export function UsersPageContent({ users, incluirInativos }: UsersPageContentPro
       </Dialog>
 
       {/* Vínculos Error Dialog (422 response) */}
-      <Dialog open={!!vinculoError} onOpenChange={(open) => !open && setVinculoError(null)}>
+      <Dialog
+        open={!!vinculoError}
+        onOpenChange={(open) => !open && setVinculoError(null)}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Não é possível inativar</DialogTitle>
             <DialogDescription>
-              <strong>{vinculoError?.user.name}</strong> ainda é titular das turmas
-              listadas abaixo. Atribua outra professora a essas turmas (ou remova
-              a titularidade) antes de inativar.
+              <strong>{vinculoError?.user.name}</strong> ainda é titular das
+              turmas listadas abaixo. Atribua outra professora a essas turmas
+              (ou remova a titularidade) antes de inativar.
             </DialogDescription>
           </DialogHeader>
           <ul className="list-disc list-inside text-sm text-slate-700 my-4 space-y-1">
