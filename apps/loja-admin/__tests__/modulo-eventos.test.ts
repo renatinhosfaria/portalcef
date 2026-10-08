@@ -50,6 +50,9 @@ describe("módulo eventos", () => {
     const appSidebar = lerArquivoRepositorio(
       "packages/components/src/shell/app-sidebar.tsx",
     );
+    const configuracaoModulos = lerArquivoRepositorio(
+      "packages/components/src/shell/module-config.ts",
+    );
     const eventosPage = lerArquivoRepositorio(
       "apps/eventos/app/inscricoes-evento/page.tsx",
     );
@@ -57,7 +60,9 @@ describe("módulo eventos", () => {
       "services/api/src/modules/evento-inscricoes/evento-inscricoes.controller.ts",
     );
 
-    expect(appSidebar).toMatch(
+    expect(appSidebar).toContain('from "./module-config"');
+    expect(appSidebar).toContain("hasModuleAccess(role, item.key)");
+    expect(configuracaoModulos).toMatch(
       /eventos:\s*\[[^\]]*"auxiliar_administrativo"[^\]]*\]/,
     );
     expect(eventosPage).toMatch(
