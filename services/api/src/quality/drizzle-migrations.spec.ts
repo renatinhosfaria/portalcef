@@ -12,6 +12,27 @@ describe('controle de migrations do Drizzle', () => {
   );
   const journalPath = path.join(migrationsDir, 'meta', '_journal.json');
 
+  it('preserva o índice da chave estrangeira ao tornar o código único por escola', () => {
+    const migration = fs.readFileSync(
+      path.join(migrationsDir, '0045_unidades_codigo_por_escola.sql'),
+      'utf8',
+    );
+    const esquemaUnidades = fs.readFileSync(
+      path.resolve(migrationsDir, '../src/schema/units.ts'),
+      'utf8',
+    );
+
+    expect(migration).not.toMatch(
+      /DROP\s+INDEX\s+(?:IF\s+EXISTS\s+)?"units_id_school_id_unique"/i,
+    );
+    expect(migration).toMatch(
+      /CREATE UNIQUE INDEX "units_school_code_unique"\s+ON "units" USING btree \("school_id", "code"\)/,
+    );
+    expect(esquemaUnidades).toMatch(
+      /uniqueIndex\("units_id_school_id_unique"\)\.on\(\s*table.id,\s*table.schoolId,?\s*\)/,
+    );
+  });
+
   it('inclui a migration do modulo workflows com tabelas principais', () => {
     const migration = fs.readFileSync(
       path.join(migrationsDir, '0039_workflows.sql'),

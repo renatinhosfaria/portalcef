@@ -26,6 +26,10 @@ export const units = pgTable(
       .defaultNow(),
   },
   (table) => ({
+    idSchoolUnique: uniqueIndex("units_id_school_id_unique").on(
+      table.id,
+      table.schoolId,
+    ),
     schoolCodeUnique: uniqueIndex("units_school_code_unique").on(
       table.schoolId,
       table.code,
