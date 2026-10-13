@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   enviarEventosPendentes,
@@ -529,6 +529,102 @@ describe("DocumentoUpload - Upload Múltiplo", () => {
 
     expect(
       screen.getByText(/arraste arquivos ou clique para selecionar/i),
+    ).toBeInTheDocument();
+  });
+});
+
+describe("DocumentoUpload - Falha sem resposta do servidor", () => {
+  // Simula o Chrome quando o arquivo muda depois de selecionado (salvo no
+  // Word, sincronizado pelo OneDrive): a leitura falha com NotReadableError.
+  class LeitorDeArquivoAlterado {
+    onload: (() => void) | null = null;
+    onerror: (() => void) | null = null;
+    error = new DOMException(
+      "The requested file could not be read",
+      "NotReadableError",
+    );
+
+    readAsArrayBuffer() {
+      queueMicrotask(() => this.onerror?.());
+    }
+  }
+
+  beforeEach(() => {
+    vi.mocked(registrarEventoObservabilidade).mockReset();
+    vi.mocked(enviarEventosPendentes).mockClear();
+    vi.mocked(enviarEventosPendentes).mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  async function enviarArquivoQueFalhaSemResposta(nome: string) {
+    const user = userEvent.setup();
+    const onUpload = vi
+      .fn()
+      .mockRejectedValue(new TypeError("Failed to fetch"));
+
+    render(<DocumentoUpload onUpload={onUpload} onAddLink={vi.fn()} />);
+
+    const input = document.querySelector(
+      'input[type="file"]',
+    ) as HTMLInputElement;
+    await user.upload(input, [
+      criarArquivo(
+        nome,
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      ),
+    ]);
+
+    return onUpload;
+  }
+
+  it("pede para selecionar de novo o arquivo que o navegador não consegue ler, sem reenviar", async () => {
+    vi.stubGlobal("FileReader", LeitorDeArquivoAlterado);
+
+    const onUpload = await enviarArquivoQueFalhaSemResposta(
+      "Português 26-10.docx",
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          "Não foi possível ler o arquivo no seu computador. Feche-o no Word ou em outro programa e selecione-o novamente.",
+        ),
+      ).toBeInTheDocument();
+    });
+    expect(onUpload).toHaveBeenCalledTimes(1);
+    expect(
+      screen.queryByRole("button", { name: "Tentar enviar novamente" }),
+    ).not.toBeInTheDocument();
+    expect(registrarEventoObservabilidade).toHaveBeenCalledWith(
+      expect.objectContaining({
+        evento: "upload_resultado",
+        nivel: "error",
+        detalhes: expect.objectContaining({
+          status: "erro_leitura_arquivo",
+          tentativa: 1,
+        }),
+      }),
+    );
+  });
+
+  it("continua tentando quando o arquivo pode ser lido e a falha é de conexão", async () => {
+    const onUpload = await enviarArquivoQueFalhaSemResposta("Geo 20-10.docx");
+
+    await waitFor(() => {
+      expect(onUpload).toHaveBeenCalledTimes(5);
+    });
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          "Não conseguimos conectar ao portal agora. Verifique sua internet e tente novamente.",
+        ),
+      ).toBeInTheDocument();
+    });
+    expect(
+      screen.getByRole("button", { name: "Tentar enviar novamente" }),
     ).toBeInTheDocument();
   });
 });

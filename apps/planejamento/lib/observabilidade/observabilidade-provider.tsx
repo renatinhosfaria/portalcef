@@ -121,10 +121,15 @@ function registrarEEnviarEvento(evento: EventoObservabilidadeCliente): void {
   void enviarEventosPendentes().catch(() => undefined);
 }
 
-function registrarErroGlobal(acao: string, erro: unknown): void {
+export function registrarErroGlobal(
+  acao: string,
+  erro: unknown,
+  extras: Pick<EventoObservabilidadeCliente, "correlationId" | "pagina"> = {},
+): void {
   registrarEEnviarEvento({
     evento: "erro_navegador",
     nivel: "error",
+    ...extras,
     erro: {
       codigo: obterCodigoErro(erro),
       mensagem: obterMensagemErro(erro),

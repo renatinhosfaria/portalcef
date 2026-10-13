@@ -12,6 +12,9 @@ import { ArrowLeft, Calendar, Clock } from "lucide-react";
 import { cookies } from "next/headers";
 import Link from "next/link";
 
+import { RedirecionarParaLogin } from "../../../components/redirecionar-para-login";
+import { ehSessaoExpirada } from "../../../lib/sessao-expirada";
+
 import { PlanoContent } from "./plano-content";
 
 interface PageProps {
@@ -80,6 +83,7 @@ async function getCurrentUser(cookieHeader: string): Promise<UserData | null> {
     }
     return null;
   } catch (error) {
+    if (ehSessaoExpirada(error)) throw error;
     console.error("Erro ao buscar usuario:", error);
     return null;
   }
@@ -96,6 +100,7 @@ async function getUserTurmas(cookieHeader: string): Promise<Turma[]> {
     }
     return [];
   } catch (error) {
+    if (ehSessaoExpirada(error)) throw error;
     console.error("Erro ao buscar turmas:", error);
     return [];
   }
@@ -112,6 +117,7 @@ async function getStages(cookieHeader: string): Promise<Stage[]> {
     }
     return [];
   } catch (error) {
+    if (ehSessaoExpirada(error)) throw error;
     console.error("Erro ao buscar etapas:", error);
     return [];
   }
@@ -131,6 +137,7 @@ async function getPeriodo(
 
     return response;
   } catch (error) {
+    if (ehSessaoExpirada(error)) throw error;
     console.error("Erro ao buscar período:", error);
     return null;
   }
@@ -144,12 +151,20 @@ export default async function PlanoAulaPage({ params, searchParams }: PageProps)
 
   // Buscar dados do usuario logado, suas turmas e dados do período
   const cookieHeader = await getCookieHeader();
-  const [currentUser, userTurmas, stages, periodoData] = await Promise.all([
-    getCurrentUser(cookieHeader),
-    getUserTurmas(cookieHeader),
-    getStages(cookieHeader),
-    getPeriodo(periodoId, cookieHeader),
-  ]);
+  let dados: [UserData | null, Turma[], Stage[], PlanoAulaPeriodo | null];
+  try {
+    dados = await Promise.all([
+      getCurrentUser(cookieHeader),
+      getUserTurmas(cookieHeader),
+      getStages(cookieHeader),
+      getPeriodo(periodoId, cookieHeader),
+    ]);
+  } catch (error) {
+    // Sessão vencida não é "período inexistente": a professora precisa entrar de novo.
+    if (ehSessaoExpirada(error)) return <RedirecionarParaLogin />;
+    throw error;
+  }
+  const [currentUser, userTurmas, stages, periodoData] = dados;
 
   // Determinar turma e etapa do usuario
   const primaryTurma = turmaIdParam
