@@ -36,6 +36,7 @@ interface FileUploadItem {
   status: FileUploadStatus;
   tentativas: number;
   erro?: string;
+  arquivoIlegivel?: boolean;
 }
 
 interface DocumentoUploadProps {
@@ -65,6 +66,8 @@ const MAX_FILE_SIZE = MAX_FILE_SIZE_MB * 1024 * 1024;
 const MAX_UPLOADS_SIMULTANEOS = 3;
 const MAX_TENTATIVAS = 5;
 const TEMPO_REMOVER_SUCESSO = 2000;
+const MENSAGEM_ARQUIVO_ILEGIVEL =
+  "Não foi possível ler o arquivo no seu computador. Feche-o no Word ou em outro programa e selecione-o novamente.";
 
 function gerarId(): string {
   return `upload-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -134,6 +137,24 @@ function deveTentarUploadNovamente(error: unknown, mensagem: string): boolean {
 
 function enviarObservabilidadeBestEffort() {
   void enviarEventosPendentes().catch(() => undefined);
+}
+
+/**
+ * Lê o primeiro byte do arquivo. O navegador recusa a leitura quando o arquivo
+ * mudou depois de selecionado (salvo no Word, sincronizado pelo OneDrive); nesse
+ * caso reenviar a mesma seleção sempre falha.
+ */
+function arquivoPodeSerLido(arquivo: File): Promise<boolean> {
+  return new Promise((resolve) => {
+    try {
+      const leitor = new FileReader();
+      leitor.onload = () => resolve(true);
+      leitor.onerror = () => resolve(false);
+      leitor.readAsArrayBuffer(arquivo.slice(0, 1));
+    } catch {
+      resolve(false);
+    }
+  });
 }
 
 /** Truncar nome do arquivo para exibição */
@@ -256,12 +277,19 @@ export function DocumentoUpload({
         }, TEMPO_REMOVER_SUCESSO);
       } catch (err) {
         const novaTentativa = tentativaAtual;
-        const mensagemErro = obterMensagemErro(
-          err,
-          "Não foi possível enviar o arquivo. Verifique sua conexão e tente novamente.",
-        );
+        // Sem resposta HTTP, a falha pode ser de leitura do arquivo, não de rede.
+        const arquivoIlegivel =
+          obterStatusErroUpload(err) === null &&
+          !(await arquivoPodeSerLido(item.file));
+        const mensagemErro = arquivoIlegivel
+          ? MENSAGEM_ARQUIVO_ILEGIVEL
+          : obterMensagemErro(
+              err,
+              "Não foi possível enviar o arquivo. Verifique sua conexão e tente novamente.",
+            );
 
         if (
+          !arquivoIlegivel &&
           novaTentativa < MAX_TENTATIVAS &&
           deveTentarUploadNovamente(err, mensagemErro)
         ) {
@@ -290,7 +318,7 @@ export function DocumentoUpload({
                 typeof performance !== "undefined"
                   ? Math.round(performance.now() - inicio)
                   : undefined,
-              status: "erro",
+              status: arquivoIlegivel ? "erro_leitura_arquivo" : "erro",
               tentativa: novaTentativa,
               tipo: "arquivo",
             },
@@ -305,6 +333,7 @@ export function DocumentoUpload({
                     status: "erro" as const,
                     tentativas: novaTentativa,
                     erro: mensagemErro,
+                    arquivoIlegivel,
                   }
                 : i,
             ),
@@ -568,13 +597,17 @@ export function DocumentoUpload({
                 {item.status === "erro" && (item.erro || "Erro")}
               </span>
 
-              {/* Botão de retentativa para itens com erro de upload (não validação) */}
-              {item.status === "erro" && item.tentativas > 0 && (
+              {/* Botão de retentativa para itens com erro de upload (não validação).
+                  Arquivo ilegível precisa ser selecionado de novo, não reenviado. */}
+              {item.status === "erro" &&
+                item.tentativas > 0 &&
+                !item.arquivoIlegivel && (
                 <Button
                   type="button"
                   variant="ghost"
                   size="sm"
                   className="h-6 px-2 text-destructive hover:text-destructive"
+                  aria-label="Tentar enviar novamente"
                   onClick={() => handleRetry(item.id)}
                 >
                   <RotateCcw className="h-3 w-3" />
