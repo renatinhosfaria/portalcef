@@ -58,6 +58,10 @@ services:
       - essencia-nginx-cache:/var/cache/nginx
       - essencia-nginx-certs:/etc/letsencrypt:ro
       - essencia-nginx-webroot:/var/www/certbot:ro
+    # O nginx só lê o certificado ao iniciar. Sem este reload periódico, o
+    # certificado renovado pelo certbot nunca entra em uso e o site expira
+    # (incidente de 12/10/2026).
+    command: "/bin/sh -c 'while :; do sleep 6h & wait $${!}; nginx -s reload; done & exec nginx -g \"daemon off;\"'"
     depends_on:
       api:
         condition: service_healthy
