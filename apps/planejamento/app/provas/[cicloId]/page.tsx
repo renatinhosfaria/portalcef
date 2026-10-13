@@ -9,6 +9,9 @@ import { ArrowLeft, Calendar, Clock } from "lucide-react";
 import { cookies } from "next/headers";
 import Link from "next/link";
 
+import { RedirecionarParaLogin } from "../../../components/redirecionar-para-login";
+import { ehSessaoExpirada } from "../../../lib/sessao-expirada";
+
 import { ProvaDetailContent } from "./prova-content";
 
 interface PageProps {
@@ -75,6 +78,7 @@ async function getCurrentUser(cookieHeader: string): Promise<UserData | null> {
     }
     return null;
   } catch (error) {
+    if (ehSessaoExpirada(error)) throw error;
     console.error("Erro ao buscar usuario:", error);
     return null;
   }
@@ -91,6 +95,7 @@ async function getUserTurmas(cookieHeader: string): Promise<Turma[]> {
     }
     return [];
   } catch (error) {
+    if (ehSessaoExpirada(error)) throw error;
     console.error("Erro ao buscar turmas:", error);
     return [];
   }
@@ -107,6 +112,7 @@ async function getStages(cookieHeader: string): Promise<Stage[]> {
     }
     return [];
   } catch (error) {
+    if (ehSessaoExpirada(error)) throw error;
     console.error("Erro ao buscar etapas:", error);
     return [];
   }
@@ -126,6 +132,7 @@ async function getCiclo(
 
     return response;
   } catch (error) {
+    if (ehSessaoExpirada(error)) throw error;
     console.error("Erro ao buscar ciclo:", error);
     return null;
   }
@@ -136,12 +143,20 @@ export default async function ProvaDetalheServerPage({ params, searchParams }: P
   const { turmaId: turmaIdParam } = await searchParams;
 
   const cookieHeader = await getCookieHeader();
-  const [currentUser, userTurmas, stages, cicloData] = await Promise.all([
-    getCurrentUser(cookieHeader),
-    getUserTurmas(cookieHeader),
-    getStages(cookieHeader),
-    getCiclo(cicloId, cookieHeader),
-  ]);
+  let dados: [UserData | null, Turma[], Stage[], ProvaCiclo | null];
+  try {
+    dados = await Promise.all([
+      getCurrentUser(cookieHeader),
+      getUserTurmas(cookieHeader),
+      getStages(cookieHeader),
+      getCiclo(cicloId, cookieHeader),
+    ]);
+  } catch (error) {
+    // Sessão vencida não é "ciclo inexistente": a professora precisa entrar de novo.
+    if (ehSessaoExpirada(error)) return <RedirecionarParaLogin />;
+    throw error;
+  }
+  const [currentUser, userTurmas, stages, cicloData] = dados;
 
   const primaryTurma = turmaIdParam
     ? userTurmas.find((t) => t.id === turmaIdParam) || userTurmas[0] || null
