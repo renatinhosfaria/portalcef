@@ -844,5 +844,28 @@ describe("TarefasService", () => {
         proximasVencer: 2,
       });
     });
+
+    it("envia os limites de prazo ao SQL como texto ISO, nunca como Date", async () => {
+      // O driver postgres-js configurado pelo Drizzle rejeita Date cru em
+      // template sql (ERR_INVALID_ARG_TYPE) e o endpoint inteiro responde 500.
+      const { sql } = jest.requireMock("@essencia/db") as { sql: jest.Mock };
+      mockDb.where.mockResolvedValueOnce([{}]);
+
+      await service.getStats("user-uuid-1", "school-uuid-1");
+
+      const valoresInterpolados = sql.mock.calls.flatMap(
+        ([, ...valores]: unknown[]) => valores,
+      );
+      expect(
+        valoresInterpolados.filter((valor) => valor instanceof Date),
+      ).toEqual([]);
+      expect(
+        valoresInterpolados.filter(
+          (valor) =>
+            typeof valor === "string" &&
+            /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(valor),
+        ),
+      ).toHaveLength(3);
+    });
   });
 });

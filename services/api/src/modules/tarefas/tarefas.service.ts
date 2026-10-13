@@ -969,14 +969,15 @@ export class TarefasService {
       agora.getTime() + 3 * 24 * 60 * 60 * 1000,
     );
 
+    // Datas vão como texto ISO: o driver postgres-js rejeita Date cru em sql``.
     const [valores] = await db
       .select({
         total: sql<number>`count(*)::int`,
         pendentes: sql<number>`count(*) FILTER (WHERE ${tarefas.status} = 'PENDENTE')::int`,
         concluidas: sql<number>`count(*) FILTER (WHERE ${tarefas.status} = 'CONCLUIDA')::int`,
         canceladas: sql<number>`count(*) FILTER (WHERE ${tarefas.status} = 'CANCELADA')::int`,
-        atrasadas: sql<number>`count(*) FILTER (WHERE ${tarefas.status} = 'PENDENTE' AND ${tarefas.prazo} < ${agora})::int`,
-        proximasVencer: sql<number>`count(*) FILTER (WHERE ${tarefas.status} = 'PENDENTE' AND ${tarefas.prazo} >= ${agora} AND ${tarefas.prazo} <= ${limiteProximoVencimento})::int`,
+        atrasadas: sql<number>`count(*) FILTER (WHERE ${tarefas.status} = 'PENDENTE' AND ${tarefas.prazo} < ${agora.toISOString()})::int`,
+        proximasVencer: sql<number>`count(*) FILTER (WHERE ${tarefas.status} = 'PENDENTE' AND ${tarefas.prazo} >= ${agora.toISOString()} AND ${tarefas.prazo} <= ${limiteProximoVencimento.toISOString()})::int`,
       })
       .from(tarefas)
       .where(
