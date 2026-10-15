@@ -1443,4 +1443,39 @@ describe("PlanoAulaService", () => {
     });
   });
 
+  describe("aprovarComoAnalista", () => {
+    beforeEach(() => {
+      mockDb.query.planoAula.findFirst.mockResolvedValue({
+        id: "plano-1",
+        unitId: "unit-1",
+        userId: "professora-1",
+        turmaId: "turma-1",
+        quinzenaId: "periodo-1",
+        status: "AGUARDANDO_ANALISTA",
+        turma: { stageId: "etapa-1" },
+      });
+      mockDb.query.users.findFirst.mockResolvedValue({ name: "Analista" });
+      mockDb.returning.mockResolvedValue([
+        { id: "plano-1", status: "APROVADO" },
+      ]);
+    });
+
+    it("finaliza o plano para liberar a próxima quinzena", async () => {
+      await service.aprovarComoAnalista(usuarioLogado, "plano-1");
+
+      expect(mockDb.set).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: "APROVADO",
+          approvedAt: expect.any(Date),
+        }),
+      );
+      expect(historicoServiceMock.registrar).toHaveBeenCalledWith(
+        expect.objectContaining({
+          acao: "APROVADO_ANALISTA",
+          statusAnterior: "AGUARDANDO_ANALISTA",
+          statusNovo: "APROVADO",
+        }),
+      );
+    });
+  });
 });

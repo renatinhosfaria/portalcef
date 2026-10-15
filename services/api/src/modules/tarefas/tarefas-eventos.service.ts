@@ -3,11 +3,8 @@ import { OnEvent } from "@nestjs/event-emitter";
 import { TarefasService } from "./tarefas.service";
 import { DatabaseService } from "../../common/database/database.service";
 import { and, eq, isNull } from "@essencia/db";
-import { users, educationStages } from "@essencia/db";
-import type {
-  TarefaPrioridade,
-  EducationStageCode,
-} from "@essencia/shared/types";
+import { users } from "@essencia/db";
+import type { TarefaPrioridade } from "@essencia/shared/types";
 
 /**
  * TarefasEventosService
@@ -17,7 +14,7 @@ import type {
  *
  * Eventos suportados:
  * - plano.submetido: Professora submete plano → cria tarefa para analista
- * - plano.aprovado_analista: Analista aprova → cria tarefa para coordenadora
+ * - plano.aprovado_analista: Analista aprova (aprovação final) → encerra a revisão
  * - plano.devolvido: Revisor devolve → cria tarefa para professora ajustar
  * - plano.aprovado_final: Coordenadora aprova → marca tarefa como concluída
  */
@@ -42,33 +39,6 @@ export class TarefasEventosService implements OnModuleInit {
   // ============================================
 
   /**
-   * Busca o código da etapa (BERCARIO, INFANTIL, etc.) a partir do ID
-   */
-  private async getStageCode(
-    stageId: string,
-  ): Promise<EducationStageCode | null> {
-    const db = this.db.db;
-    const stage = await db.query.educationStages.findFirst({
-      where: eq(educationStages.id, stageId),
-    });
-    return stage?.code ?? null;
-  }
-
-  /**
-   * Mapeia código da etapa para role de coordenadora
-   */
-  private mapStageToCoordRole(stageCode: EducationStageCode): string {
-    const mapping: Record<EducationStageCode, string> = {
-      BERCARIO: "coordenadora_bercario",
-      INFANTIL: "coordenadora_infantil",
-      FUNDAMENTAL_I: "coordenadora_fundamental_i",
-      FUNDAMENTAL_II: "coordenadora_fundamental_ii",
-      MEDIO: "coordenadora_medio",
-    };
-    return mapping[stageCode];
-  }
-
-  /**
    * Busca analista pedagógico responsável pela unidade
    */
   private async findAnalistaPedagogico(
@@ -86,36 +56,6 @@ export class TarefasEventosService implements OnModuleInit {
       columns: { id: true },
     });
     return analista?.id ?? null;
-  }
-
-  /**
-   * Busca coordenadora responsável pela etapa
-   */
-  private async findCoordenadora(
-    schoolId: string,
-    unitId: string,
-    stageId: string,
-  ): Promise<string | null> {
-    const stageCode = await this.getStageCode(stageId);
-    if (!stageCode) {
-      this.logger.warn(`Etapa não encontrada: ${stageId}`);
-      return null;
-    }
-
-    const coordRole = this.mapStageToCoordRole(stageCode);
-    const db = this.db.db;
-
-    const coordenadora = await db.query.users.findFirst({
-      where: and(
-        eq(users.role, coordRole),
-        eq(users.schoolId, schoolId),
-        eq(users.unitId, unitId),
-        isNull(users.inativadoEm),
-      ),
-      columns: { id: true },
-    });
-
-    return coordenadora?.id ?? null;
   }
 
   /**
@@ -236,8 +176,8 @@ export class TarefasEventosService implements OnModuleInit {
   /**
    * Handler para evento plano.aprovado_analista
    *
-   * Disparado quando um analista aprova um plano.
-   * Cria tarefa para a coordenadora fazer aprovação final.
+   * Disparado quando um analista aprova um plano. A aprovação do analista é a
+   * final, então apenas encerra a tarefa de revisão.
    *
    * @param payload Dados do evento
    */
@@ -257,20 +197,6 @@ export class TarefasEventosService implements OnModuleInit {
     );
 
     try {
-      // Buscar coordenadora responsável pela etapa
-      const coordenadoraId = await this.findCoordenadora(
-        payload.schoolId,
-        payload.unitId,
-        payload.etapaId,
-      );
-
-      if (!coordenadoraId) {
-        this.logger.warn(
-          `Coordenadora não encontrada para etapa ${payload.etapaId}`,
-        );
-        return;
-      }
-
       await this.tarefasService.concluirPorContexto({
         planoId: payload.planoId,
         quinzenaId: payload.quinzenaId,
@@ -283,35 +209,8 @@ export class TarefasEventosService implements OnModuleInit {
         titulo: `Revisar planejamento - Turma ${payload.turmaId}`,
       });
 
-      // Calcular prazo (2 dias para aprovação final)
-      const prazo = this.calcularPrazo(2);
-      const prioridade = this.calcularPrioridade(prazo);
-
-      // Criar tarefa para coordenadora aprovar
-      await this.tarefasService.criarAutomatica({
-        chaveIdempotencia: `plano:${payload.planoId}:aprovado-analista:${coordenadoraId}`,
-        schoolId: payload.schoolId,
-        unitId: payload.unitId,
-        titulo: `Aprovar planejamento - Turma ${payload.turmaId}`,
-        descricao: `Plano aprovado pelo analista, aguardando aprovação final`,
-        prioridade,
-        prazo,
-        criadoPor: payload.analistaId,
-        responsavel: coordenadoraId,
-        contextos: [
-          {
-            modulo: "PLANEJAMENTO",
-            planoId: payload.planoId,
-            quinzenaId: payload.quinzenaId,
-            etapaId: payload.etapaId,
-            turmaId: payload.turmaId,
-            professoraId: payload.professoraId,
-          },
-        ],
-      });
-
       this.logger.log(
-        `Tarefa criada para coordenadora aprovar plano: ${payload.planoId}`,
+        `Revisão do analista encerrada - plano aprovado: ${payload.planoId}`,
       );
     } catch (error) {
       this.logger.error(
