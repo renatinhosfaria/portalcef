@@ -570,7 +570,8 @@ export class PlanoAulaService {
   }
 
   /**
-   * Aprova plano como analista (-> AGUARDANDO_COORDENADORA)
+   * Aprova plano como analista (-> APROVADO)
+   * A aprovação da analista é a final: libera a próxima quinzena da turma.
    */
   async aprovarComoAnalista(
     user: UserContext,
@@ -608,7 +609,8 @@ export class PlanoAulaService {
     const [atualizado] = await db
       .update(planoAula)
       .set({
-        status: "AGUARDANDO_COORDENADORA",
+        status: "APROVADO",
+        approvedAt: new Date(),
         updatedAt: new Date(),
       })
       .where(eq(planoAula.id, planoId))
@@ -623,7 +625,7 @@ export class PlanoAulaService {
       userRole: user.role,
       acao: "APROVADO_ANALISTA",
       statusAnterior,
-      statusNovo: "AGUARDANDO_COORDENADORA",
+      statusNovo: "APROVADO",
     });
 
     if (user.schoolId) {

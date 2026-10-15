@@ -96,48 +96,49 @@ describe("eventos de tarefas", () => {
     );
   });
 
-  it("encerra a revisão do analista e cria a aprovação da coordenadora", async () => {
-    const concluirPorContexto = jest.fn().mockResolvedValue(null);
-    const criarAutomatica = jest.fn();
-    const service = new TarefasEventosService(
-      { concluirPorContexto, criarAutomatica } as never,
-      {
-        db: {
-          query: {
-            users: {
-              findFirst: jest.fn().mockResolvedValue({ id: "coord-1" }),
-            },
-            educationStages: {
-              findFirst: jest.fn().mockResolvedValue({ code: "INFANTIL" }),
+  it.each([
+    ["existe coordenadora da etapa", { id: "coord-1" }],
+    ["só existe coordenadora geral", undefined],
+  ])(
+    "encerra a revisão do analista sem criar tarefa para a coordenadora quando %s",
+    async (_cenario, coordenadoraDaEtapa) => {
+      const concluirPorContexto = jest.fn().mockResolvedValue(null);
+      const criarAutomatica = jest.fn();
+      const service = new TarefasEventosService(
+        { concluirPorContexto, criarAutomatica } as never,
+        {
+          db: {
+            query: {
+              users: {
+                findFirst: jest.fn().mockResolvedValue(coordenadoraDaEtapa),
+              },
+              educationStages: {
+                findFirst: jest.fn().mockResolvedValue({ code: "INFANTIL" }),
+              },
             },
           },
-        },
-      } as never,
-    );
-    await service.onPlanoAprovadoAnalista({
-      planoId: "plano-1",
-      quinzenaId: "quinzena-1",
-      professoraId: "prof-1",
-      turmaId: "turma-1",
-      etapaId: "etapa-1",
-      schoolId: "escola-1",
-      unitId: "unidade-1",
-      analistaId: "analista-2",
-    });
-    expect(concluirPorContexto).toHaveBeenCalledWith(
-      expect.objectContaining({
-        titulo: "Revisar planejamento - Turma turma-1",
-        usuarioId: "analista-2",
+        } as never,
+      );
+      await service.onPlanoAprovadoAnalista({
         planoId: "plano-1",
-      }),
-    );
-    expect(criarAutomatica).toHaveBeenCalledWith(
-      expect.objectContaining({
-        responsavel: "coord-1",
-        titulo: "Aprovar planejamento - Turma turma-1",
-      }),
-    );
-  });
+        quinzenaId: "quinzena-1",
+        professoraId: "prof-1",
+        turmaId: "turma-1",
+        etapaId: "etapa-1",
+        schoolId: "escola-1",
+        unitId: "unidade-1",
+        analistaId: "analista-2",
+      });
+      expect(concluirPorContexto).toHaveBeenCalledWith(
+        expect.objectContaining({
+          titulo: "Revisar planejamento - Turma turma-1",
+          usuarioId: "analista-2",
+          planoId: "plano-1",
+        }),
+      );
+      expect(criarAutomatica).not.toHaveBeenCalled();
+    },
+  );
 
   it.each([
     ["REVISAO", undefined, "Revisar", "Ajustar", "prof-1"],
