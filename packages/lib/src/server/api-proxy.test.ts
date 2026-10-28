@@ -62,3 +62,18 @@ describe("proxy HTTP compartilhado", () => {
     );
   });
 });
+
+it("encaminha multipart como bytes preservando boundary e cookie", async () => {
+  const fetchMock = vi.fn().mockResolvedValue(new Response("{}"));
+  vi.stubGlobal("fetch", fetchMock);
+  const form = new FormData();
+  form.append("file", new Blob(["bytes"]), "map.png");
+  const request = new NextRequest("http://localhost:3004/api/eventos/admin/1/mapas/import", { method: "POST", headers: { cookie: "sid=1" }, body: form });
+  await proxyRequest(request, "POST", { preservarPrefixoApi: true });
+  const [url, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+  expect(url).toBe("http://localhost:3001/api/eventos/admin/1/mapas/import");
+  expect((options.headers as Record<string,string>).Cookie).toBe("sid=1");
+  expect((options.headers as Record<string,string>)["Content-Type"]).toContain("multipart/form-data; boundary=");
+  expect(options.body).toBeInstanceOf(ArrayBuffer);
+  expect(new TextDecoder().decode(options.body as ArrayBuffer)).toContain("bytes");
+});
