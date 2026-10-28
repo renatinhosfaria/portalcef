@@ -137,3 +137,32 @@ GREEN:
 - Regressões da loja — **126 testes PASS**.
 - API typecheck/lint, DB schema (3 testes), DB build e shared build — **PASS**.
 - Pipeline global `pnpm turbo lint && pnpm turbo typecheck` — **PASS**, 21 tarefas de lint e 22 de typecheck.
+
+## Rodada de correção 4/5
+
+- O fake transacional passou a resolver cada marcador pelo par `__table`/`__column`, rejeitando referências de tabela errada em `eq`, `and`, `or`, `lte` e `inArray`, tanto em filtros simples quanto em atualizações condicionais.
+- A seleção conjunta de `eventoPagamentos`/`eventoPedidos` agora avalia o predicado contra o contexto correto do `innerJoin`; deixou de aceitar um predicado de pedido apenas porque o mesmo nome de coluna/valor existe no pagamento.
+- Adicionado teste regressivo com IDs/datas coincidentes e valor presente apenas na entidade errada; o teste falha com o fake anterior e passa após a correção.
+
+RED antes da correção:
+
+```text
+pnpm --filter @essencia/api test -- --config jest.eventos.config.js --runInBand \
+  src/modules/eventos/eventos-pagamentos.service.spec.ts -t "predicado de tabela errada"
+```
+
+Falhou no primeiro `expect`: `matches(eq(eventoPedidos.id, ...), payment)` retornava `true` porque o fake ignorava `marker.__table`; a seleção `payment/order` também usava `OR` entre as duas entidades.
+
+GREEN:
+
+- Suíte focada de Eventos/Payments/Public — **5 suítes, 26 testes PASS**.
+- `src/modules/shop/shop-regressions.spec.ts` — **126 testes PASS**.
+- `pnpm --filter @essencia/api typecheck` e `pnpm --filter @essencia/api lint` — **PASS** (lint com avisos `any` preexistentes).
+- `pnpm --filter @essencia/db test -- --test-name-pattern eventos` — **3 testes PASS**.
+- `pnpm --filter @essencia/db build` e `pnpm --filter @essencia/shared build` — **PASS**.
+- Pipeline global `pnpm turbo lint && pnpm turbo typecheck` — **PASS**, 22 tarefas de lint e 22 de typecheck.
+
+Arquivos desta rodada:
+
+- `services/api/src/modules/eventos/eventos-pagamentos.service.spec.ts`
+- `.superpowers/sdd/2026-10-28-eventos-publico-admin/task-4-report.md`
