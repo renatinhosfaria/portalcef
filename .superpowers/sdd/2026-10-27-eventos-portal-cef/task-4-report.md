@@ -64,3 +64,7 @@ Revisão exibe confiança, aguarda correção antes de limpar conflito, status d
 ## Round 11
 
 Adicionados helpers puros de adaptação de detecções e flatten/normalização de inventário com testes Vitest runtime. Eventos: 9 testes passaram e typecheck passou.
+
+## Round 12
+
+Helpers de contratos agora são usados diretamente pelas páginas de mapa e inventário. Adicionado builder puro de DTO de formulário com normalização de campos opcionais e remoção das flags de herança.
