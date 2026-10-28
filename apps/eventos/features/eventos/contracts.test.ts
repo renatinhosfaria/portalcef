@@ -1,0 +1,2 @@
+import {describe,expect,it} from 'vitest';import {adaptDetection,flattenInventory} from './contracts';
+describe('event contracts',()=>{it('adapts detection',()=>expect(adaptDetection({proposedRowLabel:'A',proposedSeatNumber:'1',conflictReason:'x',confidence:.8})).toMatchObject({rowLabel:'A',seatNumber:'1',conflict:'x',confidence:.8}));it('flattens statuses',()=>expect(flattenInventory([{session:{id:'s'},inventory:[{seatId:'1',status:'VENDIDO'},{seatId:'2',status:'other'}]}]).map(x=>x.status)).toEqual(['vendido','bloqueado']))});
