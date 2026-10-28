@@ -68,3 +68,7 @@ Adicionados helpers puros de adaptação de detecções e flatten/normalização
 ## Round 12
 
 Helpers de contratos agora são usados diretamente pelas páginas de mapa e inventário. Adicionado builder puro de DTO de formulário com normalização de campos opcionais e remoção das flags de herança.
+
+## Round 15
+
+Adicionado teste runtime de multipart no proxy, verificando bytes, boundary, cookie e prefixo `/api`. Lib: 3 testes passaram e typecheck passou.
