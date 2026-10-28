@@ -65,8 +65,13 @@ export async function proxyRequest(
   };
 
   if (method !== "GET" && method !== "HEAD") {
-    const corpo = await request.text();
-    if (corpo) options.body = corpo;
+    const contentTypeHeader = request.headers.get("content-type") || "";
+    if (contentTypeHeader.toLowerCase().startsWith("multipart/")) {
+      options.body = await (request as unknown as Request).arrayBuffer();
+    } else {
+      const corpo = await request.text();
+      if (corpo) options.body = corpo;
+    }
   }
 
   try {

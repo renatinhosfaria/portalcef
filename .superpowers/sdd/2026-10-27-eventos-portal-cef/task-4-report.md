@@ -24,3 +24,7 @@ A listagem e criação usam a rota proxy administrativa, mas as operações de p
 ## Round 1
 
 Corrigido o uso do `basePath` nas chamadas públicas, incluído `schoolId`, controles de sessões múltiplas, ingressos e cinco políticas, revisão de mapa com upload privado e resolução de conflitos, e ações de inventário com motivo obrigatório e tratamento de rejeição. Testes: 7 passaram; typecheck passou; build concluído com avisos de lockfiles/import order.
+
+## Round 2
+
+Proxy preserva prefixo `/api`, uploads multipart encaminham bytes, tenant define `schoolId` sem permitir override do formulário, e páginas de mapa/inventário usam rotas públicas com estados de erro. Testes e typecheck passaram.

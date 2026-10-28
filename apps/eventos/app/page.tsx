@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 
 export default function EventosPage() {
   const [status, setStatus] = useState("Carregando eventos disponíveis para sua unidade…");
-  useEffect(() => { fetch("/eventos/api/eventos/admin/eventos", { credentials: "include" }).then((r) => r.ok ? r.json() : Promise.reject()).then((data) => setStatus(Array.isArray(data) && data.length ? `${data.length} eventos encontrados.` : "Nenhum evento encontrado.")).catch(() => setStatus("Não foi possível carregar os eventos.")); }, []);
+  useEffect(() => { fetch("/eventos/api/eventos/admin", { credentials: "include" }).then((r) => r.ok ? r.json() : Promise.reject()).then((data) => setStatus(Array.isArray(data) && data.length ? `${data.length} eventos encontrados.` : "Nenhum evento encontrado.")).catch(() => setStatus("Não foi possível carregar os eventos.")); }, []);
   return (
     <section aria-labelledby="eventos-dashboard-title" className="space-y-8">
       <div className="flex flex-wrap items-center justify-between gap-4">
