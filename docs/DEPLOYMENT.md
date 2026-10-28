@@ -26,7 +26,7 @@ Internet
    ▼
 ┌────────────────────────────────────────────────────────────┐
 │                    Nginx + SSL (443/80)                    │
-│          (www.portalcef.com.br + Certbot)                  │
+│    (www.portalcef.com.br + eventos.portalcef.com.br)       │
 └────────────────────────────────────────────────────────────┘
    │
    ├──→ /api/*          →  essencia-api:3002       (NestJS)
@@ -36,7 +36,9 @@ Internet
    ├──→ /turmas/*       →  essencia-turmas:3006    (Next.js)
    ├──→ /planejamento/* →  essencia-planejamento:3007 (Next.js)
    ├──→ /calendario/*   →  essencia-calendario:3008 (Next.js)
-   ├──→ /eventos/*      →  essencia-eventos:3014    (Next.js)
+   ├──→ eventos.portalcef.com.br/ → essencia-eventos:3014 (vitrine pública)
+   ├──→ www.portalcef.com.br/eventos-admin → essencia-eventos-admin:3016 (painel)
+   ├──→ www.portalcef.com.br/eventos → 301 /eventos-admin
    ├──→ /loja/*         →  essencia-loja:3010      (Next.js)
    ├──→ /loja-admin/*   →  essencia-loja-admin:3011 (Next.js)
    ├──→ /tarefas/*      →  essencia-tarefas:3012   (Next.js)
@@ -71,7 +73,8 @@ Internet
 | **Turmas**       | essencia-turmas          | 3006          | —             | —            |
 | **Planejamento** | essencia-planejamento    | 3007          | —             | —            |
 | **Calendario**   | essencia-calendario      | 3008          | —             | —            |
-| **Eventos**      | essencia-eventos         | 3014          | —             | —            |
+| **Eventos público** | essencia-eventos      | 3014          | —             | `/`          |
+| **Eventos admin**   | essencia-eventos-admin | 3016          | —             | `/eventos-admin` |
 | **Loja**         | essencia-loja            | 3010          | —             | —            |
 | **Loja Admin**   | essencia-loja-admin      | 3011          | —             | —            |
 | **Tarefas**      | essencia-tarefas         | 3012          | —             | —            |
@@ -113,8 +116,9 @@ http {
         listen 443 ssl;
         server_name www.portalcef.com.br;
 
-        ssl_certificate /etc/letsencrypt/live/portalcef.com.br/fullchain.pem;
-        ssl_certificate_key /etc/letsencrypt/live/portalcef.com.br/privkey.pem;
+        # O nome final pode ser portalcef.com.br-0001 (ou o nome emitido pelo Certbot).
+        ssl_certificate /etc/letsencrypt/live/portalcef.com.br-0001/fullchain.pem;
+        ssl_certificate_key /etc/letsencrypt/live/portalcef.com.br-0001/privkey.pem;
         ssl_protocols TLSv1.2 TLSv1.3;
         ssl_ciphers HIGH:!aNULL:!MD5;
 
@@ -138,6 +142,11 @@ http {
 - **Redirect Chain**: Força `www` + HTTPS
 - **Proxy Headers**: `X-Real-IP`, `X-Forwarded-For`, `X-Forwarded-Proto`
 - **ACME Challenge**: `/.well-known/acme-challenge/` para validação Let's Encrypt
+
+O host `eventos.portalcef.com.br` atende a vitrine pública em
+`essencia-eventos:3014`. O painel autenticado fica em
+`www.portalcef.com.br/eventos-admin`, servido por `essencia-eventos-admin:3016`;
+o caminho legado `/eventos` no host `www` retorna 301 para `/eventos-admin`.
 
 ---
 
@@ -219,11 +228,18 @@ STRIPE_WEBHOOK_SECRET=whsec_...
 LOJA_PUBLIC_URL=https://loja.portalcef.com.br
 NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_live_...
 
+# Eventos público e emissão de QR
+EVENTOS_PUBLIC_URL=https://eventos.portalcef.com.br
+EVENTOS_QR_SECRET=<strong-random-secret>
+
 # Node
 NODE_ENV=production
 ```
 
 > **⚠️ ATENÇÃO**: Nunca commitar `.env.docker` no repositório. Use secrets management ou `.gitignore`.
+
+`EVENTOS_QR_SECRET` é obrigatório para o fluxo de Eventos; gere um valor forte,
+preserve-o somente no secret manager/`.env.docker` e nunca o imprima em logs.
 
 ---
 
@@ -249,7 +265,9 @@ cp .env.example .env.docker
 nano .env.docker  # Editar com valores de produção
 
 # 3. Gerar certificado SSL (primeira vez)
-# Certifique-se de que o DNS aponta para o servidor
+# Certifique-se de que os DNS apontam para o servidor. O certificado deve
+# conter SAN para portalcef.com.br, www.portalcef.com.br,
+# loja.portalcef.com.br e eventos.portalcef.com.br.
 docker compose -f docker-compose.prod.yml --env-file .env.docker run --rm certbot certonly \
   --webroot \
   --webroot-path=/var/www/certbot \
@@ -257,13 +275,15 @@ docker compose -f docker-compose.prod.yml --env-file .env.docker run --rm certbo
   --agree-tos \
   --no-eff-email \
   -d portalcef.com.br \
-  -d www.portalcef.com.br
+  -d www.portalcef.com.br \
+  -d loja.portalcef.com.br \
+  -d eventos.portalcef.com.br
 
 # 4. Iniciar serviços
 docker compose -f docker-compose.prod.yml --env-file .env.docker up -d
 
-# 5. Executar migrations
-./scripts/migrate.sh
+# 5. Executar a migration 0051 com backup
+./scripts/deploy.sh --migrar
 
 # 6. Setup inicial (criar escola, unidade, usuário master)
 curl -X POST https://www.portalcef.com.br/api/setup/init \
@@ -279,6 +299,9 @@ curl -X POST https://www.portalcef.com.br/api/setup/init \
 # 7. Verificar saúde
 ./scripts/health-check.sh
 ```
+
+O modo `--migrar` cria o backup e aplica a migration 0051 antes de subir a
+release dos serviços.
 
 ### 2. Deploys Subsequentes com Build Local
 
