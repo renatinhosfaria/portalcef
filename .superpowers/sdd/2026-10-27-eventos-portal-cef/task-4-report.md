@@ -60,3 +60,7 @@ Detecções da API são adaptadas dos campos `proposed*` para o modelo de revis�
 ## Round 10
 
 Revisão exibe confiança, aguarda correção antes de limpar conflito, status desconhecido do inventário vira bloqueado e respostas `{success:false}` da criação exibem erro mesmo com HTTP 2xx. Testes/typecheck passaram.
+
+## Round 11
+
+Adicionados helpers puros de adaptação de detecções e flatten/normalização de inventário com testes Vitest runtime. Eventos: 9 testes passaram e typecheck passou.
