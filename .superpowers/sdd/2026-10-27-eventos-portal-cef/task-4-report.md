@@ -56,3 +56,7 @@ Páginas de pedidos, check-in e configurações agora exibem títulos específic
 ## Round 9
 
 Detecções da API são adaptadas dos campos `proposed*` para o modelo de revisão. Ações de inventário exigem callback explícito e a página informa pendência da Task 7. DTO de formulário separado do estado visual de sessões.
+
+## Round 10
+
+Revisão exibe confiança, aguarda correção antes de limpar conflito, status desconhecido do inventário vira bloqueado e respostas `{success:false}` da criação exibem erro mesmo com HTTP 2xx. Testes/typecheck passaram.
