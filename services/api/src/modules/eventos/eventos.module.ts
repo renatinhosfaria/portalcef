@@ -9,5 +9,6 @@ import { EventosService } from "./eventos.service";
 import { MapasController } from "./mapas/mapas.controller";
 import { MapasService } from "./mapas/mapas.service";
 import { MapDetector } from "./mapas/map-detector";
-@Module({ imports: [AuthModule, DatabaseModule, StorageModule.forRoot()], controllers: [EventosAdminController, EventosPublicController, MapasController], providers: [EventosRulesService, EventosService, MapasService, MapDetector], exports: [EventosRulesService, EventosService, MapasService] })
+import { EventosPublicSalesService } from "./eventos-public-sales.service";
+@Module({ imports: [AuthModule, DatabaseModule, StorageModule.forRoot()], controllers: [EventosAdminController, EventosPublicController, MapasController], providers: [EventosRulesService, EventosService, EventosPublicSalesService, MapasService, MapDetector], exports: [EventosRulesService, EventosService, EventosPublicSalesService, MapasService] })
 export class EventosModule {}

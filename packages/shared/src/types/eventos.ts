@@ -6,3 +6,7 @@ export interface PublicEventDetail extends PublicEventCard { description: string
 export interface PublicEventSession { id: string; startsAt: Date; endsAt: Date; status: "PUBLICADA"; capacity: number; location: { name: string; address: string; room: string | null; instructions: string | null; accessibility: string | null } | null; mapId: string | null; salesStartsAt: Date | null; salesEndsAt: Date | null; availability: "available" | "sold_out" | "unavailable"; }
 export interface PublicSeat { id: string; sessionId: string; rowLabel: string; seatNumber: string; x: number; y: number; width: number; height: number; category: string | null; accessible: boolean; state: "available" | "reserved" | "sold" | "blocked"; }
 export interface PublicMap { sessionId: string; mapId: string; seats: PublicSeat[]; }
+export interface PoliticaPublica { type: "PRIVACIDADE" | "COMPRA" | "CANCELAMENTO_REEMBOLSO" | "ACESSIBILIDADE" | "CONTATO"; version: number; content: string; }
+export interface ReservaPublicaResult { reservationId: string; orderNumber: string; expiresAt: Date; totalCents: number; items: Array<{ seatId: string; ticketTypeId: string; unitPriceCents: number; totalPriceCents: number }>; }
+export interface PedidoPublicoResult { orderNumber: string; status: string; eventTitle: string; session: { startsAt: Date; endsAt: Date }; totalCents: number; items: Array<{ seatId: string; ticketTypeId: string; unitPriceCents: number; totalPriceCents: number }>; tickets?: unknown[]; }
+export type ConsultaPedidoPublica = PedidoPublicoResult;

@@ -318,5 +318,5 @@ export type {
   OrderFilterQuery,
 } from "./shop";
 
-export { eventoStatusSchema, eventoSessaoStatusSchema, eventoParticipanteTipoSchema, criarEventoSchema, criarEventoInputSchema, atualizarEventoSchema, criarSessaoSchema, politicaSchema, eventoListQuerySchema } from "./eventos";
-export type { CriarEventoInput, AtualizarEventoInput, CriarSessaoInput, EventoListQuery } from "./eventos";
+export { eventoStatusSchema, eventoSessaoStatusSchema, eventoParticipanteTipoSchema, criarEventoSchema, criarEventoInputSchema, atualizarEventoSchema, criarSessaoSchema, politicaSchema, eventoListQuerySchema, politicaPublicaTipoSchema, reservaPublicaSchema, finalizarPedidoSchema, checkoutPublicoSchema } from "./eventos";
+export type { CriarEventoInput, AtualizarEventoInput, CriarSessaoInput, EventoListQuery, ReservaPublicaInput, FinalizarPedidoInput, CheckoutPublicoInput } from "./eventos";

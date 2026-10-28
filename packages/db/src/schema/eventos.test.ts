@@ -8,6 +8,7 @@ import {
   eventoSessoes,
   eventoTokensConsulta,
   eventoTiposIngresso,
+  eventoAceiteTipoEnum,
   eventos,
 } from "./eventos.js";
 
@@ -19,6 +20,10 @@ test("expõe as entidades do módulo e mantém unicidade por sessão", () => {
   assert.ok(eventoIngressos);
   assert.ok("sessionId" in eventoInventarioAssentos);
   assert.ok("seatId" in eventoInventarioAssentos);
+});
+
+test("aceites cobrem todas as politicas publicas", () => {
+  assert.deepEqual(eventoAceiteTipoEnum, ["PRIVACIDADE", "COMPRA", "CANCELAMENTO_REEMBOLSO", "ACESSIBILIDADE", "CONTATO"]);
 });
 
 test("representa dinheiro em centavos e armazena somente hash do token de consulta", () => {

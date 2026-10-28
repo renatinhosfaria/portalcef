@@ -157,7 +157,7 @@ export const eventoPoliticaTipoEnum = [
 ] as const;
 export type EventoPoliticaTipo = (typeof eventoPoliticaTipoEnum)[number];
 
-export const eventoAceiteTipoEnum = ["COMPRA", "PRIVACIDADE"] as const;
+export const eventoAceiteTipoEnum = ["PRIVACIDADE", "COMPRA", "CANCELAMENTO_REEMBOLSO", "ACESSIBILIDADE", "CONTATO"] as const;
 export type EventoAceiteTipo = (typeof eventoAceiteTipoEnum)[number];
 
 export const eventoAuditoriaAcaoEnum = [

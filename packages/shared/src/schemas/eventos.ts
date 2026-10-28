@@ -3,6 +3,10 @@ import { z } from "zod";
 export const eventoStatusSchema = z.enum(["RASCUNHO","REVISAO","PUBLICADO","PAUSADO","ENCERRADO","CANCELADO","ARQUIVADO"]);
 export const eventoSessaoStatusSchema = z.enum(["RASCUNHO","PUBLICADA","ESGOTADA","ENCERRADA","CANCELADA"]);
 export const eventoParticipanteTipoSchema = z.enum(["ALUNO","CONVIDADO"]);
+export const politicaPublicaTipoSchema = z.enum(["PRIVACIDADE","COMPRA","CANCELAMENTO_REEMBOLSO","ACESSIBILIDADE","CONTATO"]);
+export const reservaPublicaSchema = z.object({ sessionId: z.string().uuid(), seats: z.array(z.object({ seatId: z.string().uuid(), ticketTypeId: z.string().uuid(), participantIndex: z.number().int().nonnegative() })).min(1).max(20), buyer: z.object({ name: z.string().trim().min(2).max(200), email: z.string().trim().email().max(320), phone: z.string().trim().min(8).max(30) }), idempotencyKey: z.string().trim().min(8).max(180) }).strict();
+export const finalizarPedidoSchema = z.object({ participants: z.array(z.object({ fullName: z.string().trim().min(2).max(200), type: eventoParticipanteTipoSchema, email: z.string().email().optional(), phone: z.string().max(30).optional() })).min(1).max(20), acceptances: z.array(z.object({ type: politicaPublicaTipoSchema, version: z.number().int().positive() })).min(1).max(5), idempotencyKey: z.string().trim().min(8).max(180) }).strict();
+export const checkoutPublicoSchema = z.object({ successUrl: z.string().url().refine((v) => v.startsWith("https://")), cancelUrl: z.string().url().refine((v) => v.startsWith("https://")), idempotencyKey: z.string().trim().min(8).max(180) }).strict();
 
 const date = z.coerce.date();
 export const criarEventoSchema = z.object({
@@ -25,3 +29,6 @@ export type CriarEventoInput = z.infer<typeof criarEventoSchema>;
 export type AtualizarEventoInput = z.infer<typeof atualizarEventoSchema>;
 export type CriarSessaoInput = z.infer<typeof criarSessaoSchema>;
 export type EventoListQuery = z.infer<typeof eventoListQuerySchema>;
+export type ReservaPublicaInput = z.infer<typeof reservaPublicaSchema>;
+export type FinalizarPedidoInput = z.infer<typeof finalizarPedidoSchema>;
+export type CheckoutPublicoInput = z.infer<typeof checkoutPublicoSchema>;
