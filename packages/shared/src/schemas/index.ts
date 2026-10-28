@@ -317,3 +317,6 @@ export type {
   ProductListQuery,
   OrderFilterQuery,
 } from "./shop";
+
+export { eventoStatusSchema, eventoSessaoStatusSchema, eventoParticipanteTipoSchema, criarEventoSchema, criarEventoInputSchema, atualizarEventoSchema, criarSessaoSchema, politicaSchema, eventoListQuerySchema } from "./eventos";
+export type { CriarEventoInput, AtualizarEventoInput, CriarSessaoInput, EventoListQuery } from "./eventos";

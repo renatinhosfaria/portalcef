@@ -32,6 +32,7 @@ import { ProvaCicloModule } from "./modules/prova-ciclo/prova-ciclo.module";
 import { ProvaModule } from "./modules/prova/prova.module";
 import { SecurityModule } from "./modules/security/security.module";
 import { EventoInscricoesModule } from "./modules/evento-inscricoes/evento-inscricoes.module";
+import { EventosModule } from "./modules/eventos/eventos.module";
 import { SemestreRelatorioModule } from "./modules/semestre-relatorio/semestre-relatorio.module";
 import { RelatorioModule } from "./modules/relatorio/relatorio.module";
 
@@ -104,6 +105,7 @@ import { RelatorioModule } from "./modules/relatorio/relatorio.module";
     ProvaModule,
     // Inscrições de eventos (landing pública + admin restrito)
     EventoInscricoesModule,
+    EventosModule,
     // Relatórios (workflow semestral para BERCARIO e INFANTIL)
     SemestreRelatorioModule,
     RelatorioModule,

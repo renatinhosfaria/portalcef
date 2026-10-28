@@ -277,3 +277,5 @@ export * from "./tarefas";
 export * from "./suporte";
 
 export * from "./workflows";
+
+export * from "./eventos";
