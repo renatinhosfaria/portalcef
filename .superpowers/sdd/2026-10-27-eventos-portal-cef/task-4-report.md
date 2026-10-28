@@ -28,3 +28,7 @@ Corrigido o uso do `basePath` nas chamadas públicas, incluído `schoolId`, cont
 ## Round 2
 
 Proxy preserva prefixo `/api`, uploads multipart encaminham bytes, tenant define `schoolId` sem permitir override do formulário, e páginas de mapa/inventário usam rotas públicas com estados de erro. Testes e typecheck passaram.
+
+## Round 3
+
+Mapa agora inicia por upload e propaga `mapId/importId` às rotas de revisão, detecção e confirmação. Inventário apenas consulta o endpoint GET disponível e mantém ações sem mutação otimista enquanto operações aguardam Task 7. Testes e typecheck passaram.
