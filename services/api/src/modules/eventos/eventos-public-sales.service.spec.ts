@@ -16,9 +16,49 @@ describe("EventosPublicSalesService - contratos públicos", () => {
   });
 
   it("usa o preço persistido do ingresso e retorna itens da reserva", async () => {
-    const db = vendaDb({ event: { id: "e1", status: "PUBLICADO" }, session: { id: "s1", status: "PUBLICADA" }, inventory: { id: "i1", status: "DISPONIVEL", seatId: "seat-1" }, ticket: { id: "t1", priceCents: 1250, version: 1 } });
+    const db = vendaDb({ event: { id: "e1", status: "PUBLICADO" }, session: { id: "s1", status: "PUBLICADA" }, inventory: { id: "i1", status: "DISPONIVEL", seatId: "seat-1" }, ticket: { id: "t1", priceCents: 1250, maxPerOrder: 1, version: 1 } });
     const result = await new EventosPublicSalesService({ db } as any).reservarAssentos({ sessionId: "00000000-0000-4000-8000-000000000001", seats: [{ seatId: "00000000-0000-4000-8000-000000000002", ticketTypeId: "00000000-0000-4000-8000-000000000003", participantIndex: 0 }], buyer: { name: "Ana", email: "a@b.com", phone: "11999999999" }, idempotencyKey: "price-123456" });
     expect(result.totalCents).toBe(1250);
+    expect(result.items).toHaveLength(1);
+  });
+
+  it("rejeita excesso por tipo de ingresso antes de mutar inventário ou pedido", async () => {
+    const db = vendaDbComIngressos({
+      event: { id: "e1", status: "PUBLICADO" },
+      session: { id: "s1", status: "PUBLICADA" },
+      inventories: [
+        { id: "i1", status: "DISPONIVEL", seatId: "seat-1" },
+        { id: "i2", status: "DISPONIVEL", seatId: "seat-2" },
+      ],
+      ticket: { id: "t1", priceCents: 1250, maxPerOrder: 1, version: 1 },
+    });
+
+    await expect(new EventosPublicSalesService({ db } as any).reservarAssentos({
+      sessionId: "00000000-0000-4000-8000-000000000001",
+      seats: [
+        { seatId: "00000000-0000-4000-8000-000000000002", ticketTypeId: "00000000-0000-4000-8000-000000000003", participantIndex: 0 },
+        { seatId: "00000000-0000-4000-8000-000000000004", ticketTypeId: "00000000-0000-4000-8000-000000000003", participantIndex: 1 },
+      ],
+      buyer: { name: "Ana", email: "a@b.com", phone: "11999999999" },
+      idempotencyKey: "ticket-limit-123456",
+    })).rejects.toMatchObject({ response: { code: "TICKET_LIMIT_EXCEEDED" } });
+    expect(db.mutations.value).toBe(0);
+  });
+
+  it("permite a quantidade igual ao limite do tipo de ingresso", async () => {
+    const db = vendaDbComIngressos({
+      event: { id: "e1", status: "PUBLICADO" },
+      session: { id: "s1", status: "PUBLICADA" },
+      inventories: [{ id: "i1", status: "DISPONIVEL", seatId: "seat-1" }],
+      ticket: { id: "t1", priceCents: 1250, maxPerOrder: 1, version: 1 },
+    });
+
+    const result = await new EventosPublicSalesService({ db } as any).reservarAssentos({
+      sessionId: "00000000-0000-4000-8000-000000000001",
+      seats: [{ seatId: "00000000-0000-4000-8000-000000000002", ticketTypeId: "00000000-0000-4000-8000-000000000003", participantIndex: 0 }],
+      buyer: { name: "Ana", email: "a@b.com", phone: "11999999999" },
+      idempotencyKey: "ticket-limit-ok-123456",
+    });
     expect(result.items).toHaveLength(1);
   });
 
@@ -81,7 +121,33 @@ describe("EventosPublicSalesService - contratos públicos", () => {
 function vendaDb(data: any) {
   let selects = 0;
   const order = { id: "order-1", orderNumber: "ABC123DEF456", totalCents: data.ticket?.priceCents ?? 0, expiresAt: new Date(Date.now() + 60_000), buyerEmail: "a@b.com" };
-  const rows = [[], data.session ? [{ event: data.event, session: data.session }] : [], data.inventory ? [data.inventory] : [], data.ticket ? [data.ticket] : [], [], [{ item: { ticketTypeId: data.ticket?.id, unitPriceCents: data.ticket?.priceCents, totalPriceCents: data.ticket?.priceCents }, inventory: data.inventory }]];
+  const rows = [[], data.session ? [{ event: data.event, session: data.session }] : [], data.ticket ? [data.ticket] : [], data.inventory ? [data.inventory] : [], [], [{ item: { ticketTypeId: data.ticket?.id, unitPriceCents: data.ticket?.priceCents, totalPriceCents: data.ticket?.priceCents }, inventory: data.inventory }]];
   const db: any = { transaction: async (fn: any) => fn(db), select: () => { const value = rows[selects++] ?? []; const chain: any = { from: () => chain, innerJoin: () => chain, where: async () => value, orderBy: async () => value }; return chain; }, insert: () => ({ values: () => ({ returning: async () => [order] }) }), update: () => ({ set: () => ({ where: () => ({ returning: async () => [{}] }) }) }) };
+  return db;
+}
+
+function vendaDbComIngressos(data: any) {
+  let selects = 0;
+  const mutations = { value: 0 };
+  const order = { id: "order-1", orderNumber: "ABC123DEF456", totalCents: data.ticket.priceCents, expiresAt: new Date(Date.now() + 60_000), buyerEmail: "a@b.com" };
+  const rows = [
+    [],
+    [{ event: data.event, session: data.session }],
+    [data.ticket],
+    ...(data.inventories ?? []).map((inventory: any) => [inventory]),
+    [],
+    [{ item: { ticketTypeId: data.ticket.id, unitPriceCents: data.ticket.priceCents, totalPriceCents: data.ticket.priceCents }, inventory: data.inventories?.[0] }],
+  ];
+  const db: any = {
+    mutations,
+    transaction: async (fn: any) => fn(db),
+    select: () => {
+      const value = rows[selects++] ?? [];
+      const chain: any = { from: () => chain, innerJoin: () => chain, where: async () => value, orderBy: async () => value };
+      return chain;
+    },
+    insert: () => { mutations.value += 1; return { values: () => ({ returning: async () => [order] }) }; },
+    update: () => { mutations.value += 1; return { set: () => ({ where: () => ({ returning: async () => [{}] }) }) }; },
+  };
   return db;
 }

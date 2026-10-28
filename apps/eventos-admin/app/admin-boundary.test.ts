@@ -15,4 +15,13 @@ describe("fronteira do painel administrativo de eventos", () => {
     expect(layout).toContain("TenantProvider");
     expect(layout).toContain("<Shell>");
   });
+
+  it("exige sessão no servidor antes de renderizar o painel", () => {
+    const layout = readFileSync(new URL("./layout.tsx", import.meta.url), "utf8");
+    expect(layout).toContain('dynamic = "force-dynamic"');
+    expect(layout).toContain("serverApi.get");
+    expect(layout).toContain('"/api/auth/me"');
+    expect(layout).toContain("cookies()");
+    expect(layout).toContain('redirect("/login")');
+  });
 });
