@@ -196,7 +196,7 @@ export class PaymentsWebhookController {
 
   private getEventosPagamentosService(): EventosPagamentosService {
     if (!this.eventosPagamentosService) {
-      throw new InternalServerErrorException({ code: "EVENTOS_PAYMENTS_PROVIDER_UNAVAILABLE", message: "Processador de pagamentos de Eventos indisponível" });
+      throw new InternalServerErrorException({ code: "EVENTOS_PAYMENTS_PROVIDER_UNAVAILABLE", message: "Processador de pagamentos de Eventos indisponivel" });
     }
     return this.eventosPagamentosService;
   }
