@@ -14,4 +14,24 @@ describe("EventosPublicSalesService - contratos públicos", () => {
   it("falha fechado no checkout e nunca devolve URL do cliente", async () => {
     await expect(service().iniciarCheckout("ABC123DEF456", { successUrl: "https://ok.example/sucesso", cancelUrl: "https://ok.example/cancelar", idempotencyKey: "checkout-123456" })).rejects.toMatchObject({ response: { code: "CHECKOUT_UNAVAILABLE" } });
   });
+
+  it("usa o preço persistido do ingresso e retorna itens da reserva", async () => {
+    const db = vendaDb({ event: { id: "e1", status: "PUBLICADO" }, session: { id: "s1", status: "PUBLICADA" }, inventory: { id: "i1", status: "DISPONIVEL", seatId: "seat-1" }, ticket: { id: "t1", priceCents: 1250, version: 1 } });
+    const result = await new EventosPublicSalesService({ db } as any).reservarAssentos({ sessionId: "00000000-0000-4000-8000-000000000001", seats: [{ seatId: "00000000-0000-4000-8000-000000000002", ticketTypeId: "00000000-0000-4000-8000-000000000003", participantIndex: 0 }], buyer: { name: "Ana", email: "a@b.com", phone: "11999999999" }, idempotencyKey: "price-123456" });
+    expect(result.totalCents).toBe(1250);
+    expect(result.items).toHaveLength(1);
+  });
+
+  it("rejeita sessão não publicada", async () => {
+    const db = vendaDb({ event: { id: "e1", status: "PUBLICADO" }, session: null });
+    await expect(new EventosPublicSalesService({ db } as any).reservarAssentos({ sessionId: "00000000-0000-4000-8000-000000000001", seats: [{ seatId: "00000000-0000-4000-8000-000000000002", ticketTypeId: "00000000-0000-4000-8000-000000000003", participantIndex: 0 }], buyer: { name: "Ana", email: "a@b.com", phone: "11999999999" }, idempotencyKey: "session-123456" })).rejects.toMatchObject({ response: { code: "EVENT_NOT_FOUND" } });
+  });
 });
+
+function vendaDb(data: any) {
+  let selects = 0;
+  const order = { id: "order-1", orderNumber: "ABC123DEF456", totalCents: data.ticket?.priceCents ?? 0, expiresAt: new Date(Date.now() + 60_000), buyerEmail: "a@b.com" };
+  const rows = [[], data.session ? [{ event: data.event, session: data.session }] : [], data.inventory ? [data.inventory] : [], data.ticket ? [data.ticket] : [], [], [{ item: { ticketTypeId: data.ticket?.id, unitPriceCents: data.ticket?.priceCents, totalPriceCents: data.ticket?.priceCents }, inventory: data.inventory }]];
+  const db: any = { transaction: async (fn: any) => fn(db), select: () => { const value = rows[selects++] ?? []; const chain: any = { from: () => chain, innerJoin: () => chain, where: async () => value, orderBy: async () => value }; return chain; }, insert: () => ({ values: () => ({ returning: async () => [order] }) }), update: () => ({ set: () => ({ where: () => ({ returning: async () => [{}] }) }) }) };
+  return db;
+}

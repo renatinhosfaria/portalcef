@@ -10,9 +10,8 @@ module.exports = {
   coverageDirectory: './coverage',
   testEnvironment: 'node',
   moduleNameMapper: {
-    '^@essencia/db$': '<rootDir>/test/db-jest-shim.ts',
+    '^@essencia/db$': '<rootDir>/../../packages/db/src/index.ts',
     '^@essencia/shared$': '<rootDir>/../../packages/shared/src/index.ts',
-    '^@essencia/shared/schemas$': '<rootDir>/test/shared-schemas-jest-shim.ts',
     '^@essencia/shared/(.*)$': '<rootDir>/../../packages/shared/src/$1',
   },
   passWithNoTests: true,

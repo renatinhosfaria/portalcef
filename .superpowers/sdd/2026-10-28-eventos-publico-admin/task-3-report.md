@@ -43,3 +43,12 @@ Validações da correção: shared build, API typecheck e lint passaram; testes 
 - Criado shim Jest para `@essencia/db` sem carregar `client.js` e schemas shim; suíte focada executou 4 testes com sucesso.
 
 Comandos finais: `pnpm --filter @essencia/api test -- --runInBand src/modules/eventos/eventos-public-sales.service.spec.ts src/modules/eventos/eventos-public.controller.spec.ts` (2 suítes, 4 testes PASS); `pnpm --filter @essencia/shared build` PASS; `pnpm --filter @essencia/api typecheck` PASS; `pnpm --filter @essencia/api lint` PASS; teste DB schema PASS (3 testes).
+
+## Correção da rodada 3
+
+- A finalização agora procura primeiro `finalizationIdempotencyKey`; repetição após expiração/status retorna o resultado original, sem revalidar disponibilidade.
+- Corridas de chave de finalização convertem qualquer violação `23505`/constraint em `IDEMPOTENCY_CONFLICT`, inclusive quando a chave pertence a outro pedido.
+- O mapper global de Jest foi restaurado para o comportamento original. O shim ficou restrito a `jest.eventos.config.js`, usado somente pelas suítes de Eventos.
+- Testes comportamentais de preço persistido e sessão não publicada foram restaurados; focused Jest executou 2 suítes/6 testes. Uma suíte existente de Usuários executou com o mapper global e passou (1 teste).
+
+Validação adicional: `pnpm --filter @essencia/api typecheck` PASS, `pnpm --filter @essencia/api lint` PASS e testes DB schema PASS (3 testes).
