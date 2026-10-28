@@ -237,7 +237,21 @@ services:
       PORT: 3014
     healthcheck:
       <<: *healthcheck
-      test: [ "CMD", "curl", "-f", "http://localhost:3014/eventos" ]
+      test: [ "CMD", "curl", "-f", "http://localhost:3014/" ]
+    depends_on:
+      api:
+        condition: service_healthy
+
+  eventos-admin:
+    image: essencia-eventos-admin:${IMAGE_TAG:-latest}
+    container_name: essencia-eventos-admin
+    <<: *common
+    environment:
+      <<: *nextjs-env
+      PORT: 3016
+    healthcheck:
+      <<: *healthcheck
+      test: [ "CMD", "curl", "-f", "http://localhost:3016/eventos-admin" ]
     depends_on:
       api:
         condition: service_healthy

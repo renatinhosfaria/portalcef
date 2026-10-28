@@ -82,6 +82,7 @@ SERVICES=(
     "planejamento"
     "calendario"
     "eventos"
+    "eventos-admin"
     "loja"
     "loja-admin"
     "tarefas"
@@ -174,6 +175,8 @@ if [ $FAILED -eq 0 ]; then
     echo "Verifique os endpoints:"
     echo "  - https://www.portalcef.com.br/api/health"
     echo "  - https://www.portalcef.com.br/"
+    echo "  - https://eventos.portalcef.com.br/"
+    echo "  - https://www.portalcef.com.br/eventos-admin"
     echo ""
 else
     echo -e "${YELLOW}  Deploy concluído com avisos${NC}"

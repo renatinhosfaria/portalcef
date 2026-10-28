@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Contrato de publicação da vitrine pública e do painel administrativo.
+# O teste lê a configuração versionada e não acessa Docker, DNS ou produção.
+RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+falha() {
+  echo "Falha: $1" >&2
+  exit 1
+}
+
+contém() {
+  local arquivo=$1
+  local trecho=$2
+  grep -Fq -- "$trecho" "$arquivo" || falha "$arquivo não contém: $trecho"
+}
+
+BAKE="$RAIZ/docker-bake.hcl"
+COMPOSE="$RAIZ/docker-compose.prod.yml"
+NGINX="$RAIZ/nginx.conf"
+HEALTH="$RAIZ/scripts/health-check.sh"
+ROLLING="$RAIZ/scripts/deploy-rolling.sh"
+
+# Buildx: cada app usa o pacote correto e sua porta interna.
+contém "$BAKE" 'target "eventos"'
+contém "$BAKE" 'APP_NAME     = "eventos"'
+contém "$BAKE" 'PACKAGE_NAME = "@essencia/eventos"'
+contém "$BAKE" 'APP_PORT     = "3014"'
+contém "$BAKE" 'target "eventos-admin"'
+contém "$BAKE" 'APP_NAME     = "eventos-admin"'
+contém "$BAKE" 'PACKAGE_NAME = "@essencia/eventos-admin"'
+contém "$BAKE" 'APP_PORT     = "3016"'
+
+# Compose: público e painel são containers independentes, com health próprio.
+contém "$COMPOSE" '  eventos:'
+contém "$COMPOSE" 'image: essencia-eventos:${IMAGE_TAG:-latest}'
+contém "$COMPOSE" 'container_name: essencia-eventos'
+contém "$COMPOSE" 'PORT: 3014'
+contém "$COMPOSE" 'http://localhost:3014/'
+contém "$COMPOSE" '  eventos-admin:'
+contém "$COMPOSE" 'image: essencia-eventos-admin:${IMAGE_TAG:-latest}'
+contém "$COMPOSE" 'container_name: essencia-eventos-admin'
+contém "$COMPOSE" 'PORT: 3016'
+contém "$COMPOSE" 'http://localhost:3016/eventos-admin'
+
+# Nginx: ACME/HTTP, TLS com o host público, proxy de app/assets/API e painel.
+contém "$NGINX" 'server_name eventos.portalcef.com.br;'
+contém "$NGINX" 'listen 80;'
+contém "$NGINX" 'location /.well-known/acme-challenge/'
+contém "$NGINX" 'return 301 https://$host$request_uri;'
+contém "$NGINX" 'listen 443 ssl;'
+contém "$NGINX" 'ssl_certificate /etc/letsencrypt/live/portalcef.com.br-0001/fullchain.pem;'
+contém "$NGINX" 'location ^~ /_next/static/'
+contém "$NGINX" 'essencia-eventos:3014'
+contém "$NGINX" 'essencia-api:3002'
+contém "$NGINX" 'essencia-eventos-admin:3016'
+contém "$NGINX" 'location ^~ /eventos-admin/_next/static/'
+contém "$NGINX" 'location = /eventos-admin'
+contém "$NGINX" 'location ^~ /eventos-admin/'
+contém "$NGINX" 'return 301 /eventos-admin;'
+contém "$NGINX" 'location = /eventos'
+contém "$NGINX" 'location ^~ /eventos/'
+
+# Health/rolling: os dois nomes aparecem sem misturar porta ou path.
+contém "$HEALTH" 'check_internal "Eventos" "essencia-eventos" "3014" "/"'
+contém "$HEALTH" 'check_internal "Eventos Admin" "essencia-eventos-admin" "3016" "/eventos-admin"'
+contém "$HEALTH" 'check_external "Eventos" "https://eventos.portalcef.com.br/"'
+contém "$HEALTH" 'check_external "Eventos Admin" "https://www.portalcef.com.br/eventos-admin"'
+contém "$ROLLING" '"eventos"'
+contém "$ROLLING" '"eventos-admin"'
+
+echo 'Contrato de publicação de Eventos público/admin passou.'

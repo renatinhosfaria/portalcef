@@ -45,7 +45,7 @@ export HEALTH_TIMEOUT=1
 
 bash "$TEST_DIR/scripts/deploy-rolling.sh" abc1234 > "$TEST_DIR/output.log"
 
-test "$(grep -c '^pull registry.exemplo/portalcef/' "$ROLLING_LOG")" -eq 15
+test "$(grep -c '^pull registry.exemplo/portalcef/' "$ROLLING_LOG")" -eq 16
 grep -Fq 'pull registry.exemplo/portalcef/landing-mae:abc1234' "$ROLLING_LOG"
 grep -Fq 'tag registry.exemplo/portalcef/api:abc1234 essencia-api:abc1234' "$ROLLING_LOG"
 grep -Fq -- '--env-file .env.docker up -d --force-recreate --no-build --pull never --no-deps api' "$ROLLING_LOG"

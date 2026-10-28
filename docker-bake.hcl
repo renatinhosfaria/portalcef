@@ -58,6 +58,7 @@ group "apps" {
     "planejamento",
     "calendario",
     "eventos",
+    "eventos-admin",
     "loja",
     "loja-admin",
     "tarefas",
@@ -203,7 +204,7 @@ target "eventos" {
   inherits = ["_nextjs"]
   args = {
     APP_NAME     = "eventos"
-    PACKAGE_NAME = "eventos"
+    PACKAGE_NAME = "@essencia/eventos"
     APP_PORT     = "3014"
   }
   tags = PUBLISH ? [
@@ -211,6 +212,21 @@ target "eventos" {
   ] : [
     "essencia-eventos:${TAG}",
     "essencia-eventos:latest"
+  ]
+}
+
+target "eventos-admin" {
+  inherits = ["_nextjs"]
+  args = {
+    APP_NAME     = "eventos-admin"
+    PACKAGE_NAME = "@essencia/eventos-admin"
+    APP_PORT     = "3016"
+  }
+  tags = PUBLISH ? [
+    "${REGISTRY}/eventos-admin:${TAG}"
+  ] : [
+    "essencia-eventos-admin:${TAG}",
+    "essencia-eventos-admin:latest"
   ]
 }
 
