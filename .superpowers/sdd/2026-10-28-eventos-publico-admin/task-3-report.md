@@ -52,3 +52,13 @@ Comandos finais: `pnpm --filter @essencia/api test -- --runInBand src/modules/ev
 - Testes comportamentais de preço persistido e sessão não publicada foram restaurados; focused Jest executou 2 suítes/6 testes. Uma suíte existente de Usuários executou com o mapper global e passou (1 teste).
 
 Validação adicional: `pnpm --filter @essencia/api typecheck` PASS, `pnpm --filter @essencia/api lint` PASS e testes DB schema PASS (3 testes).
+
+## Correção da rodada 4
+
+- A repetição com `finalizationIdempotencyKey` própria agora monta a resposta mínima diretamente a partir do pedido já finalizado, antes da regra de expiração da consulta pública; a validação de propriedade da chave, publicação do evento/sessão e filtragem de itens permanecem ativas.
+- O caminho de corrida por unicidade de finalização usa o mesmo retorno direto, preservando `IDEMPOTENCY_CONFLICT` quando a chave pertence a outro pedido.
+- Adicionado teste comportamental para repetir finalização de pedido `EXPIRADO` com `expiresAt` passado, verificando status, título, total e itens persistidos.
+
+Arquivos alterados: `services/api/src/modules/eventos/eventos-public-sales.service.ts`, `services/api/src/modules/eventos/eventos-public-sales.service.spec.ts`, este relatório.
+
+Validações: `pnpm --filter @essencia/api test -- --config jest.eventos.config.js --runInBand src/modules/eventos/eventos-public-sales.service.spec.ts src/modules/eventos/eventos-public.controller.spec.ts` — 2 suítes, 7 testes PASS; `pnpm --filter @essencia/api typecheck` — PASS; `pnpm --filter @essencia/api lint` — PASS (somente avisos preexistentes); `pnpm --filter @essencia/db test -- --test-name-pattern eventos` — 3 testes PASS; `pnpm --filter @essencia/db build` — PASS; `pnpm --filter @essencia/shared build` — PASS.
