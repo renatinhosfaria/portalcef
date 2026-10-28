@@ -56,3 +56,35 @@ Saída RED esperada e confirmada: 3 suítes falharam antes dos testes, com `TS23
 - `services/api/src/modules/payments/payments-webhook.controller.spec.ts`
 - `services/api/src/modules/payments/payments.module.ts`
 - `services/api/test/db-jest-shim.ts`
+
+## Rodada de correção 1/5
+
+Achados tratados:
+
+- Confirmação agora marca pagamento `PROCESSANDO` com atualização condicional, exige reserva `ATIVA`, inventário `RESERVADO` do próprio pedido e `returning()` com exatamente uma linha antes de vender; qualquer divergência lança erro e a transação desfaz pagamento, inventário e ingressos.
+- A mesma serialização impede emissão duplicada em webhooks simultâneos; repetição após `APROVADO`/`CONFIRMADO` retorna sem inserir outro ingresso. O PaymentIntent pode resolver pelo `eventOrderId` quando a referência Stripe ainda não foi persistida.
+- Falha e expiração exigem transições condicionais com linha afetada; corrida contra assento vendido desfaz a operação e preserva a reserva/pedido pago.
+- Provider de Eventos é obrigatório no webhook; ausência gera `EVENTOS_PAYMENTS_PROVIDER_UNAVAILABLE` em vez de no-op silencioso.
+- Token QR exige `EVENTOS_QR_SECRET` dedicado na inicialização, sem fallback previsível.
+- URLs de retorno precisam usar a origem HTTPS configurada em `EVENTOS_PUBLIC_URL` (padrão `https://eventos.portalcef.com.br`), rejeitando hosts arbitrários.
+- Testes passaram a usar banco falso transacional representativo, verificando conversão, rollback, concorrência, PaymentIntent sem ID, falha protegida e job em duas execuções.
+
+RED contra o commit anterior `07b8142`:
+
+```text
+pnpm --filter @essencia/api test -- --config jest.eventos.config.js --runInBand \
+  src/modules/eventos/eventos-pagamentos.service.spec.ts \
+  src/modules/payments/payments-webhook.controller.spec.ts \
+  src/modules/eventos/eventos-public-sales.service.spec.ts
+```
+
+Falhou antes da execução completa com `TS2353` para `eventOrderId` inexistente no contrato anterior, além de expectativa de metadata ausente e provider ausente resolvendo em vez de rejeitar.
+
+GREEN:
+
+- Mesmo comando focado, incluindo `eventos-public.controller.spec.ts` — **4 suítes, 19 testes PASS**.
+- `src/modules/shop/shop-regressions.spec.ts` — **126 testes PASS**, preservando a loja.
+- `pnpm --filter @essencia/api typecheck` — **PASS**.
+- `pnpm --filter @essencia/api lint` — **PASS**, somente avisos de `any`.
+- `pnpm --filter @essencia/db test -- --test-name-pattern eventos` — **3 testes PASS**.
+- `pnpm --filter @essencia/db build` e `pnpm --filter @essencia/shared build` — **PASS**.

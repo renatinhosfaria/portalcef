@@ -39,7 +39,7 @@ export class PaymentsWebhookController {
     private paymentsService: PaymentsService,
     private ordersService: ShopOrdersService,
     @Inject(forwardRef(() => EventosPagamentosService))
-    private eventosPagamentosService?: EventosPagamentosService,
+    private eventosPagamentosService: EventosPagamentosService = undefined as never,
   ) {
     this.webhookSecret =
       this.configService.get<string>("STRIPE_WEBHOOK_SECRET") || "";
@@ -194,6 +194,13 @@ export class PaymentsWebhookController {
     return metadata?.orderId || undefined;
   }
 
+  private getEventosPagamentosService(): EventosPagamentosService {
+    if (!this.eventosPagamentosService) {
+      throw new InternalServerErrorException({ code: "EVENTOS_PAYMENTS_PROVIDER_UNAVAILABLE", message: "Processador de pagamentos de Eventos indisponível" });
+    }
+    return this.eventosPagamentosService;
+  }
+
   private getPaymentIntentId(
     paymentIntent: string | Stripe.PaymentIntent | null,
   ): string | undefined {
@@ -207,10 +214,11 @@ export class PaymentsWebhookController {
     const eventOrderId = session.metadata?.eventOrderId;
     if (eventOrderId) {
       if (session.payment_status !== "paid") return;
-      await this.eventosPagamentosService?.confirmarCheckout({
+      await this.getEventosPagamentosService().confirmarCheckout({
         checkoutSessionId: session.id,
         paymentIntentId: this.getPaymentIntentId(session.payment_intent),
         amountCents: session.amount_total ?? 0,
+        eventOrderId,
       });
       return;
     }
@@ -246,10 +254,11 @@ export class PaymentsWebhookController {
     session: Stripe.Checkout.Session,
   ): Promise<void> {
     if (session.metadata?.eventOrderId) {
-      await this.eventosPagamentosService?.confirmarCheckout({
+      await this.getEventosPagamentosService().confirmarCheckout({
         checkoutSessionId: session.id,
         paymentIntentId: this.getPaymentIntentId(session.payment_intent),
         amountCents: session.amount_total ?? 0,
+        eventOrderId: session.metadata.eventOrderId,
       });
       return;
     }
@@ -278,7 +287,7 @@ export class PaymentsWebhookController {
     session: Stripe.Checkout.Session,
   ): Promise<void> {
     if (session.metadata?.eventOrderId) {
-      await this.eventosPagamentosService?.falharCheckout({
+      await this.getEventosPagamentosService().falharCheckout({
         checkoutSessionId: session.id,
         paymentIntentId: this.getPaymentIntentId(session.payment_intent),
         reason: "Pagamento Stripe falhou",
@@ -304,7 +313,7 @@ export class PaymentsWebhookController {
     session: Stripe.Checkout.Session,
   ): Promise<void> {
     if (session.metadata?.eventOrderId) {
-      await this.eventosPagamentosService?.falharCheckout({
+      await this.getEventosPagamentosService().falharCheckout({
         checkoutSessionId: session.id,
         paymentIntentId: this.getPaymentIntentId(session.payment_intent),
         reason: "Checkout Stripe expirado",
@@ -335,10 +344,11 @@ export class PaymentsWebhookController {
     paymentIntent: Stripe.PaymentIntent,
   ): Promise<void> {
     if (paymentIntent.metadata.eventOrderId) {
-      await this.eventosPagamentosService?.confirmarCheckout({
+      await this.getEventosPagamentosService().confirmarCheckout({
         checkoutSessionId: "",
         paymentIntentId: paymentIntent.id,
         amountCents: paymentIntent.amount,
+        eventOrderId: paymentIntent.metadata.eventOrderId,
       });
       return;
     }
@@ -384,7 +394,7 @@ export class PaymentsWebhookController {
     paymentIntent: Stripe.PaymentIntent,
   ): Promise<void> {
     if (paymentIntent.metadata.eventOrderId) {
-      await this.eventosPagamentosService?.falharCheckout({
+      await this.getEventosPagamentosService().falharCheckout({
         paymentIntentId: paymentIntent.id,
         reason: `Pagamento falhou: ${paymentIntent.last_payment_error?.message || "Erro desconhecido"}`,
       });
@@ -421,7 +431,7 @@ export class PaymentsWebhookController {
     paymentIntent: Stripe.PaymentIntent,
   ): Promise<void> {
     if (paymentIntent.metadata.eventOrderId) {
-      await this.eventosPagamentosService?.falharCheckout({
+      await this.getEventosPagamentosService().falharCheckout({
         paymentIntentId: paymentIntent.id,
         reason: "PaymentIntent cancelado no Stripe",
       });

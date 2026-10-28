@@ -71,6 +71,11 @@ describe("EventosPublicSalesService - contratos públicos", () => {
       items: [{ seatId: "seat-1", ticketTypeId: "ticket-1", totalPriceCents: 1250 }],
     });
   });
+
+  it("rejeita successUrl/cancelUrl fora da origem pública configurada", () => {
+    const service = new EventosPublicSalesService({ db: {} } as any, {} as any);
+    expect(() => (service as any).validarUrlCheckout("https://evil.example/retorno")).toThrow();
+  });
 });
 
 function vendaDb(data: any) {
