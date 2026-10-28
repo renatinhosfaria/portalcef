@@ -21,6 +21,7 @@ export * from "./prova-ciclo.js";
 export * from "./prova.js";
 export * from "./prova-historico.js";
 export * from "./evento-inscricoes.js";
+export * from "./eventos.js";
 export * from "./semestre-relatorio.js";
 export * from "./relatorio.js";
 export * from "./relatorio-historico.js";
