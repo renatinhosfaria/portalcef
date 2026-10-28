@@ -44,3 +44,7 @@ Adicionados campos de resumo, telefone, publicação planejada, categoria e imag
 ## Round 6
 
 Removidos `any` do inventário, normalizados status da API para a união da UI e achatadas linhas `{session, inventory}`. Campos opcionais vazios são enviados como `null` para o DTO. Testes e typecheck passaram.
+
+## Round 7
+
+Falhas de importação, correção e confirmação de mapa agora aparecem na tela. Pedidos, check-in e configurações exibem contexto operacional pendente e link de retorno. Testes/typecheck passaram.
