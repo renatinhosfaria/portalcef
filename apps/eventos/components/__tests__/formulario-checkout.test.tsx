@@ -30,5 +30,7 @@ describe("formulário de checkout público", () => {
   it("só considera o conjunto completo de cinco aceites como válido", () => {
     expect(aceitesCompletos([])).toBe(false);
     expect(aceitesCompletos(politicas.map((policy) => ({ type: policy.type, version: policy.version })))).toBe(true);
+    expect(aceitesCompletos([...politicas, { type: "COMPRA" as const, version: 2 }].map((policy) => ({ type: policy.type, version: policy.version })))).toBe(false);
+    expect(aceitesCompletos(politicas.map((policy) => ({ type: policy.type, version: 0 })))).toBe(false);
   });
 });

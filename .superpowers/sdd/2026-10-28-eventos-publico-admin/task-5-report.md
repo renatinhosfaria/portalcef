@@ -64,3 +64,18 @@ pnpm --filter @essencia/api lint           — PASS (avisos preexistentes)
 ```
 
 Arquivos adicionais: `packages/shared/src/types/eventos.ts`, `services/api/src/modules/eventos/eventos.service.ts`, `apps/eventos/components/detalhe-evento.tsx`, `apps/eventos/app/evento/[slug]/sessao/[sessionId]/page.tsx` e o teste regressivo `apps/eventos/components/__tests__/detalhe-evento-ingresso.test.tsx`.
+
+## Rodada de correção 2/5
+
+- A chave de reserva deixou de ser cacheada por assentos no módulo. O formulário cria uma chave por montagem via `useRef`, mantendo retries da mesma tentativa; chamadas sem chave explícita geram uma nova chave a cada tentativa. Finalização e checkout continuam estáveis por `orderNumber`.
+- `aceitesCompletos` agora exige exatamente cinco tipos distintos e versões inteiras positivas.
+- O teste regressivo também verifica o caminho da sessão sem query, com seleção automática do único tipo ou opções acessíveis.
+
+RED: testes de duas tentativas de reserva com os mesmos assentos falharam pela reutilização da chave global; o teste de aceites duplicados/versão inválida também falhou.
+
+GREEN:
+
+```text
+pnpm --filter @essencia/eventos test      — PASS (5 arquivos, 15 testes)
+pnpm --filter @essencia/eventos typecheck — PASS
+```

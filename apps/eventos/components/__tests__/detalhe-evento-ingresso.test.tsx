@@ -1,6 +1,7 @@
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
 import { DetalheEvento } from "../detalhe-evento";
 import type { PublicEventDetail, PublicEventSession } from "@essencia/shared/types";
 
@@ -21,5 +22,8 @@ describe("caminho público de ingresso", () => {
     expect(html).toContain("Inteira");
     expect(html).toContain("ticketTypeId=ticket-1");
     expect(html).not.toContain("Escolha seus assentos</a>");
+    const sessionPage = readFileSync(new URL("../../app/evento/[slug]/sessao/[sessionId]/page.tsx", import.meta.url), "utf8");
+    expect(sessionPage).toContain("session?.ticketTypes.length === 1");
+    expect(sessionPage).toContain("Escolha o tipo de ingresso");
   });
 });

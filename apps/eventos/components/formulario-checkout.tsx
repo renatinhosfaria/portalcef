@@ -1,13 +1,13 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import type { PoliticaPublica, PedidoPublicoResult } from "@essencia/shared/types";
-import { EventosApiError, finalizarPedido, iniciarCheckout, origemPublicaEventos, reservarAssentos } from "../lib/eventos-api";
+import { EventosApiError, finalizarPedido, gerarChaveIdempotenciaPublica, iniciarCheckout, origemPublicaEventos, reservarAssentos } from "../lib/eventos-api";
 
 const TIPOS_POLITICA: PoliticaPublica["type"][] = ["PRIVACIDADE", "COMPRA", "CANCELAMENTO_REEMBOLSO", "ACESSIBILIDADE", "CONTATO"];
 
 export function aceitesCompletos(acceptances: Array<{ type: PoliticaPublica["type"]; version: number }>) {
-  return TIPOS_POLITICA.every((type) => acceptances.some((acceptance) => acceptance.type === type));
+  return acceptances.length === TIPOS_POLITICA.length && new Set(acceptances.map((acceptance) => acceptance.type)).size === TIPOS_POLITICA.length && TIPOS_POLITICA.every((type) => acceptances.some((acceptance) => acceptance.type === type && Number.isInteger(acceptance.version) && acceptance.version > 0));
 }
 
 type Props = {
@@ -19,6 +19,8 @@ type Props = {
 };
 
 export function FormularioCheckout({ seatIds, ticketTypeIds = [], sessionId, politicas = [], onComplete }: Props) {
+  const reservationKeyRef = useRef<string | null>(null);
+  if (!reservationKeyRef.current) reservationKeyRef.current = gerarChaveIdempotenciaPublica("reserva");
   const [accepted, setAccepted] = useState<Record<string, boolean>>({});
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -41,7 +43,9 @@ export function FormularioCheckout({ seatIds, ticketTypeIds = [], sessionId, pol
     if (participants.some((participant) => participant.fullName.trim().length < 2)) return setError("Informe o nome de cada participante.");
     setSubmitting(true);
     try {
-      const reservation = await reservarAssentos({ sessionId, seats: seatIds.map((seatId, index) => ({ seatId, ticketTypeId: ticketTypeIds[index] || ticketTypeIds[0] || "", participantIndex: index })), buyer });
+      const reservationKey = reservationKeyRef.current ?? gerarChaveIdempotenciaPublica("reserva");
+      reservationKeyRef.current = reservationKey;
+      const reservation = await reservarAssentos({ sessionId, idempotencyKey: reservationKey, seats: seatIds.map((seatId, index) => ({ seatId, ticketTypeId: ticketTypeIds[index] || ticketTypeIds[0] || "", participantIndex: index })), buyer });
       const pedido = await finalizarPedido(reservation.orderNumber, { participants, acceptances: politicas.map((policy) => ({ type: policy.type, version: policy.version })) });
       setPending(true);
       onComplete?.(pedido);

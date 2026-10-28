@@ -37,4 +37,21 @@ describe("API pública de eventos", () => {
     expect(String(fetchMock.mock.calls[0]?.[0])).not.toContain("stripe.com");
     vi.restoreAllMocks();
   });
+
+  it("gera uma chave nova para cada tentativa de reserva, mas repete a chave explícita", async () => {
+    vi.stubGlobal("window", {});
+    const result = { reservationId: "reservation-1", orderNumber: "ABC123DEF456", expiresAt: new Date().toISOString(), totalCents: 1000, items: [] };
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response(JSON.stringify(result), { status: 200 }));
+    const input = { sessionId: "00000000-0000-4000-8000-000000000001", seats: [{ seatId: "00000000-0000-4000-8000-000000000002", ticketTypeId: "00000000-0000-4000-8000-000000000003", participantIndex: 0 }], buyer: { name: "Ana", email: "ana@example.com", phone: "11999999999" } };
+    await reservarAssentos(input);
+    await reservarAssentos(input);
+    const firstKey = (fetchMock.mock.calls[0]?.[1]?.headers as Record<string, string>)["Idempotency-Key"];
+    const secondKey = (fetchMock.mock.calls[1]?.[1]?.headers as Record<string, string>)["Idempotency-Key"];
+    expect(firstKey).not.toBe(secondKey);
+    await reservarAssentos({ ...input, idempotencyKey: "reserva-explicita-123456" });
+    await reservarAssentos({ ...input, idempotencyKey: "reserva-explicita-123456" });
+    expect((fetchMock.mock.calls[2]?.[1]?.headers as Record<string, string>)["Idempotency-Key"]).toBe("reserva-explicita-123456");
+    expect((fetchMock.mock.calls[3]?.[1]?.headers as Record<string, string>)["Idempotency-Key"]).toBe("reserva-explicita-123456");
+    vi.restoreAllMocks();
+  });
 });

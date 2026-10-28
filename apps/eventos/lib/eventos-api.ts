@@ -30,13 +30,13 @@ export class EventosApiError extends Error {
 }
 
 const publicOrderState: { reservationId?: string; orderNumber?: string } = {};
-const browserIdempotencyKeys = new Map<string, string>();
+const stableIdempotencyKeys = new Map<string, string>();
 
 export function obterPedidoEmMemoria() {
   return { ...publicOrderState };
 }
 
-function gerarChaveIdempotencia(prefixo: string) {
+export function gerarChaveIdempotenciaPublica(prefixo: string) {
   const randomUuid = typeof globalThis.crypto?.randomUUID === "function" ? globalThis.crypto.randomUUID() : Math.random().toString(36).slice(2);
   return `${prefixo}-${randomUuid}`;
 }
@@ -44,10 +44,10 @@ function gerarChaveIdempotencia(prefixo: string) {
 function chavePersistida(input: string | undefined, prefixo: string, identity: string) {
   if (input?.trim()) return input.trim();
   const key = `${prefixo}:${identity}`;
-  const current = browserIdempotencyKeys.get(key);
+  const current = stableIdempotencyKeys.get(key);
   if (current) return current;
-  const generated = gerarChaveIdempotencia(prefixo);
-  browserIdempotencyKeys.set(key, generated);
+  const generated = gerarChaveIdempotenciaPublica(prefixo);
+  stableIdempotencyKeys.set(key, generated);
   return generated;
 }
 
@@ -97,7 +97,7 @@ async function enviarJson<T>(path: string, body: Record<string, unknown>, idempo
 }
 
 export async function reservarAssentos(input: ReservaAssentosInput): Promise<ReservaPublicaResult> {
-  const idempotencyKey = chavePersistida(input.idempotencyKey, "reserva", `${input.sessionId}:${input.seats.map((seat) => seat.seatId).join(",")}`);
+  const idempotencyKey = input.idempotencyKey?.trim() || gerarChaveIdempotenciaPublica("reserva");
   const body = { ...input, idempotencyKey };
   try {
     const result = await enviarJson<ReservaPublicaResult>("/eventos/public/reservas", body, idempotencyKey);
