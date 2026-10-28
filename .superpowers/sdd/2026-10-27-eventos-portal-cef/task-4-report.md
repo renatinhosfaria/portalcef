@@ -52,3 +52,7 @@ Falhas de importação, correção e confirmação de mapa agora aparecem na tel
 ## Round 8
 
 Páginas de pedidos, check-in e configurações agora exibem títulos específicos, o ID do evento e link de retorno ao detalhe. Testes e typecheck passaram.
+
+## Round 9
+
+Detecções da API são adaptadas dos campos `proposed*` para o modelo de revisão. Ações de inventário exigem callback explícito e a página informa pendência da Task 7. DTO de formulário separado do estado visual de sessões.
