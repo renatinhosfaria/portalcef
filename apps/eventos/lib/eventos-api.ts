@@ -60,9 +60,9 @@ function persistirPedidoNaUrl(result: { orderNumber: string; reservationId?: str
 }
 
 export async function buscarApiPublica(path: string, init: RequestInit = {}): Promise<Response> {
-  const base = typeof window === "undefined" ? (process.env.API_INTERNAL_URL ?? "http://api:3001") : "/api";
+  const base = typeof window === "undefined" ? (process.env.API_INTERNAL_URL ?? "http://api:3001").replace(/\/$/, "") : "";
   const normalized = path.startsWith("/") ? path : `/${path}`;
-  const response = await fetch(`${base}${normalized}`, {
+  const response = await fetch(`${base}/api${normalized}`, {
     ...init,
     cache: "no-store",
     credentials: "omit",

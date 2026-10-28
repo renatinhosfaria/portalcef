@@ -2,6 +2,19 @@ import { describe, expect, it, vi } from "vitest";
 import { buscarApiPublica, iniciarCheckout, listarEventosPublicos, reservarAssentos } from "./eventos-api";
 
 describe("API pública de eventos", () => {
+  it("usa /api também quando consulta a API interna no servidor", async () => {
+    vi.stubGlobal("window", undefined);
+    vi.stubEnv("API_INTERNAL_URL", "http://api:3002");
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("[]", { status: 200 }));
+
+    await listarEventosPublicos();
+
+    expect(fetchMock).toHaveBeenCalledWith("http://api:3002/api/eventos/public", expect.objectContaining({ cache: "no-store" }));
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
   it("usa /api no navegador e não encaminha cookie administrativo", async () => {
     vi.stubGlobal("window", {});
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("[]", { status: 200 }));
