@@ -25,13 +25,13 @@ export class EventosPublicController {
   politicas(@Param("slug") slug: string) { return this.sales.listarPoliticasPublicas(slug); }
   @Post("reservas")
   @Throttle({ strict: { limit: 20, ttl: 60000 } })
-  reservar(@Body() input: any) { return this.sales.reservarAssentos(input); }
+  reservar(@Body() input: unknown) { return this.sales.reservarAssentos(input); }
   @Post("pedidos/:orderNumber/finalizar")
   @Throttle({ strict: { limit: 20, ttl: 60000 } })
-  finalizar(@Param("orderNumber") orderNumber: string, @Body() input: any) { return this.sales.finalizarPedidoConvidado(orderNumber, input); }
+  finalizar(@Param("orderNumber") orderNumber: string, @Body() input: unknown) { return this.sales.finalizarPedidoConvidado(orderNumber, input); }
   @Post("pedidos/:orderNumber/checkout")
   @Throttle({ strict: { limit: 20, ttl: 60000 } })
-  checkout(@Param("orderNumber") orderNumber: string, @Body() input: any) { return this.sales.iniciarCheckout(orderNumber, input); }
+  checkout(@Param("orderNumber") orderNumber: string, @Body() input: unknown) { return this.sales.iniciarCheckout(orderNumber, input); }
   @Get("pedidos/:orderNumber")
   @Throttle({ strict: { limit: 60, ttl: 60000 } })
   consultarPedido(@Param("orderNumber") orderNumber: string) { return this.sales.consultarPedido(orderNumber); }

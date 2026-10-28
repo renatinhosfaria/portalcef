@@ -19,3 +19,16 @@
 
 - A integração Stripe concreta permanece delegada à Task 4; a rota grava o pagamento pendente e retorna a URL de sucesso como placeholder de contrato.
 - A suíte Jest da API precisa da configuração ESM já conhecida do monorepo para executar os testes novos.
+
+## Correção da revisão
+
+- Checkout agora falha fechado com `CHECKOUT_UNAVAILABLE`; nenhuma URL do cliente é tratada como checkout.
+- Reservas e finalização usam transação; idempotência é consultada dentro da transação e respostas repetidas carregam itens persistidos.
+- Schemas Zod são executados em runtime, com rejeição de campos extras, UUIDs, limites, contato, URLs HTTPS e chave de idempotência.
+- Ofertas ativas compatíveis são aplicadas ao total e registradas em `pricingEvidence`.
+- Reservas expiradas são retomadas na mesma transação; concorrência retorna `SEAT_UNAVAILABLE` e conflitos de chave recuperam o pedido original.
+- Finalização valida políticas sem duplicatas, expiração/status do pedido e vincula itens aos participantes por `participantIndex`.
+- Consulta pública filtra evento/sessão publicados, remove PII e retorna itens reais.
+- Liberação expirada atualiza reservas, inventário e pedidos `INICIADO` para `EXPIRADO`, preservando confirmados.
+
+Validações da correção: shared build, API typecheck e lint passaram; testes do schema DB passaram (3). O Jest focado continua bloqueado antes da execução pelo erro ESM de `packages/db/src/client.js`; o comando e a saída permanecem registrados acima.
