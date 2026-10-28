@@ -48,6 +48,18 @@ describe("MapasService", () => {
     expect(update).toHaveBeenCalled();
   });
 
+  it.each(["CONFIRMADO", "ARQUIVADO"])("rejeita correção em mapa %s sem atualizar detecções", async (status) => {
+    const update = jest.fn();
+    let call = 0;
+    const db: any = { select: () => ({ from: () => ({ where: async () => {
+      call += 1;
+      return call === 1 ? [{ id: "event-1", schoolId: "school-1" }] : [{ id: "map-1", eventId: "event-1", status }];
+    } }) }), update };
+    const maps = new MapasService({ db } as any, undefined, {} as any);
+    await expect(maps.atualizarDeteccoes("event-1", "map-1", { reason: "ajuste", seats: [{ id: "det-1", rowLabel: "A", seatNumber: "1", x: 1, y: 1 }] }, actor)).rejects.toMatchObject({ response: { code: "MAP_NOT_IN_REVIEW" } });
+    expect(update).not.toHaveBeenCalled();
+  });
+
   it("não conclui correção quando auditoria transacional falha", async () => {
     const update = jest.fn(() => ({ set: () => ({ where: async () => undefined }) }));
     let call = 0;

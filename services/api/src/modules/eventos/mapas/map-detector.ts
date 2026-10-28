@@ -32,8 +32,6 @@ export class MapDetector {
       const n = node as Record<string, unknown>; const value = String(n["#text"] ?? "").trim();
       if (numberPattern.test(value)) seats.push({ rowLabel: "", seatNumber: value, x: asNumber(n["@_x"]), y: asNumber(n["@_y"]), width: 20, height: 20, confidence: 86 });
     }
-    const ys = [...new Set(seats.map((seat) => seat.y))].sort((a, b) => a - b);
-    for (const seat of seats) { const row = ys.findIndex((y) => Math.abs(y - seat.y) <= 12); seat.rowLabel = String.fromCharCode(65 + Math.max(0, row)); }
     return this.finalize({ canvas: { width, height }, seats, detector: "svg-text-v1" });
   }
 
@@ -66,9 +64,23 @@ export class MapDetector {
   }
 
   private finalize(value: { canvas: { width: number; height: number }; seats: MapSeatProposal[]; detector: string }): MapDetectionResult {
+    this.assignRows(value.seats);
     const seen = new Set<string>(); const conflicts: string[] = [];
     for (const seat of value.seats) { const key = `${seat.rowLabel}:${seat.seatNumber}`; if (seen.has(key)) { seat.conflict = "DUPLICATE_SEAT"; conflicts.push(key); } seen.add(key); }
     const confidence = value.seats.length ? Math.round(value.seats.reduce((sum, seat) => sum + seat.confidence, 0) / value.seats.length) : 0;
     return { ...value, categories: [], confidence, conflicts };
+  }
+
+  /** Cluster nearby y coordinates into deterministic rows for every detector. */
+  private assignRows(seats: MapSeatProposal[], tolerance = 12): void {
+    const clusters: number[] = [];
+    for (const seat of [...seats].sort((a, b) => a.y - b.y || a.x - b.x || a.seatNumber.localeCompare(b.seatNumber))) {
+      let cluster = clusters.findIndex((y) => Math.abs(y - seat.y) <= tolerance);
+      if (cluster < 0) {
+        clusters.push(seat.y);
+        cluster = clusters.length - 1;
+      }
+      seat.rowLabel = cluster < 26 ? String.fromCharCode(65 + cluster) : `R${cluster + 1}`;
+    }
   }
 }

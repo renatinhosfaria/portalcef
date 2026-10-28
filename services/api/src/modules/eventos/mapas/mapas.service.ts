@@ -63,7 +63,6 @@ export class MapasService {
     await this.assertEvent(eventId, actor);
     const [map] = await this.db.select().from(eventoMapas).where(and(eq(eventoMapas.id, versionId), eq(eventoMapas.eventId, eventId)));
     if (!map) throw new NotFoundException({ code: "MAP_NOT_FOUND", message: "Versão não encontrada" });
-    if (map.status !== "EM_REVISAO") throw new BadRequestException({ code: "MAP_NOT_IN_REVIEW", message: "Somente mapas em revisão podem ser corrigidos" });
     const imports = await this.db.select().from(eventoImportacoesMapa).where(eq(eventoImportacoesMapa.mapId, map.id));
     const detections = imports.length ? await this.db.select().from(eventoDeteccoesMapa).where(eq(eventoDeteccoesMapa.importId, imports[0].id)) : [];
     return { map, import: imports[0] ?? null, detections };
@@ -73,6 +72,7 @@ export class MapasService {
     await this.assertEvent(eventId, actor);
     const [map] = await this.db.select().from(eventoMapas).where(and(eq(eventoMapas.id, versionId), eq(eventoMapas.eventId, eventId)));
     if (!map) throw new NotFoundException({ code: "MAP_NOT_FOUND", message: "Versão não encontrada" });
+    if (map.status !== "EM_REVISAO") throw new BadRequestException({ code: "MAP_NOT_IN_REVIEW", message: "Somente mapas em revisão podem ser corrigidos" });
     if (!corrections.reason?.trim()) throw new BadRequestException({ code: "REASON_REQUIRED", message: "Informe o motivo da correção" });
     const [imp] = await this.db.select().from(eventoImportacoesMapa).where(eq(eventoImportacoesMapa.mapId, map.id));
     if (!imp) throw new BadRequestException({ code: "MAP_IMPORT_NOT_FOUND", message: "Importação não encontrada" });
