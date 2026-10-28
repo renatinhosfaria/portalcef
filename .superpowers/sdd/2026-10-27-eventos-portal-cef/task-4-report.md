@@ -36,3 +36,7 @@ Mapa agora inicia por upload e propaga `mapId/importId` às rotas de revisão, d
 ## Round 4
 
 Revisão de mapa agora interpreta `detections`, sincroniza propostas após upload, edita a proposta selecionada e envia payload com `seats` e motivo. O formulário remove flags de herança do DTO e converte exceções para IDs/null. Testes e typecheck passaram.
+
+## Round 5
+
+Adicionados campos de resumo, telefone, publicação planejada, categoria e imagem; exceções de local/mapa por sessão; inventário achata linhas `{session, inventory}` com loading/erro e IDs compostos. Testes e typecheck passaram.
