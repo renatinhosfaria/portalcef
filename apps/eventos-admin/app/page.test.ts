@@ -5,8 +5,9 @@ describe("módulo Eventos", () => {
   it("abre o dashboard administrativo sem redirecionar para o legado", () => {
     const source = readFileSync(new URL("./page.tsx", import.meta.url), "utf8");
     expect(source).toContain("EventosPage");
-    expect(source).not.toContain("redirect(\"/eventos/inscricoes-evento\")");
-    expect(source).toContain("/eventos");
+    expect(source).not.toContain("redirect(\"/eventos-admin/inscricoes-evento\")");
+    expect(source).toContain("/eventos-admin/api/eventos/admin");
+    expect(source).toContain("/eventos-admin/eventos");
   });
   it("preserva o fluxo legado de inscrições", () => {
     const source = readFileSync(new URL("./inscricoes-evento/page.tsx", import.meta.url), "utf8");

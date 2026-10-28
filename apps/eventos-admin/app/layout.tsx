@@ -10,8 +10,8 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Eventos | Essência",
-  description: "Gestão de inscrições de eventos",
+  title: "Eventos Admin | Essência",
+  description: "Painel administrativo de eventos",
   icons: {
     icon: "/favicon.ico",
     apple: "/favicon.ico",

@@ -41,7 +41,7 @@ function getActivePageFromPath(pathname: string): ActivePage | null {
   if (normalizedPath.startsWith("/turmas")) return "turmas";
   if (normalizedPath.startsWith("/planejamento")) return "planejamento";
   if (normalizedPath.startsWith("/calendario")) return "calendario";
-  if (normalizedPath.startsWith("/eventos")) return "eventos";
+  if (normalizedPath.startsWith("/eventos-admin")) return "eventos";
   if (normalizedPath.startsWith("/tarefas")) return "tarefas";
   if (normalizedPath.startsWith("/workflows")) return "workflows";
   if (normalizedPath.startsWith("/suporte")) return "suporte";
@@ -127,7 +127,7 @@ export function AppSidebar({ tarefasBadge, suporteBadge, collapsed = false, onTo
     if (port === "3006") return setActivePage("turmas");
     if (port === "3007") return setActivePage("planejamento");
     if (port === "3008") return setActivePage("calendario");
-    if (port === "3014") return setActivePage("eventos");
+    if (port === "3016") return setActivePage("eventos");
     if (port === "3012") return setActivePage("tarefas");
     if (port === "3015") return setActivePage("workflows");
     if (port === "3013") return setActivePage("suporte");

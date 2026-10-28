@@ -18,22 +18,23 @@ function lerArquivoRepositorio(...partes: string[]) {
 }
 
 describe("módulo eventos", () => {
-  it("mantém inscrições de evento fora de loja-admin e publicada em eventos", () => {
+  it("mantém inscrições de evento fora de loja-admin e publicada em eventos-admin", () => {
+    expect(existeNoRepositorio("apps/eventos")).toBe(false);
     expect(existeNoRepositorio("apps/loja-admin/app/inscricoes-evento")).toBe(
       false,
     );
     expect(
-      existeNoRepositorio("apps/eventos/app/inscricoes-evento/page.tsx"),
+      existeNoRepositorio("apps/eventos-admin/app/inscricoes-evento/page.tsx"),
     ).toBe(true);
-    expect(existeNoRepositorio("apps/eventos/app/page.tsx")).toBe(true);
-    expect(lerArquivoRepositorio("apps/eventos/next.config.js")).toContain(
-      'basePath: "/eventos"',
+    expect(existeNoRepositorio("apps/eventos-admin/app/page.tsx")).toBe(true);
+    expect(lerArquivoRepositorio("apps/eventos-admin/next.config.js")).toContain(
+      'basePath: "/eventos-admin"',
     );
-    expect(lerArquivoRepositorio("apps/eventos/app/page.tsx")).not.toContain(
+    expect(lerArquivoRepositorio("apps/eventos-admin/app/page.tsx")).not.toContain(
       'redirect("/eventos/inscricoes-evento")',
     );
-    expect(lerArquivoRepositorio("apps/eventos/package.json")).toContain(
-      '"name": "eventos"',
+    expect(lerArquivoRepositorio("apps/eventos-admin/package.json")).toContain(
+      '"name": "@essencia/eventos-admin"',
     );
   });
 
@@ -54,7 +55,7 @@ describe("módulo eventos", () => {
       "packages/components/src/shell/module-config.ts",
     );
     const eventosPage = lerArquivoRepositorio(
-      "apps/eventos/app/inscricoes-evento/page.tsx",
+      "apps/eventos-admin/app/inscricoes-evento/page.tsx",
     );
     const eventosController = lerArquivoRepositorio(
       "services/api/src/modules/evento-inscricoes/evento-inscricoes.controller.ts",
@@ -75,7 +76,7 @@ describe("módulo eventos", () => {
 
   it("exibe controles para confirmar presença no evento", () => {
     const eventosPage = lerArquivoRepositorio(
-      "apps/eventos/app/inscricoes-evento/page.tsx",
+      "apps/eventos-admin/app/inscricoes-evento/page.tsx",
     );
 
     expect(eventosPage).toContain("Presentes confirmadas");
@@ -90,7 +91,7 @@ describe("módulo eventos", () => {
 
   it("exibe sorteio por brinde com histórico e elegibilidade", () => {
     const eventosPage = lerArquivoRepositorio(
-      "apps/eventos/app/inscricoes-evento/page.tsx",
+      "apps/eventos-admin/app/inscricoes-evento/page.tsx",
     );
 
     expect(eventosPage).toContain("Sorteio de brindes");
@@ -105,7 +106,7 @@ describe("módulo eventos", () => {
 
   it("restaura o último sorteio e exibe seus dados de contato", () => {
     const eventosPage = lerArquivoRepositorio(
-      "apps/eventos/app/inscricoes-evento/page.tsx",
+      "apps/eventos-admin/app/inscricoes-evento/page.tsx",
     );
 
     expect(eventosPage).toContain("setUltimoSorteio(data[0] ?? null)");
@@ -126,7 +127,7 @@ describe("módulo eventos", () => {
     const landing = lerArquivoRepositorio("landing-mae-por-inteiro/index.html");
     const script = lerArquivoRepositorio("landing-mae-por-inteiro/script.js");
     const eventosPage = lerArquivoRepositorio(
-      "apps/eventos/app/inscricoes-evento/page.tsx",
+      "apps/eventos-admin/app/inscricoes-evento/page.tsx",
     );
 
     expect(inscricao).toContain("numeroInscricao");
@@ -144,7 +145,7 @@ describe("módulo eventos", () => {
 
   it("não exibe capacidade fixa que pode divergir do evento", () => {
     const eventosPage = lerArquivoRepositorio(
-      "apps/eventos/app/inscricoes-evento/page.tsx",
+      "apps/eventos-admin/app/inscricoes-evento/page.tsx",
     );
 
     expect(eventosPage).not.toContain("Vagas disponíveis");

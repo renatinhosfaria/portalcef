@@ -108,7 +108,7 @@ export const PORTAL_MODULES: readonly PortalModule[] = [
     key: "eventos",
     icon: HeartHandshake,
     label: "Eventos",
-    href: "/eventos",
+    href: "/eventos-admin",
     activePage: "eventos",
   },
   {

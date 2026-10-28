@@ -1,2 +1,0 @@
-import Link from "next/link";
-export default async function Page({params}:{params:Promise<{id:string}>}) { const {id}=await params; return <section className="space-y-4"><Link href={`/eventos/${id}`} className="text-sm underline">Voltar ao evento {id}</Link><h1 className="text-2xl font-semibold">Pedidos</h1><div className="rounded-xl border bg-white p-8"><p>Pedidos do evento {id} ainda depende da API da próxima etapa.</p><p className="mt-2 text-sm text-slate-600">Nenhuma alteração foi aplicada.</p></div></section>; }
