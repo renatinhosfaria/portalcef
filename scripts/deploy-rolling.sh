@@ -145,11 +145,10 @@ for service in "${SERVICES[@]}"; do
         "${COMPOSE[@]}" logs --tail=30 "$service"
         FAILED=1
 
-        # Para o deploy se API falhar
-        if [ "$service" = "api" ]; then
-            echo -e "${RED}API falhou - abortando deploy${NC}"
-            exit 1
-        fi
+        # Falha fechada: não recriar serviços seguintes e preservar a versão
+        # anterior deles para rollback manual com a mesma tag.
+        echo -e "${RED}${service} falhou - abortando deploy${NC}"
+        exit 1
     fi
 
     echo ""

@@ -18,6 +18,10 @@ case "$1" in
     exit 0
     ;;
   inspect)
+    if [[ -n "${CONTAINER_FALHO:-}" && "$*" == *"essencia-${CONTAINER_FALHO}"* ]]; then
+      echo unhealthy
+      exit 0
+    fi
     if [[ "${INICIO_LENTO:-}" == 1 && "$*" == *essencia-api* ]]; then
       tentativas=$(cat "$TESTE_CONTADOR" 2>/dev/null || echo 0)
       tentativas=$((tentativas + 1))
@@ -91,3 +95,15 @@ if HEALTH_TIMEOUT=2 INICIO_LENTO=1 bash "$TEST_DIR/scripts/deploy-rolling.sh" ab
   exit 1
 fi
 echo 'Inicialização lenta e timeout configurável passaram.'
+
+: > "$ROLLING_LOG"
+if CONTAINER_FALHO=eventos-admin HEALTH_TIMEOUT=1 bash "$TEST_DIR/scripts/deploy-rolling.sh" abc1234 > "$TEST_DIR/admin-unhealthy.log"; then
+  echo 'Falha: rolling aceitou app administrativo unhealthy.' >&2
+  exit 1
+fi
+grep -Fq -- '--env-file .env.docker up -d --force-recreate --no-build --pull never --no-deps eventos-admin' "$ROLLING_LOG"
+if grep -Fq -- '--env-file .env.docker up -d --force-recreate --no-build --pull never --no-deps loja' "$ROLLING_LOG"; then
+  echo 'Falha: rolling recriou loja após eventos-admin unhealthy.' >&2
+  exit 1
+fi
+echo 'Falha fechada após app unhealthy passou.'
