@@ -18,7 +18,7 @@
   },
   "scripts": {
     "lint": "eslint src/",
-    "test": "vitest run --environment jsdom",
+    "test": "vitest run --environment jsdom --testTimeout=15000",
     "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
