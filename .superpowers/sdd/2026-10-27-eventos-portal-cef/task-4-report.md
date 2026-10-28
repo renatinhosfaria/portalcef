@@ -40,3 +40,7 @@ Revisão de mapa agora interpreta `detections`, sincroniza propostas após uploa
 ## Round 5
 
 Adicionados campos de resumo, telefone, publicação planejada, categoria e imagem; exceções de local/mapa por sessão; inventário achata linhas `{session, inventory}` com loading/erro e IDs compostos. Testes e typecheck passaram.
+
+## Round 6
+
+Removidos `any` do inventário, normalizados status da API para a união da UI e achatadas linhas `{session, inventory}`. Campos opcionais vazios são enviados como `null` para o DTO. Testes e typecheck passaram.
