@@ -79,3 +79,16 @@ GREEN:
 pnpm --filter @essencia/eventos test      — PASS (5 arquivos, 15 testes)
 pnpm --filter @essencia/eventos typecheck — PASS
 ```
+
+## Rodada de correção 3/5
+
+O formulário agora limpa a chave de reserva quando a reserva/finalização termina com pedido expirado, cancelado ou não encontrado (`ORDER_NOT_AVAILABLE`, `ORDER_NOT_FOUND`, `RESERVATION_EXPIRED`, `RESERVATION_CANCELLED`). Retries transitórios preservam a chave da tentativa; finalização e checkout continuam com chaves estáveis por pedido. A geração sem chave da API permanece nova a cada chamada.
+
+RED: o teste de decisão terminal/transitória falhou porque o formulário não exportava a regra de invalidação.
+
+GREEN:
+
+```text
+pnpm --filter @essencia/eventos test      — PASS (5 arquivos, 16 testes)
+pnpm --filter @essencia/eventos typecheck — PASS
+```

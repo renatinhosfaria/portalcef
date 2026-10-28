@@ -5,9 +5,14 @@ import type { PoliticaPublica, PedidoPublicoResult } from "@essencia/shared/type
 import { EventosApiError, finalizarPedido, gerarChaveIdempotenciaPublica, iniciarCheckout, origemPublicaEventos, reservarAssentos } from "../lib/eventos-api";
 
 const TIPOS_POLITICA: PoliticaPublica["type"][] = ["PRIVACIDADE", "COMPRA", "CANCELAMENTO_REEMBOLSO", "ACESSIBILIDADE", "CONTATO"];
+const CODIGOS_PEDIDO_ENCERRADO = new Set(["ORDER_NOT_AVAILABLE", "ORDER_NOT_FOUND", "RESERVATION_EXPIRED", "RESERVATION_CANCELLED"]);
 
 export function aceitesCompletos(acceptances: Array<{ type: PoliticaPublica["type"]; version: number }>) {
   return acceptances.length === TIPOS_POLITICA.length && new Set(acceptances.map((acceptance) => acceptance.type)).size === TIPOS_POLITICA.length && TIPOS_POLITICA.every((type) => acceptances.some((acceptance) => acceptance.type === type && Number.isInteger(acceptance.version) && acceptance.version > 0));
+}
+
+export function deveInvalidarChaveReserva(cause: unknown) {
+  return cause instanceof EventosApiError && (CODIGOS_PEDIDO_ENCERRADO.has(cause.code ?? "") || cause.status === 404 || /expirad|cancelad/i.test(cause.message));
 }
 
 type Props = {
@@ -42,16 +47,20 @@ export function FormularioCheckout({ seatIds, ticketTypeIds = [], sessionId, pol
     const participants = seatIds.map((_, participantIndex) => ({ participantIndex, fullName: String(form.get(`participant-${participantIndex}-fullName`) || ""), type: "CONVIDADO" as const }));
     if (participants.some((participant) => participant.fullName.trim().length < 2)) return setError("Informe o nome de cada participante.");
     setSubmitting(true);
+    let etapa: "reserva" | "finalizacao" | "checkout" = "reserva";
     try {
       const reservationKey = reservationKeyRef.current ?? gerarChaveIdempotenciaPublica("reserva");
       reservationKeyRef.current = reservationKey;
       const reservation = await reservarAssentos({ sessionId, idempotencyKey: reservationKey, seats: seatIds.map((seatId, index) => ({ seatId, ticketTypeId: ticketTypeIds[index] || ticketTypeIds[0] || "", participantIndex: index })), buyer });
+      etapa = "finalizacao";
       const pedido = await finalizarPedido(reservation.orderNumber, { participants, acceptances: politicas.map((policy) => ({ type: policy.type, version: policy.version })) });
       setPending(true);
       onComplete?.(pedido);
+      etapa = "checkout";
       const checkout = await iniciarCheckout(reservation.orderNumber, { successUrl: `${origemPublicaEventos()}/pedido/${encodeURIComponent(reservation.orderNumber)}?retorno=sucesso`, cancelUrl: `${origemPublicaEventos()}/pedido/${encodeURIComponent(reservation.orderNumber)}?retorno=cancelado` });
       if (typeof window !== "undefined") window.location.assign(checkout.checkoutUrl);
     } catch (cause) {
+      if (etapa !== "checkout" && deveInvalidarChaveReserva(cause)) reservationKeyRef.current = null;
       setPending(false);
       if (cause instanceof EventosApiError && cause.status === 409) setError(cause.message);
       else if (cause instanceof EventosApiError && cause.status === 429) setError("Muitas tentativas em pouco tempo. Aguarde um instante e tente novamente.");
