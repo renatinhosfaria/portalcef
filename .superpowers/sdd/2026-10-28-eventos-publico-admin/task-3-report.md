@@ -32,3 +32,13 @@
 - Liberação expirada atualiza reservas, inventário e pedidos `INICIADO` para `EXPIRADO`, preservando confirmados.
 
 Validações da correção: shared build, API typecheck e lint passaram; testes do schema DB passaram (3). O Jest focado continua bloqueado antes da execução pelo erro ESM de `packages/db/src/client.js`; o comando e a saída permanecem registrados acima.
+
+## Correção da rodada 2
+
+- Adicionada `finalizationIdempotencyKey` nullable com índice único separado da chave de reserva; finalização repetida retorna o pedido original e chave diferente gera conflito.
+- Corrida de unicidade de reserva é recuperada fora da transação abortada pela chave de idempotência.
+- Finalização exige exatamente os cinco tipos de política, sem duplicatas, versões ativas e participantes com índices 0..N-1 completos e únicos.
+- Liberação exige `RESERVADO`, `reservedByOrderId` igual ao pedido e vencimento; pedidos confirmados não são alterados.
+- Criado shim Jest para `@essencia/db` sem carregar `client.js` e schemas shim; suíte focada executou 4 testes com sucesso.
+
+Comandos finais: `pnpm --filter @essencia/api test -- --runInBand src/modules/eventos/eventos-public-sales.service.spec.ts src/modules/eventos/eventos-public.controller.spec.ts` (2 suítes, 4 testes PASS); `pnpm --filter @essencia/shared build` PASS; `pnpm --filter @essencia/api typecheck` PASS; `pnpm --filter @essencia/api lint` PASS; teste DB schema PASS (3 testes).

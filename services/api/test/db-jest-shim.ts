@@ -1,0 +1,5 @@
+const op = (...args: unknown[]) => ({ args });
+export const and = op; export const asc = op; export const desc = op; export const eq = op; export const gt = op; export const gte = op; export const ilike = op; export const inArray = op; export const isNotNull = op; export const isNull = op; export const lt = op; export const lte = op; export const ne = op; export const not = op; export const or = op; export const sql = op;
+const table = new Proxy({}, { get: () => ({}) });
+export const eventoAceites = table; export const eventoAuditorias = table; export const eventoInventarioAssentos = table; export const eventoItensPedido = table; export const eventoOfertas = table; export const eventoPagamentos = table; export const eventoParticipantes = table; export const eventoPedidos = table; export const eventoPoliticas = table; export const eventoReservas = table; export const eventoSessoes = table; export const eventoTiposIngresso = table; export const eventoMapaAssentos = table; export const eventoMapas = table; export const eventoLocais = table; export const eventos = table;
+export const getDb = () => ({}); export const closeDb = async () => undefined;

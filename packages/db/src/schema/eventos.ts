@@ -488,6 +488,7 @@ export const eventoPedidos = pgTable(
       .default("INICIADO"),
     totalCents: integer("total_cents").notNull(),
     idempotencyKey: varchar("idempotency_key", { length: 180 }).notNull(),
+    finalizationIdempotencyKey: varchar("finalization_idempotency_key", { length: 180 }),
     expiresAt: timestamp("expires_at", { withTimezone: true }),
     confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
     cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
@@ -501,6 +502,7 @@ export const eventoPedidos = pgTable(
     idempotencyUnique: uniqueIndex("uq_evento_pedidos_idempotency_key").on(
       table.idempotencyKey,
     ),
+    finalizationIdempotencyUnique: uniqueIndex("uq_evento_pedidos_finalization_idempotency_key").on(table.finalizationIdempotencyKey),
     eventStatusIdx: index("idx_evento_pedidos_event_status").on(
       table.eventId,
       table.status,
