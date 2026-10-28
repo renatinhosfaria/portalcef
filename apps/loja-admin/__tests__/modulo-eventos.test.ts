@@ -29,7 +29,7 @@ describe("módulo eventos", () => {
     expect(lerArquivoRepositorio("apps/eventos/next.config.js")).toContain(
       'basePath: "/eventos"',
     );
-    expect(lerArquivoRepositorio("apps/eventos/app/page.tsx")).toContain(
+    expect(lerArquivoRepositorio("apps/eventos/app/page.tsx")).not.toContain(
       'redirect("/eventos/inscricoes-evento")',
     );
     expect(lerArquivoRepositorio("apps/eventos/package.json")).toContain(

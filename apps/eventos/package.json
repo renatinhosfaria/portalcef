@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@essencia/components": "workspace:*",
+    "@essencia/lib": "workspace:*",
     "@essencia/shared": "workspace:*",
     "@essencia/tailwind-config": "workspace:*",
     "@essencia/ui": "workspace:*",

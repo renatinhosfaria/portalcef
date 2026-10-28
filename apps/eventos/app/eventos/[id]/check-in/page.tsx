@@ -1,0 +1,1 @@
+export default function CheckinPage() { return <section className="space-y-4"><h1 className="text-2xl font-semibold">Check-in</h1><div className="rounded-xl border border-slate-200 bg-white p-8"><p className="font-medium">Check-in ainda sem registros.</p><p className="mt-2 text-sm text-slate-600">A operação será habilitada pela API de presença.</p></div></section>; }

@@ -1,0 +1,1 @@
+export default function PedidosPage() { return <section className="space-y-4"><h1 className="text-2xl font-semibold">Pedidos</h1><div className="rounded-xl border border-slate-200 bg-white p-8"><p className="font-medium">Nenhum pedido disponível ainda.</p><p className="mt-2 text-sm text-slate-600">Esta operação será conectada pela API nas próximas etapas.</p></div></section>; }

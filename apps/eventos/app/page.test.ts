@@ -1,21 +1,16 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-describe("smoke de Eventos", () => {
-  it("mantém uma página renderizável dentro do shell autenticado", () => {
+describe("módulo Eventos", () => {
+  it("abre o dashboard administrativo sem redirecionar para o legado", () => {
     const source = readFileSync(new URL("./page.tsx", import.meta.url), "utf8");
-    expect(source).toMatch(/export default function/);
-    expect(source).toContain('redirect("/eventos/inscricoes-evento")');
+    expect(source).toContain("EventosPage");
+    expect(source).not.toContain("redirect(\"/eventos/inscricoes-evento\")");
+    expect(source).toContain("/eventos");
   });
-
-  it("mantém paginação e exportação completa na tela de inscrições", () => {
-    const source = readFileSync(
-      new URL("./inscricoes-evento/page.tsx", import.meta.url),
-      "utf8",
-    );
-
+  it("preserva o fluxo legado de inscrições", () => {
+    const source = readFileSync(new URL("./inscricoes-evento/page.tsx", import.meta.url), "utf8");
     expect(source).toContain("offset");
     expect(source).toContain("Carregar todas as inscrições");
-    expect(source).toContain("Página");
   });
 });

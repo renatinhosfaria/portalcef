@@ -208,6 +208,9 @@ importers:
       '@essencia/components':
         specifier: workspace:*
         version: link:../../packages/components
+      '@essencia/lib':
+        specifier: workspace:*
+        version: link:../../packages/lib
       '@essencia/shared':
         specifier: workspace:*
         version: link:../../packages/shared
