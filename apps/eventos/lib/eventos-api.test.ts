@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { buscarApiPublica, listarEventosPublicos } from "./eventos-api";
+import { buscarApiPublica, iniciarCheckout, listarEventosPublicos, reservarAssentos } from "./eventos-api";
 
 describe("API pública de eventos", () => {
   it("usa /api no navegador e não encaminha cookie administrativo", async () => {
@@ -15,6 +15,26 @@ describe("API pública de eventos", () => {
   it("propaga erro HTTP sem redirecionar", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("falha", { status: 503 }));
     await expect(buscarApiPublica("/eventos/public")).rejects.toThrow("Falha ao consultar API pública (503)");
+    vi.restoreAllMocks();
+  });
+
+  it("cria chave de idempotência no navegador e preserva a seleção quando a reserva conflita", async () => {
+    vi.stubGlobal("window", {});
+    const response = new Response(JSON.stringify({ code: "SEAT_UNAVAILABLE", message: "Assento indisponível" }), { status: 409 });
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(response);
+    const input = { sessionId: "00000000-0000-4000-8000-000000000001", seats: [{ seatId: "00000000-0000-4000-8000-000000000002", ticketTypeId: "00000000-0000-4000-8000-000000000003", participantIndex: 0 }], buyer: { name: "Ana", email: "ana@example.com", phone: "11999999999" } };
+    await expect(reservarAssentos(input)).rejects.toMatchObject({ status: 409, code: "SEAT_UNAVAILABLE", selection: input.seats });
+    const [, init] = fetchMock.mock.calls[0] ?? [];
+    expect((init?.headers as Record<string, string>)?.["Idempotency-Key"]).toBeTruthy();
+    expect(JSON.parse(String(init?.body))).toMatchObject(input);
+    vi.restoreAllMocks();
+  });
+
+  it("retorna a checkoutUrl da API sem montar URL Stripe no cliente", async () => {
+    vi.stubGlobal("window", {});
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ checkoutUrl: "https://checkout.stripe.com/c/pay/cs_test" }), { status: 200 }));
+    await expect(iniciarCheckout("ABC123DEF456", { successUrl: "https://eventos.portalcef.com.br/pedido/ABC123DEF456?retorno=sucesso", cancelUrl: "https://eventos.portalcef.com.br/checkout?retorno=cancelado" })).resolves.toEqual({ checkoutUrl: "https://checkout.stripe.com/c/pay/cs_test" });
+    expect(String(fetchMock.mock.calls[0]?.[0])).not.toContain("stripe.com");
     vi.restoreAllMocks();
   });
 });
