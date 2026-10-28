@@ -88,3 +88,4 @@ GREEN:
 - `pnpm --filter @essencia/api lint` — **PASS**, somente avisos de `any`.
 - `pnpm --filter @essencia/db test -- --test-name-pattern eventos` — **3 testes PASS**.
 - `pnpm --filter @essencia/db build` e `pnpm --filter @essencia/shared build` — **PASS**.
+- `pnpm turbo lint && pnpm turbo typecheck` após a correção — **PASS**, 21 tarefas de lint e 22 de typecheck.
