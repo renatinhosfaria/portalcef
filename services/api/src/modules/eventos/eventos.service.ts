@@ -133,13 +133,15 @@ export class EventosService {
 
   async listarSessoesPublicas(slug: string, now = new Date()): Promise<PublicEventSession[]> {
     const detail = await this.getPublicBySlug(slug, now);
+    const ticketTypes = await this.db.select().from(eventoTiposIngresso).where(and(eq(eventoTiposIngresso.eventId, detail.id), eq(eventoTiposIngresso.active, true))).orderBy(asc(eventoTiposIngresso.name));
+    const publicTicketTypes = ticketTypes.map((ticket: typeof eventoTiposIngresso.$inferSelect) => ({ id: ticket.id, name: ticket.name, description: ticket.description, priceCents: ticket.priceCents, maxPerOrder: ticket.maxPerOrder, eligibility: ticket.eligibility }));
     const rows = await this.db.select({ session: eventoSessoes, location: eventoLocais, inventory: eventoInventarioAssentos }).from(eventoSessoes).leftJoin(eventoLocais, eq(eventoLocais.id, eventoSessoes.locationId)).leftJoin(eventoInventarioAssentos, eq(eventoInventarioAssentos.sessionId, eventoSessoes.id)).where(and(eq(eventoSessoes.eventId, detail.id), eq(eventoSessoes.status, "PUBLICADA"))).orderBy(asc(eventoSessoes.startsAt));
     const result = new Map<string, PublicEventSession>();
     for (const row of rows) {
       const existing = result.get(row.session.id);
       const available = this.salesAvailability(row.session) === "available" && (row.inventory?.status === "DISPONIVEL" || row.inventory?.status === "LIBERADO");
       if (existing) { if (available) existing.availability = "available"; continue; }
-      result.set(row.session.id, { id: row.session.id, startsAt: row.session.startsAt, endsAt: row.session.endsAt, status: "PUBLICADA", capacity: row.session.capacity, mapId: row.session.mapId, salesStartsAt: row.session.salesStartsAt, salesEndsAt: row.session.salesEndsAt, location: row.location ? { name: row.location.name, address: row.location.address, room: row.location.room, instructions: row.location.instructions, accessibility: row.location.accessibility } : null, availability: available ? "available" : "sold_out" });
+      result.set(row.session.id, { id: row.session.id, startsAt: row.session.startsAt, endsAt: row.session.endsAt, status: "PUBLICADA", capacity: row.session.capacity, mapId: row.session.mapId, salesStartsAt: row.session.salesStartsAt, salesEndsAt: row.session.salesEndsAt, location: row.location ? { name: row.location.name, address: row.location.address, room: row.location.room, instructions: row.location.instructions, accessibility: row.location.accessibility } : null, availability: available ? "available" : "sold_out", ticketTypes: publicTicketTypes });
     }
     return [...result.values()];
   }

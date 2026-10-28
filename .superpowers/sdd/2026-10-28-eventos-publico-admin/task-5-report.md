@@ -44,3 +44,23 @@ pnpm turbo lint && pnpm turbo typecheck   — PASS (21/21 lint, 22/22 typecheck;
 - `apps/eventos/app/checkout/page.tsx`
 - `apps/eventos/app/evento/[slug]/sessao/[sessionId]/page.tsx`
 - `apps/eventos/app/pedido/[orderNumber]/page.tsx`
+
+## Rodada de correção 1/5
+
+Achado tratado: o mapa não tinha `ticketTypeId` e o fluxo normal chegava ao checkout com o botão desabilitado. O contrato público de `PublicEventSession` agora expõe somente tipos de ingresso ativos (id, nome, descrição, preço, limite e elegibilidade); a API preenche essa lista por evento publicado. O detalhe oferece links acessíveis para escolher o ingresso, a sessão seleciona automaticamente o único tipo ou exibe opções quando há vários, e o UUID validado é encaminhado ao checkout/reserva.
+
+RED da rodada: o teste `detalhe-evento-ingresso.test.tsx` falhou porque `PublicEventSession` não possuía `ticketTypes` e o detalhe não gerava caminho com `ticketTypeId`.
+
+GREEN da rodada:
+
+```text
+pnpm --filter @essencia/shared build       — PASS
+pnpm --filter @essencia/eventos test       — PASS (5 arquivos, 14 testes)
+pnpm --filter @essencia/eventos lint       — PASS
+pnpm --filter @essencia/eventos typecheck  — PASS
+pnpm --filter @essencia/eventos build      — PASS (standalone)
+pnpm --filter @essencia/api typecheck      — PASS
+pnpm --filter @essencia/api lint           — PASS (avisos preexistentes)
+```
+
+Arquivos adicionais: `packages/shared/src/types/eventos.ts`, `services/api/src/modules/eventos/eventos.service.ts`, `apps/eventos/components/detalhe-evento.tsx`, `apps/eventos/app/evento/[slug]/sessao/[sessionId]/page.tsx` e o teste regressivo `apps/eventos/components/__tests__/detalhe-evento-ingresso.test.tsx`.
