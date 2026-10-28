@@ -28,7 +28,8 @@ async function exigirSessao() {
   try {
     await serverApi.get("/api/auth/me", { cookies: cookieString });
   } catch {
-    redirect("/login");
+    const loginUrl = process.env.LOGIN_PUBLIC_URL ?? (process.env.NODE_ENV === "production" ? "https://www.portalcef.com.br/login" : "http://localhost:3003/login");
+    redirect(loginUrl);
   }
 }
 

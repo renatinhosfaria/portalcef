@@ -22,6 +22,8 @@ describe("fronteira do painel administrativo de eventos", () => {
     expect(layout).toContain("serverApi.get");
     expect(layout).toContain('"/api/auth/me"');
     expect(layout).toContain("cookies()");
-    expect(layout).toContain('redirect("/login")');
+    expect(layout).toContain("LOGIN_PUBLIC_URL");
+    expect(layout).toContain("https://www.portalcef.com.br/login");
+    expect(layout).toContain("http://localhost:3003/login");
   });
 });
