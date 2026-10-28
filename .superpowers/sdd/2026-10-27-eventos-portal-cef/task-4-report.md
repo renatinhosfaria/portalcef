@@ -20,3 +20,7 @@ Implementada a área administrativa multi-evento sob o Shell existente, preserva
 ## Limitações
 
 A listagem e criação usam a rota proxy administrativa, mas as operações de pedidos, check-in e configurações permanecem estados vazios até as APIs das Tasks 6/7. O inventário recebe dados da API quando integrado e não mantém reserva otimista local.
+
+## Round 1
+
+Corrigido o uso do `basePath` nas chamadas públicas, incluído `schoolId`, controles de sessões múltiplas, ingressos e cinco políticas, revisão de mapa com upload privado e resolução de conflitos, e ações de inventário com motivo obrigatório e tratamento de rejeição. Testes: 7 passaram; typecheck passou; build concluído com avisos de lockfiles/import order.
