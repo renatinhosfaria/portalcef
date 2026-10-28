@@ -115,3 +115,25 @@ GREEN da rodada:
 - `pnpm --filter @essencia/api typecheck` — **PASS**.
 - `pnpm --filter @essencia/db test -- --test-name-pattern eventos` — **3 testes PASS**.
 - `pnpm --filter @essencia/db build` e `pnpm --filter @essencia/shared build` — **PASS**.
+
+## Rodada de correção 3/5
+
+- O teste de concorrência deixou de serializar artificialmente o fake: duas transações iniciam sobre o mesmo estado compartilhado, uma conclui a emissão e a outra recebe `PAYMENT_IN_PROGRESS`; há também casos separados para `PROCESSANDO` ativo e stale recuperável.
+- Adicionado teste comportamental do serviço para falha de PaymentIntent sem ID persistido, resolvida por `eventOrderId`, verificando liberação do inventário, reserva `LIBERADA`, pagamento `EXPIRADO` e pedido `CANCELADO`.
+- O shim DB agora marca cada tabela e coluna (`__table`/`__column`), e o fake avalia `eq`, `and`, `or`, `lte` e `inArray` pela coluna correta; referências conflitantes falham se o marcador não coincidir.
+
+RED contra o fake anterior de `fdb9452`:
+
+```text
+pnpm --filter @essencia/api test -- --config jest.eventos.config.js --runInBand \
+  src/modules/eventos/eventos-pagamentos.service.spec.ts
+```
+
+Falhou porque o fake anterior serializava a corrida, não distinguia colunas e deixava a expiração/falha protegida sem os estados esperados.
+
+GREEN:
+
+- Focused Eventos/Payments/Public — **4 suítes, 24 testes PASS**.
+- Regressões da loja — **126 testes PASS**.
+- API typecheck/lint, DB schema (3 testes), DB build e shared build — **PASS**.
+- Pipeline global `pnpm turbo lint && pnpm turbo typecheck` — **PASS**, 21 tarefas de lint e 22 de typecheck.
