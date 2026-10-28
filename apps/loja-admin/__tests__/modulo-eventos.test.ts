@@ -18,11 +18,18 @@ function lerArquivoRepositorio(...partes: string[]) {
 }
 
 describe("módulo eventos", () => {
-  it("mantém inscrições de evento fora de loja-admin e publicada em eventos-admin", () => {
-    expect(existeNoRepositorio("apps/eventos")).toBe(false);
+  it("mantém a vitrine pública fora de loja-admin e o painel em eventos-admin", () => {
+    expect(existeNoRepositorio("apps/eventos")).toBe(true);
     expect(existeNoRepositorio("apps/loja-admin/app/inscricoes-evento")).toBe(
       false,
     );
+    const pacotePublico = lerArquivoRepositorio("apps/eventos/package.json");
+    const configuracaoPublica = lerArquivoRepositorio(
+      "apps/eventos/next.config.js",
+    );
+    expect(pacotePublico).toContain('"name":"@essencia/eventos"');
+    expect(pacotePublico).toContain("3014");
+    expect(configuracaoPublica).not.toMatch(/basePath\s*:/);
     expect(
       existeNoRepositorio("apps/eventos-admin/app/inscricoes-evento/page.tsx"),
     ).toBe(true);
