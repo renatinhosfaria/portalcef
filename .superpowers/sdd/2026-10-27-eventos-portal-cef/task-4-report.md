@@ -48,3 +48,7 @@ Removidos `any` do inventário, normalizados status da API para a união da UI e
 ## Round 7
 
 Falhas de importação, correção e confirmação de mapa agora aparecem na tela. Pedidos, check-in e configurações exibem contexto operacional pendente e link de retorno. Testes/typecheck passaram.
+
+## Round 8
+
+Páginas de pedidos, check-in e configurações agora exibem títulos específicos, o ID do evento e link de retorno ao detalhe. Testes e typecheck passaram.
