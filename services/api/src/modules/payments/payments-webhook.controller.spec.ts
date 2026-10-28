@@ -44,6 +44,21 @@ describe("PaymentsWebhookController - Eventos", () => {
     expect(eventosPagamentos.confirmarCheckout).toHaveBeenCalledWith(expect.objectContaining({ paymentIntentId: "pi_novo", eventOrderId: "pedido-evento-1" }));
   });
 
+  it("encaminha falha e cancelamento de PaymentIntent sem referência persistida", async () => {
+    const eventosPagamentos = { falharCheckout: jest.fn().mockResolvedValue(undefined) };
+    const controller = new PaymentsWebhookController(
+      { get: jest.fn().mockReturnValue("whsec_test") } as any,
+      { getStripeClient: jest.fn() } as any,
+      { failStripePayment: jest.fn() } as any,
+      eventosPagamentos as any,
+    );
+    const paymentIntent = { id: "pi-falha", metadata: { eventOrderId: "pedido-evento-1" }, last_payment_error: { message: "recusado" } };
+    await (controller as any).handlePaymentFailed(paymentIntent);
+    await (controller as any).handlePaymentCanceled(paymentIntent);
+    expect(eventosPagamentos.falharCheckout).toHaveBeenNthCalledWith(1, expect.objectContaining({ paymentIntentId: "pi-falha", eventOrderId: "pedido-evento-1" }));
+    expect(eventosPagamentos.falharCheckout).toHaveBeenNthCalledWith(2, expect.objectContaining({ paymentIntentId: "pi-falha", eventOrderId: "pedido-evento-1" }));
+  });
+
   it("falha explicitamente se o provider obrigatório estiver ausente", async () => {
     const controller = new PaymentsWebhookController(
       { get: jest.fn().mockReturnValue("whsec_test") } as any,

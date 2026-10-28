@@ -11,6 +11,7 @@ import {
   eventoParticipantes,
   eventoPedidos,
   eventoReservas,
+  lte,
   or,
   type Database,
 } from "@essencia/db";
@@ -63,7 +64,7 @@ export class EventosPagamentosService {
         message: "Referência de pagamento obrigatória",
       });
     }
-    return predicates.length === 1 ? predicates[0] : or(...predicates);
+    return predicates.length === 1 ? predicates[0] : and(...predicates);
   }
 
   private async findPayment(
@@ -80,6 +81,12 @@ export class EventosPagamentosService {
         .innerJoin(eventoPedidos, eq(eventoPedidos.id, eventoPagamentos.orderId))
         .where(this.paymentWhere(checkoutSessionId, paymentIntentId)),
     );
+    if (row && eventOrderId) {
+      const directOrder = row.order ?? row.eventoPedidos ?? row;
+      if (directOrder.id !== eventOrderId) {
+        throw new ConflictException({ code: "PAYMENT_REFERENCE_CONFLICT", message: "Referências do pagamento não correspondem ao pedido de Evento" });
+      }
+    }
     if (!row && eventOrderId) {
       row = await this.first<any>(
         db
@@ -90,10 +97,12 @@ export class EventosPagamentosService {
       );
     }
     if (!row) return undefined;
-    return {
-      payment: row.payment ?? row.eventoPagamentos ?? row,
-      order: row.order ?? row.eventoPedidos ?? row,
-    };
+    const payment = row.payment ?? row.eventoPagamentos ?? row;
+    const order = row.order ?? row.eventoPedidos ?? row;
+    if (eventOrderId && order.id !== eventOrderId) throw new ConflictException({ code: "PAYMENT_REFERENCE_CONFLICT", message: "Referências do pagamento não correspondem ao pedido de Evento" });
+    if (eventOrderId && checkoutSessionId && payment.stripeCheckoutSessionId && payment.stripeCheckoutSessionId !== checkoutSessionId) throw new ConflictException({ code: "PAYMENT_REFERENCE_CONFLICT", message: "Checkout Session não corresponde ao pedido de Evento" });
+    if (eventOrderId && paymentIntentId && payment.stripePaymentIntentId && payment.stripePaymentIntentId !== paymentIntentId) throw new ConflictException({ code: "PAYMENT_REFERENCE_CONFLICT", message: "PaymentIntent não corresponde ao pedido de Evento" });
+    return { payment, order };
   }
 
   private assertAmount(payment: any, order: any, amountCents: number) {
@@ -140,15 +149,12 @@ export class EventosPagamentosService {
         throw new BadRequestException({ code: "EVENT_ORDER_NOT_PAYABLE", message: "Pedido de Evento não pode ser confirmado" });
       }
 
+      const staleAt = new Date(Date.now() - 5 * 60_000);
       const transition = typeof tx.update === "function"
-        ? await tx.update(eventoPagamentos).set({ status: "PROCESSANDO", updatedAt: new Date() }).where(and(eq(eventoPagamentos.id, payment.id), eq(eventoPagamentos.status, "PENDENTE"))).returning()
+        ? await tx.update(eventoPagamentos).set({ status: "PROCESSANDO", updatedAt: new Date() }).where(and(eq(eventoPagamentos.id, payment.id), or(eq(eventoPagamentos.status, "PENDENTE"), and(eq(eventoPagamentos.status, "PROCESSANDO"), lte(eventoPagamentos.updatedAt, staleAt))))).returning()
         : [];
       if (!this.changed(transition)) {
-        let latest = (await this.findPayment(tx, input.checkoutSessionId, input.paymentIntentId, input.eventOrderId)) ?? current;
-        if (latest.payment.status === "PROCESSANDO") {
-          await new Promise((resolve) => setTimeout(resolve, 0));
-          latest = (await this.findPayment(tx, input.checkoutSessionId, input.paymentIntentId, input.eventOrderId)) ?? latest;
-        }
+        const latest = (await this.findPayment(tx, input.checkoutSessionId, input.paymentIntentId, input.eventOrderId)) ?? current;
         if (["CONFIRMADO", "USADO"].includes(latest.order.status) || latest.payment.status === "APROVADO") return;
         throw new ConflictException({ code: "PAYMENT_IN_PROGRESS", message: "Pagamento de Evento em processamento" });
       }

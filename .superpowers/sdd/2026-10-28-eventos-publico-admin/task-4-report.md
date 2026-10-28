@@ -89,3 +89,29 @@ GREEN:
 - `pnpm --filter @essencia/db test -- --test-name-pattern eventos` — **3 testes PASS**.
 - `pnpm --filter @essencia/db build` e `pnpm --filter @essencia/shared build` — **PASS**.
 - `pnpm turbo lint && pnpm turbo typecheck` após a correção — **PASS**, 21 tarefas de lint e 22 de typecheck.
+
+## Rodada de correção 2/5
+
+- Referências de checkout e PaymentIntent agora usam `AND` quando ambas chegam; o fallback por `eventOrderId` valida que o pedido e as referências persistidas são coerentes e rejeita mistura de pedidos.
+- A transição `PROCESSANDO` usa lease de cinco minutos: pagamento stale pode ser retomado condicionalmente, enquanto um processamento ativo permanece serializado pela atualização condicional.
+- Falhas/cancelamentos de PaymentIntent também recebem `eventOrderId`, permitindo liberar o pedido quando o PI não existia na persistência inicial.
+- `docker-compose.prod.yml` encaminha `EVENTOS_QR_SECRET` e `EVENTOS_PUBLIC_URL` ao serviço API; os valores reais continuam fora do Git.
+- O fake transacional respeita predicates de IDs/status/data, e os testes cobrem referências conflitantes, lease stale e falhas/cancelamentos por PI sem ID persistido.
+
+RED contra `d61075a`:
+
+```text
+pnpm --filter @essencia/api test -- --config jest.eventos.config.js --runInBand \
+  src/modules/eventos/eventos-pagamentos.service.spec.ts \
+  src/modules/payments/payments-webhook.controller.spec.ts
+```
+
+Falhou com confirmação indevida da referência conflitante e falha no cenário `PROCESSANDO` stale.
+
+GREEN da rodada:
+
+- Suíte focada de Eventos/Payments/Public — **4 suítes, 22 testes PASS**.
+- Regressões da loja — **126 testes PASS**.
+- `pnpm --filter @essencia/api typecheck` — **PASS**.
+- `pnpm --filter @essencia/db test -- --test-name-pattern eventos` — **3 testes PASS**.
+- `pnpm --filter @essencia/db build` e `pnpm --filter @essencia/shared build` — **PASS**.
