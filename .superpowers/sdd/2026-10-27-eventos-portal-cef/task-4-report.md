@@ -32,3 +32,7 @@ Proxy preserva prefixo `/api`, uploads multipart encaminham bytes, tenant define
 ## Round 3
 
 Mapa agora inicia por upload e propaga `mapId/importId` às rotas de revisão, detecção e confirmação. Inventário apenas consulta o endpoint GET disponível e mantém ações sem mutação otimista enquanto operações aguardam Task 7. Testes e typecheck passaram.
+
+## Round 4
+
+Revisão de mapa agora interpreta `detections`, sincroniza propostas após upload, edita a proposta selecionada e envia payload com `seats` e motivo. O formulário remove flags de herança do DTO e converte exceções para IDs/null. Testes e typecheck passaram.
