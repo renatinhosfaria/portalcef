@@ -1,15 +1,16 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException, ServiceUnavailableException } from "@nestjs/common";
-import { and, desc, eq, eventoAceites, eventoInventarioAssentos, eventoItensPedido, eventoOfertas, eventoPagamentos, eventoParticipantes, eventoPedidos, eventoPoliticas, eventoReservas, eventoSessoes, eventoTiposIngresso, eventos, lte, type Database } from "@essencia/db";
+import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException, Optional, ServiceUnavailableException, forwardRef } from "@nestjs/common";
+import { and, desc, eq, eventoAceites, eventoInventarioAssentos, eventoItensPedido, eventoOfertas, eventoPagamentos, eventoParticipantes, eventoPedidos, eventoPoliticas, eventoReservas, eventoSessoes, eventoTiposIngresso, eventos, inArray, lte, type Database } from "@essencia/db";
 import { checkoutPublicoSchema, finalizarPedidoSchema, reservaPublicaSchema, type CheckoutPublicoInput, type FinalizarPedidoInput, type ReservaPublicaInput } from "@essencia/shared/schemas";
 import type { ConsultaPedidoPublica, PedidoPublicoResult, PoliticaPublica, ReservaPublicaResult } from "@essencia/shared/types";
 import { DatabaseService } from "../../common/database/database.service";
+import { PaymentsService } from "../payments/payments.service";
 
 const fail = (code: string, message: string) => new BadRequestException({ code, message });
 const validated = <T>(schema: { safeParse(value: unknown): { success: boolean; data?: T } }, value: unknown): T => { const result = schema.safeParse(value); if (!result.success) throw fail("VALIDATION_ERROR", "Dados inválidos"); return result.data as T; };
 
 @Injectable()
 export class EventosPublicSalesService {
-  constructor(private readonly database: DatabaseService) {}
+  constructor(private readonly database: DatabaseService, @Optional() @Inject(forwardRef(() => PaymentsService)) private readonly paymentsService?: PaymentsService) {}
   private get db(): Database { return this.database.db; }
   private async first<T>(query: any): Promise<T | undefined> { const rows = await query; return rows?.[0]; }
   private normalizePhone(phone: string) { return phone.replace(/\D/g, "").slice(0, 30); }
@@ -62,9 +63,43 @@ export class EventosPublicSalesService {
     }).catch(async (error: any) => { if (error?.code === "23505" || error?.constraint?.includes("finalization")) { const existing = await this.first<any>(this.db.select().from(eventoPedidos).where(eq(eventoPedidos.finalizationIdempotencyKey, input.idempotencyKey))); const ownOrder = await this.getOrder(orderNumber, this.db); if (existing?.id === ownOrder.id) return this.pedidoResult(ownOrder, this.db); throw new ConflictException({ code: "IDEMPOTENCY_CONFLICT", message: "Chave de idempotência já utilizada" }); } throw error; });
   }
 
-  async iniciarCheckout(orderNumber: string, raw: unknown) { validated<CheckoutPublicoInput>(checkoutPublicoSchema, raw); void orderNumber; throw new ServiceUnavailableException({ code: "CHECKOUT_UNAVAILABLE", message: "Checkout ainda indisponível" }); }
+  async iniciarCheckout(orderNumber: string, raw: unknown) {
+    const input = validated<CheckoutPublicoInput>(checkoutPublicoSchema, raw);
+    if (!this.paymentsService) throw new ServiceUnavailableException({ code: "CHECKOUT_UNAVAILABLE", message: "Checkout ainda indisponível" });
+    const order = await this.getOrder(orderNumber, this.db);
+    if (!["RESERVADO", "AGUARDANDO_PAGAMENTO"].includes(order.status)) throw fail("ORDER_NOT_AVAILABLE", "Pedido indisponível para checkout");
+    if (order.expiresAt && order.expiresAt <= new Date()) throw fail("ORDER_NOT_AVAILABLE", "Pedido expirado ou indisponível");
+    const minimumCheckoutExpiry = new Date(Date.now() + 30 * 60_000);
+    const checkoutExpiresAt = order.expiresAt && order.expiresAt > minimumCheckoutExpiry ? order.expiresAt : minimumCheckoutExpiry;
+    const rows = await this.db.select({ item: eventoItensPedido, ticket: eventoTiposIngresso }).from(eventoItensPedido).innerJoin(eventoTiposIngresso, eq(eventoTiposIngresso.id, eventoItensPedido.ticketTypeId)).where(eq(eventoItensPedido.orderId, order.id));
+    if (!rows.length) throw fail("ORDER_NOT_AVAILABLE", "Pedido sem itens");
+    const checkout = await this.paymentsService.createCheckoutSession({
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      totalAmount: order.totalCents,
+      customerName: order.buyerName,
+      customerPhone: order.buyerPhone,
+      customerEmail: order.buyerEmail,
+      expiresAt: checkoutExpiresAt,
+      items: rows.map((row: any) => ({ name: row.ticket?.name ?? "Ingresso de Evento", unitAmount: row.item?.unitPriceCents ?? 0, quantity: row.item?.quantity ?? 1 })),
+      successUrl: input.successUrl,
+      cancelUrl: input.cancelUrl,
+      idempotencyKey: `evento-checkout:${order.id}`,
+      eventOrderId: order.id,
+    });
+    const existing = await this.first<any>(this.db.select().from(eventoPagamentos).where(eq(eventoPagamentos.orderId, order.id)));
+    if (existing) {
+      await this.db.update(eventoPagamentos).set({ stripeCheckoutSessionId: checkout.checkoutSessionId, stripePaymentIntentId: checkout.paymentIntentId ?? null, expectedAmountCents: order.totalCents, status: "PENDENTE", updatedAt: new Date() }).where(eq(eventoPagamentos.id, existing.id));
+    } else {
+      await this.db.insert(eventoPagamentos).values({ orderId: order.id, stripeCheckoutSessionId: checkout.checkoutSessionId, stripePaymentIntentId: checkout.paymentIntentId ?? null, method: "card", expectedAmountCents: order.totalCents, receivedAmountCents: null, currency: "BRL", status: "PENDENTE" });
+    }
+    await this.db.update(eventoPedidos).set({ status: "AGUARDANDO_PAGAMENTO", expiresAt: checkoutExpiresAt, updatedAt: new Date() }).where(and(eq(eventoPedidos.id, order.id), inArray(eventoPedidos.status, ["RESERVADO", "INICIADO"] as any)));
+    await this.db.update(eventoReservas).set({ expiresAt: checkoutExpiresAt, updatedAt: new Date() }).where(and(eq(eventoReservas.orderId, order.id), eq(eventoReservas.status, "ATIVA")));
+    await this.db.update(eventoInventarioAssentos).set({ reservationExpiresAt: checkoutExpiresAt, updatedAt: new Date() }).where(and(eq(eventoInventarioAssentos.reservedByOrderId, order.id), eq(eventoInventarioAssentos.status, "RESERVADO")));
+    return { checkoutUrl: checkout.checkoutUrl, expiresAt: checkoutExpiresAt, orderNumber: order.orderNumber };
+  }
   async consultarPedido(orderNumber: string, db: any = this.db): Promise<ConsultaPedidoPublica> { const order = await this.getOrder(orderNumber, db); if (order.expiresAt && order.expiresAt <= new Date() && !["CONFIRMADO", "USADO"].includes(order.status)) throw new NotFoundException({ code: "ORDER_NOT_FOUND", message: "Pedido não encontrado" }); return this.pedidoResult(order, db); }
   private async pedidoResult(order: any, db: any): Promise<PedidoPublicoResult> { if (order.event?.status !== "PUBLICADO" || order.session?.status !== "PUBLICADA") throw new NotFoundException({ code: "ORDER_NOT_FOUND", message: "Pedido não encontrado" }); const rows = await db.select({ item: eventoItensPedido, inventory: eventoInventarioAssentos }).from(eventoItensPedido).innerJoin(eventoInventarioAssentos, eq(eventoInventarioAssentos.id, eventoItensPedido.inventorySeatId)).where(eq(eventoItensPedido.orderId, order.id)); return { orderNumber: order.orderNumber, status: order.status, eventTitle: order.event?.title ?? "", session: { startsAt: order.session?.startsAt, endsAt: order.session?.endsAt }, totalCents: order.totalCents, items: rows.map((row: any) => ({ seatId: row.inventory?.seatId, ticketTypeId: row.item?.ticketTypeId, unitPriceCents: row.item?.unitPriceCents, totalPriceCents: row.item?.totalPriceCents })) }; }
   private async getOrder(orderNumber: string, db: any): Promise<any> { const result = await this.first<any>(db.select({ order: eventoPedidos, event: eventos, session: eventoSessoes }).from(eventoPedidos).innerJoin(eventos, eq(eventos.id, eventoPedidos.eventId)).innerJoin(eventoSessoes, eq(eventoSessoes.id, eventoPedidos.sessionId)).where(eq(eventoPedidos.orderNumber, orderNumber))); if (!result) throw new NotFoundException({ code: "ORDER_NOT_FOUND", message: "Pedido não encontrado" }); return result.order ? { ...result.order, event: result.event, session: result.session } : result; }
-  async liberarReservasExpiradas(now = new Date()) { return this.db.transaction(async (tx: any) => { const expired = await tx.select().from(eventoReservas).where(and(eq(eventoReservas.status, "ATIVA"), lte(eventoReservas.expiresAt, now))); for (const reservation of expired) { const order = await this.first<any>(tx.select().from(eventoPedidos).where(eq(eventoPedidos.id, reservation.orderId))); const changed = await tx.update(eventoInventarioAssentos).set({ status: "DISPONIVEL", reservationExpiresAt: null, reservedByOrderId: null, updatedAt: now }).where(and(eq(eventoInventarioAssentos.id, reservation.inventorySeatId), eq(eventoInventarioAssentos.status, "RESERVADO"), eq(eventoInventarioAssentos.reservedByOrderId, reservation.orderId), lte(eventoInventarioAssentos.reservationExpiresAt, now))); if (changed?.rowCount === 0) continue; await tx.update(eventoReservas).set({ status: "LIBERADA", releasedAt: now, updatedAt: now }).where(eq(eventoReservas.id, reservation.id)); if (order) await tx.update(eventoPedidos).set({ status: "EXPIRADO", updatedAt: now }).where(and(eq(eventoPedidos.id, reservation.orderId), eq(eventoPedidos.status, "INICIADO"), lte(eventoPedidos.expiresAt, now))); } return expired.length; }); }
+  async liberarReservasExpiradas(now = new Date()) { return this.db.transaction(async (tx: any) => { const expired = await tx.select().from(eventoReservas).where(and(eq(eventoReservas.status, "ATIVA"), lte(eventoReservas.expiresAt, now))); let released = 0; for (const reservation of expired) { const order = await this.first<any>(tx.select().from(eventoPedidos).where(eq(eventoPedidos.id, reservation.orderId))); if (!order || ["CONFIRMADO", "USADO", "REEMBOLSADO"].includes(order.status)) continue; await tx.update(eventoInventarioAssentos).set({ status: "DISPONIVEL", reservationExpiresAt: null, reservedByOrderId: null, updatedAt: now }).where(and(eq(eventoInventarioAssentos.id, reservation.inventorySeatId), eq(eventoInventarioAssentos.status, "RESERVADO"), eq(eventoInventarioAssentos.reservedByOrderId, reservation.orderId), lte(eventoInventarioAssentos.reservationExpiresAt, now))); await tx.update(eventoReservas).set({ status: "LIBERADA", releasedAt: now, updatedAt: now }).where(and(eq(eventoReservas.id, reservation.id), eq(eventoReservas.status, "ATIVA"))); if (["INICIADO", "RESERVADO", "AGUARDANDO_PAGAMENTO"].includes(order.status)) await tx.update(eventoPedidos).set({ status: "EXPIRADO", cancelledAt: now, cancellationReason: "Reserva de Evento expirada", updatedAt: now }).where(and(eq(eventoPedidos.id, reservation.orderId), inArray(eventoPedidos.status, ["INICIADO", "RESERVADO", "AGUARDANDO_PAGAMENTO"] as any))); released += 1; } return released; }); }
 }

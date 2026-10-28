@@ -8,6 +8,8 @@ import {
   BadRequestException,
   InternalServerErrorException,
   RawBodyRequest,
+  Inject,
+  forwardRef,
 } from "@nestjs/common";
 import { Request } from "express";
 import { ConfigService } from "@nestjs/config";
@@ -15,6 +17,7 @@ import Stripe from "stripe";
 import { PaymentsService } from "./payments.service";
 import { ShopOrdersService } from "../shop/shop-orders.service";
 import { getDb, stripeWebhookEvents, eq } from "@essencia/db";
+import { EventosPagamentosService } from "../eventos/eventos-pagamentos.service";
 
 /**
  * PaymentsWebhookController
@@ -35,6 +38,8 @@ export class PaymentsWebhookController {
     private configService: ConfigService,
     private paymentsService: PaymentsService,
     private ordersService: ShopOrdersService,
+    @Inject(forwardRef(() => EventosPagamentosService))
+    private eventosPagamentosService?: EventosPagamentosService,
   ) {
     this.webhookSecret =
       this.configService.get<string>("STRIPE_WEBHOOK_SECRET") || "";
@@ -199,6 +204,16 @@ export class PaymentsWebhookController {
   private async handleCheckoutSessionCompleted(
     session: Stripe.Checkout.Session,
   ): Promise<void> {
+    const eventOrderId = session.metadata?.eventOrderId;
+    if (eventOrderId) {
+      if (session.payment_status !== "paid") return;
+      await this.eventosPagamentosService?.confirmarCheckout({
+        checkoutSessionId: session.id,
+        paymentIntentId: this.getPaymentIntentId(session.payment_intent),
+        amountCents: session.amount_total ?? 0,
+      });
+      return;
+    }
     const orderId = this.getMetadataOrderId(session.metadata);
 
     if (!orderId) {
@@ -230,6 +245,14 @@ export class PaymentsWebhookController {
   private async handleCheckoutSessionAsyncPaymentSucceeded(
     session: Stripe.Checkout.Session,
   ): Promise<void> {
+    if (session.metadata?.eventOrderId) {
+      await this.eventosPagamentosService?.confirmarCheckout({
+        checkoutSessionId: session.id,
+        paymentIntentId: this.getPaymentIntentId(session.payment_intent),
+        amountCents: session.amount_total ?? 0,
+      });
+      return;
+    }
     const orderId = this.getMetadataOrderId(session.metadata);
 
     if (!orderId) {
@@ -254,6 +277,14 @@ export class PaymentsWebhookController {
   private async handleCheckoutSessionAsyncPaymentFailed(
     session: Stripe.Checkout.Session,
   ): Promise<void> {
+    if (session.metadata?.eventOrderId) {
+      await this.eventosPagamentosService?.falharCheckout({
+        checkoutSessionId: session.id,
+        paymentIntentId: this.getPaymentIntentId(session.payment_intent),
+        reason: "Pagamento Stripe falhou",
+      });
+      return;
+    }
     const orderId = this.getMetadataOrderId(session.metadata);
 
     if (!orderId) {
@@ -272,6 +303,14 @@ export class PaymentsWebhookController {
   private async handleCheckoutSessionExpired(
     session: Stripe.Checkout.Session,
   ): Promise<void> {
+    if (session.metadata?.eventOrderId) {
+      await this.eventosPagamentosService?.falharCheckout({
+        checkoutSessionId: session.id,
+        paymentIntentId: this.getPaymentIntentId(session.payment_intent),
+        reason: "Checkout Stripe expirado",
+      });
+      return;
+    }
     const orderId = this.getMetadataOrderId(session.metadata);
 
     if (!orderId) {
@@ -295,6 +334,14 @@ export class PaymentsWebhookController {
   private async handlePaymentSucceeded(
     paymentIntent: Stripe.PaymentIntent,
   ): Promise<void> {
+    if (paymentIntent.metadata.eventOrderId) {
+      await this.eventosPagamentosService?.confirmarCheckout({
+        checkoutSessionId: "",
+        paymentIntentId: paymentIntent.id,
+        amountCents: paymentIntent.amount,
+      });
+      return;
+    }
     const orderId = paymentIntent.metadata.orderId;
     const orderNumber = paymentIntent.metadata.orderNumber;
 
@@ -336,6 +383,13 @@ export class PaymentsWebhookController {
   private async handlePaymentFailed(
     paymentIntent: Stripe.PaymentIntent,
   ): Promise<void> {
+    if (paymentIntent.metadata.eventOrderId) {
+      await this.eventosPagamentosService?.falharCheckout({
+        paymentIntentId: paymentIntent.id,
+        reason: `Pagamento falhou: ${paymentIntent.last_payment_error?.message || "Erro desconhecido"}`,
+      });
+      return;
+    }
     const orderId = paymentIntent.metadata.orderId;
     const orderNumber = paymentIntent.metadata.orderNumber;
 
@@ -366,6 +420,13 @@ export class PaymentsWebhookController {
   private async handlePaymentCanceled(
     paymentIntent: Stripe.PaymentIntent,
   ): Promise<void> {
+    if (paymentIntent.metadata.eventOrderId) {
+      await this.eventosPagamentosService?.falharCheckout({
+        paymentIntentId: paymentIntent.id,
+        reason: "PaymentIntent cancelado no Stripe",
+      });
+      return;
+    }
     const orderId = paymentIntent.metadata.orderId;
     const orderNumber = paymentIntent.metadata.orderNumber;
 

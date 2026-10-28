@@ -3,6 +3,7 @@ import { ConfigModule } from "@nestjs/config";
 import { PaymentsService } from "./payments.service";
 import { PaymentsWebhookController } from "./payments-webhook.controller";
 import { ShopModule } from "../shop/shop.module";
+import { EventosModule } from "../eventos/eventos.module";
 
 /**
  * PaymentsModule
@@ -16,6 +17,7 @@ import { ShopModule } from "../shop/shop.module";
   imports: [
     ConfigModule,
     forwardRef(() => ShopModule), // forwardRef para evitar dependência circular
+    forwardRef(() => EventosModule),
   ],
   controllers: [PaymentsWebhookController],
   providers: [PaymentsService],

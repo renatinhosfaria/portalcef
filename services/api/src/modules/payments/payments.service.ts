@@ -22,6 +22,10 @@ type CreateCheckoutSessionInput = {
   customerEmail?: string;
   expiresAt: Date;
   items: CheckoutSessionItem[];
+  successUrl?: string;
+  cancelUrl?: string;
+  idempotencyKey?: string;
+  eventOrderId?: string;
 };
 
 /**
@@ -194,12 +198,17 @@ export class PaymentsService {
         requestedExpiresAtSeconds,
         minimumExpiresAtSeconds,
       );
-      const metadata = {
-        orderId: input.orderId,
-        orderNumber: input.orderNumber,
-        customerName: input.customerName,
-        customerPhone: input.customerPhone,
-      };
+      const metadata: Stripe.MetadataParam = input.eventOrderId
+        ? {
+            eventOrderId: input.eventOrderId,
+            orderNumber: input.orderNumber,
+          }
+        : {
+            orderId: input.orderId,
+            orderNumber: input.orderNumber,
+            customerName: input.customerName,
+            customerPhone: input.customerPhone,
+          };
 
       const session = await this.stripe.checkout.sessions.create({
         mode: "payment",
@@ -225,10 +234,12 @@ export class PaymentsService {
             expires_after_seconds: 30 * 60,
           },
         },
-        success_url: `${orderUrl}&pagamento=sucesso`,
-        cancel_url: `${orderUrl}&pagamento=cancelado`,
+        success_url:
+          input.successUrl ?? `${orderUrl}&pagamento=sucesso`,
+        cancel_url:
+          input.cancelUrl ?? `${orderUrl}&pagamento=cancelado`,
         expires_at: expiresAtSeconds,
-      });
+      }, input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : undefined);
 
       if (!session.url) {
         throw new InternalServerErrorException({
