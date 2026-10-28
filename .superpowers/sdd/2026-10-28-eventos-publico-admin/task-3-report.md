@@ -36,6 +36,7 @@ Validações da correção: shared build, API typecheck e lint passaram; testes 
 ## Correção da rodada 2
 
 - Adicionada `finalizationIdempotencyKey` nullable com índice único separado da chave de reserva; finalização repetida retorna o pedido original e chave diferente gera conflito.
+- A coluna possui migration `0051_evento_finalization_idempotency.sql`, necessária para alinhar o schema de produção.
 - Corrida de unicidade de reserva é recuperada fora da transação abortada pela chave de idempotência.
 - Finalização exige exatamente os cinco tipos de política, sem duplicatas, versões ativas e participantes com índices 0..N-1 completos e únicos.
 - Liberação exige `RESERVADO`, `reservedByOrderId` igual ao pedido e vencimento; pedidos confirmados não são alterados.

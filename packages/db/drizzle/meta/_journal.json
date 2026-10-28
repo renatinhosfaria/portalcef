@@ -358,6 +358,13 @@
       "when": 1793206043739,
       "tag": "0050_evento_mapas_preview",
       "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1793207040000,
+      "tag": "0051_evento_finalization_idempotency",
+      "breakpoints": true
     }
   ]
 }
