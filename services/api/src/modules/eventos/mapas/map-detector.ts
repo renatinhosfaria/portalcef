@@ -23,7 +23,23 @@ export class MapDetector {
     const width = asNumber(svg["@_width"], asNumber(svg["@_viewBox"]?.split?.(" ")?.[2], 1000));
     const height = asNumber(svg["@_height"], asNumber(svg["@_viewBox"]?.split?.(" ")?.[3], 800));
     const textNodes: unknown[] = [];
-    const collect = (node: unknown) => { if (!node || typeof node !== "object") return; if (Array.isArray(node)) return node.forEach(collect); const object = node as Record<string, unknown>; if ("text" in object) { const value = object.text; Array.isArray(value) ? value.forEach((v) => textNodes.push(v)) : textNodes.push(value); } Object.values(object).forEach(collect); };
+    const collect = (node: unknown): void => {
+      if (!node || typeof node !== "object") return;
+      if (Array.isArray(node)) {
+        node.forEach(collect);
+        return;
+      }
+      const object = node as Record<string, unknown>;
+      if ("text" in object) {
+        const value = object.text;
+        if (Array.isArray(value)) {
+          value.forEach((item) => textNodes.push(item));
+        } else {
+          textNodes.push(value);
+        }
+      }
+      Object.values(object).forEach(collect);
+    };
     collect(svg);
     const seats: MapSeatProposal[] = [];
     for (const node of textNodes) {
