@@ -351,6 +351,13 @@
       "when": 1793193903929,
       "tag": "0049_eventos_ingressos",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1793206043739,
+      "tag": "0050_evento_mapas_preview",
+      "breakpoints": true
     }
   ]
 }

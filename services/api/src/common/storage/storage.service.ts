@@ -20,7 +20,11 @@ export const RASTER_IMAGE_MIME_TYPES = [
 
 type UploadFileOptions = {
   allowedMimeTypes?: readonly string[];
+  maxBytes?: number;
 };
+
+export const MAP_MIME_TYPES = ["application/pdf", ...RASTER_IMAGE_MIME_TYPES, "image/svg+xml"] as const;
+export const MAX_MAP_BYTES = 25 * 1024 * 1024;
 
 const SAFE_INLINE_MIME_TYPES = new Set<string>(RASTER_IMAGE_MIME_TYPES);
 const SCRIPTABLE_MIME_TYPES = new Set([
@@ -149,6 +153,7 @@ export class StorageService {
           allowed as (typeof RASTER_IMAGE_MIME_TYPES)[number],
         ),
       ) ?? false;
+    const requiresPdfSignature = allowedMimeTypes?.includes("application/pdf") ?? false;
 
     if (requiresRasterSignature && !detectedMimeType) {
       throw new BadRequestException({
@@ -156,11 +161,12 @@ export class StorageService {
         message: "Arquivo de imagem inválido",
       });
     }
+    if (requiresPdfSignature && declaredMimeType === "application/pdf" && detectedMimeType !== "application/pdf") {
+      throw new BadRequestException({ code: "INVALID_FILE_TYPE", message: "Arquivo PDF inválido" });
+    }
 
-    if (
-      (!detectedRasterMimeType && this.hasActiveTextContent(buffer)) ||
-      (!detectedMimeType && SCRIPTABLE_MIME_TYPES.has(declaredMimeType))
-    ) {
+    const safeSvg = declaredMimeType === "image/svg+xml" && /<svg(?:[\s/>])/i.test(buffer.toString("utf8")) && !/<\s*(script|iframe|object|embed|foreignObject)\b/i.test(buffer.toString("utf8")) && !/\bon[a-z]+\s*=/i.test(buffer.toString("utf8")) && !/javascript\s*:/i.test(buffer.toString("utf8"));
+    if ((!detectedRasterMimeType && this.hasActiveTextContent(buffer) && !safeSvg) || (!detectedMimeType && SCRIPTABLE_MIME_TYPES.has(declaredMimeType) && !safeSvg)) {
       throw new BadRequestException({
         code: "INVALID_FILE_TYPE",
         message: "Tipo de arquivo não permitido",
@@ -187,6 +193,7 @@ export class StorageService {
 
     try {
       const buffer = await file.toBuffer();
+      if (options.maxBytes && buffer.length > options.maxBytes) throw new BadRequestException({ code: "FILE_TOO_LARGE", message: "Arquivo excede o limite permitido" });
       const mimetype = this.resolveUploadMimeType(
         buffer,
         file.mimetype,
@@ -236,6 +243,23 @@ export class StorageService {
       }
       throw error;
     }
+  }
+
+  async uploadMap(file: MultipartFile, prefix = "eventos/mapas") {
+    const buffer = await file.toBuffer();
+    return this.uploadMapBuffer(buffer, file.filename, file.mimetype, prefix);
+  }
+
+  async uploadMapBuffer(buffer: Buffer, filename: string, declaredMimeType: string, prefix = "eventos/mapas") {
+    if (buffer.length > MAX_MAP_BYTES) throw new BadRequestException({ code: "MAP_TOO_LARGE", message: "O mapa excede 25 MB" });
+    const detected = this.detectMimeType(buffer);
+    if (detected && declaredMimeType !== detected) throw new BadRequestException({ code: "INVALID_FILE_TYPE", message: "MIME declarado não corresponde ao conteúdo" });
+    const mime = this.resolveUploadMimeType(buffer, declaredMimeType, MAP_MIME_TYPES);
+    if (mime === "image/svg+xml") {
+      const source = buffer.toString("utf8");
+      if (/<\s*(script|iframe|object|embed|foreignObject)\b/i.test(source) || /\bon[a-z]+\s*=/i.test(source) || /javascript\s*:/i.test(source)) throw new BadRequestException({ code: "UNSAFE_MAP_SVG", message: "SVG contém conteúdo ativo" });
+    }
+    return this.uploadBuffer(buffer, filename, mime, prefix);
   }
 
   async uploadBuffer(

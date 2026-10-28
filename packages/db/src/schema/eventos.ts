@@ -257,6 +257,7 @@ export const eventoMapas = pgTable(
     originalFileKey: varchar("original_file_key", { length: 500 }).notNull(),
     originalFileName: varchar("original_file_name", { length: 255 }),
     originalMimeType: varchar("original_mime_type", { length: 120 }),
+    previewFileKey: varchar("preview_file_key", { length: 500 }),
     status: text("status", { enum: eventoMapaStatusEnum })
       .notNull()
       .default("ENVIADO"),

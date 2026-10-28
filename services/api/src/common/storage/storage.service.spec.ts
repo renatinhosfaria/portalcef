@@ -166,4 +166,24 @@ describe("StorageService", () => {
       "minio indisponivel",
     );
   });
+
+  it("aceita PDF em upload de mapa", async () => {
+    const service = new StorageService(configService);
+    const arquivo = criarArquivoMultipart("planta.pdf", "application/pdf", Buffer.from("%PDF-1.7\n"));
+    await service.uploadMap(arquivo);
+    expect(awsMocks.putObjectCommand).toHaveBeenCalledWith(expect.objectContaining({ ContentType: "application/pdf" }));
+  });
+
+  it("aceita SVG seguro e rejeita SVG ativo", async () => {
+    const service = new StorageService(configService);
+    await service.uploadMap(criarArquivoMultipart("planta.svg", "image/svg+xml", Buffer.from("<svg xmlns=\"http://www.w3.org/2000/svg\"><rect width=\"10\" height=\"10\"/></svg>")));
+    await expect(service.uploadMap(criarArquivoMultipart("ataque.svg", "image/svg+xml", Buffer.from("<svg><script>alert(1)</script></svg>")))).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it("rejeita MIME incompatível e mapas maiores que 25 MB", async () => {
+    const service = new StorageService(configService);
+    await expect(service.uploadMap(criarArquivoMultipart("fraude.pdf", "application/pdf", Buffer.from("not a pdf")))).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.uploadMap(criarArquivoMultipart("grande.png", "image/png", Buffer.alloc(25 * 1024 * 1024 + 1)))).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.uploadMap(criarArquivoMultipart("fraude.svg", "image/svg+xml", Buffer.from("\x89PNG\r\n\x1a\n")))).rejects.toBeInstanceOf(BadRequestException);
+  });
 });
