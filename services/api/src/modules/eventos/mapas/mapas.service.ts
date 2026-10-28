@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException, Optional } from "@nestjs/common";
-import { and, eq, eventoAuditorias, eventoDeteccoesMapa, eventoImportacoesMapa, eventoMapaAssentos, eventoMapas, eventos, type Database } from "@essencia/db";
+import { and, eq, eventoAuditorias, eventoDeteccoesMapa, eventoImportacoesMapa, eventoMapaAssentos, eventoMapas, eventoSessoes, eventos, type Database } from "@essencia/db";
 import type { MultipartFile } from "@fastify/multipart";
 import type { EventoActor } from "@essencia/shared/types";
 import { DatabaseService } from "../../../common/database/database.service";
@@ -107,7 +107,12 @@ export class MapasService {
   }
 
   async arquivar(eventId: string, versionId: string, actor: EventoActor) {
-    await this.assertEvent(eventId, actor);
+    const event = await this.assertEvent(eventId, actor);
+    // O original permanece privado no MinIO; projeções públicas usam apenas
+    // assentos estruturados de mapas confirmados e nunca retornam essa chave.
+    if (event.defaultMapId === versionId) throw new BadRequestException({ code: "MAP_IN_USE", message: "Mapa está em uso pelo evento" });
+    const references = await this.db.select({ mapId: eventoSessoes.mapId }).from(eventoSessoes).where(eq(eventoSessoes.eventId, eventId));
+    if (references.some((row: any) => row.mapId === versionId)) throw new BadRequestException({ code: "MAP_IN_USE", message: "Mapa está em uso por uma sessão" });
     const [current] = await this.db.select().from(eventoMapas).where(and(eq(eventoMapas.id, versionId), eq(eventoMapas.eventId, eventId)));
     if (!current) throw new NotFoundException({ code: "MAP_NOT_FOUND", message: "Versão não encontrada" });
     if (current.status !== "EM_REVISAO" && current.status !== "CONFIRMADO") throw new BadRequestException({ code: "MAP_INVALID_TRANSITION", message: "Mapa já arquivado ou em estado inválido" });
