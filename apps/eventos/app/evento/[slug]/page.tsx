@@ -1,0 +1,2 @@
+import {DetalheEvento} from "../../../components/detalhe-evento"; import {obterEventoPublico,listarSessoesPublicas} from "../../../lib/eventos-api";
+export default async function Page({params}:{params:Promise<{slug:string}>}){const{slug}=await params;const[event,sessions]=await Promise.all([obterEventoPublico(slug),listarSessoesPublicas(slug)]);return <DetalheEvento event={event} sessions={sessions}/>}

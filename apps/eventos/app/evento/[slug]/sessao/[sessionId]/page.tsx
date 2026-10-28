@@ -1,0 +1,2 @@
+import {MapaAssentos} from "../../../../../components/mapa-assentos"; import {obterMapaSessao} from "../../../../../lib/eventos-api";
+export default async function Page({params}:{params:Promise<{slug:string;sessionId:string}>}){const{sessionId}=await params;const map=await obterMapaSessao(sessionId);return <><h1 className="text-2xl font-bold">Escolha seus assentos</h1><p className="my-4 text-slate-600">Assentos cinza estão indisponíveis.</p><MapaAssentos map={map} checkoutHref="/checkout"/></>}
