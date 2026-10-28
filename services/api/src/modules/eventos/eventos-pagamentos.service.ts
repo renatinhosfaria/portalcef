@@ -28,6 +28,7 @@ type FalharCheckoutInput = {
   checkoutSessionId?: string;
   paymentIntentId?: string;
   reason: string;
+  eventOrderId?: string;
 };
 
 @Injectable()
@@ -215,11 +216,11 @@ export class EventosPagamentosService {
   }
 
   async falharCheckout(input: FalharCheckoutInput): Promise<void> {
-    const reference = await this.findPayment(this.db, input.checkoutSessionId, input.paymentIntentId);
+    const reference = await this.findPayment(this.db, input.checkoutSessionId, input.paymentIntentId, input.eventOrderId);
     if (!reference) return;
 
     await this.db.transaction(async (tx: any) => {
-      const current = (await this.findPayment(tx, input.checkoutSessionId, input.paymentIntentId)) ?? reference;
+      const current = (await this.findPayment(tx, input.checkoutSessionId, input.paymentIntentId, input.eventOrderId)) ?? reference;
       const payment = current.payment;
       const order = current.order;
       if (["CONFIRMADO", "USADO"].includes(order.status) || payment.status === "APROVADO") return;

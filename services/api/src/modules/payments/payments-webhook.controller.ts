@@ -397,6 +397,7 @@ export class PaymentsWebhookController {
       await this.getEventosPagamentosService().falharCheckout({
         paymentIntentId: paymentIntent.id,
         reason: `Pagamento falhou: ${paymentIntent.last_payment_error?.message || "Erro desconhecido"}`,
+        eventOrderId: paymentIntent.metadata.eventOrderId,
       });
       return;
     }
@@ -434,6 +435,7 @@ export class PaymentsWebhookController {
       await this.getEventosPagamentosService().falharCheckout({
         paymentIntentId: paymentIntent.id,
         reason: "PaymentIntent cancelado no Stripe",
+        eventOrderId: paymentIntent.metadata.eventOrderId,
       });
       return;
     }
