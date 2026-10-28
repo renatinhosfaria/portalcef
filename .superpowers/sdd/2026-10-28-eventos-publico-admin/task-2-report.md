@@ -25,3 +25,19 @@ Os testes foram escritos antes da implementação e a primeira execução falhou
 O checkout permanece deliberadamente sem operações de reserva/pagamento, conforme o escopo da Task 2; essas escritas ficam para a Task 5. A página inicial exibe estado vazio quando a API pública está indisponível para manter a vitrine navegável sem login.
 
 Atualizado em: 2026-10-28
+
+## Relatório de correção — revisão P1/P2
+
+- O mapa agora diferencia visualmente `available`, `reserved`, `sold` e `blocked` por classes específicas, inclui legenda visível e mantém botões indisponíveis desabilitados.
+- A página de catálogo separa falha HTTP (`role="alert"`) da lista vazia; erros da API não são mais apresentados como ausência de eventos.
+- O logotipo do layout foi migrado de `<img>` para `next/image`, removendo o warning de lint.
+
+### Testes e comandos
+
+- Teste RED antes da correção: 2 testes falharam (helper inexistente e ausência da mensagem de erro).
+- `pnpm --filter @essencia/eventos test` — PASS (7 testes).
+- `pnpm --filter @essencia/eventos lint` — PASS, sem warnings ESLint do app.
+- `pnpm --filter @essencia/eventos typecheck` — PASS.
+- `pnpm --filter @essencia/eventos build` — PASS.
+
+Atualizado em: 2026-10-28

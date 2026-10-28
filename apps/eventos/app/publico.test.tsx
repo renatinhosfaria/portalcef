@@ -27,3 +27,21 @@ describe("vitrine pública de Eventos", () => {
     expect(source).toContain("disabled");
   });
 });
+
+import { classeEstadoAssento } from "../components/mapa-assentos";
+
+describe("comportamento da vitrine", () => {
+  it("aplica apresentação visual distinta a cada estado de assento", () => {
+    const classes = (["available", "reserved", "sold", "blocked"] as const).map(classeEstadoAssento);
+    expect(new Set(classes).size).toBe(4);
+    expect(classes[1]).toContain("reserved");
+    expect(classes[2]).toContain("sold");
+    expect(classes[3]).toContain("blocked");
+  });
+
+  it("preserva erro da API separado do estado vazio", () => {
+    const page = readFileSync(new URL("./page.tsx", import.meta.url), "utf8");
+    expect(page).toContain("Não foi possível carregar os eventos");
+    expect(page).toContain("role=\"alert\"");
+  });
+});
