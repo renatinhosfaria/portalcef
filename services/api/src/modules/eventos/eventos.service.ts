@@ -78,12 +78,12 @@ export class EventosService {
     return this.resumo(event);
   }
 
-  async atualizarEvento(id: string, input: AtualizarEventoInput, actor: EventoActor): Promise<EventoResumo> {
+  async atualizarEvento(id: string, input: AtualizarEventoInput, actor: EventoActor, expectedUpdatedAt?: Date): Promise<EventoResumo> {
     const [existing] = await this.db.select().from(eventos).where(eq(eventos.id, id));
     if (!existing) throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Evento não encontrado" });
     this.assertSchoolScope(actor, existing.schoolId);
-    const { publishImmediately, updatedAt, expectedUpdatedAt, sessions: _sessions, ticketTypes: _ticketTypes, policies: _policies, ...updateInput } = input;
-    const expected = expectedUpdatedAt ?? updatedAt;
+    const { publishImmediately, updatedAt, expectedUpdatedAt: inputExpectedUpdatedAt, sessions: _sessions, ticketTypes: _ticketTypes, policies: _policies, ...updateInput } = input;
+    const expected = expectedUpdatedAt ?? inputExpectedUpdatedAt ?? updatedAt;
     if (expected && existing.updatedAt && existing.updatedAt.getTime() !== expected.getTime()) throw new ConflictException({ code: "VERSION_CONFLICT", message: "O evento foi alterado por outra pessoa", current: this.resumo(existing) });
     if (_sessions !== undefined || _ticketTypes !== undefined || _policies !== undefined) throw new BadRequestException({ code: "EVENT_UPDATE_FIELDS_UNSUPPORTED", message: "Atualize sessões, ingressos e políticas pelas rotas próprias" });
     const normalizedSlug = input.slug ? this.normalizeSlug(input.slug) : undefined;
@@ -104,11 +104,35 @@ export class EventosService {
       if (expected) throw new ConflictException({ code: "VERSION_CONFLICT", message: "O evento foi alterado por outra pessoa", current: this.resumo(existing) });
       throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Evento não encontrado" });
     }
-    await this.audit(id, actor, "ATUALIZADO", "evento", id, { version: existing.updatedAt?.toISOString(), previous: { title: existing.title, slug: existing.slug, defaultLocationId: existing.defaultLocationId, defaultMapId: existing.defaultMapId }, next: updateInput });
+    const nextValues = { ...updateInput, ...(nextSlug ? { slug: nextSlug } : {}) } as Record<string, unknown>;
+    const previousValues = Object.fromEntries(Object.keys(nextValues).map((key) => [key, (existing as Record<string, unknown>)[key]]));
+    await this.audit(id, actor, "ATUALIZADO", "evento", id, { version: existing.updatedAt?.toISOString(), previous: previousValues, next: nextValues });
     if (publishImmediately) return this.publicar(id, actor);
     const result = this.resumo(updated);
     if (input.title && !normalizedSlug && manualSlug && titleSuggestion && titleSuggestion !== existing.slug) result.slugSuggestion = titleSuggestion;
     return result;
+  }
+
+  async atualizarMapaPadrao(eventId: string, mapId: string, actor: EventoActor) {
+    const [event] = await this.db.select().from(eventos).where(eq(eventos.id, eventId));
+    if (!event) throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Evento não encontrado" });
+    this.assertSchoolScope(actor, event.schoolId);
+    const transaction = (this.db as any).transaction;
+    const run = async (db: any) => {
+      const now = new Date();
+      const sessions = await db.select().from(eventoSessoes).where(eq(eventoSessoes.eventId, eventId));
+      const inherited = sessions.filter((session: any) => session.mapId == null);
+      const [updated] = await db.update(eventos).set({ defaultMapId: mapId, updatedAt: now }).where(eq(eventos.id, eventId)).returning();
+      if (!updated) throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Evento não encontrado" });
+      for (const session of inherited) {
+        await db.update(eventoSessoes).set({ mapId, updatedAt: now }).where(eq(eventoSessoes.id, session.id));
+        await db.update(eventoInventarioAssentos).set({ status: "BLOQUEADO", blockedReason: "MAPA_PADRAO_ALTERADO", updatedAt: now }).where(eq(eventoInventarioAssentos.sessionId, session.id));
+      }
+      await this.audit(eventId, actor, "ATUALIZADO", "mapa_padrao", eventId, { previousMapId: event.defaultMapId, nextMapId: mapId, inheritedSessionIds: inherited.map((session: any) => session.id), inventory: "REVISAR_REGENERAR" });
+      return { updated, inheritedSessionIds: inherited.map((session: any) => session.id) };
+    };
+    const result = typeof transaction === "function" ? await transaction.call(this.db, run) : await run(this.db);
+    return { ...this.resumo(result.updated), inheritedSessionIds: result.inheritedSessionIds, inventoryRequiresReview: result.inheritedSessionIds.length > 0 };
   }
 
   async listarAdmin(query: EventoListQuery = {}, actor?: EventoActor) {
@@ -128,7 +152,7 @@ export class EventosService {
     if (!event) throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Evento não encontrado" });
     if (actor) this.assertSchoolScope(actor, event.schoolId);
     if (input.status === "PUBLICADA") throw new BadRequestException({ code: "SESSION_PUBLICATION_REQUIRES_INVENTORY", message: "Publique a sessão pelo fluxo de publicação após inicializar o inventário" });
-    const [session] = await this.db.insert(eventoSessoes).values({ eventId, startsAt: input.startsAt, endsAt: input.endsAt, capacity: input.capacity, locationId: input.locationId ?? event.defaultLocationId, mapId: input.mapId ?? event.defaultMapId, salesStartsAt: input.salesStartsAt ?? null, salesEndsAt: input.salesEndsAt ?? null, status: input.status ?? "RASCUNHO" }).returning();
+    const [session] = await this.db.insert(eventoSessoes).values({ eventId, startsAt: input.startsAt, endsAt: input.endsAt, capacity: input.capacity, locationId: input.locationId ?? event.defaultLocationId, mapId: input.mapId ?? null, salesStartsAt: input.salesStartsAt ?? null, salesEndsAt: input.salesEndsAt ?? null, status: input.status ?? "RASCUNHO" }).returning();
     if (audit && session) await this.audit(eventId, actor, "ATUALIZADO", "sessao", session.id);
     return session;
   }

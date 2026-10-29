@@ -45,6 +45,43 @@ describe('EventosService contratos de workspace', () => {
     const db = fakeDb({ selects: [[event({ status: 'PUBLICADO', slug: 'publicado' })]] });
     await expect(service(db).atualizarEvento('e1', { slug: 'outro-slug' }, actor)).rejects.toMatchObject({ response: { code: 'EVENT_SLUG_IMMUTABLE' } });
   });
+
+  it('propaga mapa padrão somente para sessões herdadas e invalida seus inventários', async () => {
+    const updates: Array<{ table: unknown; values: unknown }> = [];
+    const db = fakeDb({
+      selects: [
+        [event({ defaultMapId: 'map-antigo' })],
+        [
+          { id: 'sessao-herdada', eventId: 'e1', mapId: null },
+          { id: 'sessao-especifica', eventId: 'e1', mapId: 'map-especifico' },
+        ],
+      ],
+      update: async () => [event({ defaultMapId: 'map-novo' })],
+    });
+    db.update = (table: unknown) => ({
+      set: (values: unknown) => ({
+        where: () => ({
+          then: async (resolve: (value: unknown) => void) => {
+            updates.push({ table, values });
+            resolve([]);
+          },
+          returning: async () => {
+            updates.push({ table, values });
+            return [event({ defaultMapId: 'map-novo' })];
+          },
+        }),
+      }),
+    });
+
+    await service(db).atualizarMapaPadrao('e1', 'map-novo', actor);
+
+    expect(updates).toHaveLength(3);
+    expect(updates.map((item) => item.values)).toEqual(expect.arrayContaining([
+      { defaultMapId: 'map-novo', updatedAt: expect.any(Date) },
+      { mapId: 'map-novo', updatedAt: expect.any(Date) },
+      { status: 'BLOQUEADO', blockedReason: 'MAPA_PADRAO_ALTERADO', updatedAt: expect.any(Date) },
+    ]));
+  });
 });
 
 function service(db: any) { return new EventosService({ db } as any, { validarPublicacao: jest.fn() } as any); }

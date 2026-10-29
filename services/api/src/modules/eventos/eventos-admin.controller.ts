@@ -3,7 +3,7 @@ import { ExactRoles, Roles } from "../../common/decorators/roles.decorator";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { AuthGuard } from "../../common/guards/auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
-import { atualizarRascunhoSchema, criarEventoSchema, criarRascunhoSchema, criarSessaoSchema, eventoListQuerySchema, politicaSchema } from "@essencia/shared/schemas";
+import { atualizarMapaPadraoSchema, atualizarRascunhoSchema, criarEventoSchema, criarRascunhoSchema, criarSessaoSchema, eventoListQuerySchema, politicaSchema } from "@essencia/shared/schemas";
 import { EventosService } from "./eventos.service";
 import { EVENTOS_ADMIN_ROLES } from "./eventos.constants";
 
@@ -43,6 +43,13 @@ export class EventosAdminController {
 
   @Get(":id/prontidao")
   readiness(@Param("id") id: string, @CurrentUser() actor: any) { return this.readinessService.verificar(id, actor); }
+
+  @Patch(":id/mapa-padrao")
+  async updateDefaultMap(@Param("id") id: string, @Body() body: unknown, @CurrentUser() actor: any) {
+    const parsed = atualizarMapaPadraoSchema.safeParse(body);
+    if (!parsed.success) return { success: false, error: { code: "VALIDATION_ERROR", details: parsed.error.flatten() } };
+    return { success: true, data: await this.service.atualizarMapaPadrao(id, parsed.data.mapId, actor) };
+  }
 
   @Get(":id/inventario")
   inventory(@Param("id") id: string, @CurrentUser() actor: any) { return this.service.listarInventario(id, actor); }
