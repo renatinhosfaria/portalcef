@@ -11,3 +11,7 @@ export interface PoliticaPublica { type: "PRIVACIDADE" | "COMPRA" | "CANCELAMENT
 export interface ReservaPublicaResult { reservationId: string; orderNumber: string; expiresAt: Date; totalCents: number; items: Array<{ seatId: string; ticketTypeId: string; unitPriceCents: number; totalPriceCents: number }>; }
 export interface PedidoPublicoResult { orderNumber: string; status: string; eventTitle: string; session: { startsAt: Date; endsAt: Date }; totalCents: number; items: Array<{ seatId: string; ticketTypeId: string; unitPriceCents: number; totalPriceCents: number }>; tickets?: unknown[]; }
 export type ConsultaPedidoPublica = PedidoPublicoResult;
+
+export type ProntidaoState = "BLOQUEADOR" | "AVISO" | "OK";
+export interface ProntidaoItem { key: string; label: string; state: ProntidaoState; href?: string; message?: string; }
+export interface EventoProntidao { eventId: string; status: EventoStatus; progress: number; items: ProntidaoItem[]; }

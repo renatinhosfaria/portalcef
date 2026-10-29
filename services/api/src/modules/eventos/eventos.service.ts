@@ -1,6 +1,6 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
-import { and, asc, eq, eventoAuditorias, eventoInventarioAssentos, eventoLocais, eventoMapaAssentos, eventoMapas, eventoPedidos, eventoPoliticas, eventoSessoes, eventoTiposIngresso, eventos, type Database } from "@essencia/db";
-import type { AtualizarEventoInput, CriarEventoInput, CriarSessaoInput, EventoListQuery } from "@essencia/shared/schemas";
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import { and, asc, eq, eventoAuditorias, eventoInventarioAssentos, eventoLocais, eventoMapaAssentos, eventoMapas, eventoPedidos, eventoPoliticas, eventoSessoes, eventoTiposIngresso, eventos, ne, type Database } from "@essencia/db";
+import type { AtualizarEventoInput, CriarEventoInput, CriarSessaoInput, CriarRascunhoInput, EventoListQuery } from "@essencia/shared/schemas";
 import type { EventoActor, EventoResumo, PublicEventCard, PublicEventDetail, PublicEventSession, PublicMap } from "@essencia/shared/types";
 import { DatabaseService } from "../../common/database/database.service";
 import { EventosRulesService } from "./eventos-rules.service";
@@ -24,6 +24,23 @@ export class EventosService {
   private async audit(eventId: string, actor: EventoActor | undefined, action: "CRIADO" | "ATUALIZADO" | "PUBLICADO" | "PAUSADO" | "CANCELADO", resourceType: string, resourceId: string, metadata?: unknown) {
     if (!actor?.userId || typeof (this.db as any).insert !== "function") return;
     await this.db.insert(eventoAuditorias).values({ eventId, actorId: actor.userId, actorRole: actor.role, action, resourceType, resourceId, metadata: metadata ?? null });
+  }
+
+  async criarRascunho(input: CriarRascunhoInput, actor: EventoActor): Promise<EventoResumo> {
+    if (!actor.schoolId && actor.role !== "master") throw new BadRequestException({ code: "FORBIDDEN", message: "Escola obrigatória" });
+    const schoolId = actor.schoolId;
+    if (!schoolId) throw new BadRequestException({ code: "SCHOOL_REQUIRED", message: "Informe a escola na sessão" });
+    const base = this.normalizeSlug(input.title) || "evento";
+    let slug = base;
+    for (let suffix = 2; ; suffix += 1) {
+      const [existing] = await this.db.select({ id: eventos.id }).from(eventos).where(and(eq(eventos.schoolId, schoolId), eq(eventos.slug, slug))).limit(1);
+      if (!existing) break;
+      slug = `${base}-${suffix}`;
+    }
+    const [event] = await this.db.insert(eventos).values({ schoolId, title: input.title.trim(), slug, status: "RASCUNHO", description: null, summary: null, cancellationPolicy: null, contactEmail: null, publishedAt: null, plannedPublicationAt: null }).returning();
+    if (!event) throw new BadRequestException({ code: "EVENT_CREATE_FAILED", message: "Não foi possível criar o evento" });
+    await this.audit(event.id, actor, "CRIADO", "evento", event.id);
+    return this.resumo(event);
   }
 
   async criarEvento(input: CriarEventoInput, actor: EventoActor): Promise<EventoResumo> {
@@ -61,11 +78,19 @@ export class EventosService {
     const [existing] = await this.db.select().from(eventos).where(eq(eventos.id, id));
     if (!existing) throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Evento não encontrado" });
     this.assertSchoolScope(actor, existing.schoolId);
-    const { publishImmediately, sessions: _sessions, ticketTypes: _ticketTypes, policies: _policies, ...updateInput } = input;
+    const { publishImmediately, updatedAt, expectedUpdatedAt, sessions: _sessions, ticketTypes: _ticketTypes, policies: _policies, ...updateInput } = input;
+    const expected = expectedUpdatedAt ?? updatedAt;
+    if (expected && existing.updatedAt && existing.updatedAt.getTime() !== expected.getTime()) throw new ConflictException({ code: "VERSION_CONFLICT", message: "O evento foi alterado por outra pessoa", current: this.resumo(existing) });
     if (_sessions !== undefined || _ticketTypes !== undefined || _policies !== undefined) throw new BadRequestException({ code: "EVENT_UPDATE_FIELDS_UNSUPPORTED", message: "Atualize sessões, ingressos e políticas pelas rotas próprias" });
+    const normalizedSlug = input.slug ? this.normalizeSlug(input.slug) : undefined;
+    if (normalizedSlug && existing.status === "PUBLICADO" && normalizedSlug !== existing.slug) throw new BadRequestException({ code: "PUBLISHED_SLUG_IMMUTABLE", message: "O slug de um evento publicado não pode ser alterado" });
+    if (normalizedSlug && normalizedSlug !== existing.slug) {
+      const [slugOwner] = await this.db.select({ id: eventos.id }).from(eventos).where(and(eq(eventos.schoolId, existing.schoolId), eq(eventos.slug, normalizedSlug), ne(eventos.id, id))).limit(1);
+      if (slugOwner) throw new ConflictException({ code: "SLUG_ALREADY_EXISTS", message: "Este slug já está em uso nesta escola" });
+    }
     const [sales] = await this.db.select({ id: eventoPedidos.id }).from(eventoPedidos).where(eq(eventoPedidos.eventId, id)).limit(1);
     if (sales) throw new BadRequestException({ code: "EVENT_HAS_SALES", message: "O evento possui vendas; crie uma nova versão antes de alterar sua configuração" });
-    const [updated] = await this.db.update(eventos).set({ ...updateInput, slug: input.slug ? this.normalizeSlug(input.slug) : undefined, updatedAt: new Date() }).where(eq(eventos.id, id)).returning();
+    const [updated] = await this.db.update(eventos).set({ ...updateInput, slug: normalizedSlug, updatedAt: new Date() }).where(eq(eventos.id, id)).returning();
     if (!updated) throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Evento não encontrado" });
     await this.audit(id, actor, "ATUALIZADO", "evento", id, { version: existing.updatedAt?.toISOString(), previous: { title: existing.title, slug: existing.slug, defaultLocationId: existing.defaultLocationId, defaultMapId: existing.defaultMapId }, next: updateInput });
     if (publishImmediately) return this.publicar(id, actor);

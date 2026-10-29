@@ -3,7 +3,7 @@ import { ExactRoles, Roles } from "../../common/decorators/roles.decorator";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { AuthGuard } from "../../common/guards/auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
-import { atualizarEventoSchema, criarEventoSchema, criarSessaoSchema, eventoListQuerySchema, politicaSchema } from "@essencia/shared/schemas";
+import { atualizarRascunhoSchema, criarEventoSchema, criarRascunhoSchema, criarSessaoSchema, eventoListQuerySchema, politicaSchema } from "@essencia/shared/schemas";
 import { EventosService } from "./eventos.service";
 import { EVENTOS_ADMIN_ROLES } from "./eventos.constants";
 
@@ -12,12 +12,19 @@ import { EVENTOS_ADMIN_ROLES } from "./eventos.constants";
 @ExactRoles()
 @Roles(...EVENTOS_ADMIN_ROLES)
 export class EventosAdminController {
-  constructor(private readonly service: EventosService) {}
+  constructor(private readonly service: EventosService, private readonly readinessService: import("./eventos-readiness.service").EventosReadinessService) {}
 
   @Get()
   async list(@Query() query: unknown, @CurrentUser() actor: any) {
     const parsed = eventoListQuerySchema.safeParse(query);
     return this.service.listarAdmin(parsed.success ? parsed.data : {}, actor);
+  }
+
+  @Post("rascunhos")
+  async createDraft(@Body() body: unknown, @CurrentUser() actor: any) {
+    const parsed = criarRascunhoSchema.safeParse(body);
+    if (!parsed.success) return { success: false, error: { code: "VALIDATION_ERROR", details: parsed.error.flatten() } };
+    return { success: true, data: await this.service.criarRascunho(parsed.data, actor) };
   }
 
   @Post()
@@ -29,10 +36,13 @@ export class EventosAdminController {
 
   @Patch(":id")
   async update(@Param("id") id: string, @Body() body: unknown, @CurrentUser() actor: any) {
-    const parsed = atualizarEventoSchema.safeParse(body);
+    const parsed = atualizarRascunhoSchema.safeParse(body);
     if (!parsed.success) return { success: false, error: { code: "VALIDATION_ERROR", details: parsed.error.flatten() } };
     return { success: true, data: await this.service.atualizarEvento(id, parsed.data, actor) };
   }
+
+  @Get(":id/prontidao")
+  readiness(@Param("id") id: string, @CurrentUser() actor: any) { return this.readinessService.verificar(id, actor); }
 
   @Get(":id/inventario")
   inventory(@Param("id") id: string, @CurrentUser() actor: any) { return this.service.listarInventario(id, actor); }
