@@ -24,6 +24,9 @@ export function assertRespostaApi(response: { ok: boolean; status: number; body:
 }
 
 export type IngressoValue = { id?: string; name: string; priceCents: number; description?: string; eligibility?: string | null; salesLot?: string | null; rules?: Record<string, unknown> | null; maxPerOrder?: number | null };
+export function ingressosProntosParaSalvar(values: IngressoValue[]) {
+  return values.length > 0 && values.every((value) => value.name.trim().length > 0 && Number.isInteger(value.priceCents) && value.priceCents >= 0 && (value.maxPerOrder == null || (Number.isInteger(value.maxPerOrder) && value.maxPerOrder > 0)));
+}
 export function construirPayloadIngresso(value: IngressoValue) { return { name: value.name.trim(), priceCents: Math.round(Number(value.priceCents)), ...(value.description ? { description: value.description } : {}), ...(value.eligibility ? { eligibility: value.eligibility } : {}), ...(value.salesLot ? { salesLot: value.salesLot } : {}), ...(value.rules ? { rules: value.rules } : {}), ...(value.maxPerOrder ? { maxPerOrder: value.maxPerOrder } : {}) }; }
 
 export type PoliticaValue = { type: string; content: string; version?: number };

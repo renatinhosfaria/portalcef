@@ -3,6 +3,7 @@ import {
   assertRespostaApi,
   construirPayloadInformacoes,
   construirPayloadIngresso,
+  ingressosProntosParaSalvar,
   construirPayloadPoliticas,
   construirPayloadSessao,
   slugSugerido,
@@ -29,6 +30,11 @@ describe("contratos das etapas do workspace", () => {
 
   it("mantém preço de ingresso em centavos", () => {
     expect(construirPayloadIngresso({ name: "Inteira", priceCents: 1250, eligibility: "Famílias", salesLot: "Lote 1", rules: { idadeMinima: 6 } })).toEqual({ name: "Inteira", priceCents: 1250, eligibility: "Famílias", salesLot: "Lote 1", rules: { idadeMinima: 6 } });
+  });
+
+  it("não considera ingresso incompleto pronto para autosave", () => {
+    expect(ingressosProntosParaSalvar([{ name: "", priceCents: 0 }])).toBe(false);
+    expect(ingressosProntosParaSalvar([{ name: "Inteira", priceCents: 0 }])).toBe(true);
   });
 
   it("exige e normaliza as cinco políticas obrigatórias", () => {
