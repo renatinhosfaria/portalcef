@@ -267,13 +267,14 @@ export class StorageService {
     filename: string,
     mimetype: string,
     prefix: string = "",
+    allowedMimeTypes?: readonly string[],
   ): Promise<{ url: string; key: string; name: string }> {
     const fileId = randomUUID();
     const ext = extname(filename);
     const key = prefix ? `${prefix}/${fileId}${ext}` : `${fileId}${ext}`;
 
     try {
-      const resolvedMimeType = this.resolveUploadMimeType(buffer, mimetype);
+      const resolvedMimeType = this.resolveUploadMimeType(buffer, mimetype, allowedMimeTypes);
       await this.s3Client.send(
         new PutObjectCommand({
           Bucket: this.bucketName,
@@ -348,6 +349,18 @@ export class StorageService {
       const mensagem = error instanceof Error ? error.message : String(error);
       this.logger.warn(`Falha ao remover ${key} do MinIO: ${mensagem}`);
     }
+  }
+
+  async deletePublicUrl(url: string): Promise<void> {
+    const publicEndpoint = this.configService.get<string>("MINIO_PUBLIC_ENDPOINT");
+    const endpoint = publicEndpoint || this.configService.getOrThrow<string>("MINIO_ENDPOINT");
+    const base = new URL(`${endpoint.replace(/\/$/, "")}/${this.bucketName}/`);
+    const candidate = new URL(url);
+
+    if (candidate.origin !== base.origin || !candidate.pathname.startsWith(base.pathname)) return;
+
+    const key = decodeURIComponent(candidate.pathname.slice(base.pathname.length));
+    if (key) await this.deleteFile(key);
   }
 
   async replaceFile(

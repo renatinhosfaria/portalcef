@@ -186,4 +186,52 @@ describe("StorageService", () => {
     await expect(service.uploadMap(criarArquivoMultipart("grande.png", "image/png", Buffer.alloc(25 * 1024 * 1024 + 1)))).rejects.toBeInstanceOf(BadRequestException);
     await expect(service.uploadMap(criarArquivoMultipart("fraude.svg", "image/svg+xml", Buffer.from("\x89PNG\r\n\x1a\n")))).rejects.toBeInstanceOf(BadRequestException);
   });
+
+  it("aplica a lista de MIME permitidos ao upload de imagem do evento", async () => {
+    const service = new StorageService(configService);
+    const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
+
+    const result = await service.uploadBuffer(
+      jpeg,
+      "capa.jpg",
+      "image/jpeg",
+      "eventos/event-1/imagem",
+      tiposImagem,
+    );
+
+    expect(result.key).toMatch(/^eventos\/event-1\/imagem\/.+\.jpg$/);
+  });
+
+  it("rejeita conteúdo HTML no upload de imagem do evento", async () => {
+    const service = new StorageService(configService);
+
+    await expect(
+      service.uploadBuffer(
+        Buffer.from("<html>ataque</html>"),
+        "capa.jpg",
+        "image/jpeg",
+        "eventos/event-1/imagem",
+        tiposImagem,
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(awsMocks.s3Send).not.toHaveBeenCalled();
+  });
+
+  it("remove uma URL pública do bucket convertendo-a em chave", async () => {
+    const service = new StorageService(configService);
+
+    await service.deletePublicUrl(
+      "https://www.portalcef.com.br/storage/essencia-uploads/eventos/event-1/imagem/capa.jpg",
+    );
+
+    expect(awsMocks.s3Send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        input: {
+          Bucket: "essencia-uploads",
+          Key: "eventos/event-1/imagem/capa.jpg",
+        },
+      }),
+    );
+  });
 });
