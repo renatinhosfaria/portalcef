@@ -23,7 +23,10 @@ const stateLabels: Record<WorkspaceStepState, string> = {
 
 export function getActiveWorkspaceKey(pathname: string | null, items: WorkspaceNavigationItem[]) {
   if (!pathname) return items[0]?.key;
-  return items.find((item) => pathname === item.href || pathname.endsWith(item.href) || pathname.startsWith(`${item.href}/`))?.key ?? items[0]?.key;
+  return items.find((item) => {
+    const route = item.href.split("#", 1)[0];
+    return pathname === route || pathname.endsWith(route) || pathname.startsWith(`${route}/`);
+  })?.key ?? items[0]?.key;
 }
 
 export function WorkspaceNavigation({ eventId: _eventId, items, activeKey }: { eventId: string; items: WorkspaceNavigationItem[]; activeKey?: string }) {

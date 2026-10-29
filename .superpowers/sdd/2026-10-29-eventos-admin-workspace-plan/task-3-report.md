@@ -38,3 +38,10 @@ Ajuste adicional: a comparação de rota também reconhece o `basePath` `/evento
 - Teste de payload real cobre os três bloqueadores e a rota normalizada de sessões.
 
 Verificação: suíte do app PASS (8 arquivos, 22 testes), typecheck PASS, lint PASS com avisos preexistentes, `git diff --check` PASS.
+
+## Rodada de correção 3
+
+- `getActiveWorkspaceKey` agora remove o fragmento do href antes de comparar a rota, mantendo o fragmento no link final.
+- Cobertura adicionada para pathname com basePath e href `/eventos/evt-1/sessoes#sessoes`.
+
+Verificação: teste focado PASS (8 testes), suíte do app PASS (8 arquivos, 23 testes), typecheck PASS, lint PASS com avisos preexistentes, `git diff --check` PASS.

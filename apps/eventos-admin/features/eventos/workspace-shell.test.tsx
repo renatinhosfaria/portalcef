@@ -55,10 +55,11 @@ describe("navegação e readiness do workspace", () => {
     ["/eventos/evt-1/sessoes", "sessoes"],
     ["/eventos/evt-1/mapa", "mapa"],
     ["/eventos-admin/eventos/evt-1/mapa", "mapa"],
+    ["/eventos-admin/eventos/evt-1/sessoes", "sessoes"],
   ])("identifica a etapa ativa para %s", (pathname, expected) => {
     expect(getActiveWorkspaceKey(pathname, [
       { key: "informacoes", label: "Informações", href: "/eventos/evt-1/informacoes", state: "OK" },
-      { key: "sessoes", label: "Sessões e local", href: "/eventos/evt-1/sessoes", state: "OK" },
+      { key: "sessoes", label: "Sessões e local", href: pathname.endsWith("sessoes") ? "/eventos/evt-1/sessoes#sessoes" : "/eventos/evt-1/sessoes", state: "OK" },
       { key: "mapa", label: "Mapa e lugares", href: "/eventos/evt-1/mapa", state: "OK" },
     ])).toBe(expected);
   });
