@@ -7,7 +7,8 @@ describe("módulo Eventos", () => {
     expect(source).toContain("EventosPage");
     expect(source).not.toContain("redirect(\"/eventos-admin/inscricoes-evento\")");
     expect(source).toContain("/eventos-admin/api/eventos/admin");
-    expect(source).toContain("/eventos-admin/eventos");
+    expect(source).toContain('href="/eventos/novo"');
+    expect(source).toContain('href="/eventos"');
   });
   it("preserva o fluxo legado de inscrições", () => {
     const source = readFileSync(new URL("./inscricoes-evento/page.tsx", import.meta.url), "utf8");
