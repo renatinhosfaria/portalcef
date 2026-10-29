@@ -5,11 +5,16 @@ import { PublicationChecklist, formatPublicationError, type PublicationError, ty
 
 type Readiness = { status: string; items: PublicationItem[] };
 
+const etapasPorFragmento: Record<string, string> = { informacoes: "informacoes", sessoes: "sessoes", mapa: "mapa", ingressos: "ingressos", politicas: "politicas" };
+export function normalizarPublicationItems(eventId: string, items: PublicationItem[]) {
+  return items.map((item) => item.href?.startsWith("#") ? { ...item, href: `/eventos/${eventId}/${etapasPorFragmento[item.href.slice(1)] ?? "revisar"}` } : item);
+}
+
 export function EventReviewPage({ eventId }: { eventId: string }) {
   const [readiness, setReadiness] = useState<Readiness>({ status: "RASCUNHO", items: [] });
   const [publishing, setPublishing] = useState(false);
   const [error, setError] = useState<PublicationError | null>(null);
   useEffect(() => { let active = true; void fetch(`/eventos-admin/api/eventos/admin/${eventId}/prontidao`, { credentials: "include" }).then(async (response) => { const body = await response.json(); if (!response.ok) throw Object.assign(new Error(body.error?.message), { status: response.status, code: body.error?.code }); const data = body.data ?? body; if (active) setReadiness({ status: data.status, items: data.items ?? [] }); }).catch((reason) => { if (active) setError(formatPublicationError(reason)); }); return () => { active = false; }; }, [eventId]);
   async function publish() { setPublishing(true); setError(null); try { const response = await fetch(`/eventos-admin/api/eventos/admin/${eventId}/publicar`, { method: "POST", credentials: "include" }); const body = await response.json().catch(() => ({})); if (!response.ok || body.success === false) throw formatPublicationError({ status: response.status, code: body.error?.code, message: body.error?.message }); setReadiness((current) => ({ ...current, status: "PUBLICADO" })); } catch (reason) { setError(formatPublicationError(reason as PublicationError)); const refresh = await fetch(`/eventos-admin/api/eventos/admin/${eventId}/prontidao`, { credentials: "include" }).catch(() => null); if (refresh?.ok) { const body = await refresh.json(); const data = body.data ?? body; setReadiness({ status: data.status, items: data.items ?? [] }); } } finally { setPublishing(false); } }
-  return <PublicationChecklist items={readiness.items} status={readiness.status} error={error} publishing={publishing} onPublish={publish} />;
+  return <PublicationChecklist items={normalizarPublicationItems(eventId, readiness.items)} status={readiness.status} error={error} publishing={publishing} onPublish={publish} />;
 }
