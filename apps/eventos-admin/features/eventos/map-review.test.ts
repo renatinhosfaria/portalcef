@@ -14,3 +14,14 @@ it("não calcula prontidão global no grid", () => {
   const source = readFileSync(new URL("./inventory-grid.tsx", import.meta.url), "utf8");
   expect(source).not.toContain("Inventário pronto para a capacidade");
 });
+it("carrega o mapa padrão atual ao abrir a etapa", () => {
+  const page = readFileSync(new URL("../../app/eventos/[id]/mapa/page.tsx", import.meta.url), "utf8");
+  expect(page).toContain("/eventos-admin/api/eventos/admin/${id}");
+  expect(page).toContain("defaultMapId");
+  expect(page).toContain("useEffect");
+});
+it("marca confirmação antes de atualizar herança e não repete confirmação", () => {
+  const page = readFileSync(new URL("../../app/eventos/[id]/mapa/page.tsx", import.meta.url), "utf8");
+  expect(page).toContain("setStatus(\"CONFIRMADO\")");
+  expect(page).toContain("Falha ao atualizar o mapa padrão");
+});
