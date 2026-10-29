@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useParams } from "next/navigation";
 import { useEventoAutosave } from "@/features/eventos/use-evento-autosave";
-import { assertRespostaApi, construirPayloadInformacoes, slugSugerido, type InformacoesValue } from "@/features/eventos/etapas-contratos";
+import { assertRespostaApi, construirPayloadInformacoes, deveLimparDirtyAposUpload, slugSugerido, type InformacoesValue } from "@/features/eventos/etapas-contratos";
 
 const vazio: InformacoesValue = { title: "", slug: "", summary: "", description: "", imageUrl: "", category: "", contactEmail: "", contactPhone: "", cancellationPolicy: "" };
 const camposOpcionais = new Set(["summary", "category", "imageUrl", "contactPhone"]);
@@ -66,6 +66,7 @@ export default function InformacoesPage() {
   const titleChange = (title: string) => patch({ title, ...(manualSlug ? {} : { slug: slugSugerido(title) }) });
   const enviarImagem = async (file: File) => {
     const revision = changeRevision.current;
+    const dirtyAtStart = dirty;
     setUploadState("uploading");
     setUploadError("");
     const formData = new FormData();
@@ -80,7 +81,7 @@ export default function InformacoesPage() {
       setValue((current) => ({ ...current, imageUrl: data.imageUrl }));
       setUpdatedAt(data.updatedAt);
       setUploadState("idle");
-      if (changeRevision.current === revision) setDirty(false);
+      if (deveLimparDirtyAposUpload(dirtyAtStart, revision, changeRevision.current)) setDirty(false);
     } catch (uploadFailure) {
       setUploadState("error");
       setUploadError(uploadFailure instanceof Error ? uploadFailure.message : "Não foi possível enviar a imagem.");
