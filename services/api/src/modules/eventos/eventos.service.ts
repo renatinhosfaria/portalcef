@@ -123,17 +123,18 @@ export class EventosService {
 
     const uploaded = await this.storage.uploadBuffer(arquivo.buffer, arquivo.filename, arquivo.mimetype, `eventos/${eventId}/imagem`, RASTER_IMAGE_MIME_TYPES);
     const updatedAt = new Date();
+    let updated: typeof eventos.$inferSelect | undefined;
     try {
       const versionFilter = expectedUpdatedAt ? and(eq(eventos.id, eventId), eq(eventos.updatedAt, expectedUpdatedAt)) : eq(eventos.id, eventId);
-      const [updated] = await this.db.update(eventos).set({ imageUrl: uploaded.url, updatedAt }).where(versionFilter).returning();
+      [updated] = await this.db.update(eventos).set({ imageUrl: uploaded.url, updatedAt }).where(versionFilter).returning();
       if (!updated) throw new NotFoundException({ code: expectedUpdatedAt ? "VERSION_CONFLICT" : "EVENT_NOT_FOUND", message: expectedUpdatedAt ? "O evento foi alterado por outra pessoa" : "Evento não encontrado" });
-      if (existing.imageUrl) await this.storage.deletePublicUrl(existing.imageUrl);
-      await this.audit(eventId, actor, "ATUALIZADO", "imagem", eventId, { etapa: "informacoes", previousImageUrl: existing.imageUrl, imageUrl: uploaded.url });
-      return { imageUrl: updated.imageUrl, updatedAt: updated.updatedAt };
     } catch (error) {
       await this.storage.deletePublicUrl(uploaded.url);
       throw error;
     }
+    if (existing.imageUrl) await this.storage.deletePublicUrl(existing.imageUrl);
+    await this.audit(eventId, actor, "ATUALIZADO", "imagem", eventId, { etapa: "informacoes", previousImageUrl: existing.imageUrl, imageUrl: uploaded.url });
+    return { imageUrl: updated.imageUrl, updatedAt: updated.updatedAt };
   }
 
   async atualizarMapaPadrao(eventId: string, mapId: string, actor: EventoActor) {

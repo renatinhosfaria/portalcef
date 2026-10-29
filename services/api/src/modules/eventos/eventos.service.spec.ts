@@ -133,6 +133,15 @@ describe('EventosService contratos de workspace', () => {
     await expect(service(db, storage).atualizarImagem('e1', { buffer: Buffer.from('x'), filename: 'nova.jpg', mimetype: 'image/jpeg' }, actor, new Date('2026-10-29T10:00:00Z'))).rejects.toMatchObject({ response: { code: 'VERSION_CONFLICT' } });
     expect(storage.uploadBuffer).not.toHaveBeenCalled();
   });
+
+  it('não apaga a nova imagem quando a auditoria falha após atualizar o evento', async () => {
+    const db = fakeDb({ selects: [[event({ imageUrl: 'https://www.portalcef.com.br/storage/essencia-uploads/eventos/e1/imagem/antiga.jpg' })]], update: async () => [event({ imageUrl: 'https://www.portalcef.com.br/storage/essencia-uploads/eventos/e1/imagem/nova.jpg' })] });
+    db.insert = () => ({ values: async () => { throw new Error('auditoria indisponível'); } });
+    const storage = { uploadBuffer: jest.fn().mockResolvedValue({ url: 'https://www.portalcef.com.br/storage/essencia-uploads/eventos/e1/imagem/nova.jpg' }), deletePublicUrl: jest.fn() };
+
+    await expect(service(db, storage).atualizarImagem('e1', { buffer: Buffer.from([0xff, 0xd8, 0xff]), filename: 'nova.jpg', mimetype: 'image/jpeg' }, actor)).rejects.toThrow('auditoria indisponível');
+    expect(storage.deletePublicUrl).not.toHaveBeenCalledWith(expect.stringContaining('/nova.jpg'));
+  });
 });
 
 function service(db: any, storage?: any) { return new EventosService({ db } as any, { validarPublicacao: jest.fn() } as any, storage); }
