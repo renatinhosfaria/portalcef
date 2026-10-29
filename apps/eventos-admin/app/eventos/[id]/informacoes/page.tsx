@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useEventoAutosave } from "@/features/eventos/use-evento-autosave";
 import { assertRespostaApi, construirPayloadInformacoes, deveLimparDirtyAposUpload, slugSugerido, type InformacoesValue } from "@/features/eventos/etapas-contratos";
 
@@ -15,6 +15,7 @@ function Rotulo({ children, obrigatorio = false }: { children: ReactNode; obriga
 
 export default function InformacoesPage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const [value, setValue] = useState(vazio);
   const [dirty, setDirty] = useState(false);
   const [manualSlug, setManualSlug] = useState(false);
@@ -55,6 +56,7 @@ export default function InformacoesPage() {
         }
       });
     },
+    onSaved: () => router.refresh(),
     debounceMs: 700,
   });
 
