@@ -237,6 +237,42 @@ export class EventosService {
   async alterarStatus(id: string, status: "PAUSADO" | "CANCELADO", actor?: EventoActor) { const [existing] = await this.db.select().from(eventos).where(eq(eventos.id, id)); if (!existing) throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Evento não encontrado" }); if (actor) this.assertSchoolScope(actor, existing.schoolId); const [event] = await this.db.update(eventos).set({ status, updatedAt: new Date() }).where(eq(eventos.id, id)).returning(); if (!event) throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Evento não encontrado" }); await this.audit(id, actor, status === "PAUSADO" ? "PAUSADO" : "CANCELADO", "evento", id); return this.resumo(event); }
   async listarInventario(eventId: string, actor: EventoActor) { const [event] = await this.db.select().from(eventos).where(eq(eventos.id, eventId)); if (!event) throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Evento não encontrado" }); this.assertSchoolScope(actor, event.schoolId); return this.db.select({ session: eventoSessoes, inventory: eventoInventarioAssentos }).from(eventoSessoes).innerJoin(eventoInventarioAssentos, eq(eventoInventarioAssentos.sessionId, eventoSessoes.id)).where(eq(eventoSessoes.eventId, eventId)); }
 
+  async listarSessoesAdmin(eventId: string, actor: EventoActor) {
+    const [event] = await this.db.select().from(eventos).where(eq(eventos.id, eventId));
+    if (!event) throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Evento não encontrado" });
+    this.assertSchoolScope(actor, event.schoolId);
+    return this.db.select().from(eventoSessoes).where(eq(eventoSessoes.eventId, eventId)).orderBy(asc(eventoSessoes.startsAt));
+  }
+
+  async listarIngressosAdmin(eventId: string, actor: EventoActor) {
+    const [event] = await this.db.select().from(eventos).where(eq(eventos.id, eventId));
+    if (!event) throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Evento não encontrado" });
+    this.assertSchoolScope(actor, event.schoolId);
+    return this.db.select().from(eventoTiposIngresso).where(and(eq(eventoTiposIngresso.eventId, eventId), eq(eventoTiposIngresso.active, true))).orderBy(asc(eventoTiposIngresso.name));
+  }
+
+  async atualizarIngressos(eventId: string, inputs: Array<{ id?: string; name: string; description?: string | null; priceCents: number; maxPerOrder?: number | null }>, actor: EventoActor) {
+    const [event] = await this.db.select().from(eventos).where(eq(eventos.id, eventId));
+    if (!event) throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Evento não encontrado" });
+    this.assertSchoolScope(actor, event.schoolId);
+    if (inputs.some((input) => !input.name?.trim() || !Number.isInteger(input.priceCents) || input.priceCents < 0 || (input.maxPerOrder != null && (!Number.isInteger(input.maxPerOrder) || input.maxPerOrder <= 0)))) throw new BadRequestException({ code: "INVALID_TICKET", message: "Ingresso inválido" });
+    const current = await this.db.select().from(eventoTiposIngresso).where(and(eq(eventoTiposIngresso.eventId, eventId), eq(eventoTiposIngresso.active, true)));
+    const kept = new Set<string>();
+    const result = [];
+    for (const input of inputs) {
+      if (input.id && current.some((ticket: any) => ticket.id === input.id)) {
+        const [updated] = await this.db.update(eventoTiposIngresso).set({ name: input.name.trim(), description: input.description ?? null, priceCents: input.priceCents, maxPerOrder: input.maxPerOrder ?? null, version: (current.find((ticket: any) => ticket.id === input.id)?.version ?? 1) + 1, updatedAt: new Date() }).where(and(eq(eventoTiposIngresso.id, input.id), eq(eventoTiposIngresso.eventId, eventId))).returning();
+        if (updated) result.push(updated); kept.add(input.id);
+      } else {
+        const [created] = await this.db.insert(eventoTiposIngresso).values({ eventId, name: input.name.trim(), description: input.description ?? null, priceCents: input.priceCents, maxPerOrder: input.maxPerOrder ?? null }).returning();
+        if (created) result.push(created);
+      }
+    }
+    for (const ticket of current as any[]) if (!kept.has(ticket.id) && !inputs.some((input) => input.id === ticket.id)) await this.db.update(eventoTiposIngresso).set({ active: false, updatedAt: new Date() }).where(eq(eventoTiposIngresso.id, ticket.id));
+    await this.audit(eventId, actor, "ATUALIZADO", "ingresso", eventId);
+    return result;
+  }
+
   async listarPoliticas(eventId: string, actor?: EventoActor) { const [event] = await this.db.select().from(eventos).where(eq(eventos.id, eventId)); if (!event) throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Evento não encontrado" }); if (actor) this.assertSchoolScope(actor, event.schoolId); return this.db.select().from(eventoPoliticas).where(and(eq(eventoPoliticas.eventId, eventId), eq(eventoPoliticas.active, true))); }
   private async upsertPolitica(eventId: string, input: { type: "PRIVACIDADE" | "COMPRA" | "CANCELAMENTO_REEMBOLSO" | "ACESSIBILIDADE" | "CONTATO"; content: string; version?: number }, actor: EventoActor) {
     const current: any[] = await this.db.select().from(eventoPoliticas).where(eq(eventoPoliticas.eventId, eventId));

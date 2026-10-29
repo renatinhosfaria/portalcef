@@ -61,6 +61,19 @@ export class EventosAdminController {
     return { success: true, data: await this.service.criarSessao(id, parsed.data, actor) };
   }
 
+  @Get(":id/sessoes")
+  sessions(@Param("id") id: string, @CurrentUser() actor: any) { return this.service.listarSessoesAdmin(id, actor); }
+
+  @Get(":id/ingressos")
+  tickets(@Param("id") id: string, @CurrentUser() actor: any) { return this.service.listarIngressosAdmin(id, actor); }
+
+  @Patch(":id/ingressos")
+  async updateTickets(@Param("id") id: string, @Body() body: unknown, @CurrentUser() actor: any) {
+    const values = Array.isArray(body) ? body : [body];
+    if (!values.every((value: any) => value && typeof value.name === "string" && Number.isInteger(value.priceCents) && value.priceCents >= 0)) return { success: false, error: { code: "VALIDATION_ERROR", message: "Ingresso inválido" } };
+    return { success: true, data: await this.service.atualizarIngressos(id, values as any, actor) };
+  }
+
   @Patch(":id/sessoes/:sessionId")
   async updateSession(@Param("id") id: string, @Param("sessionId") sessionId: string, @Body() body: unknown, @CurrentUser() actor: any) {
     const parsed = criarSessaoSchema.partial().safeParse(body);
