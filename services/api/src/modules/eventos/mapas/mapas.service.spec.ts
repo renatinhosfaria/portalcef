@@ -1,6 +1,8 @@
 import { BadRequestException } from "@nestjs/common";
+import "reflect-metadata";
 jest.mock("@essencia/db", () => ({ eventos: {}, eventoMapas: {}, eventoSessoes: {}, eventoImportacoesMapa: {}, eventoDeteccoesMapa: {}, eventoMapaAssentos: {}, eventoAuditorias: {}, eq: jest.fn(), and: jest.fn() }));
 import { MapasService } from "./mapas.service";
+import { StorageService } from "../../../common/storage/storage.service";
 
 describe("MapasService", () => {
   const actor = { userId: "user-1", role: "diretora_geral", schoolId: "school-1" };
@@ -11,6 +13,10 @@ describe("MapasService", () => {
     };
     return new MapasService({ db } as any, { uploadMapBuffer: jest.fn().mockResolvedValue({ key: "private/map.svg" }) } as any, { detect: jest.fn().mockResolvedValue({ detector: "svg-text-v1", seats: [{ rowLabel: "A", seatNumber: "1", x: 1, y: 2, width: 20, height: 20, confidence: 90 }], categories: [], confidence: 90, conflicts: [] }) } as any);
   }
+  it("mantém StorageService como token de DI mesmo sendo opcional", () => {
+    const selfParamTypes = Reflect.getMetadata("self:paramtypes", MapasService) as Array<{ index: number; param: unknown }>;
+    expect(selfParamTypes).toEqual(expect.arrayContaining([{ index: 1, param: StorageService }]));
+  });
   it("exige revisão humana para toda confirmação estruturada", async () => {
     const maps = service();
     const result = await maps.importar("event-1", { filename: "map.svg", mimetype: "image/svg+xml", toBuffer: jest.fn().mockResolvedValue(Buffer.from("<svg/>")) } as any, actor);

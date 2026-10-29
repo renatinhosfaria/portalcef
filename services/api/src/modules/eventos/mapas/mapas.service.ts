@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException, Optional } from "@nestjs/common";
+import { BadRequestException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common";
 import { and, eq, eventoAuditorias, eventoDeteccoesMapa, eventoImportacoesMapa, eventoMapaAssentos, eventoMapas, eventoSessoes, eventos, type Database } from "@essencia/db";
 import type { MultipartFile } from "@fastify/multipart";
 import type { EventoActor } from "@essencia/shared/types";
@@ -12,7 +12,7 @@ export interface MapImportSummary { importId: string; mapId: string; status: str
 
 @Injectable()
 export class MapasService {
-  constructor(private readonly database: DatabaseService, @Optional() private readonly storage: StorageService | undefined, private readonly detector: MapDetector) {}
+  constructor(private readonly database: DatabaseService, @Optional() @Inject(StorageService) private readonly storage: StorageService | undefined, private readonly detector: MapDetector) {}
   private get db(): Database { return this.database.db; }
   private async assertEvent(eventId: string, actor: EventoActor) {
     const [event] = await this.db.select().from(eventos).where(eq(eventos.id, eventId));
