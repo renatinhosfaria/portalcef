@@ -54,6 +54,7 @@ describe("navegação e readiness do workspace", () => {
   it.each([
     ["/eventos/evt-1/sessoes", "sessoes"],
     ["/eventos/evt-1/mapa", "mapa"],
+    ["/eventos-admin/eventos/evt-1/mapa", "mapa"],
   ])("identifica a etapa ativa para %s", (pathname, expected) => {
     expect(getActiveWorkspaceKey(pathname, [
       { key: "informacoes", label: "Informações", href: "/eventos/evt-1/informacoes", state: "OK" },
