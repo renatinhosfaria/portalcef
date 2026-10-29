@@ -1,5 +1,5 @@
 import type { Multipart } from "@fastify/multipart";
-import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, UseGuards } from "@nestjs/common";
 import type { FastifyRequest } from "fastify";
 import { ExactRoles, Roles } from "../../common/decorators/roles.decorator";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
@@ -100,6 +100,11 @@ export class EventosAdminController {
     const values = Array.isArray(body) ? body : [body];
     if (!values.every((value: any) => value && typeof value.name === "string" && Number.isInteger(value.priceCents) && value.priceCents >= 0)) return { success: false, error: { code: "VALIDATION_ERROR", message: "Ingresso inválido" } };
     return { success: true, data: await this.service.atualizarIngressos(id, values as any, actor) };
+  }
+
+  @Delete(":id/sessoes/:sessionId")
+  async deleteSession(@Param("id") id: string, @Param("sessionId") sessionId: string, @CurrentUser() actor: any) {
+    return { success: true, data: await this.service.removerSessao(id, sessionId, actor) };
   }
 
   @Patch(":id/sessoes/:sessionId")

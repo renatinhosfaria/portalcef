@@ -150,6 +150,23 @@ describe('EventosService contratos de workspace', () => {
     expect(storage.deletePublicUrl).not.toHaveBeenCalledWith(expect.stringContaining('/nova.jpg'));
   });
 
+  it('remove sessão somente dentro do evento e registra a exclusão', async () => {
+    const deleted: unknown[] = [];
+    const db = fakeDb({
+      selects: [[event()], [{ id: 's1', eventId: 'e1' }], []],
+      delete: (table: unknown) => ({ where: async () => { deleted.push(table); } }),
+    });
+
+    await expect(service(db).removerSessao('e1', 's1', actor)).resolves.toEqual({ id: 's1' });
+    expect(deleted).toHaveLength(1);
+  });
+
+  it('bloqueia exclusão de sessão fora da escola do ator', async () => {
+    const db = fakeDb({ selects: [[event({ schoolId: 's2' })]] });
+
+    await expect(service(db).removerSessao('e1', 's1', actor)).rejects.toMatchObject({ response: { code: 'FORBIDDEN' } });
+  });
+
   it('lista opções de sessão no escopo da escola, com padrão e apenas mapas confirmados', async () => {
     const db = fakeDb({
       selects: [
@@ -196,12 +213,13 @@ describe('EventosService contratos de workspace', () => {
 
 function service(db: any, storage?: any) { return new EventosService({ db } as any, { validarPublicacao: jest.fn() } as any, storage); }
 
-function fakeDb(options: { selects?: unknown[][]; insert?: (values: any) => Promise<any[]>; update?: () => Promise<any[]> } = {}) {
+function fakeDb(options: { selects?: unknown[][]; insert?: (values: any) => Promise<any[]>; update?: () => Promise<any[]>; delete?: (table: unknown) => { where: () => Promise<unknown> } } = {}) {
   let selectIndex = 0;
   const selects = options.selects ?? [];
   const db: any = { updated: false };
   db.select = () => ({ from: () => ({ where: () => { const rows = selects[selectIndex++] ?? []; const promise: any = Promise.resolve(rows); promise.limit = async () => rows; return promise; } }) });
   db.insert = (table: any) => ({ values: (values: any) => ({ returning: async () => options.insert ? options.insert(values) : [] }) });
   db.update = () => ({ set: () => ({ where: () => ({ returning: async () => { db.updated = true; return options.update ? options.update() : []; } }) }) });
+  db.delete = (table: unknown) => options.delete ? options.delete(table) : ({ where: async () => undefined });
   return db;
 }

@@ -212,6 +212,22 @@ export class EventosService {
     return updated;
   }
 
+  async removerSessao(eventId: string, sessionId: string, actor: EventoActor) {
+    const [event] = await this.db.select().from(eventos).where(eq(eventos.id, eventId));
+    if (!event) throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Evento não encontrado" });
+    this.assertSchoolScope(actor, event.schoolId);
+
+    const [session] = await this.db.select().from(eventoSessoes).where(and(eq(eventoSessoes.id, sessionId), eq(eventoSessoes.eventId, eventId)));
+    if (!session) throw new NotFoundException({ code: "SESSION_NOT_FOUND", message: "Sessão não encontrada" });
+
+    const [sale] = await this.db.select({ id: eventoPedidos.id }).from(eventoPedidos).where(eq(eventoPedidos.sessionId, sessionId)).limit(1);
+    if (sale) throw new BadRequestException({ code: "EVENT_HAS_SALES", message: "A sessão possui vendas e não pode ser removida" });
+
+    await this.db.delete(eventoSessoes).where(and(eq(eventoSessoes.id, sessionId), eq(eventoSessoes.eventId, eventId)));
+    await this.audit(eventId, actor, "ATUALIZADO", "sessao", sessionId, { operacao: "REMOVIDA" });
+    return { id: sessionId };
+  }
+
   async listarPublicados(now: Date): Promise<PublicEventCard[]> {
     const rows = await this.db.select({ event: eventos, session: eventoSessoes, location: eventoLocais, ticket: eventoTiposIngresso, inventory: eventoInventarioAssentos }).from(eventos).innerJoin(eventoSessoes, and(eq(eventoSessoes.eventId, eventos.id), eq(eventoSessoes.status, "PUBLICADA"))).leftJoin(eventoLocais, eq(eventoLocais.id, eventoSessoes.locationId)).leftJoin(eventoTiposIngresso, and(eq(eventoTiposIngresso.eventId, eventos.id), eq(eventoTiposIngresso.active, true))).leftJoin(eventoInventarioAssentos, eq(eventoInventarioAssentos.sessionId, eventoSessoes.id)).where(eq(eventos.status, "PUBLICADO"));
     const byId = new Map<string, PublicEventCard>();
