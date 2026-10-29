@@ -23,7 +23,16 @@ describe("checklist de publicação", () => {
 
 it("a página de revisão chama a publicação administrativa", async () => {
   const { readFileSync } = await import("node:fs");
-  const source = readFileSync(new URL("../../app/eventos/[id]/page.tsx", import.meta.url), "utf8");
+  const source = readFileSync(new URL("./event-review-page.tsx", import.meta.url), "utf8");
   expect(source).toContain("/eventos-admin/api/eventos/admin/");
   expect(source).toContain("/publicar");
+});
+
+it("usa a rota de revisão do shell e oferece ação para etapas pendentes", async () => {
+  const { readFileSync } = await import("node:fs");
+  const route = readFileSync(new URL("../../app/eventos/[id]/revisar/page.tsx", import.meta.url), "utf8");
+  const component = readFileSync(new URL("./publication-checklist.tsx", import.meta.url), "utf8");
+  expect(route).toContain("EventReviewPage");
+  expect(component).toContain("Revisar etapa");
+  expect(component).toContain("item.href");
 });
