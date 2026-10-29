@@ -28,3 +28,5 @@ O layout usa um estado inicial `RASCUNHO` sem consulta de prontidão; o carregam
 - Status do evento expandido para `REVISAO`, `ENCERRADO` e `ARQUIVADO`.
 
 Verificação adicional: suíte do app PASS (8 arquivos, 21 testes), typecheck PASS, lint PASS com avisos preexistentes, `git diff --check` PASS.
+
+Ajuste adicional: a comparação de rota também reconhece o `basePath` `/eventos-admin`; teste focado final passou (7 testes).
