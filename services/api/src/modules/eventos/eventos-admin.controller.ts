@@ -5,6 +5,7 @@ import { AuthGuard } from "../../common/guards/auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
 import { atualizarMapaPadraoSchema, atualizarRascunhoSchema, criarEventoSchema, criarRascunhoSchema, criarSessaoSchema, eventoListQuerySchema, politicaSchema } from "@essencia/shared/schemas";
 import { EventosService } from "./eventos.service";
+import { EventosReadinessService } from "./eventos-readiness.service";
 import { EVENTOS_ADMIN_ROLES } from "./eventos.constants";
 
 @Controller("eventos/admin")
@@ -12,7 +13,7 @@ import { EVENTOS_ADMIN_ROLES } from "./eventos.constants";
 @ExactRoles()
 @Roles(...EVENTOS_ADMIN_ROLES)
 export class EventosAdminController {
-  constructor(private readonly service: EventosService, private readonly readinessService: import("./eventos-readiness.service").EventosReadinessService) {}
+  constructor(private readonly service: EventosService, private readonly readinessService: EventosReadinessService) {}
 
   @Get()
   async list(@Query() query: unknown, @CurrentUser() actor: any) {
