@@ -46,11 +46,22 @@ describe('EventosService contratos de workspace', () => {
     await expect(service(db).atualizarEvento('e1', { slug: 'outro-slug' }, actor)).rejects.toMatchObject({ response: { code: 'EVENT_SLUG_IMMUTABLE' } });
   });
 
+  it('rejeita qualquer PATCH de slug em evento publicado, mesmo sem mudança', async () => {
+    const db = fakeDb({ selects: [[event({ status: 'PUBLICADO', slug: 'publicado' })]] });
+    await expect(service(db).atualizarEvento('e1', { slug: 'publicado' }, actor)).rejects.toMatchObject({ response: { code: 'EVENT_SLUG_IMMUTABLE' } });
+  });
+
+  it('rejeita mapa pertencente a outro evento', async () => {
+    const db = fakeDb({ selects: [[event()], [{ id: 'mapa-externo', eventId: 'outro-evento' }]] });
+    await expect(service(db).atualizarMapaPadrao('e1', 'mapa-externo', actor)).rejects.toMatchObject({ response: { code: 'MAP_EVENT_MISMATCH' } });
+  });
+
   it('propaga mapa padrão somente para sessões herdadas e invalida seus inventários', async () => {
     const updates: Array<{ table: unknown; values: unknown }> = [];
     const db = fakeDb({
       selects: [
         [event({ defaultMapId: 'map-antigo' })],
+        [{ id: 'map-novo', eventId: 'e1' }],
         [
           { id: 'sessao-herdada', eventId: 'e1', mapId: null },
           { id: 'sessao-especifica', eventId: 'e1', mapId: 'map-especifico' },
@@ -75,10 +86,9 @@ describe('EventosService contratos de workspace', () => {
 
     await service(db).atualizarMapaPadrao('e1', 'map-novo', actor);
 
-    expect(updates).toHaveLength(3);
+    expect(updates).toHaveLength(2);
     expect(updates.map((item) => item.values)).toEqual(expect.arrayContaining([
       { defaultMapId: 'map-novo', updatedAt: expect.any(Date) },
-      { mapId: 'map-novo', updatedAt: expect.any(Date) },
       { status: 'BLOQUEADO', blockedReason: 'MAPA_PADRAO_ALTERADO', updatedAt: expect.any(Date) },
     ]));
   });

@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
-import { and, asc, eq, eventoAuditorias, eventoInventarioAssentos, eventoLocais, eventoMapaAssentos, eventoMapas, eventoPedidos, eventoPoliticas, eventoSessoes, eventoTiposIngresso, eventos, ne, type Database } from "@essencia/db";
+import { and, asc, eq, eventoAuditorias, eventoInventarioAssentos, eventoLocais, eventoMapaAssentos, eventoMapas, eventoPedidos, eventoPoliticas, eventoSessoes, eventoTiposIngresso, eventos, inArray, ne, type Database } from "@essencia/db";
 import type { AtualizarEventoInput, CriarEventoInput, CriarSessaoInput, CriarRascunhoInput, EventoListQuery } from "@essencia/shared/schemas";
 import type { EventoActor, EventoResumo, PublicEventCard, PublicEventDetail, PublicEventSession, PublicMap } from "@essencia/shared/types";
 import { DatabaseService } from "../../common/database/database.service";
@@ -25,9 +25,9 @@ export class EventosService {
     return "available";
   }
 
-  private async audit(eventId: string, actor: EventoActor | undefined, action: "CRIADO" | "ATUALIZADO" | "PUBLICADO" | "PAUSADO" | "CANCELADO", resourceType: string, resourceId: string, metadata?: unknown) {
-    if (!actor?.userId || typeof (this.db as any).insert !== "function") return;
-    await this.db.insert(eventoAuditorias).values({ eventId, actorId: actor.userId, actorRole: actor.role, action, resourceType, resourceId, metadata: metadata ?? null });
+  private async audit(eventId: string, actor: EventoActor | undefined, action: "CRIADO" | "ATUALIZADO" | "PUBLICADO" | "PAUSADO" | "CANCELADO", resourceType: string, resourceId: string, metadata?: unknown, db: Database = this.db) {
+    if (!actor?.userId || typeof (db as any).insert !== "function") return;
+    await db.insert(eventoAuditorias).values({ eventId, actorId: actor.userId, actorRole: actor.role, action, resourceType, resourceId, metadata: metadata ?? null });
   }
 
   async criarRascunho(input: CriarRascunhoInput, actor: EventoActor): Promise<EventoResumo> {
@@ -87,7 +87,7 @@ export class EventosService {
     if (expected && existing.updatedAt && existing.updatedAt.getTime() !== expected.getTime()) throw new ConflictException({ code: "VERSION_CONFLICT", message: "O evento foi alterado por outra pessoa", current: this.resumo(existing) });
     if (_sessions !== undefined || _ticketTypes !== undefined || _policies !== undefined) throw new BadRequestException({ code: "EVENT_UPDATE_FIELDS_UNSUPPORTED", message: "Atualize sessões, ingressos e políticas pelas rotas próprias" });
     const normalizedSlug = input.slug ? this.normalizeSlug(input.slug) : undefined;
-    if (normalizedSlug && existing.status === "PUBLICADO" && normalizedSlug !== existing.slug) throw new BadRequestException({ code: "EVENT_SLUG_IMMUTABLE", message: "O slug de um evento publicado não pode ser alterado" });
+    if (input.slug !== undefined && existing.status === "PUBLICADO") throw new BadRequestException({ code: "EVENT_SLUG_IMMUTABLE", message: "O slug de um evento publicado não pode ser alterado" });
     if (normalizedSlug && normalizedSlug !== existing.slug) {
       const [slugOwner] = await this.db.select({ id: eventos.id }).from(eventos).where(and(eq(eventos.schoolId, existing.schoolId), eq(eventos.slug, normalizedSlug), ne(eventos.id, id))).limit(1);
       if (slugOwner) throw new ConflictException({ code: "SLUG_ALREADY_EXISTS", message: "Este slug já está em uso nesta escola" });
@@ -106,7 +106,7 @@ export class EventosService {
     }
     const nextValues = { ...updateInput, ...(nextSlug ? { slug: nextSlug } : {}) } as Record<string, unknown>;
     const previousValues = Object.fromEntries(Object.keys(nextValues).map((key) => [key, (existing as Record<string, unknown>)[key]]));
-    await this.audit(id, actor, "ATUALIZADO", "evento", id, { version: existing.updatedAt?.toISOString(), previous: previousValues, next: nextValues });
+    await this.audit(id, actor, "ATUALIZADO", "evento", id, { etapa: input.defaultMapId !== undefined ? "mapa" : "informacoes", version: existing.updatedAt?.toISOString(), previous: previousValues, next: nextValues });
     if (publishImmediately) return this.publicar(id, actor);
     const result = this.resumo(updated);
     if (input.title && !normalizedSlug && manualSlug && titleSuggestion && titleSuggestion !== existing.slug) result.slugSuggestion = titleSuggestion;
@@ -120,15 +120,17 @@ export class EventosService {
     const transaction = (this.db as any).transaction;
     const run = async (db: any) => {
       const now = new Date();
+      const [map] = await db.select().from(eventoMapas).where(eq(eventoMapas.id, mapId));
+      if (!map) throw new NotFoundException({ code: "MAP_NOT_FOUND", message: "Mapa não encontrado" });
+      if (map.eventId !== eventId) throw new BadRequestException({ code: "MAP_EVENT_MISMATCH", message: "O mapa informado pertence a outro evento" });
       const sessions = await db.select().from(eventoSessoes).where(eq(eventoSessoes.eventId, eventId));
       const inherited = sessions.filter((session: any) => session.mapId == null);
       const [updated] = await db.update(eventos).set({ defaultMapId: mapId, updatedAt: now }).where(eq(eventos.id, eventId)).returning();
       if (!updated) throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Evento não encontrado" });
       for (const session of inherited) {
-        await db.update(eventoSessoes).set({ mapId, updatedAt: now }).where(eq(eventoSessoes.id, session.id));
-        await db.update(eventoInventarioAssentos).set({ status: "BLOQUEADO", blockedReason: "MAPA_PADRAO_ALTERADO", updatedAt: now }).where(eq(eventoInventarioAssentos.sessionId, session.id));
+        await db.update(eventoInventarioAssentos).set({ status: "BLOQUEADO", blockedReason: "MAPA_PADRAO_ALTERADO", updatedAt: now }).where(and(eq(eventoInventarioAssentos.sessionId, session.id), inArray(eventoInventarioAssentos.status, ["DISPONIVEL", "LIBERADO"])));
       }
-      await this.audit(eventId, actor, "ATUALIZADO", "mapa_padrao", eventId, { previousMapId: event.defaultMapId, nextMapId: mapId, inheritedSessionIds: inherited.map((session: any) => session.id), inventory: "REVISAR_REGENERAR" });
+      await this.audit(eventId, actor, "ATUALIZADO", "mapa_padrao", eventId, { etapa: "mapa", previousMapId: event.defaultMapId, nextMapId: mapId, inheritedSessionIds: inherited.map((session: any) => session.id), inventory: "REVISAR_REGENERAR" }, db);
       return { updated, inheritedSessionIds: inherited.map((session: any) => session.id) };
     };
     const result = typeof transaction === "function" ? await transaction.call(this.db, run) : await run(this.db);
