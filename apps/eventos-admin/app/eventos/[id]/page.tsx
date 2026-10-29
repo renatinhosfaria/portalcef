@@ -1,2 +1,6 @@
-import Link from "next/link";
-export default async function EventoDetailPage({ params }: { params: Promise<{ id: string }> }) { const { id } = await params; return <section className="space-y-6"><div><p className="text-sm text-slate-500">Evento</p><h1 className="text-2xl font-semibold">Administração do evento {id}</h1></div><nav className="grid gap-3 md:grid-cols-3">{[["mapa","Mapa e revisão"],["sessoes","Sessões"],["inventario","Inventário"],["pedidos","Pedidos"],["check-in","Check-in"],["configuracoes","Configurações"]].map(([href,label]) => <Link key={href} className="rounded-xl border bg-white p-5 font-medium hover:border-slate-400" href={`/eventos/${id}/${href}`}>{label}</Link>)}</nav></section>; }
+import { EventReviewPage } from "@/features/eventos/event-review-page";
+
+export default async function EventoDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  return <EventReviewPage eventId={id} />;
+}

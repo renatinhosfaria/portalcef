@@ -3,7 +3,7 @@ import { ExactRoles, Roles } from "../../common/decorators/roles.decorator";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { AuthGuard } from "../../common/guards/auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
-import { atualizarEventoSchema, criarEventoSchema, criarSessaoSchema, eventoListQuerySchema, politicaSchema } from "@essencia/shared/schemas";
+import { atualizarMapaPadraoSchema, atualizarRascunhoSchema, criarEventoSchema, criarRascunhoSchema, criarSessaoSchema, eventoListQuerySchema, politicaSchema } from "@essencia/shared/schemas";
 import { EventosService } from "./eventos.service";
 import { EVENTOS_ADMIN_ROLES } from "./eventos.constants";
 
@@ -12,12 +12,19 @@ import { EVENTOS_ADMIN_ROLES } from "./eventos.constants";
 @ExactRoles()
 @Roles(...EVENTOS_ADMIN_ROLES)
 export class EventosAdminController {
-  constructor(private readonly service: EventosService) {}
+  constructor(private readonly service: EventosService, private readonly readinessService: import("./eventos-readiness.service").EventosReadinessService) {}
 
   @Get()
   async list(@Query() query: unknown, @CurrentUser() actor: any) {
     const parsed = eventoListQuerySchema.safeParse(query);
     return this.service.listarAdmin(parsed.success ? parsed.data : {}, actor);
+  }
+
+  @Post("rascunhos")
+  async createDraft(@Body() body: unknown, @CurrentUser() actor: any) {
+    const parsed = criarRascunhoSchema.safeParse(body);
+    if (!parsed.success) return { success: false, error: { code: "VALIDATION_ERROR", details: parsed.error.flatten() } };
+    return { success: true, data: await this.service.criarRascunho(parsed.data, actor) };
   }
 
   @Post()
@@ -29,9 +36,22 @@ export class EventosAdminController {
 
   @Patch(":id")
   async update(@Param("id") id: string, @Body() body: unknown, @CurrentUser() actor: any) {
-    const parsed = atualizarEventoSchema.safeParse(body);
+    const parsed = atualizarRascunhoSchema.safeParse(body);
     if (!parsed.success) return { success: false, error: { code: "VALIDATION_ERROR", details: parsed.error.flatten() } };
     return { success: true, data: await this.service.atualizarEvento(id, parsed.data, actor) };
+  }
+
+  @Get(":id")
+  detail(@Param("id") id: string, @CurrentUser() actor: any) { return this.service.detalheAdmin(id, actor); }
+
+  @Get(":id/prontidao")
+  async readiness(@Param("id") id: string, @CurrentUser() actor: any) { return { success: true, data: await this.readinessService.verificar(id, actor) }; }
+
+  @Patch(":id/mapa-padrao")
+  async updateDefaultMap(@Param("id") id: string, @Body() body: unknown, @CurrentUser() actor: any) {
+    const parsed = atualizarMapaPadraoSchema.safeParse(body);
+    if (!parsed.success) return { success: false, error: { code: "VALIDATION_ERROR", details: parsed.error.flatten() } };
+    return { success: true, data: await this.service.atualizarMapaPadrao(id, parsed.data.mapId, actor) };
   }
 
   @Get(":id/inventario")
@@ -42,6 +62,19 @@ export class EventosAdminController {
     const parsed = criarSessaoSchema.safeParse(body);
     if (!parsed.success) return { success: false, error: { code: "VALIDATION_ERROR", details: parsed.error.flatten() } };
     return { success: true, data: await this.service.criarSessao(id, parsed.data, actor) };
+  }
+
+  @Get(":id/sessoes")
+  sessions(@Param("id") id: string, @CurrentUser() actor: any) { return this.service.listarSessoesAdmin(id, actor); }
+
+  @Get(":id/ingressos")
+  tickets(@Param("id") id: string, @CurrentUser() actor: any) { return this.service.listarIngressosAdmin(id, actor); }
+
+  @Patch(":id/ingressos")
+  async updateTickets(@Param("id") id: string, @Body() body: unknown, @CurrentUser() actor: any) {
+    const values = Array.isArray(body) ? body : [body];
+    if (!values.every((value: any) => value && typeof value.name === "string" && Number.isInteger(value.priceCents) && value.priceCents >= 0)) return { success: false, error: { code: "VALIDATION_ERROR", message: "Ingresso inválido" } };
+    return { success: true, data: await this.service.atualizarIngressos(id, values as any, actor) };
   }
 
   @Patch(":id/sessoes/:sessionId")
