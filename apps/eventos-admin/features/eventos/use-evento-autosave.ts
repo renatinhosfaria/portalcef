@@ -32,7 +32,8 @@ export function useEventoAutosave<T, S = unknown>(options: EventoAutosaveOptions
   const [, forceRender] = useState(0);
   const controller = useRef<AutosaveController<T, S> | undefined>(undefined);
   if (!controller.current) controller.current = createEventoAutosaveController({ ...options, onState: () => forceRender((value) => value + 1) });
-  useEffect(() => { controller.current?.configure(options); controller.current?.update(options.value, options.dirty); }, [options.eventId, options.serialize, options.save, options.debounceMs, options.value, options.dirty]);
+  controller.current.configure(options);
+  useEffect(() => { controller.current?.update(options.value, options.dirty); }, [options.eventId, options.debounceMs, options.value, options.dirty]);
   useEffect(() => () => controller.current?.dispose(), []);
   const retry = useCallback(() => controller.current?.retry(), []);
   const snapshot = controller.current?.snapshot() ?? { state: options.dirty ? "idle" : "saved", lastSavedAt: null, conflict: false };

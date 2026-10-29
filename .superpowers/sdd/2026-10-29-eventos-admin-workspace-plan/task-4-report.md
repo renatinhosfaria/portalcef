@@ -39,3 +39,14 @@ Validação atualizada:
 - `pnpm --filter @essencia/eventos-admin test` — 10 arquivos, 31 testes aprovados;
 - `pnpm --filter @essencia/eventos-admin typecheck` — aprovado;
 - `pnpm --filter @essencia/eventos-admin lint` — aprovado, somente avisos preexistentes.
+
+## Rodada de correção 3
+
+- Callbacks são atualizados via `configure` fora do efeito que agenda salvamento; mudanças de identidade em `serialize`/`save` não reexecutam `update`.
+- O efeito de agendamento depende somente dos dados da edição (`value`, `dirty`, `eventId` e debounce), eliminando loops causados por rerenders.
+- Adicionado teste que troca callbacks repetidamente e confirma que nenhum salvamento extra é agendado.
+
+Validação atualizada:
+- `pnpm --filter @essencia/eventos-admin test` — 10 arquivos, 32 testes aprovados;
+- `pnpm --filter @essencia/eventos-admin typecheck` — aprovado;
+- `pnpm --filter @essencia/eventos-admin lint` — aprovado, somente avisos preexistentes.
