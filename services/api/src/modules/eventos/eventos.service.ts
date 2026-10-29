@@ -281,6 +281,24 @@ export class EventosService {
     return this.db.select().from(eventoSessoes).where(eq(eventoSessoes.eventId, eventId)).orderBy(asc(eventoSessoes.startsAt));
   }
 
+  async listarOpcoesSessoes(eventId: string, actor: EventoActor) {
+    const [event] = await this.db.select().from(eventos).where(eq(eventos.id, eventId));
+    if (!event) throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Evento não encontrado" });
+    this.assertSchoolScope(actor, event.schoolId);
+
+    const locations = await this.db.select().from(eventoLocais).where(eq(eventoLocais.schoolId, event.schoolId));
+    const maps = await this.db.select().from(eventoMapas).where(and(eq(eventoMapas.eventId, eventId), eq(eventoMapas.status, "CONFIRMADO")));
+    const locationOptions: Array<{ id: string; name: string; address: string; room: string | null }> = locations.filter((location: any) => location.schoolId === event.schoolId).map((location: any) => ({ id: location.id, name: location.name, address: location.address, room: location.room ?? null }));
+    const mapOptions: Array<{ id: string; version: number; status: "CONFIRMADO"; originalFileName: string | null }> = maps.filter((map: any) => map.eventId === eventId && map.status === "CONFIRMADO").map((map: any) => ({ id: map.id, version: map.version, status: "CONFIRMADO" as const, originalFileName: map.originalFileName ?? null }));
+
+    return {
+      defaultLocation: locationOptions.find((location) => location.id === event.defaultLocationId) ?? null,
+      locations: locationOptions,
+      defaultMap: mapOptions.find((map) => map.id === event.defaultMapId) ?? null,
+      maps: mapOptions,
+    };
+  }
+
   async listarIngressosAdmin(eventId: string, actor: EventoActor) {
     const [event] = await this.db.select().from(eventos).where(eq(eventos.id, eventId));
     if (!event) throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Evento não encontrado" });

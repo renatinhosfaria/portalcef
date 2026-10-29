@@ -15,6 +15,7 @@ describe('eventos workspace contracts', () => {
     expect(typeof proto.readiness).toBe('function');
     expect(typeof proto.publish).toBe('function');
     expect(typeof proto.uploadImage).toBe('function');
+    expect(typeof proto.sessionOptions).toBe('function');
   });
 
   it('aceita somente o título no contrato de criação mínima', () => {

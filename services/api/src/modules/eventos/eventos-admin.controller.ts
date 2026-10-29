@@ -89,6 +89,9 @@ export class EventosAdminController {
   @Get(":id/sessoes")
   sessions(@Param("id") id: string, @CurrentUser() actor: any) { return this.service.listarSessoesAdmin(id, actor); }
 
+  @Get(":id/sessoes/opcoes")
+  sessionOptions(@Param("id") id: string, @CurrentUser() actor: any) { return this.service.listarOpcoesSessoes(id, actor); }
+
   @Get(":id/ingressos")
   tickets(@Param("id") id: string, @CurrentUser() actor: any) { return this.service.listarIngressosAdmin(id, actor); }
 

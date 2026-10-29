@@ -149,6 +149,49 @@ describe('EventosService contratos de workspace', () => {
     await expect(service(db, storage).atualizarImagem('e1', { buffer: Buffer.from([0xff, 0xd8, 0xff]), filename: 'nova.jpg', mimetype: 'image/jpeg' }, actor)).rejects.toThrow('auditoria indisponível');
     expect(storage.deletePublicUrl).not.toHaveBeenCalledWith(expect.stringContaining('/nova.jpg'));
   });
+
+  it('lista opções de sessão no escopo da escola, com padrão e apenas mapas confirmados', async () => {
+    const db = fakeDb({
+      selects: [
+        [event({ defaultLocationId: 'local-2', defaultMapId: 'mapa-2' })],
+        [
+          { id: 'local-1', schoolId: 's1', name: 'Auditório', address: 'Rua A', room: null },
+          { id: 'local-2', schoolId: 's1', name: 'Quadra', address: 'Rua B', room: 'Sala 2' },
+          { id: 'local-outra-escola', schoolId: 's2', name: 'Local externo', address: 'Rua C', room: null },
+        ],
+        [
+          { id: 'mapa-1', eventId: 'e1', version: 1, status: 'CONFIRMADO', originalFileName: 'mapa-1.pdf' },
+          { id: 'mapa-2', eventId: 'e1', version: 2, status: 'CONFIRMADO', originalFileName: null },
+          { id: 'mapa-enviado', eventId: 'e1', version: 3, status: 'ENVIADO', originalFileName: 'rascunho.pdf' },
+        ],
+      ],
+    });
+
+    await expect(service(db).listarOpcoesSessoes('e1', actor)).resolves.toEqual({
+      defaultLocation: { id: 'local-2', name: 'Quadra', address: 'Rua B', room: 'Sala 2' },
+      locations: [
+        { id: 'local-1', name: 'Auditório', address: 'Rua A', room: null },
+        { id: 'local-2', name: 'Quadra', address: 'Rua B', room: 'Sala 2' },
+      ],
+      defaultMap: { id: 'mapa-2', version: 2, status: 'CONFIRMADO', originalFileName: null },
+      maps: [
+        { id: 'mapa-1', version: 1, status: 'CONFIRMADO', originalFileName: 'mapa-1.pdf' },
+        { id: 'mapa-2', version: 2, status: 'CONFIRMADO', originalFileName: null },
+      ],
+    });
+  });
+
+  it('retorna padrões nulos quando as referências não estão entre as opções válidas', async () => {
+    const db = fakeDb({
+      selects: [
+        [event({ defaultLocationId: 'local-outra-escola', defaultMapId: 'mapa-enviado' })],
+        [{ id: 'local-1', schoolId: 's1', name: 'Auditório', address: 'Rua A', room: null }],
+        [{ id: 'mapa-confirmado', eventId: 'e1', version: 1, status: 'CONFIRMADO', originalFileName: 'mapa.pdf' }],
+      ],
+    });
+
+    await expect(service(db).listarOpcoesSessoes('e1', actor)).resolves.toMatchObject({ defaultLocation: null, defaultMap: null });
+  });
 });
 
 function service(db: any, storage?: any) { return new EventosService({ db } as any, { validarPublicacao: jest.fn() } as any, storage); }
