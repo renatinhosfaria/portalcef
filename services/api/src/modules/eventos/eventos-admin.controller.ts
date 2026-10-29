@@ -45,7 +45,7 @@ export class EventosAdminController {
   detail(@Param("id") id: string, @CurrentUser() actor: any) { return this.service.detalheAdmin(id, actor); }
 
   @Get(":id/prontidao")
-  readiness(@Param("id") id: string, @CurrentUser() actor: any) { return this.readinessService.verificar(id, actor); }
+  async readiness(@Param("id") id: string, @CurrentUser() actor: any) { return { success: true, data: await this.readinessService.verificar(id, actor) }; }
 
   @Patch(":id/mapa-padrao")
   async updateDefaultMap(@Param("id") id: string, @Body() body: unknown, @CurrentUser() actor: any) {

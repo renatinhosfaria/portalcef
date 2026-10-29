@@ -9,7 +9,7 @@ export default async function EventoWorkspaceLayout({ children, params }: { chil
   const { id } = await params;
   let readiness: WorkspaceReadiness = { status: "RASCUNHO", progress: 0, items: [] };
   try {
-    readiness = await serverFetch<WorkspaceReadiness>(`/eventos/admin/${id}/prontidao`, { cookies: (await cookies()).toString() });
+    readiness = await serverFetch<WorkspaceReadiness>(`/api/eventos/admin/${id}/prontidao`, { cookies: (await cookies()).toString() });
   } catch { /* a etapa continua navegável enquanto a API estiver indisponível */ }
   return <WorkspaceShell eventId={id} readiness={readiness} saveState="idle">{children}</WorkspaceShell>;
 }
