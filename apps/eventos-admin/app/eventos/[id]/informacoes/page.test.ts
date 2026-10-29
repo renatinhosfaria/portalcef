@@ -10,4 +10,12 @@ describe("etapa de informações", () => {
     expect(source).toContain("E-mail de contato");
     expect(source).toContain("Política de cancelamento");
   });
+
+  it("oferece upload de imagem e prévia vinculados ao evento", () => {
+    expect(source).toContain('type="file"');
+    expect(source).toContain('accept="image/jpeg,image/png,image/webp,image/gif"');
+    expect(source).toContain("new FormData()");
+    expect(source).toContain("/imagem");
+    expect(source).toContain("<img");
+  });
 });
