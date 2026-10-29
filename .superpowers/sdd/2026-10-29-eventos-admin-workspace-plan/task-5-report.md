@@ -27,3 +27,8 @@
 - IDs de sessões criadas são persistidos imediatamente no estado após cada POST; uma falha posterior não causa duplicação no retry.
 - Teste de contrato incremental adicionado.
 - Teste focado: 8 contratos passando; typecheck app/API e lint aprovados.
+
+## Rodada corretiva 3
+- IDs de sessões criadas passam a ficar em ref interno durante o salvamento; o estado React não é alterado enquanto há requisições em voo, evitando invalidar a sequência do autosave e ocultar falhas posteriores.
+- O próximo payload injeta os IDs persistidos e usa PATCH, sem duplicar sessões.
+- 8 testes focados, typecheck e lint aprovados.
