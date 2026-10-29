@@ -41,6 +41,9 @@ export class EventosAdminController {
     return { success: true, data: await this.service.atualizarEvento(id, parsed.data, actor) };
   }
 
+  @Get(":id")
+  detail(@Param("id") id: string, @CurrentUser() actor: any) { return this.service.detalheAdmin(id, actor); }
+
   @Get(":id/prontidao")
   readiness(@Param("id") id: string, @CurrentUser() actor: any) { return this.readinessService.verificar(id, actor); }
 

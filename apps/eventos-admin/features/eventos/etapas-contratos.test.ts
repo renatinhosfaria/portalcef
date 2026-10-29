@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  assertRespostaApi,
   construirPayloadInformacoes,
   construirPayloadIngresso,
   construirPayloadPoliticas,
   construirPayloadSessao,
   slugSugerido,
+  mesclarSessaoSalva,
 } from "./etapas-contratos";
 
 describe("contratos das etapas do workspace", () => {
@@ -25,12 +27,20 @@ describe("contratos das etapas do workspace", () => {
   });
 
   it("mantém preço de ingresso em centavos", () => {
-    expect(construirPayloadIngresso({ name: "Inteira", priceCents: 1250 })).toEqual({ name: "Inteira", priceCents: 1250 });
+    expect(construirPayloadIngresso({ name: "Inteira", priceCents: 1250, eligibility: "Famílias", salesLot: "Lote 1", rules: { idadeMinima: 6 } })).toEqual({ name: "Inteira", priceCents: 1250, eligibility: "Famílias", salesLot: "Lote 1", rules: { idadeMinima: 6 } });
   });
 
   it("exige e normaliza as cinco políticas obrigatórias", () => {
     const policies = ["PRIVACIDADE", "COMPRA", "CANCELAMENTO_REEMBOLSO", "ACESSIBILIDADE", "CONTATO"].map((type) => ({ type, content: `Texto ${type}` }));
     expect(construirPayloadPoliticas(policies)).toEqual(policies);
     expect(() => construirPayloadPoliticas(policies.slice(0, 4))).toThrow("cinco políticas");
+  });
+
+  it("trata success:false como falha mesmo com HTTP 200 e preserva código/status", () => {
+    expect(() => assertRespostaApi({ ok: true, status: 200, body: { success: false, error: { code: "VERSION_CONFLICT" } } })).toThrowError(expect.objectContaining({ code: "VERSION_CONFLICT", status: 409 }));
+  });
+
+  it("incorpora o id retornado ao criar uma sessão", () => {
+    expect(mesclarSessaoSalva({ startsAt: "a", endsAt: "b", capacity: 1, salesStartsAt: "", salesEndsAt: "", inheritLocation: true, inheritMap: true }, { id: "sessao-1" })).toMatchObject({ id: "sessao-1" });
   });
 });
