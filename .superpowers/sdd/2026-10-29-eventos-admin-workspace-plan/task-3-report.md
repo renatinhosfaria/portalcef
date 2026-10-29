@@ -30,3 +30,11 @@ O layout usa um estado inicial `RASCUNHO` sem consulta de prontidão; o carregam
 Verificação adicional: suíte do app PASS (8 arquivos, 21 testes), typecheck PASS, lint PASS com avisos preexistentes, `git diff --check` PASS.
 
 Ajuste adicional: a comparação de rota também reconhece o `basePath` `/eventos-admin`; teste focado final passou (7 testes).
+
+## Rodada de correção 2
+
+- Atualizadas as chaves reais da API: `LOCAL_SESSOES`, `INVENTARIO_SESSOES` e `INGRESSO_OBRIGATORIO`.
+- Fragmentos de readiness (`#informacoes`, `#sessoes`, `#mapa`, `#ingressos`, `#politicas`) são convertidos para a rota da etapa com fragmento opcional, permitindo que `next/link` aplique o basePath do app e evitando destino bruto no shell.
+- Teste de payload real cobre os três bloqueadores e a rota normalizada de sessões.
+
+Verificação: suíte do app PASS (8 arquivos, 22 testes), typecheck PASS, lint PASS com avisos preexistentes, `git diff --check` PASS.

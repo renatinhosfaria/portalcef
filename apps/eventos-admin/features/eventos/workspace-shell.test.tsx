@@ -65,12 +65,17 @@ describe("navegação e readiness do workspace", () => {
 
   it("agrupa as chaves de prontidão da API nas etapas e deriva revisão", () => {
     const itens = normalizarReadiness("evt-1", [
-      { key: "TEXTOS_OBRIGATORIOS", label: "Textos obrigatórios", state: "OK" },
-      { key: "SESSAO_OBRIGATORIA", label: "Sessão obrigatória", state: "BLOQUEADOR", message: "Crie uma sessão" },
-      { key: "INGRESSO_VALIDO", label: "Ingresso", state: "OK" },
+      { key: "TEXTOS_OBRIGATORIOS", label: "Textos obrigatórios", state: "OK", href: "#informacoes" },
+      { key: "SESSAO_OBRIGATORIA", label: "Sessão obrigatória", state: "OK", href: "#sessoes" },
+      { key: "LOCAL_SESSOES", label: "Local das sessões", state: "BLOQUEADOR", href: "#sessoes", message: "Informe o local" },
+      { key: "INVENTARIO_SESSOES", label: "Inventário", state: "BLOQUEADOR", href: "#mapa", message: "Revise o inventário" },
+      { key: "INGRESSO_OBRIGATORIO", label: "Ingresso", state: "BLOQUEADOR", href: "#ingressos", message: "Crie um ingresso" },
     ]);
     expect(itens.find((item) => item.key === "informacoes")?.state).toBe("OK");
     expect(itens.find((item) => item.key === "sessoes")?.state).toBe("BLOQUEADOR");
+    expect(itens.find((item) => item.key === "mapa")?.state).toBe("BLOQUEADOR");
+    expect(itens.find((item) => item.key === "ingressos")?.state).toBe("BLOQUEADOR");
+    expect(itens.find((item) => item.key === "sessoes")?.href).toBe("/eventos/evt-1/sessoes#sessoes");
     expect(itens.find((item) => item.key === "revisar")?.state).toBe("BLOQUEADOR");
   });
 

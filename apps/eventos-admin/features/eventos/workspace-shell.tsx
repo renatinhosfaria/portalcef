@@ -20,9 +20,9 @@ export type WorkspaceReadiness = {
 
 const readinessGroups: Record<string, string> = {
   informacoes: "informacoes", TEXTOS_OBRIGATORIOS: "informacoes", SLUG_VALIDO: "informacoes",
-  sessoes: "sessoes", SESSAO_OBRIGATORIA: "sessoes", LOCAL_SESSAO: "sessoes",
-  mapa: "mapa", MAPA_CONFIRMADO: "mapa", INVENTARIO_VENDAVEL: "mapa",
-  ingressos: "ingressos", INGRESSO_VALIDO: "ingressos",
+  sessoes: "sessoes", SESSAO_OBRIGATORIA: "sessoes", LOCAL_SESSAO: "sessoes", LOCAL_SESSOES: "sessoes",
+  mapa: "mapa", MAPA_CONFIRMADO: "mapa", INVENTARIO_VENDAVEL: "mapa", INVENTARIO_SESSOES: "mapa",
+  ingressos: "ingressos", INGRESSO_VALIDO: "ingressos", INGRESSO_OBRIGATORIO: "ingressos",
   politicas: "politicas", POLITICAS_OBRIGATORIAS: "politicas",
 };
 
@@ -36,7 +36,9 @@ export function normalizarReadiness(eventId: string, source: WorkspaceReadinessI
     const items = source.filter((item) => (readinessGroups[item.key] ?? item.key) === key);
     const state = items.some((item) => item.state === "BLOQUEADOR") ? "BLOQUEADOR" : items.some((item) => item.state === "AVISO") ? "AVISO" : items.length > 0 && items.every((item) => item.state === "OK") ? "OK" : items.length > 0 ? "EM_ANDAMENTO" : "NAO_INICIADO";
     const detail = items.find((item) => item.state === "BLOQUEADOR") ?? items[0];
-    return { key, label, state, href: detail?.href ?? `/eventos/${eventId}/${path}`, message: detail?.message };
+    const route = `/eventos/${eventId}/${path}`;
+    const href = detail?.href?.startsWith("#") ? `${route}${detail.href}` : route;
+    return { key, label, state, href, message: detail?.message };
   });
   const bloqueadores = source.filter((item) => item.state === "BLOQUEADOR");
   resultado.push({ key: "revisar", label: "Revisar e publicar", state: bloqueadores.length ? "BLOQUEADOR" : source.length && source.every((item) => item.state === "OK") ? "OK" : "NAO_INICIADO", href: `/eventos/${eventId}/revisar`, message: bloqueadores[0]?.message });
