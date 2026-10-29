@@ -1,3 +1,5 @@
+import type { SessionDraftState } from "./session-card-contracts";
+
 export const TIPOS_POLITICA = ["PRIVACIDADE", "COMPRA", "CANCELAMENTO_REEMBOLSO", "ACESSIBILIDADE", "CONTATO"] as const;
 
 export function slugSugerido(title: string) {
@@ -10,8 +12,10 @@ export function construirPayloadInformacoes(value: InformacoesValue) {
 }
 
 export type SessaoValue = { id?: string; startsAt: string; endsAt: string; capacity: number; salesStartsAt: string; salesEndsAt: string; inheritLocation: boolean; inheritMap: boolean; locationId?: string | null; mapId?: string | null };
-export function construirPayloadSessao(value: SessaoValue) {
-  return { startsAt: value.startsAt, endsAt: value.endsAt, capacity: Number(value.capacity), salesStartsAt: value.salesStartsAt || null, salesEndsAt: value.salesEndsAt || null, locationId: value.inheritLocation ? null : (value.locationId || null), mapId: value.inheritMap ? null : (value.mapId || null) };
+export function construirPayloadSessao(value: SessaoValue | SessionDraftState) {
+  const inheritLocation = "locationMode" in value ? value.locationMode === "default" : value.inheritLocation;
+  const inheritMap = "mapMode" in value ? value.mapMode === "default" : value.inheritMap;
+  return { startsAt: value.startsAt, endsAt: value.endsAt, capacity: Number(value.capacity), salesStartsAt: value.salesStartsAt || null, salesEndsAt: value.salesEndsAt || null, locationId: inheritLocation ? null : (value.locationId || null), mapId: inheritMap ? null : (value.mapId || null) };
 }
 
 export function mesclarSessaoSalva(local: SessaoValue, saved: { id?: string }) { return { ...local, ...(saved.id ? { id: saved.id } : {}) }; }
