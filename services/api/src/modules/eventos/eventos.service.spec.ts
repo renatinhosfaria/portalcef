@@ -92,9 +92,50 @@ describe('EventosService contratos de workspace', () => {
       { status: 'BLOQUEADO', blockedReason: 'MAPA_PADRAO_ALTERADO', updatedAt: expect.any(Date) },
     ]));
   });
+
+  it('envia a imagem do evento, atualiza a URL e remove a imagem anterior', async () => {
+    const db = fakeDb({ selects: [[event({ imageUrl: 'https://www.portalcef.com.br/storage/essencia-uploads/eventos/e1/imagem/antiga.jpg' })]], update: async () => [event({ imageUrl: 'https://www.portalcef.com.br/storage/essencia-uploads/eventos/e1/imagem/nova.jpg' })] });
+    const storage = { uploadBuffer: jest.fn().mockResolvedValue({ url: 'https://www.portalcef.com.br/storage/essencia-uploads/eventos/e1/imagem/nova.jpg' }), deletePublicUrl: jest.fn() };
+
+    const result = await service(db, storage).atualizarImagem('e1', { buffer: Buffer.from([0xff, 0xd8, 0xff]), filename: 'nova.jpg', mimetype: 'image/jpeg' }, actor);
+
+    expect(result.imageUrl).toContain('/nova.jpg');
+    expect(storage.uploadBuffer).toHaveBeenCalledWith(expect.any(Buffer), 'nova.jpg', 'image/jpeg', 'eventos/e1/imagem', expect.arrayContaining(['image/jpeg']));
+    expect(storage.deletePublicUrl).toHaveBeenCalledWith(expect.stringContaining('/antiga.jpg'));
+  });
+
+  it('rejeita imagem de evento fora do escopo sem fazer upload', async () => {
+    const db = fakeDb({ selects: [[event({ schoolId: 'outra-escola' })]] });
+    const storage = { uploadBuffer: jest.fn(), deletePublicUrl: jest.fn() };
+
+    await expect(service(db, storage).atualizarImagem('e1', { buffer: Buffer.from('x'), filename: 'nova.jpg', mimetype: 'image/jpeg' }, actor)).rejects.toMatchObject({ response: { code: 'FORBIDDEN' } });
+    expect(storage.uploadBuffer).not.toHaveBeenCalled();
+  });
+
+  it('rejeita upload quando o storage não está disponível', async () => {
+    const db = fakeDb({ selects: [[event()]] });
+
+    await expect(service(db, undefined).atualizarImagem('e1', { buffer: Buffer.from('x'), filename: 'nova.jpg', mimetype: 'image/jpeg' }, actor)).rejects.toMatchObject({ response: { code: 'STORAGE_UNAVAILABLE' } });
+  });
+
+  it('remove a nova imagem quando a atualização do evento falha', async () => {
+    const db = fakeDb({ selects: [[event()]], update: async () => [] });
+    const storage = { uploadBuffer: jest.fn().mockResolvedValue({ url: 'https://www.portalcef.com.br/storage/essencia-uploads/eventos/e1/imagem/nova.jpg' }), deletePublicUrl: jest.fn() };
+
+    await expect(service(db, storage).atualizarImagem('e1', { buffer: Buffer.from([0xff, 0xd8, 0xff]), filename: 'nova.jpg', mimetype: 'image/jpeg' }, actor)).rejects.toMatchObject({ response: { code: 'EVENT_NOT_FOUND' } });
+    expect(storage.deletePublicUrl).toHaveBeenCalledWith(expect.stringContaining('/nova.jpg'));
+  });
+
+  it('não faz upload quando a versão esperada está desatualizada', async () => {
+    const db = fakeDb({ selects: [[event({ updatedAt: new Date('2026-10-29T11:00:00Z') })]] });
+    const storage = { uploadBuffer: jest.fn(), deletePublicUrl: jest.fn() };
+
+    await expect(service(db, storage).atualizarImagem('e1', { buffer: Buffer.from('x'), filename: 'nova.jpg', mimetype: 'image/jpeg' }, actor, new Date('2026-10-29T10:00:00Z'))).rejects.toMatchObject({ response: { code: 'VERSION_CONFLICT' } });
+    expect(storage.uploadBuffer).not.toHaveBeenCalled();
+  });
 });
 
-function service(db: any) { return new EventosService({ db } as any, { validarPublicacao: jest.fn() } as any); }
+function service(db: any, storage?: any) { return new EventosService({ db } as any, { validarPublicacao: jest.fn() } as any, storage); }
 
 function fakeDb(options: { selects?: unknown[][]; insert?: (values: any) => Promise<any[]>; update?: () => Promise<any[]> } = {}) {
   let selectIndex = 0;

@@ -1,4 +1,6 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import type { Multipart } from "@fastify/multipart";
+import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards } from "@nestjs/common";
+import type { FastifyRequest } from "fastify";
 import { ExactRoles, Roles } from "../../common/decorators/roles.decorator";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { AuthGuard } from "../../common/guards/auth.guard";
@@ -40,6 +42,23 @@ export class EventosAdminController {
     const parsed = atualizarRascunhoSchema.safeParse(body);
     if (!parsed.success) return { success: false, error: { code: "VALIDATION_ERROR", details: parsed.error.flatten() } };
     return { success: true, data: await this.service.atualizarEvento(id, parsed.data, actor) };
+  }
+
+  @Post(":id/imagem")
+  async uploadImage(@Param("id") id: string, @Req() req: FastifyRequest & { isMultipart: () => boolean; parts: () => AsyncIterableIterator<Multipart> }, @CurrentUser() actor: any) {
+    if (!req.isMultipart()) return { success: false, error: { code: "INVALID_REQUEST", message: "Request deve ser multipart/form-data" } };
+    let arquivo: { buffer: Buffer; filename: string; mimetype: string } | undefined;
+    let expectedUpdatedAt: Date | undefined;
+    for await (const part of req.parts()) {
+      if (part.type === "file") {
+        if (arquivo) return { success: false, error: { code: "MULTIPLE_FILES", message: "Envie apenas uma imagem" } };
+        arquivo = { buffer: await part.toBuffer(), filename: part.filename, mimetype: part.mimetype };
+      } else if (part.fieldname === "expectedUpdatedAt" && typeof part.value === "string" && part.value) {
+        expectedUpdatedAt = new Date(part.value);
+      }
+    }
+    if (!arquivo || arquivo.buffer.length === 0) return { success: false, error: { code: "FILE_REQUIRED", message: "Envie uma imagem" } };
+    return { success: true, data: await this.service.atualizarImagem(id, arquivo, actor, expectedUpdatedAt) };
   }
 
   @Get(":id")
