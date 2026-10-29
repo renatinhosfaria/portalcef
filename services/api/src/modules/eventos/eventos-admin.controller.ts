@@ -51,10 +51,12 @@ export class EventosAdminController {
     let expectedUpdatedAt: Date | undefined;
     for await (const part of req.parts()) {
       if (part.type === "file") {
+        if (part.fieldname !== "file") continue;
         if (arquivo) return { success: false, error: { code: "MULTIPLE_FILES", message: "Envie apenas uma imagem" } };
         arquivo = { buffer: await part.toBuffer(), filename: part.filename, mimetype: part.mimetype };
       } else if (part.fieldname === "expectedUpdatedAt" && typeof part.value === "string" && part.value) {
         expectedUpdatedAt = new Date(part.value);
+        if (Number.isNaN(expectedUpdatedAt.getTime())) return { success: false, error: { code: "INVALID_REQUEST", message: "Versão do evento inválida" } };
       }
     }
     if (!arquivo || arquivo.buffer.length === 0) return { success: false, error: { code: "FILE_REQUIRED", message: "Envie uma imagem" } };

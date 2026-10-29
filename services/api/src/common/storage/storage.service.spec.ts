@@ -234,4 +234,11 @@ describe("StorageService", () => {
       }),
     );
   });
+
+  it("ignora URL pública antiga inválida ao limpar uma imagem", async () => {
+    const service = new StorageService(configService);
+
+    await expect(service.deletePublicUrl("imagem-invalida")).resolves.toBeUndefined();
+    expect(awsMocks.s3Send).not.toHaveBeenCalled();
+  });
 });

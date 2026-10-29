@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common";
+import { BadRequestException, ConflictException, Inject, Injectable, InternalServerErrorException, NotFoundException, Optional } from "@nestjs/common";
 import { and, asc, eq, eventoAuditorias, eventoInventarioAssentos, eventoLocais, eventoMapaAssentos, eventoMapas, eventoPedidos, eventoPoliticas, eventoSessoes, eventoTiposIngresso, eventos, inArray, ne, type Database } from "@essencia/db";
 import type { AtualizarEventoInput, CriarEventoInput, CriarSessaoInput, CriarRascunhoInput, EventoListQuery } from "@essencia/shared/schemas";
 import type { EventoActor, EventoResumo, PublicEventCard, PublicEventDetail, PublicEventSession, PublicMap } from "@essencia/shared/types";
@@ -121,7 +121,13 @@ export class EventosService {
     if (expectedUpdatedAt && existing.updatedAt && existing.updatedAt.getTime() !== expectedUpdatedAt.getTime()) throw new ConflictException({ code: "VERSION_CONFLICT", message: "O evento foi alterado por outra pessoa", current: this.resumo(existing) });
     if (!this.storage) throw new BadRequestException({ code: "STORAGE_UNAVAILABLE", message: "Armazenamento de imagens indisponível" });
 
-    const uploaded = await this.storage.uploadBuffer(arquivo.buffer, arquivo.filename, arquivo.mimetype, `eventos/${eventId}/imagem`, RASTER_IMAGE_MIME_TYPES);
+    let uploaded: { url: string; key: string; name: string };
+    try {
+      uploaded = await this.storage.uploadBuffer(arquivo.buffer, arquivo.filename, arquivo.mimetype, `eventos/${eventId}/imagem`, RASTER_IMAGE_MIME_TYPES);
+    } catch (error) {
+      if (error instanceof BadRequestException) throw error;
+      throw new InternalServerErrorException({ code: "UPLOAD_FAILED", message: "Não foi possível armazenar a imagem" });
+    }
     const updatedAt = new Date();
     let updated: typeof eventos.$inferSelect | undefined;
     try {

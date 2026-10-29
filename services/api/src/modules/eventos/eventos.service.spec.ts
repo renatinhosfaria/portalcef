@@ -118,6 +118,13 @@ describe('EventosService contratos de workspace', () => {
     await expect(service(db, undefined).atualizarImagem('e1', { buffer: Buffer.from('x'), filename: 'nova.jpg', mimetype: 'image/jpeg' }, actor)).rejects.toMatchObject({ response: { code: 'STORAGE_UNAVAILABLE' } });
   });
 
+  it('normaliza falha do storage durante o upload', async () => {
+    const db = fakeDb({ selects: [[event()]] });
+    const storage = { uploadBuffer: jest.fn().mockRejectedValue(new Error('minio indisponível')), deletePublicUrl: jest.fn() };
+
+    await expect(service(db, storage).atualizarImagem('e1', { buffer: Buffer.from('x'), filename: 'nova.jpg', mimetype: 'image/jpeg' }, actor)).rejects.toMatchObject({ response: { code: 'UPLOAD_FAILED' } });
+  });
+
   it('remove a nova imagem quando a atualização do evento falha', async () => {
     const db = fakeDb({ selects: [[event()]], update: async () => [] });
     const storage = { uploadBuffer: jest.fn().mockResolvedValue({ url: 'https://www.portalcef.com.br/storage/essencia-uploads/eventos/e1/imagem/nova.jpg' }), deletePublicUrl: jest.fn() };

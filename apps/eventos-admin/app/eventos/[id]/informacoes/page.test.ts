@@ -17,5 +17,6 @@ describe("etapa de informações", () => {
     expect(source).toContain("new FormData()");
     expect(source).toContain("/imagem");
     expect(source).toContain("<img");
+    expect(source).toContain("Imagem enviada com sucesso.");
   });
 });
