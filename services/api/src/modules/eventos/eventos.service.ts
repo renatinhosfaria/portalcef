@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, Inject, Injectable, InternalServerErrorException, NotFoundException, Optional } from "@nestjs/common";
-import { and, asc, eq, eventoAuditorias, eventoInventarioAssentos, eventoLocais, eventoMapaAssentos, eventoMapas, eventoPedidos, eventoPoliticas, eventoSessoes, eventoTiposIngresso, eventos, inArray, ne, type Database } from "@essencia/db";
+import { and, asc, eq, eventoAuditorias, eventoCheckins, eventoIngressos, eventoInventarioAssentos, eventoLocais, eventoMapaAssentos, eventoMapas, eventoOperacoesAdministrativas, eventoPedidos, eventoPoliticas, eventoSessoes, eventoTiposIngresso, eventos, inArray, ne, type Database } from "@essencia/db";
 import type { AtualizarEventoInput, CriarEventoInput, CriarSessaoInput, CriarRascunhoInput, EventoListQuery } from "@essencia/shared/schemas";
 import type { EventoActor, EventoResumo, PublicEventCard, PublicEventDetail, PublicEventSession, PublicMap } from "@essencia/shared/types";
 import { DatabaseService } from "../../common/database/database.service";
@@ -190,6 +190,7 @@ export class EventosService {
     const [event] = await this.db.select().from(eventos).where(eq(eventos.id, eventId));
     if (!event) throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Evento não encontrado" });
     if (actor) this.assertSchoolScope(actor, event.schoolId);
+    await this.validarReferenciasSessao(eventId, event, input);
     if (input.status === "PUBLICADA") throw new BadRequestException({ code: "SESSION_PUBLICATION_REQUIRES_INVENTORY", message: "Publique a sessão pelo fluxo de publicação após inicializar o inventário" });
     const [session] = await this.db.insert(eventoSessoes).values({ eventId, startsAt: input.startsAt, endsAt: input.endsAt, capacity: input.capacity, locationId: input.locationId === undefined ? event.defaultLocationId : input.locationId, mapId: input.mapId ?? null, salesStartsAt: input.salesStartsAt ?? null, salesEndsAt: input.salesEndsAt ?? null, status: input.status ?? "RASCUNHO" }).returning();
     if (audit && session) await this.audit(eventId, actor, "ATUALIZADO", "sessao", session.id);
@@ -199,11 +200,10 @@ export class EventosService {
   async atualizarSessao(eventId: string, sessionId: string, input: Partial<CriarSessaoInput>, actor?: EventoActor) {
     const [session] = await this.db.select().from(eventoSessoes).where(and(eq(eventoSessoes.id, sessionId), eq(eventoSessoes.eventId, eventId)));
     if (!session) throw new NotFoundException({ code: "SESSION_NOT_FOUND", message: "Sessão não encontrada" });
-    if (actor) {
-      const [event] = await this.db.select().from(eventos).where(eq(eventos.id, eventId));
-      if (!event) throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Evento não encontrado" });
-      this.assertSchoolScope(actor, event.schoolId);
-    }
+    const [event] = await this.db.select().from(eventos).where(eq(eventos.id, eventId));
+    if (!event) throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Evento não encontrado" });
+    if (actor) this.assertSchoolScope(actor, event.schoolId);
+    await this.validarReferenciasSessao(eventId, event, input);
     const [sale] = await this.db.select({ id: eventoPedidos.id }).from(eventoPedidos).where(eq(eventoPedidos.sessionId, sessionId)).limit(1);
     if (sale) throw new BadRequestException({ code: "EVENT_HAS_SALES", message: "A sessão possui vendas e não pode ser alterada" });
     if (input.status === "PUBLICADA") throw new BadRequestException({ code: "SESSION_PUBLICATION_REQUIRES_INVENTORY", message: "Publique a sessão pelo fluxo de publicação após inicializar o inventário" });
@@ -223,9 +223,26 @@ export class EventosService {
     const [sale] = await this.db.select({ id: eventoPedidos.id }).from(eventoPedidos).where(eq(eventoPedidos.sessionId, sessionId)).limit(1);
     if (sale) throw new BadRequestException({ code: "EVENT_HAS_SALES", message: "A sessão possui vendas e não pode ser removida" });
 
+    const operationalDependencies = [eventoInventarioAssentos, eventoOperacoesAdministrativas, eventoIngressos, eventoCheckins];
+    for (const table of operationalDependencies) {
+      const [dependency] = await this.db.select({ id: table.id }).from(table).where(eq(table.sessionId, sessionId)).limit(1);
+      if (dependency) throw new BadRequestException({ code: "SESSION_HAS_DEPENDENCIES", message: "A sessão possui dados operacionais e não pode ser removida" });
+    }
+
     await this.db.delete(eventoSessoes).where(and(eq(eventoSessoes.id, sessionId), eq(eventoSessoes.eventId, eventId)));
     await this.audit(eventId, actor, "ATUALIZADO", "sessao", sessionId, { operacao: "REMOVIDA" });
     return { id: sessionId };
+  }
+
+  private async validarReferenciasSessao(eventId: string, event: typeof eventos.$inferSelect, input: Partial<CriarSessaoInput>) {
+    if (input.locationId) {
+      const [location] = await this.db.select().from(eventoLocais).where(eq(eventoLocais.id, input.locationId));
+      if (!location || location.schoolId !== event.schoolId) throw new BadRequestException({ code: "SESSION_LOCATION_INVALID", message: "O local informado não pertence à escola do evento" });
+    }
+    if (input.mapId) {
+      const [map] = await this.db.select().from(eventoMapas).where(eq(eventoMapas.id, input.mapId));
+      if (!map || map.eventId !== eventId || map.status !== "CONFIRMADO") throw new BadRequestException({ code: "SESSION_MAP_INVALID", message: "O mapa informado não está confirmado para este evento" });
+    }
   }
 
   async listarPublicados(now: Date): Promise<PublicEventCard[]> {

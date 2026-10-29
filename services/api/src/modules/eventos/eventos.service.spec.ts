@@ -209,6 +209,62 @@ describe('EventosService contratos de workspace', () => {
 
     await expect(service(db).listarOpcoesSessoes('e1', actor)).resolves.toMatchObject({ defaultLocation: null, defaultMap: null });
   });
+
+  it('rejeita criação de sessão com local de outra escola', async () => {
+    const db = fakeDb({
+      selects: [
+        [event()],
+        [{ id: 'local-externo', schoolId: 's2' }],
+      ],
+    });
+
+    await expect(service(db).criarSessao('e1', {
+      startsAt: new Date('2026-11-01T10:00:00Z'),
+      endsAt: new Date('2026-11-01T11:00:00Z'),
+      capacity: 10,
+      locationId: 'local-externo',
+      mapId: null,
+    }, actor)).rejects.toMatchObject({ response: { code: 'SESSION_LOCATION_INVALID' } });
+  });
+
+  it('rejeita atualização de sessão com mapa não confirmado de outro evento', async () => {
+    const db = fakeDb({
+      selects: [
+        [{ id: 's1', eventId: 'e1' }],
+        [event()],
+        [{ id: 'mapa-externo', eventId: 'outro-evento', status: 'EM_REVISAO' }],
+      ],
+    });
+
+    await expect(service(db).atualizarSessao('e1', 's1', { mapId: 'mapa-externo' }, actor)).rejects.toMatchObject({ response: { code: 'SESSION_MAP_INVALID' } });
+  });
+
+  it('bloqueia remoção quando a sessão possui inventário operacional', async () => {
+    const db = fakeDb({
+      selects: [
+        [event()],
+        [{ id: 's1', eventId: 'e1' }],
+        [],
+        [{ id: 'inventory-1', sessionId: 's1' }],
+      ],
+    });
+
+    await expect(service(db).removerSessao('e1', 's1', actor)).rejects.toMatchObject({ response: { code: 'SESSION_HAS_DEPENDENCIES' } });
+  });
+
+  it('bloqueia remoção quando a sessão possui operação administrativa', async () => {
+    const db = fakeDb({
+      selects: [
+        [event()],
+        [{ id: 's1', eventId: 'e1' }],
+        [],
+        [],
+        [{ id: 'operation-1', sessionId: 's1' }],
+      ],
+    });
+
+    await expect(service(db).removerSessao('e1', 's1', actor)).rejects.toMatchObject({ response: { code: 'SESSION_HAS_DEPENDENCIES' } });
+  });
 });
 
 function service(db: any, storage?: any) { return new EventosService({ db } as any, { validarPublicacao: jest.fn() } as any, storage); }

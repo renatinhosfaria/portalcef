@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 export type AutosaveState = "idle" | "saving" | "saved" | "error" | "conflict";
 export type EventoAutosaveOptions<T, S = unknown> = { eventId: string; value: T; dirty: boolean; serialize: (value: T) => S; save: (payload: S, eventId: string) => Promise<unknown>; debounceMs?: number; onSaved?: () => void };
-export type AutosaveController<T, S> = { configure(options: Pick<EventoAutosaveOptions<T, S>, "eventId" | "serialize" | "save" | "debounceMs" | "onSaved">): void; update(value: T, dirty: boolean): void; retry(): void; snapshot(): { state: AutosaveState; lastSavedAt: string | null; conflict: boolean }; dispose(): void };
+export type AutosaveController<T, S> = { configure(options: Pick<EventoAutosaveOptions<T, S>, "eventId" | "serialize" | "save" | "debounceMs" | "onSaved">): void; update(value: T, dirty: boolean): void; retry(): void; invalidate(): void; snapshot(): { state: AutosaveState; lastSavedAt: string | null; conflict: boolean }; dispose(): void };
 
 function isConflict(error: unknown) { const candidate = error as { status?: number; code?: string } | null; return candidate?.status === 409 || candidate?.code === "VERSION_CONFLICT"; }
 
@@ -23,6 +23,7 @@ export function createEventoAutosaveController<T, S>({ eventId, serialize, save,
     configure(options) { currentEventId = options.eventId; currentSerialize = options.serialize; currentSave = options.save; currentOnSaved = options.onSaved; currentDebounceMs = options.debounceMs ?? 500; },
     update(value, dirty) { latestValue = value; latestDirty = dirty; if (dirty) schedule(); else publish({ state: "saved" }); },
     retry() { if (!latestDirty) return; const seq = ++sequence; activeSequence = seq; void execute(seq); },
+    invalidate() { latestDirty = false; if (timer) clearTimeout(timer); timer = undefined; activeSequence = ++sequence; publish({ state: "idle", conflict: false }); },
     snapshot: () => current,
     dispose() { disposed = true; if (timer) clearTimeout(timer); },
   };
@@ -36,6 +37,7 @@ export function useEventoAutosave<T, S = unknown>(options: EventoAutosaveOptions
   useEffect(() => { controller.current?.update(options.value, options.dirty); }, [options.eventId, options.debounceMs, options.value, options.dirty]);
   useEffect(() => () => controller.current?.dispose(), []);
   const retry = useCallback(() => controller.current?.retry(), []);
+  const invalidate = useCallback(() => controller.current?.invalidate(), []);
   const snapshot = controller.current?.snapshot() ?? { state: options.dirty ? "idle" : "saved", lastSavedAt: null, conflict: false };
-  return { ...snapshot, retry };
+  return { ...snapshot, retry, invalidate };
 }

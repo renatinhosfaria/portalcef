@@ -53,3 +53,11 @@ it("preserva alterações de outras sessões ao remover uma sessão", () => {
   expect(source).toContain("setDirty(temAlteracoes);");
   expect(source).toContain("if (!temAlteracoes)");
 });
+
+it("invalida respostas de autosave que chegam depois da remoção", () => {
+  expect(source).toContain("autosave.invalidate()");
+  expect(source).toContain("mutationGenerationRef");
+  expect(source).toContain("clientId");
+  expect(source).toContain("descartarSessaoCriadaDepoisDaRemocao");
+  expect(source).toContain("!original?.id");
+});

@@ -79,8 +79,10 @@ export function normalizarOpcoesSessao(value: unknown): SessionOptions {
 
 function normalizarSessao(value: unknown): SessionValue {
   const row = asRecord(value);
+  const id = typeof row.id === "string" ? row.id : undefined;
   return {
-    id: typeof row.id === "string" ? row.id : undefined,
+    id,
+    clientId: id ?? `sessao-local-${Date.now()}-${Math.random().toString(36).slice(2)}`,
     startsAt: String(row.startsAt ?? "").slice(0, 16),
     endsAt: String(row.endsAt ?? "").slice(0, 16),
     capacity: Number(row.capacity ?? 0),
@@ -118,6 +120,21 @@ function mesmaSessao(value: SessionValue, other: SessionValue): boolean {
     && value.mapId === other.mapId;
 }
 
+function identidadeSessao(value: SessionValue): string {
+  return value.clientId ?? value.id ?? "sessao-sem-identidade";
+}
+
+async function descartarSessaoCriadaDepoisDaRemocao(eventId: string, sessionId: string): Promise<void> {
+  try {
+    await fetch(`/eventos-admin/api/eventos/admin/${eventId}/sessoes/${sessionId}`, {
+      method: "DELETE",
+      credentials: "include",
+    });
+  } catch {
+    // A resposta stale não deve alterar o estado local mesmo que a limpeza seja reprocessada.
+  }
+}
+
 function restaurarSessaoRemovida(values: SessionValue[], removed: SessionValue, index: number): SessionValue[] {
   if (removed.id && values.some((value) => value.id === removed.id)) return values;
   const next = [...values];
@@ -136,6 +153,8 @@ export default function SessoesPage() {
   const [sessions, setSessions] = useState<SessionValue[]>([]);
   const sessionsRef = useRef<SessionValue[]>([]);
   const savedSessionsRef = useRef<SessionValue[]>([]);
+  const mutationGenerationRef = useRef(0);
+  const removedSessionIdsRef = useRef(new Set<string>());
   const [dirty, setDirty] = useState(false);
   const [error, setError] = useState("");
   const [options, setOptions] = useState<SessionOptions | null>(null);
@@ -188,9 +207,20 @@ export default function SessoesPage() {
       if (!temAlteracoes) router.refresh();
     },
     save: async (items, eventId) => {
+      const generation = mutationGenerationRef.current;
       let savedItems = items;
+      const limparRespostasStale = async () => {
+        for (const candidate of savedItems) {
+          const original = items.find((value) => identidadeSessao(value) === identidadeSessao(candidate));
+          if (removedSessionIdsRef.current.has(identidadeSessao(candidate)) && !original?.id && candidate.id) await descartarSessaoCriadaDepoisDaRemocao(eventId, candidate.id);
+        }
+      };
       for (const [index] of items.entries()) {
         const item = savedItems[index];
+        if (!item || generation !== mutationGenerationRef.current) {
+          await limparRespostasStale();
+          return;
+        }
         const response = await fetch(`/eventos-admin/api/eventos/admin/${eventId}/sessoes${item.id ? `/${item.id}` : ""}`, {
           method: item.id ? "PATCH" : "POST",
           credentials: "include",
@@ -199,14 +229,23 @@ export default function SessoesPage() {
         });
         const body = await response.json().catch(() => ({}));
         assertRespostaApi({ ok: response.ok, status: response.status, body });
-        savedItems = persistirSessaoSalva(savedItems, index, (asRecord(body).data ?? body) as { id?: string });
+        const saved = (asRecord(body).data ?? body) as { id?: string };
+        savedItems = persistirSessaoSalva(savedItems, index, saved);
+        if (generation !== mutationGenerationRef.current) {
+          await limparRespostasStale();
+          return;
+        }
+      }
+      if (generation !== mutationGenerationRef.current) {
+        await limparRespostasStale();
+        return;
       }
       savedSessionsRef.current = savedItems;
       const current = sessionsRef.current;
-      const next = current.length !== savedItems.length ? current : current.map((item, index) => {
-        const saved = savedItems[index];
-        const original = items[index];
-        return item.id || !saved.id || !mesmaSessao(item, original) ? item : { ...item, id: saved.id };
+      const next = current.map((item) => {
+        const original = items.find((candidate) => identidadeSessao(candidate) === identidadeSessao(item));
+        const saved = original ? savedItems.find((candidate) => identidadeSessao(candidate) === identidadeSessao(original)) : undefined;
+        return !original || item.id || !saved?.id || !mesmaSessao(item, original) ? item : { ...item, id: saved.id };
       });
       sessionsRef.current = next;
       setSessions(next);
@@ -216,6 +255,9 @@ export default function SessoesPage() {
 
   const removerSessao = async (index: number, session: SessionValue) => {
     if (!session.id) return;
+    removedSessionIdsRef.current.add(identidadeSessao(session));
+    mutationGenerationRef.current += 1;
+    autosave.invalidate();
     try {
       const response = await fetch(`/eventos-admin/api/eventos/admin/${id}/sessoes/${session.id}`, {
         method: "DELETE",
@@ -225,11 +267,13 @@ export default function SessoesPage() {
       assertRespostaApi({ ok: response.ok, status: response.status, body });
       const savedRemaining = savedSessionsRef.current.filter((value) => value.id !== session.id);
       savedSessionsRef.current = savedRemaining;
+       removedSessionIdsRef.current.delete(identidadeSessao(session));
       const temAlteracoes = temAlteracoesPendentes(sessionsRef.current, savedRemaining);
       setDirty(temAlteracoes);
       setError("");
       if (!temAlteracoes) router.refresh();
     } catch {
+       removedSessionIdsRef.current.delete(identidadeSessao(session));
       const restored = restaurarSessaoRemovida(sessionsRef.current, session, index);
       sessionsRef.current = restored;
       setSessions(restored);
@@ -250,7 +294,21 @@ export default function SessoesPage() {
       {error && <p role="alert" className="text-red-700">{error}</p>}
       {optionsLoading && <p role="status" className="text-sm text-slate-600">Carregando opções de local e mapa…</p>}
       {optionsError && <p role="alert" className="text-red-700">{optionsError}</p>}
-      <SessionEditor initialValue={sessions} options={options ?? EMPTY_OPTIONS} onRemove={removerSessao} onChange={(next) => { sessionsRef.current = next; setSessions(next); setDirty(true); }} />
+      <SessionEditor initialValue={sessions} options={options ?? EMPTY_OPTIONS} onRemove={removerSessao} onChange={(next) => {
+        const nextIdentities = new Set(next.map(identidadeSessao));
+        let removed = false;
+        for (const previous of sessionsRef.current) {
+          if (!nextIdentities.has(identidadeSessao(previous))) {
+            removedSessionIdsRef.current.add(identidadeSessao(previous));
+            removed = true;
+          }
+        }
+        if (removed) autosave.invalidate();
+        mutationGenerationRef.current += 1;
+        sessionsRef.current = next;
+        setSessions(next);
+        setDirty(true);
+      }} />
       <p className="text-sm text-slate-500" role="status">
         {possuiPendenciaLocal ? "Alterações locais pendentes — revise a sessão antes de salvar." : autosave.state === "saving" ? "Salvando…" : autosave.state === "saved" ? "Sessões salvas automaticamente" : ""}
       </p>

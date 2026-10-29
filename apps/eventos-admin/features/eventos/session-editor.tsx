@@ -35,6 +35,7 @@ const FIELD_LABELS: Record<keyof SessionErrors, string> = {
 export function sessionValueToDraft(value: SessionValue): SessionDraftState {
   return {
     id: value.id,
+    clientId: value.clientId,
     startsAt: value.startsAt ?? "",
     endsAt: value.endsAt ?? "",
     capacity: Number(value.capacity ?? 0),
@@ -55,6 +56,7 @@ export function confirmarRemocaoSessao(session: SessionValue, confirmar: (mensag
 export function sessionDraftToValue(draft: SessionDraftState): SessionValue {
   return {
     id: draft.id,
+    clientId: draft.clientId,
     startsAt: draft.startsAt,
     endsAt: draft.endsAt,
     capacity: Number(draft.capacity),
@@ -98,6 +100,7 @@ function primeiroCampoAusente(errors: SessionErrors): string | null {
 
 function novoRascunho(): SessionDraftState {
   return {
+    clientId: `sessao-local-${Date.now()}-${Math.random().toString(36).slice(2)}`,
     startsAt: "",
     endsAt: "",
     capacity: 0,
@@ -155,7 +158,7 @@ export function SessionEditor({ initialValue = [], options = EMPTY_OPTIONS, onCh
         const sessionLabel = `Sessão ${index + 1}`;
 
         return (
-          <article key={draft.id ?? `nova-${index}`} className="space-y-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <article key={draft.id ?? draft.clientId ?? `nova-${index}`} className="space-y-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
             <header className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <h3 className="text-base font-semibold text-slate-900">{sessionLabel}</h3>
