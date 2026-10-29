@@ -1,5 +1,6 @@
 import { EventReviewPage } from "@/features/eventos/event-review-page";
 
-export default function EventoDetailPage({ params }: { params: { id: string } }) {
-  return <EventReviewPage eventId={params.id} />;
+export default async function EventoDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  return <EventReviewPage eventId={id} />;
 }
