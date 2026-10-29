@@ -9,6 +9,7 @@ import {
   slugSugerido,
   mesclarSessaoSalva,
   persistirSessaoSalva,
+  deveLimparDirtyAposUpload,
 } from "./etapas-contratos";
 
 describe("contratos das etapas do workspace", () => {
@@ -54,5 +55,11 @@ describe("contratos das etapas do workspace", () => {
   it("persiste o id incrementalmente antes de uma próxima tentativa", () => {
     const sessions = [{ startsAt: "a", endsAt: "b", capacity: 1, salesStartsAt: "", salesEndsAt: "", inheritLocation: true, inheritMap: true }, { startsAt: "c", endsAt: "d", capacity: 1, salesStartsAt: "", salesEndsAt: "", inheritLocation: true, inheritMap: true }];
     expect(persistirSessaoSalva(sessions, 0, { id: "sessao-1" })[0]).toMatchObject({ id: "sessao-1" });
+  });
+
+  it("não limpa alterações pendentes quando o upload termina", () => {
+    expect(deveLimparDirtyAposUpload(true, 3, 3)).toBe(false);
+    expect(deveLimparDirtyAposUpload(false, 3, 3)).toBe(true);
+    expect(deveLimparDirtyAposUpload(false, 3, 4)).toBe(false);
   });
 });

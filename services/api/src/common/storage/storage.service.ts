@@ -219,11 +219,11 @@ export class StorageService {
         "MINIO_PUBLIC_ENDPOINT",
       );
       const endpoint =
-        publicEndpoint || this.configService.get<string>("MINIO_ENDPOINT");
+        publicEndpoint || this.configService.getOrThrow<string>("MINIO_ENDPOINT");
 
       // Ensure no double slashes if endpoint has trailing slash or if we just concat
       // But typically config values are without trailing slash
-      const url = `${endpoint}/${this.bucketName}/${key}`;
+      const url = `${endpoint.replace(/\/$/, "")}/${this.bucketName}/${key}`;
 
       this.logger.log(`File uploaded successfully: ${key}`);
 
@@ -267,13 +267,14 @@ export class StorageService {
     filename: string,
     mimetype: string,
     prefix: string = "",
+    allowedMimeTypes?: readonly string[],
   ): Promise<{ url: string; key: string; name: string }> {
     const fileId = randomUUID();
     const ext = extname(filename);
     const key = prefix ? `${prefix}/${fileId}${ext}` : `${fileId}${ext}`;
 
     try {
-      const resolvedMimeType = this.resolveUploadMimeType(buffer, mimetype);
+      const resolvedMimeType = this.resolveUploadMimeType(buffer, mimetype, allowedMimeTypes);
       await this.s3Client.send(
         new PutObjectCommand({
           Bucket: this.bucketName,
@@ -291,9 +292,9 @@ export class StorageService {
         "MINIO_PUBLIC_ENDPOINT",
       );
       const endpoint =
-        publicEndpoint || this.configService.get<string>("MINIO_ENDPOINT");
+        publicEndpoint || this.configService.getOrThrow<string>("MINIO_ENDPOINT");
 
-      const url = `${endpoint}/${this.bucketName}/${key}`;
+      const url = `${endpoint.replace(/\/$/, "")}/${this.bucketName}/${key}`;
 
       this.logger.log(`Buffer uploaded successfully: ${key}`);
 
@@ -347,6 +348,21 @@ export class StorageService {
     } catch (error) {
       const mensagem = error instanceof Error ? error.message : String(error);
       this.logger.warn(`Falha ao remover ${key} do MinIO: ${mensagem}`);
+    }
+  }
+
+  async deletePublicUrl(url: string): Promise<void> {
+    try {
+      const publicEndpoint = this.configService.get<string>("MINIO_PUBLIC_ENDPOINT");
+      const endpoint = publicEndpoint || this.configService.getOrThrow<string>("MINIO_ENDPOINT");
+      const base = new URL(`${endpoint.replace(/\/$/, "")}/${this.bucketName}/`);
+      const candidate = new URL(url);
+      if (candidate.origin !== base.origin || !candidate.pathname.startsWith(base.pathname)) return;
+      const key = decodeURIComponent(candidate.pathname.slice(base.pathname.length));
+      if (!key || key.includes("..") || key.startsWith("/")) return;
+      await this.deleteFile(key);
+    } catch (error) {
+      this.logger.warn(`URL pública inválida para remoção: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 

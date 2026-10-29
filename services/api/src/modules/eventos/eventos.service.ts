@@ -1,8 +1,9 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, Inject, Injectable, InternalServerErrorException, NotFoundException, Optional } from "@nestjs/common";
 import { and, asc, eq, eventoAuditorias, eventoInventarioAssentos, eventoLocais, eventoMapaAssentos, eventoMapas, eventoPedidos, eventoPoliticas, eventoSessoes, eventoTiposIngresso, eventos, inArray, ne, type Database } from "@essencia/db";
 import type { AtualizarEventoInput, CriarEventoInput, CriarSessaoInput, CriarRascunhoInput, EventoListQuery } from "@essencia/shared/schemas";
 import type { EventoActor, EventoResumo, PublicEventCard, PublicEventDetail, PublicEventSession, PublicMap } from "@essencia/shared/types";
 import { DatabaseService } from "../../common/database/database.service";
+import { RASTER_IMAGE_MIME_TYPES, StorageService } from "../../common/storage/storage.service";
 import { EventosRulesService } from "./eventos-rules.service";
 
 export function assertSchoolScope(actor: EventoActor, schoolId: string) {
@@ -12,7 +13,7 @@ export function assertSchoolScope(actor: EventoActor, schoolId: string) {
 
 @Injectable()
 export class EventosService {
-  constructor(private readonly database: DatabaseService, private readonly rules: EventosRulesService) {}
+  constructor(private readonly database: DatabaseService, private readonly rules: EventosRulesService, @Optional() @Inject(StorageService) private readonly storage: StorageService | undefined) {}
   private get db(): Database { return this.database.db; }
   private normalizeSlug(slug: string) { return slug.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""); }
   private resumo(event: typeof eventos.$inferSelect): EventoResumo { return { id: event.id, schoolId: event.schoolId, slug: event.slug, title: event.title, status: event.status as EventoResumo["status"], publishedAt: event.publishedAt, plannedPublicationAt: event.plannedPublicationAt }; }
@@ -111,6 +112,35 @@ export class EventosService {
     const result = this.resumo(updated);
     if (input.title && !normalizedSlug && manualSlug && titleSuggestion && titleSuggestion !== existing.slug) result.slugSuggestion = titleSuggestion;
     return result;
+  }
+
+  async atualizarImagem(eventId: string, arquivo: { buffer: Buffer; filename: string; mimetype: string }, actor: EventoActor, expectedUpdatedAt?: Date) {
+    const [existing] = await this.db.select().from(eventos).where(eq(eventos.id, eventId));
+    if (!existing) throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Evento não encontrado" });
+    this.assertSchoolScope(actor, existing.schoolId);
+    if (expectedUpdatedAt && existing.updatedAt && existing.updatedAt.getTime() !== expectedUpdatedAt.getTime()) throw new ConflictException({ code: "VERSION_CONFLICT", message: "O evento foi alterado por outra pessoa", current: this.resumo(existing) });
+    if (!this.storage) throw new BadRequestException({ code: "STORAGE_UNAVAILABLE", message: "Armazenamento de imagens indisponível" });
+
+    let uploaded: { url: string; key: string; name: string };
+    try {
+      uploaded = await this.storage.uploadBuffer(arquivo.buffer, arquivo.filename, arquivo.mimetype, `eventos/${eventId}/imagem`, RASTER_IMAGE_MIME_TYPES);
+    } catch (error) {
+      if (error instanceof BadRequestException) throw error;
+      throw new InternalServerErrorException({ code: "UPLOAD_FAILED", message: "Não foi possível armazenar a imagem" });
+    }
+    const updatedAt = new Date();
+    let updated: typeof eventos.$inferSelect | undefined;
+    try {
+      const versionFilter = expectedUpdatedAt ? and(eq(eventos.id, eventId), eq(eventos.updatedAt, expectedUpdatedAt)) : eq(eventos.id, eventId);
+      [updated] = await this.db.update(eventos).set({ imageUrl: uploaded.url, updatedAt }).where(versionFilter).returning();
+      if (!updated) throw new NotFoundException({ code: expectedUpdatedAt ? "VERSION_CONFLICT" : "EVENT_NOT_FOUND", message: expectedUpdatedAt ? "O evento foi alterado por outra pessoa" : "Evento não encontrado" });
+    } catch (error) {
+      await this.storage.deletePublicUrl(uploaded.url);
+      throw error;
+    }
+    if (existing.imageUrl) await this.storage.deletePublicUrl(existing.imageUrl);
+    await this.audit(eventId, actor, "ATUALIZADO", "imagem", eventId, { etapa: "informacoes", previousImageUrl: existing.imageUrl, imageUrl: uploaded.url });
+    return { imageUrl: updated.imageUrl, updatedAt: updated.updatedAt };
   }
 
   async atualizarMapaPadrao(eventId: string, mapId: string, actor: EventoActor) {

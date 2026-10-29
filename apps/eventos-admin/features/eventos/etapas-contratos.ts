@@ -17,6 +17,10 @@ export function construirPayloadSessao(value: SessaoValue) {
 export function mesclarSessaoSalva(local: SessaoValue, saved: { id?: string }) { return { ...local, ...(saved.id ? { id: saved.id } : {}) }; }
 export function persistirSessaoSalva(items: SessaoValue[], index: number, saved: { id?: string }) { return items.map((item, itemIndex) => itemIndex === index ? mesclarSessaoSalva(item, saved) : item); }
 
+export function deveLimparDirtyAposUpload(dirtyAtStart: boolean, revisionAtStart: number, currentRevision: number) {
+  return !dirtyAtStart && revisionAtStart === currentRevision;
+}
+
 export function assertRespostaApi(response: { ok: boolean; status: number; body: unknown }) {
   const body = response.body as { success?: boolean; error?: { code?: string; message?: string } };
   if (!response.ok || body.success === false) { const error = Object.assign(new Error(body.error?.message ?? "Falha ao salvar"), { status: response.status === 200 && body.error?.code === "VERSION_CONFLICT" ? 409 : response.status, code: body.error?.code }); throw error; }
