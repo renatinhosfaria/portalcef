@@ -25,3 +25,8 @@ it("marca confirmação antes de atualizar herança e não repete confirmação"
   expect(page).toContain("setStatus(\"CONFIRMADO\")");
   expect(page).toContain("Falha ao atualizar o mapa padrão");
 });
+it("oferece retry separado para sincronizar o mapa padrão", () => {
+  const page = readFileSync(new URL("../../app/eventos/[id]/mapa/page.tsx", import.meta.url), "utf8");
+  expect(page).toContain("mapaPadraoPendente");
+  expect(page).toContain("onRetryDefaultMap");
+});
