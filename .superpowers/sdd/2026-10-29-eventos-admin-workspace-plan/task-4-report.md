@@ -28,3 +28,14 @@ Validação atualizada:
 - `pnpm --filter @essencia/eventos-admin test` — 10 arquivos, 30 testes aprovados;
 - `pnpm --filter @essencia/eventos-admin typecheck` — aprovado;
 - `pnpm --filter @essencia/eventos-admin lint` — aprovado, somente avisos preexistentes.
+
+## Rodada de correção 2
+
+- O cleanup do hook agora ocorre somente no unmount; mudanças de valor não descartam o controlador reutilizado.
+- O controlador atualiza `eventId`, `serialize`, `save` e debounce antes de cada edição, evitando callbacks obsoletos.
+- Adicionado teste comportamental de duas edições consecutivas com callbacks e IDs diferentes.
+
+Validação atualizada:
+- `pnpm --filter @essencia/eventos-admin test` — 10 arquivos, 31 testes aprovados;
+- `pnpm --filter @essencia/eventos-admin typecheck` — aprovado;
+- `pnpm --filter @essencia/eventos-admin lint` — aprovado, somente avisos preexistentes.
