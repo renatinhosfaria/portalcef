@@ -11,12 +11,18 @@ export async function createDraft(title: string): Promise<EventoResumo> {
   return (body.data ?? body) as EventoResumo;
 }
 
-export async function saveDraft(eventId: string, payload: Record<string, unknown>) {
-  const response = await fetch(`/eventos-admin/api/eventos/admin/${eventId}`, { method: "PATCH", credentials: "include", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
+export async function saveDraft(eventId: string, payload: Record<string, unknown>, expectedUpdatedAt?: string) {
+  const bodyPayload = expectedUpdatedAt ? { ...payload, expectedUpdatedAt } : payload;
+  const response = await fetch(`/eventos-admin/api/eventos/admin/${eventId}`, { method: "PATCH", credentials: "include", headers: { "content-type": "application/json" }, body: JSON.stringify(bodyPayload) });
   const body = await response.json().catch(() => ({}));
-  if (!response.ok || body.success === false) throw new Error(body.error?.message ?? "Não foi possível salvar o rascunho.");
+  if (!response.ok || body.success === false) {
+    const error = Object.assign(new Error(body.error?.message ?? "Não foi possível salvar o rascunho."), { status: response.status, code: body.error?.code });
+    throw error;
+  }
   return body.data ?? body;
 }
+
+export async function createDraftAndNavigate(title: string, navigate: Navigate) { const draft = await createDraft(title); navigate(`/eventos-admin/eventos/${draft.id}/informacoes`); return draft; }
 
 export function EventoDraftForm({ navigate = (href) => { window.location.assign(href); } }: { navigate?: Navigate }) {
   const [title, setTitle] = useState("");
@@ -28,9 +34,8 @@ export function EventoDraftForm({ navigate = (href) => { window.location.assign(
     if (!validTitle || loading || created) return;
     setLoading(true); setError("");
     try {
-      const draft = await createDraft(validTitle);
+      const draft = await createDraftAndNavigate(validTitle, navigate);
       setCreated(draft);
-      navigate(`/eventos/${draft.id}/informacoes`);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Não foi possível criar o rascunho.");
     } finally { setLoading(false); }

@@ -3,64 +3,36 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 export type AutosaveState = "idle" | "saving" | "saved" | "error" | "conflict";
-export type EventoAutosaveOptions<T, S = unknown> = {
-  eventId: string;
-  value: T;
-  dirty: boolean;
-  serialize: (value: T) => S;
-  save: (payload: S, eventId: string) => Promise<unknown>;
-  debounceMs?: number;
-};
+export type EventoAutosaveOptions<T, S = unknown> = { eventId: string; value: T; dirty: boolean; serialize: (value: T) => S; save: (payload: S, eventId: string) => Promise<unknown>; debounceMs?: number };
+export type AutosaveController<T, S> = { update(value: T, dirty: boolean): void; retry(): void; snapshot(): { state: AutosaveState; lastSavedAt: string | null; conflict: boolean }; dispose(): void };
 
-function isConflict(error: unknown) {
-  const candidate = error as { status?: number; code?: string } | null;
-  return candidate?.status === 409 || candidate?.code === "VERSION_CONFLICT";
+function isConflict(error: unknown) { const candidate = error as { status?: number; code?: string } | null; return candidate?.status === 409 || candidate?.code === "VERSION_CONFLICT"; }
+
+export function createEventoAutosaveController<T, S>({ eventId, serialize, save, debounceMs = 500, onState }: Pick<EventoAutosaveOptions<T, S>, "eventId" | "serialize" | "save" | "debounceMs"> & { onState?: (snapshot: { state: AutosaveState; lastSavedAt: string | null; conflict: boolean }) => void }): AutosaveController<T, S> {
+  let latestValue: T; let latestDirty = false; let sequence = 0; let activeSequence = 0; let timer: ReturnType<typeof setTimeout> | undefined; let disposed = false;
+  let current = { state: "idle" as AutosaveState, lastSavedAt: null as string | null, conflict: false };
+  const publish = (patch: Partial<typeof current>) => { current = { ...current, ...patch }; onState?.(current); };
+  const execute = async (seq: number) => {
+    if (disposed || !latestDirty || seq !== activeSequence) return;
+    publish({ state: "saving" });
+    try { await save(serialize(latestValue), eventId); if (disposed || seq !== activeSequence) return; publish({ state: "saved", conflict: false, lastSavedAt: new Date().toISOString() }); }
+    catch (error) { if (disposed || seq !== activeSequence) return; publish(isConflict(error) ? { state: "conflict", conflict: true } : { state: "error" }); }
+  };
+  const schedule = () => { if (timer) clearTimeout(timer); const seq = ++sequence; activeSequence = seq; timer = setTimeout(() => void execute(seq), debounceMs); };
+  return {
+    update(value, dirty) { latestValue = value; latestDirty = dirty; if (dirty) schedule(); else publish({ state: "saved" }); },
+    retry() { if (!latestDirty) return; const seq = ++sequence; activeSequence = seq; void execute(seq); },
+    snapshot: () => current,
+    dispose() { disposed = true; if (timer) clearTimeout(timer); },
+  };
 }
 
-export function useEventoAutosave<T, S = unknown>({ eventId, value, dirty, serialize, save, debounceMs = 500 }: EventoAutosaveOptions<T, S>) {
-  const [state, setState] = useState<AutosaveState>(dirty ? "idle" : "saved");
-  const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
-  const [conflict, setConflict] = useState(false);
-  const sequence = useRef(0);
-  const activeSequence = useRef(0);
-  const latest = useRef({ eventId, value, dirty, serialize, save });
-  latest.current = { eventId, value, dirty, serialize, save };
-
-  const execute = useCallback(async (seq: number) => {
-    const current = latest.current;
-    if (!current.dirty || seq !== activeSequence.current) return;
-    setState("saving");
-    try {
-      await current.save(current.serialize(current.value), current.eventId);
-      if (seq !== activeSequence.current) return;
-      setConflict(false);
-      setState("saved");
-      setLastSavedAt(new Date().toISOString());
-    } catch (error) {
-      if (seq !== activeSequence.current) return;
-      if (isConflict(error)) {
-        setConflict(true);
-        setState("conflict");
-      } else {
-        setState("error");
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!dirty) return;
-    const seq = ++sequence.current;
-    activeSequence.current = seq;
-    const timer = setTimeout(() => void execute(seq), debounceMs);
-    return () => clearTimeout(timer);
-  }, [dirty, value, eventId, debounceMs, execute]);
-
-  const retry = useCallback(() => {
-    if (!latest.current.dirty) return;
-    const seq = ++sequence.current;
-    activeSequence.current = seq;
-    void execute(seq);
-  }, [execute]);
-
-  return { state, lastSavedAt, conflict, retry };
+export function useEventoAutosave<T, S = unknown>(options: EventoAutosaveOptions<T, S>) {
+  const [, forceRender] = useState(0);
+  const controller = useRef<AutosaveController<T, S> | undefined>(undefined);
+  if (!controller.current) controller.current = createEventoAutosaveController({ ...options, onState: () => forceRender((value) => value + 1) });
+  useEffect(() => { controller.current?.update(options.value, options.dirty); return () => controller.current?.dispose(); }, [options.value, options.dirty]);
+  const retry = useCallback(() => controller.current?.retry(), []);
+  const snapshot = controller.current?.snapshot() ?? { state: options.dirty ? "idle" : "saved", lastSavedAt: null, conflict: false };
+  return { ...snapshot, retry };
 }

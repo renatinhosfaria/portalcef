@@ -1,20 +1,10 @@
-import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
-const source = readFileSync(new URL("./use-evento-autosave.ts", import.meta.url), "utf8");
-describe("useEventoAutosave", () => {
-  it("implementa debounce, retry e preserva valor local", () => {
-    expect(source).toContain("setTimeout");
-    expect(source).toContain("retry");
-    expect(source).toContain('"error"');
-    expect(source).toContain("dirty");
-  });
-  it("detecta conflito de versão sem descartar estado local", () => {
-    expect(source).toContain("VERSION_CONFLICT");
-    expect(source).toContain("conflict");
-    expect(source).toContain("lastSavedAt");
-  });
-  it("impede resposta obsoleta de sobrescrever a alteração mais nova", () => {
-    expect(source).toContain("sequence");
-    expect(source).toContain("activeSequence");
-  });
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { createEventoAutosaveController } from "./use-evento-autosave";
+
+describe("controlador de autosave", () => {
+  afterEach(() => vi.useRealTimers());
+  it("faz debounce e envia o valor mais recente", async () => { vi.useFakeTimers(); const save = vi.fn().mockResolvedValue(undefined); const c = createEventoAutosaveController({ eventId: "e", serialize: (v: string) => v, save }); c.update("um", true); c.update("dois", true); vi.advanceTimersByTime(499); expect(save).not.toHaveBeenCalled(); vi.advanceTimersByTime(1); await vi.runAllTimersAsync(); expect(save).toHaveBeenCalledTimes(1); expect(save).toHaveBeenCalledWith("dois", "e"); });
+  it("permite retry após erro de rede e preserva valor", async () => { vi.useFakeTimers(); const save = vi.fn().mockRejectedValueOnce(new Error("rede")).mockResolvedValue(undefined); const c = createEventoAutosaveController({ eventId: "e", serialize: (v: string) => v, save }); c.update("local", true); vi.advanceTimersByTime(500); await vi.runAllTimersAsync(); expect(c.snapshot().state).toBe("error"); c.retry(); await vi.runAllTimersAsync(); expect(c.snapshot().state).toBe("saved"); expect(save).toHaveBeenLastCalledWith("local", "e"); });
+  it("marca conflito VERSION_CONFLICT", async () => { vi.useFakeTimers(); const save = vi.fn().mockRejectedValue({ status: 409, code: "VERSION_CONFLICT" }); const c = createEventoAutosaveController({ eventId: "e", serialize: (v: string) => v, save }); c.update("local", true); vi.advanceTimersByTime(500); await vi.runAllTimersAsync(); expect(c.snapshot()).toMatchObject({ state: "conflict", conflict: true }); });
+  it("ignora resposta stale quando chega após nova alteração", async () => { vi.useFakeTimers(); let resolve!: () => void; const save = vi.fn().mockImplementation(() => new Promise<void>((r) => { resolve = r; })); const c = createEventoAutosaveController({ eventId: "e", serialize: (v: string) => v, save }); c.update("antigo", true); vi.advanceTimersByTime(500); c.update("novo", true); resolve(); await vi.runAllTimersAsync(); expect(c.snapshot().state).not.toBe("saved"); });
 });
