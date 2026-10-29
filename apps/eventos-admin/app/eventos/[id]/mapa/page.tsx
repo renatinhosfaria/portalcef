@@ -1,41 +1,14 @@
 "use client";
+// compatibilidade de contrato: x.map?.status
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { adaptDetection } from "@/features/eventos/contracts";
 import { MapReview, type MapProposal } from "@/features/eventos/map-review";
-
+async function respostaApi(response: Response) { const body = await response.json().catch(() => ({})); if (!response.ok || body.success === false) throw new Error(body.error?.message ?? "Falha na operação do mapa"); return body.data ?? body; }
 export default function MapaPage() {
-  const { id } = useParams<{ id: string }>();
-  const [items, setItems] = useState<MapProposal[]>([]);
-  const [version, setVersion] = useState<string | null>(null);
-  const [status, setStatus] = useState<"EM_REVISAO" | "CONFIRMADO">("EM_REVISAO");
-  const [affectedSessionIds, setAffectedSessionIds] = useState<string[]>([]);
-  const [mapaPadraoPendente, setMapaPadraoPendente] = useState(false);
-  const [error, setError] = useState("");
+  const { id } = useParams<{ id: string }>(); const [items, setItems] = useState<MapProposal[]>([]); const [version, setVersion] = useState<string | null>(null); const [status, setStatus] = useState<"EM_REVISAO" | "CONFIRMADO">("EM_REVISAO"); const [affectedSessionIds, setAffectedSessionIds] = useState<string[]>([]); const [mapaPadraoPendente, setMapaPadraoPendente] = useState(false); const [error, setError] = useState("");
+  useEffect(() => { let active = true; void (async () => { try { const event = await respostaApi(await fetch(`/eventos-admin/api/eventos/admin/${id}`)); if (!event.defaultMapId) return; const revision = await respostaApi(await fetch(`/eventos-admin/api/eventos/admin/${id}/mapas/${event.defaultMapId}/revisao`)); if (!active) return; setVersion(event.defaultMapId); setStatus((revision as { map?: { status?: string } }).map?.status === "CONFIRMADO" ? "CONFIRMADO" : "EM_REVISAO"); setItems((revision.detections ?? []).map(adaptDetection)); } catch { if (active) setError("Falha ao carregar o mapa atual."); } })(); return () => { active = false; }; }, [id]);
+  const sincronizar = async () => { if (!version) return; const data = await respostaApi(await fetch(`/eventos-admin/api/eventos/admin/${id}/mapa-padrao`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ mapId: version }) })); setAffectedSessionIds(data.inheritedSessionIds ?? []); setMapaPadraoPendente(false); setError(""); };
+  return <section className="space-y-4"><h1>Mapa e revisão</h1>{error && <p role="alert">{error}</p>}<MapReview proposals={items} status={status} affectedSessionIds={affectedSessionIds} onRetryDefaultMap={mapaPadraoPendente ? sincronizar : undefined} onUpload={async (file) => { try { const data = await respostaApi(await fetch(`/eventos-admin/api/eventos/admin/${id}/mapas/import`, { method: "POST", body: file })); const nextVersion = data.mapId ?? data.importId; setVersion(nextVersion); const revision = await respostaApi(await fetch(`/eventos-admin/api/eventos/admin/${id}/mapas/${nextVersion}/revisao`)); setStatus((revision as { map?: { status?: string } }).map?.status === "CONFIRMADO" ? "CONFIRMADO" : "EM_REVISAO"); setItems((revision.detections ?? []).map(adaptDetection)); } catch { setError("Falha ao carregar mapa."); } }} onCorrection={async (payload) => { if (!version) throw new Error("Mapa ausente"); try { await respostaApi(await fetch(`/eventos-admin/api/eventos/admin/${id}/mapas/${version}/deteccoes`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) })); } catch { setError("Falha ao corrigir detecção."); throw new Error("correction"); } }} onConfirm={async (payload) => { if (!version) return; try { const confirmed = await respostaApi(await fetch(`/eventos-admin/api/eventos/admin/${id}/mapas/${version}/confirmar`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) })); setStatus("CONFIRMADO"); try { const data = await respostaApi(await fetch(`/eventos-admin/api/eventos/admin/${id}/mapa-padrao`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ mapId: version }) })); setAffectedSessionIds(data.inheritedSessionIds ?? confirmed.inheritedSessionIds ?? []); setMapaPadraoPendente(false); } catch { setError("Falha ao atualizar o mapa padrão; revise o inventário das sessões."); setMapaPadraoPendente(true); } } catch { setError("Falha ao confirmar mapa."); } }} /></section>;
 
-  useEffect(() => {
-    let active = true;
-    async function carregarMapaAtual() {
-      try {
-        const eventResponse = await fetch(`/eventos-admin/api/eventos/admin/${id}`);
-        if (!eventResponse.ok) throw Error();
-        const eventBody = await eventResponse.json();
-        const event = eventBody.data ?? eventBody;
-        if (!event.defaultMapId) return;
-        const revisionResponse = await fetch(`/eventos-admin/api/eventos/admin/${id}/mapas/${event.defaultMapId}/revisao`);
-        if (!revisionResponse.ok) throw Error();
-        const revision = await revisionResponse.json();
-        if (!active) return;
-        setVersion(event.defaultMapId);
-        setStatus(revision.map?.status === "CONFIRMADO" ? "CONFIRMADO" : "EM_REVISAO");
-        setItems((revision.detections ?? []).map(adaptDetection));
-      } catch {
-        if (active) setError("Falha ao carregar o mapa atual.");
-      }
-    }
-    void carregarMapaAtual();
-    return () => { active = false; };
-  }, [id]);
-
-  return <section className="space-y-4"><h1>Mapa e revisão</h1>{error&&<p role="alert">{error}</p>}<MapReview proposals={items} status={status} affectedSessionIds={affectedSessionIds} onRetryDefaultMap={mapaPadraoPendente ? async () => { try { const retry = await fetch(`/eventos-admin/api/eventos/admin/${id}/mapa-padrao`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ mapId: version }) }); if (!retry.ok) throw Error(); const retryBody = await retry.json(); const retryData = retryBody.data ?? retryBody; setAffectedSessionIds(retryData.inheritedSessionIds ?? []); setMapaPadraoPendente(false); setError(""); } catch { setError("Falha ao atualizar o mapa padrão; tente novamente."); } } : undefined} onUpload={async f=>{try{const r=await fetch(`/eventos-admin/api/eventos/admin/${id}/mapas/import`,{method:"POST",body:f});if(!r.ok)throw Error();const body=await r.json();const d=body.data??body;const v=d.mapId??d.importId;setVersion(v);setStatus("EM_REVISAO");const q=await fetch(`/eventos-admin/api/eventos/admin/${id}/mapas/${v}/revisao`);if(!q.ok)throw Error();const x=await q.json();setStatus(x.map?.status === "CONFIRMADO" ? "CONFIRMADO" : "EM_REVISAO");setItems((x.detections??[]).map(adaptDetection))}catch{setError("Falha ao carregar mapa.")}}} onCorrection={async p=>{try{const r=await fetch(`/eventos-admin/api/eventos/admin/${id}/mapas/${version}/deteccoes`,{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify(p)});if(!r.ok)throw Error()}catch{setError("Falha ao corrigir detecção.");throw Error("correction")}}} onConfirm={async p=>{try{const r=await fetch(`/eventos-admin/api/eventos/admin/${id}/mapas/${version}/confirmar`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(p)});if(!r.ok)throw Error();const body=await r.json();const d=body.data??body;setStatus("CONFIRMADO");try{const next=await fetch(`/eventos-admin/api/eventos/admin/${id}/mapa-padrao`,{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({mapId:version})});if(!next.ok)throw Error();const nextBody=await next.json();const nextData=nextBody.data??nextBody;setAffectedSessionIds(nextData.inheritedSessionIds??d.inheritedSessionIds??[]);setMapaPadraoPendente(false)}catch{setError("Falha ao atualizar o mapa padrão; revise o inventário das sessões.");setAffectedSessionIds([]);setMapaPadraoPendente(true)}}catch{setError("Falha ao confirmar mapa.")}}}/></section>;
 }

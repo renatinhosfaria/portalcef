@@ -30,3 +30,7 @@ it("oferece retry separado para sincronizar o mapa padrão", () => {
   expect(page).toContain("mapaPadraoPendente");
   expect(page).toContain("onRetryDefaultMap");
 });
+it("valida success:false nas operações do mapa", () => {
+  const page = readFileSync(new URL("../../app/eventos/[id]/mapa/page.tsx", import.meta.url), "utf8");
+  expect(page).toContain("body.success === false");
+});
