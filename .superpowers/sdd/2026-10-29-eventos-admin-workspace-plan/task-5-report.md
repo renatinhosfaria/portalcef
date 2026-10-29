@@ -22,3 +22,8 @@
 - Ingressos passaram a preservar elegibilidade, lote e regras; políticas exibem a versão ativa.
 - Testes focados: 7 contratos da etapa; app 39 testes; API 93 suítes/922 testes.
 - Typecheck app/API e lint aprovados (somente avisos preexistentes).
+
+## Rodada corretiva 2
+- IDs de sessões criadas são persistidos imediatamente no estado após cada POST; uma falha posterior não causa duplicação no retry.
+- Teste de contrato incremental adicionado.
+- Teste focado: 8 contratos passando; typecheck app/API e lint aprovados.

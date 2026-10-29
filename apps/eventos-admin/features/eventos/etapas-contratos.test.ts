@@ -7,6 +7,7 @@ import {
   construirPayloadSessao,
   slugSugerido,
   mesclarSessaoSalva,
+  persistirSessaoSalva,
 } from "./etapas-contratos";
 
 describe("contratos das etapas do workspace", () => {
@@ -42,5 +43,10 @@ describe("contratos das etapas do workspace", () => {
 
   it("incorpora o id retornado ao criar uma sessão", () => {
     expect(mesclarSessaoSalva({ startsAt: "a", endsAt: "b", capacity: 1, salesStartsAt: "", salesEndsAt: "", inheritLocation: true, inheritMap: true }, { id: "sessao-1" })).toMatchObject({ id: "sessao-1" });
+  });
+
+  it("persiste o id incrementalmente antes de uma próxima tentativa", () => {
+    const sessions = [{ startsAt: "a", endsAt: "b", capacity: 1, salesStartsAt: "", salesEndsAt: "", inheritLocation: true, inheritMap: true }, { startsAt: "c", endsAt: "d", capacity: 1, salesStartsAt: "", salesEndsAt: "", inheritLocation: true, inheritMap: true }];
+    expect(persistirSessaoSalva(sessions, 0, { id: "sessao-1" })[0]).toMatchObject({ id: "sessao-1" });
   });
 });
