@@ -1,7 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { and, eq, eventoInventarioAssentos, eventoMapas, eventoPoliticas, eventoSessoes, eventoTiposIngresso, eventos } from '@essencia/db';
 import type { EventoActor } from '@essencia/shared/types';
 import { DatabaseService } from '../../common/database/database.service';
+import { assertSchoolScope } from './eventos.service';
 
 export type ProntidaoItem = { key: string; label: string; state: 'BLOQUEADOR' | 'AVISO' | 'OK'; href?: string; message?: string };
 export type ProntidaoResult = { eventId: string; status: string; progress: number; items: ProntidaoItem[] };
@@ -11,12 +12,10 @@ export class EventosReadinessService {
   constructor(private readonly database: DatabaseService) {}
   private get db() { return this.database.db; }
   private async rows(table: any, predicate?: any) { const query = this.db.select().from(table); return predicate === undefined ? query : query.where(predicate); }
-  private assertScope(actor: EventoActor, schoolId: string) { if (actor.role !== 'master' && actor.schoolId !== schoolId) throw new BadRequestException({ code: 'FORBIDDEN', message: 'Acesso negado' }); }
-
   async verificar(eventId: string, actor: EventoActor): Promise<ProntidaoResult> {
     const [event] = await this.rows(eventos, eq(eventos.id, eventId));
     if (!event) throw new NotFoundException({ code: 'EVENT_NOT_FOUND', message: 'Evento não encontrado' });
-    this.assertScope(actor, event.schoolId);
+    assertSchoolScope(actor, event.schoolId);
     const sessions: any[] = await this.rows(eventoSessoes, eq(eventoSessoes.eventId, eventId));
     const maps: any[] = await this.rows(eventoMapas, eq(eventoMapas.eventId, eventId));
     const tickets: any[] = await this.rows(eventoTiposIngresso, and(eq(eventoTiposIngresso.eventId, eventId), eq(eventoTiposIngresso.active, true)));

@@ -5,6 +5,11 @@ import type { EventoActor, EventoResumo, PublicEventCard, PublicEventDetail, Pub
 import { DatabaseService } from "../../common/database/database.service";
 import { EventosRulesService } from "./eventos-rules.service";
 
+export function assertSchoolScope(actor: EventoActor, schoolId: string) {
+  if (actor.role === "master") return;
+  if (!actor.schoolId || actor.schoolId !== schoolId) throw new BadRequestException({ code: "FORBIDDEN", message: "Acesso negado" });
+}
+
 @Injectable()
 export class EventosService {
   constructor(private readonly database: DatabaseService, private readonly rules: EventosRulesService) {}
@@ -12,8 +17,7 @@ export class EventosService {
   private normalizeSlug(slug: string) { return slug.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""); }
   private resumo(event: typeof eventos.$inferSelect): EventoResumo { return { id: event.id, schoolId: event.schoolId, slug: event.slug, title: event.title, status: event.status as EventoResumo["status"], publishedAt: event.publishedAt, plannedPublicationAt: event.plannedPublicationAt }; }
   private assertSchoolScope(actor: EventoActor, schoolId: string) {
-    if (actor.role === "master") return;
-    if (!actor.schoolId || actor.schoolId !== schoolId) throw new BadRequestException({ code: "FORBIDDEN", message: "Acesso negado" });
+    assertSchoolScope(actor, schoolId);
   }
   private salesAvailability(session: { salesStartsAt: Date | null; salesEndsAt: Date | null }, now = new Date()): "available" | "unavailable" {
     if (session.salesStartsAt && now < session.salesStartsAt) return "unavailable";
@@ -83,18 +87,28 @@ export class EventosService {
     if (expected && existing.updatedAt && existing.updatedAt.getTime() !== expected.getTime()) throw new ConflictException({ code: "VERSION_CONFLICT", message: "O evento foi alterado por outra pessoa", current: this.resumo(existing) });
     if (_sessions !== undefined || _ticketTypes !== undefined || _policies !== undefined) throw new BadRequestException({ code: "EVENT_UPDATE_FIELDS_UNSUPPORTED", message: "Atualize sessões, ingressos e políticas pelas rotas próprias" });
     const normalizedSlug = input.slug ? this.normalizeSlug(input.slug) : undefined;
-    if (normalizedSlug && existing.status === "PUBLICADO" && normalizedSlug !== existing.slug) throw new BadRequestException({ code: "PUBLISHED_SLUG_IMMUTABLE", message: "O slug de um evento publicado não pode ser alterado" });
+    if (normalizedSlug && existing.status === "PUBLICADO" && normalizedSlug !== existing.slug) throw new BadRequestException({ code: "EVENT_SLUG_IMMUTABLE", message: "O slug de um evento publicado não pode ser alterado" });
     if (normalizedSlug && normalizedSlug !== existing.slug) {
       const [slugOwner] = await this.db.select({ id: eventos.id }).from(eventos).where(and(eq(eventos.schoolId, existing.schoolId), eq(eventos.slug, normalizedSlug), ne(eventos.id, id))).limit(1);
       if (slugOwner) throw new ConflictException({ code: "SLUG_ALREADY_EXISTS", message: "Este slug já está em uso nesta escola" });
     }
     const [sales] = await this.db.select({ id: eventoPedidos.id }).from(eventoPedidos).where(eq(eventoPedidos.eventId, id)).limit(1);
     if (sales) throw new BadRequestException({ code: "EVENT_HAS_SALES", message: "O evento possui vendas; crie uma nova versão antes de alterar sua configuração" });
-    const [updated] = await this.db.update(eventos).set({ ...updateInput, slug: normalizedSlug, updatedAt: new Date() }).where(eq(eventos.id, id)).returning();
-    if (!updated) throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Evento não encontrado" });
+    const titleSuggestion = input.title ? this.normalizeSlug(input.title) : undefined;
+    const manualSlug = existing.slug !== this.normalizeSlug(existing.title);
+    const nextSlug = normalizedSlug ?? (input.title && !manualSlug ? titleSuggestion : undefined);
+    const nextUpdatedAt = new Date();
+    const versionFilter = expected ? and(eq(eventos.id, id), eq(eventos.updatedAt, expected)) : eq(eventos.id, id);
+    const [updated] = await this.db.update(eventos).set({ ...updateInput, slug: nextSlug, updatedAt: nextUpdatedAt }).where(versionFilter).returning();
+    if (!updated) {
+      if (expected) throw new ConflictException({ code: "VERSION_CONFLICT", message: "O evento foi alterado por outra pessoa", current: this.resumo(existing) });
+      throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Evento não encontrado" });
+    }
     await this.audit(id, actor, "ATUALIZADO", "evento", id, { version: existing.updatedAt?.toISOString(), previous: { title: existing.title, slug: existing.slug, defaultLocationId: existing.defaultLocationId, defaultMapId: existing.defaultMapId }, next: updateInput });
     if (publishImmediately) return this.publicar(id, actor);
-    return this.resumo(updated);
+    const result = this.resumo(updated);
+    if (input.title && !normalizedSlug && manualSlug && titleSuggestion && titleSuggestion !== existing.slug) result.slugSuggestion = titleSuggestion;
+    return result;
   }
 
   async listarAdmin(query: EventoListQuery = {}, actor?: EventoActor) {

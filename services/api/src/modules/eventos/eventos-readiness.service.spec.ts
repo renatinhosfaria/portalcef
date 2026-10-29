@@ -23,6 +23,11 @@ describe('EventosReadinessService', () => {
     const result = await new EventosReadinessService({ db } as any).verificar('e1', { userId: 'u1', role: 'diretora_geral', schoolId: 's1' });
     expect(result.items.find((item) => item.key === 'INVENTARIO_SESSOES')).toMatchObject({ state: 'BLOQUEADOR' });
   });
+
+  it('rejeita tenant divergente antes de consultar o checklist', async () => {
+    const db = fakeDb([[{ id: 'e1', schoolId: 's1', title: 'Evento', status: 'RASCUNHO' }]]);
+    await expect(new EventosReadinessService({ db } as any).verificar('e1', { userId: 'u2', role: 'diretora_geral', schoolId: 's2' })).rejects.toMatchObject({ response: { code: 'FORBIDDEN' } });
+  });
 });
 
 function fakeDb(rows: unknown[][]) {
