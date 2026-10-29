@@ -1,6 +1,6 @@
 import React from "react";
 export type SaveState = "idle" | "saving" | "saved" | "error" | "conflict";
-export type WorkspaceEventStatus = "RASCUNHO" | "PUBLICADO" | "PAUSADO" | "CANCELADO";
+export type WorkspaceEventStatus = "RASCUNHO" | "PUBLICADO" | "PAUSADO" | "CANCELADO" | "REVISAO" | "ENCERRADO" | "ARQUIVADO";
 
 const saveMessages: Record<SaveState, string> = {
   idle: "Alterações locais",

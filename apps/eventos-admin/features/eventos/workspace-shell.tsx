@@ -1,5 +1,6 @@
 import React from "react";
 import type { ReactNode } from "react";
+import Link from "next/link";
 import { WorkspaceNavigation, type WorkspaceNavigationItem, type WorkspaceStepState } from "./workspace-navigation";
 import { WorkspaceStatus, type SaveState, type WorkspaceEventStatus } from "./workspace-status";
 
@@ -17,27 +18,35 @@ export type WorkspaceReadiness = {
   items: WorkspaceReadinessItem[];
 };
 
-const etapas: Array<{ key: string; label: string; path: string }> = [
-  { key: "informacoes", label: "Informações", path: "informacoes" },
-  { key: "sessoes", label: "Sessões e local", path: "sessoes" },
-  { key: "mapa", label: "Mapa e lugares", path: "mapa" },
-  { key: "ingressos", label: "Ingressos", path: "ingressos" },
-  { key: "politicas", label: "Políticas", path: "politicas" },
-  { key: "revisar", label: "Revisar e publicar", path: "revisar" },
-];
+const readinessGroups: Record<string, string> = {
+  informacoes: "informacoes", TEXTOS_OBRIGATORIOS: "informacoes", SLUG_VALIDO: "informacoes",
+  sessoes: "sessoes", SESSAO_OBRIGATORIA: "sessoes", LOCAL_SESSAO: "sessoes",
+  mapa: "mapa", MAPA_CONFIRMADO: "mapa", INVENTARIO_VENDAVEL: "mapa",
+  ingressos: "ingressos", INGRESSO_VALIDO: "ingressos",
+  politicas: "politicas", POLITICAS_OBRIGATORIAS: "politicas",
+};
+
+export function normalizarReadiness(eventId: string, source: WorkspaceReadinessItem[]): WorkspaceReadinessItem[] {
+  const etapas: Array<[string, string, string]> = [
+    ["informacoes", "Informações", "informacoes"], ["sessoes", "Sessões e local", "sessoes"],
+    ["mapa", "Mapa e lugares", "mapa"], ["ingressos", "Ingressos", "ingressos"],
+    ["politicas", "Políticas", "politicas"],
+  ];
+  const resultado: WorkspaceReadinessItem[] = etapas.map(([key, label, path]) => {
+    const items = source.filter((item) => (readinessGroups[item.key] ?? item.key) === key);
+    const state = items.some((item) => item.state === "BLOQUEADOR") ? "BLOQUEADOR" : items.some((item) => item.state === "AVISO") ? "AVISO" : items.length > 0 && items.every((item) => item.state === "OK") ? "OK" : items.length > 0 ? "EM_ANDAMENTO" : "NAO_INICIADO";
+    const detail = items.find((item) => item.state === "BLOQUEADOR") ?? items[0];
+    return { key, label, state, href: detail?.href ?? `/eventos/${eventId}/${path}`, message: detail?.message };
+  });
+  const bloqueadores = source.filter((item) => item.state === "BLOQUEADOR");
+  resultado.push({ key: "revisar", label: "Revisar e publicar", state: bloqueadores.length ? "BLOQUEADOR" : source.length && source.every((item) => item.state === "OK") ? "OK" : "NAO_INICIADO", href: `/eventos/${eventId}/revisar`, message: bloqueadores[0]?.message });
+  return resultado;
+}
 
 export function WorkspaceShell({ eventId, children, readiness, lastSavedAt, saveState }: { eventId: string; children: ReactNode; readiness: WorkspaceReadiness; lastSavedAt?: string | null; saveState: SaveState }) {
-  const items: WorkspaceNavigationItem[] = etapas.map((etapa) => {
-    const readinessItem = readiness.items.find((item) => item.key === etapa.key);
-    return {
-      key: etapa.key,
-      label: etapa.label,
-      href: readinessItem?.href ?? `/eventos/${eventId}/${etapa.path}`,
-      state: (readinessItem?.state ?? "NAO_INICIADO") as WorkspaceStepState,
-      blocked: readinessItem?.state === "BLOQUEADOR",
-    };
-  });
-  const pending = readiness.items.find((item) => item.state === "BLOQUEADOR" && item.message);
+  const normalized = normalizarReadiness(eventId, readiness.items);
+  const items: WorkspaceNavigationItem[] = normalized.map((item) => ({ key: item.key, label: item.label, href: item.href ?? `/eventos/${eventId}/${item.key}`, state: item.state as WorkspaceStepState, blocked: item.state === "BLOQUEADOR" }));
+  const pending = normalized.find((item) => item.state === "BLOQUEADOR" && item.message);
 
   return (
     <div className="workspace-shell space-y-6">
@@ -52,9 +61,9 @@ export function WorkspaceShell({ eventId, children, readiness, lastSavedAt, save
         </div>
         {pending ? (
           <p className="mt-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900" role="status">
-            <a className="font-semibold underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3d7c4a]" href={pending.href ?? `/eventos/${eventId}/revisar`}>
+            <Link className="font-semibold underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3d7c4a]" href={pending.href ?? `/eventos/${eventId}/revisar`}>
               {pending.message}
-            </a>
+            </Link>
           </p>
         ) : null}
       </header>

@@ -1,7 +1,10 @@
 import React from "react";
+import { existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { WorkspaceShell } from "./workspace-shell";
+import { WorkspaceShell, normalizarReadiness } from "./workspace-shell";
+import { getActiveWorkspaceKey } from "./workspace-navigation";
 
 const readiness = {
   status: "RASCUNHO" as const,
@@ -43,5 +46,37 @@ describe("WorkspaceShell de eventos", () => {
     expect(html).toContain("Não foi possível salvar");
     expect(html).toContain('href="/eventos/evt-1/sessoes"');
     expect(html).toContain('aria-current="page"');
+  });
+});
+
+
+describe("navegação e readiness do workspace", () => {
+  it.each([
+    ["/eventos/evt-1/sessoes", "sessoes"],
+    ["/eventos/evt-1/mapa", "mapa"],
+  ])("identifica a etapa ativa para %s", (pathname, expected) => {
+    expect(getActiveWorkspaceKey(pathname, [
+      { key: "informacoes", label: "Informações", href: "/eventos/evt-1/informacoes", state: "OK" },
+      { key: "sessoes", label: "Sessões e local", href: "/eventos/evt-1/sessoes", state: "OK" },
+      { key: "mapa", label: "Mapa e lugares", href: "/eventos/evt-1/mapa", state: "OK" },
+    ])).toBe(expected);
+  });
+
+  it("agrupa as chaves de prontidão da API nas etapas e deriva revisão", () => {
+    const itens = normalizarReadiness("evt-1", [
+      { key: "TEXTOS_OBRIGATORIOS", label: "Textos obrigatórios", state: "OK" },
+      { key: "SESSAO_OBRIGATORIA", label: "Sessão obrigatória", state: "BLOQUEADOR", message: "Crie uma sessão" },
+      { key: "INGRESSO_VALIDO", label: "Ingresso", state: "OK" },
+    ]);
+    expect(itens.find((item) => item.key === "informacoes")?.state).toBe("OK");
+    expect(itens.find((item) => item.key === "sessoes")?.state).toBe("BLOQUEADOR");
+    expect(itens.find((item) => item.key === "revisar")?.state).toBe("BLOQUEADOR");
+  });
+
+  it("mantém destinos mínimos para todas as etapas navegáveis", () => {
+    const base = fileURLToPath(new URL("../../app/eventos/[id]", import.meta.url));
+    for (const etapa of ["informacoes", "ingressos", "politicas", "revisar"]) {
+      expect(existsSync(`${base}/${etapa}/page.tsx`)).toBe(true);
+    }
   });
 });

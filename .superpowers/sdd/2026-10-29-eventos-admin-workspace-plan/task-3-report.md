@@ -18,3 +18,13 @@
 ## Observações
 
 O layout usa um estado inicial `RASCUNHO` sem consulta de prontidão; o carregamento da prontidão e os estados reais de cada etapa serão conectados nas tarefas posteriores.
+
+## Rodada de correção 1
+
+- A etapa ativa agora é derivada do pathname por `usePathname`, com cobertura para `/sessoes` e `/mapa`.
+- Readiness da API é normalizada de chaves operacionais (`TEXTOS_OBRIGATORIOS`, `SESSAO_OBRIGATORIA`, `MAPA_CONFIRMADO`, `INGRESSO_VALIDO`, `POLITICAS_OBRIGATORIAS` etc.) para as seis etapas; `revisar` deriva dos bloqueadores gerais.
+- Pendências usam `next/link`.
+- Criados destinos mínimos para `informacoes`, `ingressos`, `politicas` e `revisar`, evitando 404 enquanto as implementações de etapa não chegam.
+- Status do evento expandido para `REVISAO`, `ENCERRADO` e `ARQUIVADO`.
+
+Verificação adicional: suíte do app PASS (8 arquivos, 21 testes), typecheck PASS, lint PASS com avisos preexistentes, `git diff --check` PASS.
