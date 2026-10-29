@@ -13,6 +13,7 @@ describe('eventos workspace contracts', () => {
     const proto = (EventosAdminController as any).prototype;
     expect(typeof proto.createDraft).toBe('function');
     expect(typeof proto.readiness).toBe('function');
+    expect(typeof proto.publish).toBe('function');
   });
 
   it('aceita somente o título no contrato de criação mínima', () => {
