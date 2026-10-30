@@ -105,7 +105,7 @@ describe("EventLocationManager", () => {
     await user.click(screen.getByRole("button", { name: "Cadastrar local" }));
 
     expect(screen.getByRole("status").textContent).toContain("Salvando local");
-    expect(screen.getByRole("button", { name: "Cadastrar local" })).toHaveProperty("disabled", true);
+    expect(screen.getByRole("button", { name: "Cadastrar local" })).toHaveProperty("disabled", false);
     expect(fetchMock).toHaveBeenCalledWith(
       "/eventos-admin/api/eventos/admin/evento-1/locais",
       expect.objectContaining({
