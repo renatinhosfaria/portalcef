@@ -64,7 +64,7 @@ function normalizarMapa(value: unknown): SessionMapOption | null {
   };
 }
 
-export function normalizarOpcoesSessao(value: unknown): SessionOptions {
+function normalizarOpcoesSessao(value: unknown): SessionOptions {
   const record = asRecord(unwrapData(value));
   const locations = Array.isArray(record.locations)
     ? record.locations.map(normalizarLocal).filter((item): item is SessionLocationOption => Boolean(item))
@@ -110,7 +110,7 @@ function sessaoProntaParaSalvar(value: SessionValue, options: SessionOptions): b
   return true;
 }
 
-export function sessoesProntasParaSalvar(values: SessionValue[], options: SessionOptions | null): boolean {
+function sessoesProntasParaSalvar(values: SessionValue[], options: SessionOptions | null): boolean {
   return Boolean(options && values.length > 0 && values.every((value) => sessaoProntaParaSalvar(value, options)));
 }
 
