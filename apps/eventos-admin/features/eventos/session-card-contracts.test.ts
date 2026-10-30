@@ -22,8 +22,8 @@ describe("contrato do cartão de sessão", () => {
       startsAt: "",
       endsAt: "",
       capacity: 0,
-      salesStartsAt: "",
-      salesEndsAt: "",
+      salesStartsAt: "2026-11-01T11:00",
+      salesEndsAt: "2026-11-01T10:00",
       locationMode: "custom",
       mapMode: "custom",
       locationId: null,
@@ -35,11 +35,17 @@ describe("contrato do cartão de sessão", () => {
       startsAt: expect.any(String),
       endsAt: expect.any(String),
       capacity: expect.any(String),
-      salesStartsAt: expect.any(String),
-      salesEndsAt: expect.any(String),
       location: expect.any(String),
       map: expect.any(String),
     }));
+  });
+
+  it("aceita sessão sem janela de vendas definida", () => {
+    const result = validarSessao({ ...baseDraft, salesStartsAt: "", salesEndsAt: "" });
+
+    expect(result.ok).toBe(true);
+    expect(result.errors.salesStartsAt).toBeUndefined();
+    expect(result.errors.salesEndsAt).toBeUndefined();
   });
 
   it("rejeita datas invertidas", () => {
