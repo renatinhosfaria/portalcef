@@ -41,3 +41,15 @@ Hash final: `57e9fde`
 - Comando: `pnpm --filter @essencia/eventos-admin typecheck` — passou.
 - Comando: `pnpm --filter @essencia/eventos-admin lint` — passou com os avisos preexistentes do app.
 - Comando: `git diff --check` — passou.
+
+## Re-review round 1
+
+### Achados anteriores
+
+- **[P1] Estado visual de locais disponíveis não é exibido — ADDRESSED.** A lista agora renderiza explicitamente `Padrão` para o local selecionado e `Disponível` para os demais. A ação foi alinhada para `Usar como padrão`; o teste comportamental também confirma que o rótulo antigo não aparece.
+- **[P2] Cobertura comportamental insuficiente — ADDRESSED.** Os testes agora exercitam cadastro por POST, edição por PATCH com `expectedUpdatedAt`, seleção do padrão por PATCH com `defaultLocationId`, estados de loading, sucesso, erro de rede e conflito, além da preservação do draft e da mensagem de erro após falha.
+
+### Veredictos atualizados
+
+- **Spec: PASS.** Os estados `Padrão`/`Disponível` e a ação `Usar como padrão` estão presentes e cobertos por teste.
+- **Quality: PASS.** A execução focada passou com 2 arquivos e 12 testes, cobrindo os fluxos comportamentais exigidos; `typecheck`, `lint` e `git diff --check` também permanecem aprovados conforme o Fix round 1.
