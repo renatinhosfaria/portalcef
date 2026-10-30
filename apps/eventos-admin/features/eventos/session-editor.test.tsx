@@ -57,6 +57,19 @@ describe("SessionEditor", () => {
     expect(html).not.toContain('aria-label="Local da exceção"');
   });
 
+  it("mantém a exceção da sessão quando o local padrão do evento muda", () => {
+    const html = renderToStaticMarkup(
+      <SessionEditor
+        initialValue={[{ ...pronta, inheritLocation: false, locationId: "local-quadra" }]}
+        options={{ ...options, defaultLocation: { ...options.locations[1] } }}
+      />,
+    );
+
+    expect(html).toContain('value="local-quadra"');
+    expect(html).toContain("Quadra Coberta");
+    expect(html).not.toContain('value="local-padrao" selected');
+  });
+
   it("expande seletores avançados somente ao escolher uma exceção", () => {
     const html = renderToStaticMarkup(<SessionEditor initialValue={[{ ...pronta, inheritLocation: false, inheritMap: false, locationId: "local-quadra", mapId: "mapa-alternativo" }]} options={options} />);
 

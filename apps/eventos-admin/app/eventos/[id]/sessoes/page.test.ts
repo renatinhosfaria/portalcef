@@ -4,6 +4,23 @@ import { describe, expect, it } from "vitest";
 const source = readFileSync(new URL("./page.tsx", import.meta.url), "utf8");
 
 describe("etapa de sessões", () => {
+  it("carrega locais e integra o gerenciador acima dos cartões", () => {
+    expect(source).toContain("EventLocationManager");
+    expect(source).toContain("normalizarRespostaLocais");
+    expect(source).toContain("/locais");
+    expect(source).toContain("initialItems={locations.items}");
+    expect(source).toContain("initialDefaultLocationId={locations.defaultLocationId}");
+    expect(source).toContain("onChanged={atualizarDadosWorkspace}");
+  });
+
+  it("recarrega locais e opções depois de uma mutação sem substituir as sessões", () => {
+    expect(source).toContain("atualizarDadosWorkspace");
+    expect(source).toContain("router.refresh();");
+    expect(source).toContain("setOptions");
+    expect(source).toContain("setLocations");
+    expect(source).toContain("sessionsRef.current");
+  });
+
   it("carrega opções visuais separadas e exibe seus estados", () => {
     expect(source).toContain("/sessoes/opcoes");
     expect(source).toContain("SessionOptions");

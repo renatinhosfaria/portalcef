@@ -21,6 +21,20 @@ export type SessionOptions = {
   maps: SessionMapOption[];
 };
 
+export type SessionLocationCatalog = {
+  items: Array<Pick<SessionLocationOption, "id" | "name" | "address" | "room">>;
+  defaultLocationId: string | null;
+};
+
+export function aplicarLocaisNasOpcoes(options: SessionOptions, catalog: SessionLocationCatalog): SessionOptions {
+  const locations = catalog.items.map((location) => ({ ...location }));
+  return {
+    ...options,
+    locations,
+    defaultLocation: locations.find((location) => location.id === catalog.defaultLocationId) ?? null,
+  };
+}
+
 export type SessionDraftState = Omit<SessaoValue, "inheritLocation" | "inheritMap"> & {
   locationMode: "default" | "custom";
   mapMode: "default" | "custom";

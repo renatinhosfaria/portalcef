@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   assertRespostaApi,
@@ -12,7 +12,13 @@ import {
   sessionValueToDraft,
   type SessionValue,
 } from "@/features/eventos/session-editor";
+import { EventLocationManager } from "@/features/eventos/event-location-manager";
 import {
+  normalizarRespostaLocais,
+  type LocalesResposta,
+} from "@/features/eventos/event-location-contracts";
+import {
+  aplicarLocaisNasOpcoes,
   validarSessao,
   type SessionLocationOption,
   type SessionMapOption,
@@ -162,6 +168,29 @@ export default function SessoesPage() {
   const [options, setOptions] = useState<SessionOptions | null>(null);
   const [optionsLoading, setOptionsLoading] = useState(true);
   const [optionsError, setOptionsError] = useState("");
+  const [locations, setLocations] = useState<LocalesResposta | null>(null);
+
+  const carregarDadosWorkspace = useCallback(async (active = true) => {
+    setOptionsError("");
+    setOptionsLoading(true);
+    try {
+      const [locationsResponse, optionsResponse] = await Promise.all([
+        fetch(`/eventos-admin/api/eventos/admin/${id}/locais`, { credentials: "include" }),
+        fetch(`/eventos-admin/api/eventos/admin/${id}/sessoes/opcoes`, { credentials: "include" }),
+      ]);
+      if (!locationsResponse.ok || !optionsResponse.ok) throw new Error("workspace-options");
+      const [locationsBody, optionsBody] = await Promise.all([locationsResponse.json(), optionsResponse.json()]);
+      if (!active) return;
+      const nextLocations = normalizarRespostaLocais(locationsBody);
+      const nextOptions = aplicarLocaisNasOpcoes(normalizarOpcoesSessao(optionsBody), nextLocations);
+      setLocations(nextLocations);
+      setOptions(nextOptions);
+    } catch {
+      if (active) setOptionsError("Erro ao carregar opções de local e mapa.");
+    } finally {
+      if (active) setOptionsLoading(false);
+    }
+  }, [id]);
 
   useEffect(() => {
     let active = true;
@@ -184,18 +213,10 @@ export default function SessoesPage() {
   useEffect(() => {
     let active = true;
     setOptions(null);
-    setOptionsError("");
-    setOptionsLoading(true);
-    void fetch(`/eventos-admin/api/eventos/admin/${id}/sessoes/opcoes`, { credentials: "include" })
-      .then((response) => response.ok ? response.json() : Promise.reject(new Error("options")))
-      .then((body: unknown) => {
-        if (!active) return;
-        setOptions(normalizarOpcoesSessao(body));
-      })
-      .catch(() => { if (active) setOptionsError("Erro ao carregar opções de local e mapa."); })
-      .finally(() => { if (active) setOptionsLoading(false); });
+    setLocations(null);
+    void carregarDadosWorkspace(active);
     return () => { active = false; };
-  }, [id]);
+  }, [id, carregarDadosWorkspace]);
 
   const autosave = useEventoAutosave({
     eventId: id,
@@ -312,6 +333,12 @@ export default function SessoesPage() {
     }
   };
 
+  const atualizarDadosWorkspace = () => {
+    void carregarDadosWorkspace().then(() => {
+      router.refresh();
+    });
+  };
+
   const possuiPendenciaLocal = dirty && !sessoesProntasParaSalvar(sessions, options);
 
   return (
@@ -323,6 +350,15 @@ export default function SessoesPage() {
       {error && <p role="alert" className="text-red-700">{error}</p>}
       {optionsLoading && <p role="status" className="text-sm text-slate-600">Carregando opções de local e mapa…</p>}
       {optionsError && <p role="alert" className="text-red-700">{optionsError}</p>}
+      {locations && (
+        <EventLocationManager
+          eventId={id}
+          initialItems={locations.items}
+          initialDefaultLocationId={locations.defaultLocationId}
+          initialUpdatedAt={locations.updatedAt}
+          onChanged={atualizarDadosWorkspace}
+        />
+      )}
       <SessionEditor initialValue={sessions} options={options ?? EMPTY_OPTIONS} onRemove={removerSessao} onChange={(next) => {
         const nextIdentities = new Set(next.map(identidadeSessaoAutosave));
         let removed = false;
