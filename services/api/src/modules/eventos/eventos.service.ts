@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException, Inject, Injectable, InternalServerErrorException, NotFoundException, Optional } from "@nestjs/common";
 import { and, asc, eq, eventoAuditorias, eventoCheckins, eventoIngressos, eventoInventarioAssentos, eventoLocais, eventoMapaAssentos, eventoMapas, eventoOperacoesAdministrativas, eventoPedidos, eventoPoliticas, eventoSessoes, eventoTiposIngresso, eventos, inArray, ne, type Database } from "@essencia/db";
-import type { AtualizarEventoInput, CriarEventoInput, CriarSessaoInput, CriarRascunhoInput, EventoListQuery } from "@essencia/shared/schemas";
+import type { AtualizarEventoInput, AtualizarLocalEventoInput, CriarEventoInput, CriarSessaoInput, CriarRascunhoInput, EventoListQuery, LocalEventoInput } from "@essencia/shared/schemas";
 import type { EventoActor, EventoResumo, PublicEventCard, PublicEventDetail, PublicEventSession, PublicMap } from "@essencia/shared/types";
 import { DatabaseService } from "../../common/database/database.service";
 import { RASTER_IMAGE_MIME_TYPES, StorageService } from "../../common/storage/storage.service";
@@ -337,6 +337,105 @@ export class EventosService {
       defaultMap: mapOptions.find((map) => map.id === event.defaultMapId) ?? null,
       maps: mapOptions,
     };
+  }
+
+  async listarLocais(eventId: string, actor: EventoActor) {
+    const [event] = await this.db.select().from(eventos).where(eq(eventos.id, eventId));
+    if (!event) throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Evento não encontrado" });
+    this.assertSchoolScope(actor, event.schoolId);
+    const locations = await this.db.select().from(eventoLocais).where(eq(eventoLocais.schoolId, event.schoolId));
+    return {
+      items: locations
+        .filter((location: any) => location.schoolId === event.schoolId)
+        .map((location: any) => ({
+          id: location.id,
+          name: location.name,
+          address: location.address,
+          room: location.room ?? null,
+          instructions: location.instructions ?? null,
+          accessibility: location.accessibility ?? null,
+          isDefault: location.id === event.defaultLocationId,
+        })),
+      defaultLocationId: event.defaultLocationId ?? null,
+      updatedAt: event.updatedAt,
+    };
+  }
+
+  async criarLocal(eventId: string, input: LocalEventoInput, actor: EventoActor) {
+    const [event] = await this.db.select().from(eventos).where(eq(eventos.id, eventId));
+    if (!event) throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Evento não encontrado" });
+    this.assertSchoolScope(actor, event.schoolId);
+    const transaction = (this.db as any).transaction;
+    const run = async (db: any) => {
+      const now = new Date();
+      const [location] = await db.insert(eventoLocais).values({
+        schoolId: event.schoolId,
+        name: input.name.trim(),
+        address: input.address.trim(),
+        room: input.room?.trim() || null,
+        instructions: input.instructions?.trim() || null,
+        accessibility: input.accessibility?.trim() || null,
+      }).returning();
+      if (!location) throw new BadRequestException({ code: "LOCATION_CREATE_FAILED", message: "Não foi possível criar o local" });
+      const [updatedEvent] = await db.update(eventos).set({ updatedAt: now }).where(eq(eventos.id, eventId)).returning();
+      if (!updatedEvent) throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Evento não encontrado" });
+      await this.audit(eventId, actor, "CRIADO", "local", location.id, { etapa: "local", next: { name: location.name, address: location.address } }, db);
+      return location;
+    };
+    return typeof transaction === "function" ? transaction.call(this.db, run) : run(this.db);
+  }
+
+  async atualizarLocal(eventId: string, locationId: string, input: Omit<AtualizarLocalEventoInput, "expectedUpdatedAt">, actor: EventoActor, expectedUpdatedAt?: Date) {
+    const [event] = await this.db.select().from(eventos).where(eq(eventos.id, eventId));
+    if (!event) throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Evento não encontrado" });
+    this.assertSchoolScope(actor, event.schoolId);
+    if (expectedUpdatedAt && event.updatedAt && event.updatedAt.getTime() !== expectedUpdatedAt.getTime()) throw new ConflictException({ code: "VERSION_CONFLICT", message: "O evento foi alterado por outra pessoa", current: this.resumo(event) });
+    const transaction = (this.db as any).transaction;
+    const run = async (db: any) => {
+      const [location] = await db.select().from(eventoLocais).where(eq(eventoLocais.id, locationId));
+      if (!location) throw new NotFoundException({ code: "LOCATION_NOT_FOUND", message: "Local não encontrado" });
+      if (location.schoolId !== event.schoolId) throw new BadRequestException({ code: "LOCATION_SCHOOL_MISMATCH", message: "O local informado não pertence à escola do evento" });
+      const now = new Date();
+      const nextValues = {
+        ...(input.name !== undefined ? { name: input.name.trim() } : {}),
+        ...(input.address !== undefined ? { address: input.address.trim() } : {}),
+        ...(input.room !== undefined ? { room: input.room?.trim() || null } : {}),
+        ...(input.instructions !== undefined ? { instructions: input.instructions?.trim() || null } : {}),
+        ...(input.accessibility !== undefined ? { accessibility: input.accessibility?.trim() || null } : {}),
+        updatedAt: now,
+      };
+      const [updatedLocation] = await db.update(eventoLocais).set(nextValues).where(and(eq(eventoLocais.id, locationId), eq(eventoLocais.schoolId, event.schoolId))).returning();
+      if (!updatedLocation) throw new NotFoundException({ code: "LOCATION_NOT_FOUND", message: "Local não encontrado" });
+      const versionFilter = expectedUpdatedAt ? and(eq(eventos.id, eventId), eq(eventos.updatedAt, expectedUpdatedAt)) : eq(eventos.id, eventId);
+      const [updatedEvent] = await db.update(eventos).set({ updatedAt: now }).where(versionFilter).returning();
+      if (!updatedEvent) throw new ConflictException({ code: expectedUpdatedAt ? "VERSION_CONFLICT" : "EVENT_NOT_FOUND", message: expectedUpdatedAt ? "O evento foi alterado por outra pessoa" : "Evento não encontrado", current: this.resumo(event) });
+      await this.audit(eventId, actor, "ATUALIZADO", "local", locationId, { etapa: "local", previous: { name: location.name, address: location.address }, next: nextValues }, db);
+      return updatedLocation;
+    };
+    return typeof transaction === "function" ? transaction.call(this.db, run) : run(this.db);
+  }
+
+  async atualizarLocalPadrao(eventId: string, locationId: string | null, actor: EventoActor, expectedUpdatedAt?: Date) {
+    const [event] = await this.db.select().from(eventos).where(eq(eventos.id, eventId));
+    if (!event) throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Evento não encontrado" });
+    this.assertSchoolScope(actor, event.schoolId);
+    if (expectedUpdatedAt && event.updatedAt && event.updatedAt.getTime() !== expectedUpdatedAt.getTime()) throw new ConflictException({ code: "VERSION_CONFLICT", message: "O evento foi alterado por outra pessoa", current: this.resumo(event) });
+    const transaction = (this.db as any).transaction;
+    const run = async (db: any) => {
+      if (locationId) {
+        const [location] = await db.select().from(eventoLocais).where(eq(eventoLocais.id, locationId));
+        if (!location) throw new NotFoundException({ code: "LOCATION_NOT_FOUND", message: "Local não encontrado" });
+        if (location.schoolId !== event.schoolId) throw new BadRequestException({ code: "LOCATION_SCHOOL_MISMATCH", message: "O local informado não pertence à escola do evento" });
+      }
+      const now = new Date();
+      const versionFilter = expectedUpdatedAt ? and(eq(eventos.id, eventId), eq(eventos.updatedAt, expectedUpdatedAt)) : eq(eventos.id, eventId);
+      const [updated] = await db.update(eventos).set({ defaultLocationId: locationId, updatedAt: now }).where(versionFilter).returning();
+      if (!updated) throw new ConflictException({ code: expectedUpdatedAt ? "VERSION_CONFLICT" : "EVENT_NOT_FOUND", message: expectedUpdatedAt ? "O evento foi alterado por outra pessoa" : "Evento não encontrado", current: this.resumo(event) });
+      await this.audit(eventId, actor, "ATUALIZADO", "local_padrao", eventId, { etapa: "local", previousLocationId: event.defaultLocationId, nextLocationId: locationId }, db);
+      return updated;
+    };
+    const updated = (typeof transaction === "function" ? await transaction.call(this.db, run) : await run(this.db)) as typeof eventos.$inferSelect;
+    return { ...this.resumo(updated), defaultLocationId: updated.defaultLocationId ?? null };
   }
 
   async listarIngressosAdmin(eventId: string, actor: EventoActor) {

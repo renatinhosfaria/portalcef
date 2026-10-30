@@ -10,6 +10,125 @@ const event = (extra: Record<string, unknown> = {}) => ({
 });
 
 describe('EventosService contratos de workspace', () => {
+  it('lista locais da escola do evento com indicação do padrão', async () => {
+    const updatedAt = new Date('2026-10-29T10:00:00Z');
+    const db = fakeDb({
+      selects: [
+        [event({ defaultLocationId: 'l1', updatedAt })],
+        [
+          { id: 'l1', schoolId: 's1', name: 'Auditório', address: 'Rua A', room: null, instructions: 'Chegar cedo', accessibility: null },
+          { id: 'l2', schoolId: 's1', name: 'Quadra', address: 'Rua B', room: 'Coberta', instructions: null, accessibility: 'Rampa' },
+          { id: 'l3', schoolId: 's2', name: 'Outra escola', address: 'Rua C', room: null, instructions: null, accessibility: null },
+        ],
+      ],
+    });
+
+    await expect(service(db).listarLocais('e1', actor)).resolves.toEqual({
+      items: [
+        { id: 'l1', name: 'Auditório', address: 'Rua A', room: null, instructions: 'Chegar cedo', accessibility: null, isDefault: true },
+        { id: 'l2', name: 'Quadra', address: 'Rua B', room: 'Coberta', instructions: null, accessibility: 'Rampa', isDefault: false },
+      ],
+      defaultLocationId: 'l1',
+      updatedAt,
+    });
+  });
+
+  it('cadastra local com a escola do evento e registra auditoria', async () => {
+    const inserted: any[] = [];
+    const db = fakeDb({
+      selects: [[event({ defaultLocationId: null })]],
+      insert: async (values: any) => { inserted.push(values); return [{ id: 'l1', ...values }]; },
+      update: async () => [event({ updatedAt: new Date('2026-10-29T11:00:00Z') })],
+    });
+    const insert = db.insert;
+    db.insert = (table: unknown) => {
+      const builder = insert(table);
+      return { values: (values: any) => { inserted.push(values); return builder.values(values); } };
+    };
+
+    const result = await service(db).criarLocal('e1', { name: 'Auditório', address: 'Rua A', room: null }, actor);
+    expect(result).toMatchObject({ id: 'l1', schoolId: 's1', name: 'Auditório', address: 'Rua A' });
+    expect(inserted[0]).toMatchObject({ schoolId: 's1', name: 'Auditório', address: 'Rua A' });
+    expect(inserted.some((value) => value.resourceType === 'local' && value.action === 'CRIADO')).toBe(true);
+  });
+
+  it('rejeita local de outra escola sem alterar o evento', async () => {
+    const db = fakeDb({ selects: [[event({ schoolId: 's2' })]] });
+    await expect(service(db).criarLocal('e1', { name: 'Auditório', address: 'Rua A' }, actor)).rejects.toMatchObject({ response: { code: 'FORBIDDEN' } });
+    expect(db.updated).toBe(false);
+  });
+
+  it('edita local preservando o ID e os campos de referência', async () => {
+    const location = { id: 'l1', schoolId: 's1', name: 'Auditório', address: 'Rua A', room: null, instructions: null, accessibility: null };
+    const db = fakeDb({
+      selects: [[event({ defaultLocationId: 'l1' })], [location]],
+      update: async () => [{ ...location, name: 'Auditório novo', address: 'Rua B' }],
+    });
+    const audited: any[] = [];
+    const insert = db.insert;
+    db.insert = (table: unknown) => {
+      const builder = insert(table);
+      return { values: (values: any) => { audited.push(values); return builder.values(values); } };
+    };
+
+    await expect(service(db).atualizarLocal('e1', 'l1', { name: 'Auditório novo', address: 'Rua B' }, actor)).resolves.toMatchObject({ id: 'l1', name: 'Auditório novo', address: 'Rua B' });
+    expect(audited).toEqual(expect.arrayContaining([expect.objectContaining({ action: 'ATUALIZADO', resourceType: 'local', resourceId: 'l1' })]));
+  });
+
+  it('faz rollback quando a versão do evento conflita depois de atualizar o local', async () => {
+    const location = { id: 'l1', schoolId: 's1', name: 'Auditório', address: 'Rua A', room: null, instructions: null, accessibility: null };
+    const expectedUpdatedAt = new Date('2026-10-29T10:00:00Z');
+    const db = fakeDb({ selects: [[event({ updatedAt: expectedUpdatedAt })], [location]] });
+    let localMutated = false;
+    let updateCount = 0;
+    db.update = () => ({
+      set: () => ({
+        where: () => ({
+          returning: async () => {
+            updateCount += 1;
+            if (updateCount === 1) {
+              localMutated = true;
+              return [{ ...location, name: 'Auditório editado' }];
+            }
+            return [];
+          },
+        }),
+      }),
+    });
+    db.transaction = async (callback: (tx: any) => Promise<unknown>) => {
+      try {
+        return await callback(db);
+      } catch (error) {
+        localMutated = false;
+        throw error;
+      }
+    };
+
+    await expect(service(db).atualizarLocal('e1', 'l1', { name: 'Auditório editado' }, actor, expectedUpdatedAt)).rejects.toMatchObject({ response: { code: 'VERSION_CONFLICT' } });
+    expect(localMutated).toBe(false);
+  });
+
+  it('rejeita troca para local inexistente sem perder o padrão atual', async () => {
+    const db = fakeDb({ selects: [[event({ defaultLocationId: 'l1' })], []] });
+    await expect(service(db).atualizarLocalPadrao('e1', 'l-inexistente', actor)).rejects.toMatchObject({ response: { code: 'LOCATION_NOT_FOUND' } });
+    expect(db.updated).toBe(false);
+  });
+
+  it('rejeita conflito de versão ao trocar padrão sem mutação parcial', async () => {
+    const current = new Date('2026-10-29T11:00:00Z');
+    const db = fakeDb({ selects: [[event({ defaultLocationId: 'l1', updatedAt: current })], [{ id: 'l2', schoolId: 's1' }]] });
+    await expect(service(db).atualizarLocalPadrao('e1', 'l2', actor, new Date('2026-10-29T10:00:00Z'))).rejects.toMatchObject({ response: { code: 'VERSION_CONFLICT' } });
+    expect(db.updated).toBe(false);
+  });
+
+  it('permite remover o padrão com null e audita a alteração', async () => {
+    const db = fakeDb({
+      selects: [[event({ defaultLocationId: 'l1' })]],
+      update: async () => [event({ defaultLocationId: null })],
+    });
+    await expect(service(db).atualizarLocalPadrao('e1', null, actor)).resolves.toMatchObject({ defaultLocationId: null });
+  });
+
   it('cria rascunho com slug normalizado e incrementa colisão por escola', async () => {
     const inserted: any[] = [];
     const db = fakeDb({ selects: [[{ id: 'ocupado' }], []], insert: async (values: any) => { inserted.push(values); return [event({ title: values.title, slug: values.slug })]; } });

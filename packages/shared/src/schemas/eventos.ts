@@ -24,6 +24,15 @@ export const atualizarEventoSchema = criarEventoSchema.partial().omit({schoolId:
 export const criarRascunhoSchema = z.object({ title: z.string().trim().min(1).max(240) }).strict();
 export const atualizarRascunhoSchema = atualizarEventoSchema;
 export const atualizarMapaPadraoSchema = z.object({ mapId: z.string().uuid() }).strict();
+export const localEventoSchema = z.object({
+  name: z.string().trim().min(1).max(200),
+  address: z.string().trim().min(1),
+  room: z.string().trim().max(160).nullable().optional(),
+  instructions: z.string().trim().nullable().optional(),
+  accessibility: z.string().trim().nullable().optional(),
+}).strict();
+export const atualizarLocalEventoSchema = localEventoSchema.partial().extend({ expectedUpdatedAt: date.optional() }).strict();
+export const atualizarLocalPadraoEventoSchema = z.object({ defaultLocationId: z.string().uuid().nullable(), expectedUpdatedAt: date.optional() }).strict();
 export const criarSessaoSchema = z.object({ startsAt: date, endsAt: date, capacity: z.number().int().positive(), locationId: z.string().uuid().optional().nullable(), mapId: z.string().uuid().optional().nullable(), salesStartsAt: date.optional().nullable(), salesEndsAt: date.optional().nullable(), status: eventoSessaoStatusSchema.optional() }).strict();
 export const politicaSchema = z.object({ type: z.enum(["PRIVACIDADE","COMPRA","CANCELAMENTO_REEMBOLSO","ACESSIBILIDADE","CONTATO"]), content: z.string().min(1), version: z.number().int().positive().optional() });
 export const eventoListQuerySchema = z.object({ status: eventoStatusSchema.optional(), search: z.string().max(120).optional() });
@@ -33,6 +42,9 @@ export type AtualizarEventoInput = z.infer<typeof atualizarEventoSchema>;
 export type CriarRascunhoInput = z.infer<typeof criarRascunhoSchema>;
 export type AtualizarRascunhoInput = z.infer<typeof atualizarRascunhoSchema>;
 export type AtualizarMapaPadraoInput = z.infer<typeof atualizarMapaPadraoSchema>;
+export type LocalEventoInput = z.infer<typeof localEventoSchema>;
+export type AtualizarLocalEventoInput = z.infer<typeof atualizarLocalEventoSchema>;
+export type AtualizarLocalPadraoEventoInput = z.infer<typeof atualizarLocalPadraoEventoSchema>;
 export type CriarSessaoInput = z.infer<typeof criarSessaoSchema>;
 export type EventoListQuery = z.infer<typeof eventoListQuerySchema>;
 export type ReservaPublicaInput = z.infer<typeof reservaPublicaSchema>;

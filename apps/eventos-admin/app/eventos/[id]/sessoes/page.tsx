@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   assertRespostaApi,
@@ -12,10 +12,10 @@ import {
   sessionValueToDraft,
   type SessionValue,
 } from "@/features/eventos/session-editor";
+import { EventLocationManager } from "@/features/eventos/event-location-manager";
+import type { LocalesResposta } from "@/features/eventos/event-location-contracts";
 import {
   validarSessao,
-  type SessionLocationOption,
-  type SessionMapOption,
   type SessionOptions,
 } from "@/features/eventos/session-card-contracts";
 import {
@@ -25,6 +25,7 @@ import {
   mesclarRespostaSessao,
 } from "@/features/eventos/sessoes-autosave";
 import { useEventoAutosave } from "@/features/eventos/use-evento-autosave";
+import { carregarDadosWorkspace as buscarDadosWorkspace } from "@/features/eventos/workspace-sessions-integration";
 
 const EMPTY_OPTIONS: SessionOptions = {
   defaultLocation: null,
@@ -40,47 +41,6 @@ function asRecord(value: unknown): Record<string, unknown> {
 function unwrapData(value: unknown): unknown {
   const record = asRecord(value);
   return record.data && typeof record.data === "object" ? record.data : value;
-}
-
-function normalizarLocal(value: unknown): SessionLocationOption | null {
-  const record = asRecord(value);
-  if (typeof record.id !== "string" || typeof record.name !== "string" || typeof record.address !== "string") return null;
-  return {
-    id: record.id,
-    name: record.name,
-    address: record.address,
-    room: typeof record.room === "string" ? record.room : null,
-  };
-}
-
-function normalizarMapa(value: unknown): SessionMapOption | null {
-  const record = asRecord(value);
-  if (typeof record.id !== "string" || record.status !== "CONFIRMADO" || typeof record.version !== "number") return null;
-  return {
-    id: record.id,
-    version: record.version,
-    status: "CONFIRMADO",
-    originalFileName: typeof record.originalFileName === "string" ? record.originalFileName : null,
-  };
-}
-
-function normalizarOpcoesSessao(value: unknown): SessionOptions {
-  const record = asRecord(unwrapData(value));
-  const locations = Array.isArray(record.locations)
-    ? record.locations.map(normalizarLocal).filter((item): item is SessionLocationOption => Boolean(item))
-    : [];
-  const maps = Array.isArray(record.maps)
-    ? record.maps.map(normalizarMapa).filter((item): item is SessionMapOption => Boolean(item))
-    : [];
-  const defaultLocation = normalizarLocal(record.defaultLocation);
-  const defaultMap = normalizarMapa(record.defaultMap);
-
-  return {
-    locations,
-    maps,
-    defaultLocation: defaultLocation && locations.some((item) => item.id === defaultLocation.id) ? defaultLocation : null,
-    defaultMap: defaultMap && maps.some((item) => item.id === defaultMap.id) ? defaultMap : null,
-  };
 }
 
 function normalizarSessao(value: unknown): SessionValue {
@@ -162,6 +122,22 @@ export default function SessoesPage() {
   const [options, setOptions] = useState<SessionOptions | null>(null);
   const [optionsLoading, setOptionsLoading] = useState(true);
   const [optionsError, setOptionsError] = useState("");
+  const [locations, setLocations] = useState<LocalesResposta | null>(null);
+
+  const carregarDadosWorkspace = useCallback(async (active = true) => {
+    setOptionsError("");
+    setOptionsLoading(true);
+    try {
+      const data = await buscarDadosWorkspace(id);
+      if (!active) return;
+      setLocations(data.locations);
+      setOptions(data.options);
+    } catch {
+      if (active) setOptionsError("Erro ao carregar opções de local e mapa.");
+    } finally {
+      if (active) setOptionsLoading(false);
+    }
+  }, [id]);
 
   useEffect(() => {
     let active = true;
@@ -184,18 +160,10 @@ export default function SessoesPage() {
   useEffect(() => {
     let active = true;
     setOptions(null);
-    setOptionsError("");
-    setOptionsLoading(true);
-    void fetch(`/eventos-admin/api/eventos/admin/${id}/sessoes/opcoes`, { credentials: "include" })
-      .then((response) => response.ok ? response.json() : Promise.reject(new Error("options")))
-      .then((body: unknown) => {
-        if (!active) return;
-        setOptions(normalizarOpcoesSessao(body));
-      })
-      .catch(() => { if (active) setOptionsError("Erro ao carregar opções de local e mapa."); })
-      .finally(() => { if (active) setOptionsLoading(false); });
+    setLocations(null);
+    void carregarDadosWorkspace(active);
     return () => { active = false; };
-  }, [id]);
+  }, [id, carregarDadosWorkspace]);
 
   const autosave = useEventoAutosave({
     eventId: id,
@@ -312,6 +280,12 @@ export default function SessoesPage() {
     }
   };
 
+  const atualizarDadosWorkspace = () => {
+    void carregarDadosWorkspace().then(() => {
+      router.refresh();
+    });
+  };
+
   const possuiPendenciaLocal = dirty && !sessoesProntasParaSalvar(sessions, options);
 
   return (
@@ -323,6 +297,15 @@ export default function SessoesPage() {
       {error && <p role="alert" className="text-red-700">{error}</p>}
       {optionsLoading && <p role="status" className="text-sm text-slate-600">Carregando opções de local e mapa…</p>}
       {optionsError && <p role="alert" className="text-red-700">{optionsError}</p>}
+      {locations && (
+        <EventLocationManager
+          eventId={id}
+          initialItems={locations.items}
+          initialDefaultLocationId={locations.defaultLocationId}
+          initialUpdatedAt={locations.updatedAt}
+          onChanged={atualizarDadosWorkspace}
+        />
+      )}
       <SessionEditor initialValue={sessions} options={options ?? EMPTY_OPTIONS} onRemove={removerSessao} onChange={(next) => {
         const nextIdentities = new Set(next.map(identidadeSessaoAutosave));
         let removed = false;

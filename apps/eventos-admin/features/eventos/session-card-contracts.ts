@@ -21,6 +21,20 @@ export type SessionOptions = {
   maps: SessionMapOption[];
 };
 
+export type SessionLocationCatalog = {
+  items: Array<Pick<SessionLocationOption, "id" | "name" | "address" | "room">>;
+  defaultLocationId: string | null;
+};
+
+export function aplicarLocaisNasOpcoes(options: SessionOptions, catalog: SessionLocationCatalog): SessionOptions {
+  const locations = catalog.items.map((location) => ({ ...location }));
+  return {
+    ...options,
+    locations,
+    defaultLocation: locations.find((location) => location.id === catalog.defaultLocationId) ?? null,
+  };
+}
+
 export type SessionDraftState = Omit<SessaoValue, "inheritLocation" | "inheritMap"> & {
   locationMode: "default" | "custom";
   mapMode: "default" | "custom";
@@ -53,5 +67,13 @@ export function validarSessao(draft: SessionDraftState): { ok: boolean; errors: 
   if (draft.mapMode === "custom" && !draft.mapId?.trim()) errors.map = "Escolha um mapa para esta sessão";
 
   return { ok: Object.keys(errors).length === 0, errors };
+}
+
+export function sessaoProntaParaSalvar(draft: SessionDraftState, options: SessionOptions): boolean {
+  const validation = validarSessao(draft);
+  if (!validation.ok) return false;
+  if (draft.locationMode === "default" && !options.defaultLocation) return false;
+  if (draft.mapMode === "default" && !options.defaultMap) return false;
+  return true;
 }
 
