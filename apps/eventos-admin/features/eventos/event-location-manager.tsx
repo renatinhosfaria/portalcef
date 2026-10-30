@@ -211,11 +211,13 @@ export function EventLocationManager({
                   <p className="mt-1 text-sm text-slate-600">{item.address}</p>
                   {item.room && <p className="mt-1 text-sm text-slate-500">{item.room}</p>}
                 </div>
-                {item.id === defaultLocationId ? <span className="rounded-full bg-[#e5f1e2] px-2.5 py-1 text-xs font-semibold text-[#2f633d]">Local padrão</span> : null}
+                <span className={item.id === defaultLocationId ? "rounded-full bg-[#e5f1e2] px-2.5 py-1 text-xs font-semibold text-[#2f633d]" : "rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600"}>
+                  {item.id === defaultLocationId ? "Padrão" : "Disponível"}
+                </span>
               </div>
               <div className="mt-4 flex flex-wrap gap-2">
                 <button type="button" onClick={() => abrirEdicao(item)} disabled={Boolean(busy)} className="rounded border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 disabled:opacity-50">Editar</button>
-                {item.id === defaultLocationId ? <span className="px-2 py-1.5 text-sm text-slate-500">Usado nas sessões sem exceção</span> : <button type="button" onClick={() => void definirPadrao(item.id)} disabled={Boolean(busy)} className="rounded border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 disabled:opacity-50">Escolher como padrão</button>}
+                {item.id === defaultLocationId ? <span className="px-2 py-1.5 text-sm text-slate-500">Usado nas sessões sem exceção</span> : <button type="button" onClick={() => void definirPadrao(item.id)} disabled={Boolean(busy)} className="rounded border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 disabled:opacity-50">Usar como padrão</button>}
               </div>
             </li>
           ))}
