@@ -1,6 +1,6 @@
 import { hasEventosAdminAccess } from "./eventos.constants";
 import { EventosAdminController } from "./eventos-admin.controller";
-import { atualizarMapaPadraoSchema, criarRascunhoSchema } from "@essencia/shared/schemas";
+import { atualizarMapaPadraoSchema, criarRascunhoSchema, localEventoSchema } from "@essencia/shared/schemas";
 describe("eventos API contracts", () => {
   it("exposes public and administrative role contract", () => {
     expect(hasEventosAdminAccess("diretora_geral")).toBe(true);
@@ -45,5 +45,26 @@ describe('eventos workspace contracts', () => {
 
     expect(result).toMatchObject({ success: false, error: { code: "INVALID_REQUEST" } });
     expect(service.atualizarImagem).not.toHaveBeenCalled();
+  });
+
+  it('expõe as rotas administrativas de locais e valida o contrato do local', async () => {
+    const proto = (EventosAdminController as any).prototype;
+    expect(typeof proto.locations).toBe('function');
+    expect(typeof proto.createLocation).toBe('function');
+    expect(typeof proto.updateLocation).toBe('function');
+    expect(typeof proto.updateDefaultLocation).toBe('function');
+
+    expect(localEventoSchema.parse({ name: 'Auditório', address: 'Rua A' })).toEqual({ name: 'Auditório', address: 'Rua A' });
+    expect(localEventoSchema.parse({ name: 'Auditório', address: 'Rua A', room: null, instructions: null, accessibility: null })).toEqual({ name: 'Auditório', address: 'Rua A', room: null, instructions: null, accessibility: null });
+    expect(() => localEventoSchema.parse({ name: 'Auditório', address: 'Rua A', unknown: true })).toThrow();
+  });
+
+  it('retorna envelope de locais e não chama serviço quando o corpo é inválido', async () => {
+    const service = { listarLocais: jest.fn(), criarLocal: jest.fn(), atualizarLocal: jest.fn(), atualizarLocalPadrao: jest.fn() };
+    const controller = new EventosAdminController(service as any, {} as any);
+    await expect(controller.locations('e1', {} as any)).resolves.toMatchObject({ success: true });
+    const invalid = await controller.createLocation('e1', { name: '', address: '' }, {} as any);
+    expect(invalid).toMatchObject({ success: false, error: { code: 'VALIDATION_ERROR' } });
+    expect(service.criarLocal).not.toHaveBeenCalled();
   });
 });

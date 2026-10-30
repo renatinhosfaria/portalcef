@@ -5,7 +5,7 @@ import { ExactRoles, Roles } from "../../common/decorators/roles.decorator";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { AuthGuard } from "../../common/guards/auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
-import { atualizarMapaPadraoSchema, atualizarRascunhoSchema, criarEventoSchema, criarRascunhoSchema, criarSessaoSchema, eventoListQuerySchema, politicaSchema } from "@essencia/shared/schemas";
+import { atualizarLocalEventoSchema, atualizarLocalPadraoEventoSchema, atualizarMapaPadraoSchema, atualizarRascunhoSchema, criarEventoSchema, criarRascunhoSchema, criarSessaoSchema, eventoListQuerySchema, localEventoSchema, politicaSchema } from "@essencia/shared/schemas";
 import { EventosService } from "./eventos.service";
 import { EventosReadinessService } from "./eventos-readiness.service";
 import { EVENTOS_ADMIN_ROLES } from "./eventos.constants";
@@ -65,6 +65,33 @@ export class EventosAdminController {
 
   @Get(":id")
   detail(@Param("id") id: string, @CurrentUser() actor: any) { return this.service.detalheAdmin(id, actor); }
+
+  @Get(":id/locais")
+  async locations(@Param("id") id: string, @CurrentUser() actor: any) {
+    return { success: true, data: await this.service.listarLocais(id, actor) };
+  }
+
+  @Post(":id/locais")
+  async createLocation(@Param("id") id: string, @Body() body: unknown, @CurrentUser() actor: any) {
+    const parsed = localEventoSchema.safeParse(body);
+    if (!parsed.success) return { success: false, error: { code: "VALIDATION_ERROR", details: parsed.error.flatten() } };
+    return { success: true, data: await this.service.criarLocal(id, parsed.data, actor) };
+  }
+
+  @Patch(":id/locais/:locationId")
+  async updateLocation(@Param("id") id: string, @Param("locationId") locationId: string, @Body() body: unknown, @CurrentUser() actor: any) {
+    const parsed = atualizarLocalEventoSchema.safeParse(body);
+    if (!parsed.success) return { success: false, error: { code: "VALIDATION_ERROR", details: parsed.error.flatten() } };
+    const { expectedUpdatedAt, ...input } = parsed.data;
+    return { success: true, data: await this.service.atualizarLocal(id, locationId, input, actor, expectedUpdatedAt) };
+  }
+
+  @Patch(":id/local-padrao")
+  async updateDefaultLocation(@Param("id") id: string, @Body() body: unknown, @CurrentUser() actor: any) {
+    const parsed = atualizarLocalPadraoEventoSchema.safeParse(body);
+    if (!parsed.success) return { success: false, error: { code: "VALIDATION_ERROR", details: parsed.error.flatten() } };
+    return { success: true, data: await this.service.atualizarLocalPadrao(id, parsed.data.locationId, actor, parsed.data.expectedUpdatedAt) };
+  }
 
   @Get(":id/prontidao")
   async readiness(@Param("id") id: string, @CurrentUser() actor: any) { return { success: true, data: await this.readinessService.verificar(id, actor) }; }

@@ -318,5 +318,5 @@ export type {
   OrderFilterQuery,
 } from "./shop";
 
-export { eventoStatusSchema, eventoSessaoStatusSchema, eventoParticipanteTipoSchema, criarEventoSchema, criarEventoInputSchema, atualizarEventoSchema, criarRascunhoSchema, atualizarRascunhoSchema, atualizarMapaPadraoSchema, criarSessaoSchema, politicaSchema, eventoListQuerySchema, politicaPublicaTipoSchema, reservaPublicaSchema, finalizarPedidoSchema, checkoutPublicoSchema } from "./eventos";
-export type { CriarEventoInput, AtualizarEventoInput, CriarRascunhoInput, AtualizarRascunhoInput, AtualizarMapaPadraoInput, CriarSessaoInput, EventoListQuery, ReservaPublicaInput, FinalizarPedidoInput, CheckoutPublicoInput } from "./eventos";
+export { eventoStatusSchema, eventoSessaoStatusSchema, eventoParticipanteTipoSchema, criarEventoSchema, criarEventoInputSchema, atualizarEventoSchema, criarRascunhoSchema, atualizarRascunhoSchema, atualizarMapaPadraoSchema, localEventoSchema, atualizarLocalEventoSchema, atualizarLocalPadraoEventoSchema, criarSessaoSchema, politicaSchema, eventoListQuerySchema, politicaPublicaTipoSchema, reservaPublicaSchema, finalizarPedidoSchema, checkoutPublicoSchema } from "./eventos";
+export type { CriarEventoInput, AtualizarEventoInput, CriarRascunhoInput, AtualizarRascunhoInput, AtualizarMapaPadraoInput, LocalEventoInput, AtualizarLocalEventoInput, AtualizarLocalPadraoEventoInput, CriarSessaoInput, EventoListQuery, ReservaPublicaInput, FinalizarPedidoInput, CheckoutPublicoInput } from "./eventos";
