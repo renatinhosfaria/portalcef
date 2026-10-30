@@ -1,6 +1,6 @@
 import { hasEventosAdminAccess } from "./eventos.constants";
 import { EventosAdminController } from "./eventos-admin.controller";
-import { atualizarMapaPadraoSchema, criarRascunhoSchema, localEventoSchema } from "@essencia/shared/schemas";
+import { atualizarLocalPadraoEventoSchema, atualizarMapaPadraoSchema, criarRascunhoSchema, localEventoSchema } from "@essencia/shared/schemas";
 describe("eventos API contracts", () => {
   it("exposes public and administrative role contract", () => {
     expect(hasEventosAdminAccess("diretora_geral")).toBe(true);
@@ -66,5 +66,27 @@ describe('eventos workspace contracts', () => {
     const invalid = await controller.createLocation('e1', { name: '', address: '' }, {} as any);
     expect(invalid).toMatchObject({ success: false, error: { code: 'VALIDATION_ERROR' } });
     expect(service.criarLocal).not.toHaveBeenCalled();
+  });
+
+  it('aceita defaultLocationId no contrato do local padrão', () => {
+    expect(atualizarLocalPadraoEventoSchema.parse({ defaultLocationId: null })).toEqual({ defaultLocationId: null });
+    expect(() => atualizarLocalPadraoEventoSchema.parse({ locationId: null })).toThrow();
+  });
+
+  it('encaminha expectedUpdatedAt ao editar local e trocar o padrão', async () => {
+    const service = {
+      listarLocais: jest.fn(),
+      criarLocal: jest.fn(),
+      atualizarLocal: jest.fn().mockResolvedValue({ id: 'local-1' }),
+      atualizarLocalPadrao: jest.fn().mockResolvedValue({ defaultLocationId: null }),
+    };
+    const controller = new EventosAdminController(service as any, {} as any);
+    const expectedUpdatedAt = '2026-10-29T10:00:00.000Z';
+
+    await controller.updateLocation('e1', 'local-1', { name: 'Auditório', expectedUpdatedAt }, {} as any);
+    await controller.updateDefaultLocation('e1', { defaultLocationId: null, expectedUpdatedAt }, {} as any);
+
+    expect(service.atualizarLocal).toHaveBeenCalledWith('e1', 'local-1', { name: 'Auditório' }, expect.anything(), new Date(expectedUpdatedAt));
+    expect(service.atualizarLocalPadrao).toHaveBeenCalledWith('e1', null, expect.anything(), new Date(expectedUpdatedAt));
   });
 });

@@ -64,8 +64,48 @@ describe('EventosService contratos de workspace', () => {
       selects: [[event({ defaultLocationId: 'l1' })], [location]],
       update: async () => [{ ...location, name: 'Auditório novo', address: 'Rua B' }],
     });
+    const audited: any[] = [];
+    const insert = db.insert;
+    db.insert = (table: unknown) => {
+      const builder = insert(table);
+      return { values: (values: any) => { audited.push(values); return builder.values(values); } };
+    };
 
     await expect(service(db).atualizarLocal('e1', 'l1', { name: 'Auditório novo', address: 'Rua B' }, actor)).resolves.toMatchObject({ id: 'l1', name: 'Auditório novo', address: 'Rua B' });
+    expect(audited).toEqual(expect.arrayContaining([expect.objectContaining({ action: 'ATUALIZADO', resourceType: 'local', resourceId: 'l1' })]));
+  });
+
+  it('faz rollback quando a versão do evento conflita depois de atualizar o local', async () => {
+    const location = { id: 'l1', schoolId: 's1', name: 'Auditório', address: 'Rua A', room: null, instructions: null, accessibility: null };
+    const expectedUpdatedAt = new Date('2026-10-29T10:00:00Z');
+    const db = fakeDb({ selects: [[event({ updatedAt: expectedUpdatedAt })], [location]] });
+    let localMutated = false;
+    let updateCount = 0;
+    db.update = () => ({
+      set: () => ({
+        where: () => ({
+          returning: async () => {
+            updateCount += 1;
+            if (updateCount === 1) {
+              localMutated = true;
+              return [{ ...location, name: 'Auditório editado' }];
+            }
+            return [];
+          },
+        }),
+      }),
+    });
+    db.transaction = async (callback: (tx: any) => Promise<unknown>) => {
+      try {
+        return await callback(db);
+      } catch (error) {
+        localMutated = false;
+        throw error;
+      }
+    };
+
+    await expect(service(db).atualizarLocal('e1', 'l1', { name: 'Auditório editado' }, actor, expectedUpdatedAt)).rejects.toMatchObject({ response: { code: 'VERSION_CONFLICT' } });
+    expect(localMutated).toBe(false);
   });
 
   it('rejeita troca para local inexistente sem perder o padrão atual', async () => {

@@ -34,3 +34,13 @@ Concluída.
 
 - O build do pacote compartilhado foi executado antes do typecheck para atualizar as declarações geradas locais; os artefatos `dist` são gerados e não fazem parte do commit.
 - A suíte completa emite logs de erro esperados por testes de regressão, mas terminou sem falhas.
+
+## Fix round 1 — revisão independente
+
+- Ajustado o contrato de `PATCH /eventos/admin/:id/local-padrao` para aceitar `defaultLocationId` (inclusive `null`) e encaminhá-lo ao serviço; o campo divergente `locationId` permanece rejeitado pelo schema estrito.
+- Adicionados testes de controller para o contrato e para o encaminhamento de `expectedUpdatedAt` tanto na edição do local quanto na troca do padrão.
+- Adicionado teste explícito de auditoria da edição de local.
+- Adicionado teste de rollback quando a atualização do evento conflita depois da atualização do local, garantindo que a mutação parcial seja desfeita.
+- Arquivos: `packages/shared/src/schemas/eventos.ts`, `services/api/src/modules/eventos/eventos-admin.controller.ts`, `services/api/src/modules/eventos/eventos.controller.spec.ts`, `services/api/src/modules/eventos/eventos.service.spec.ts`.
+- Comandos: `pnpm --filter @essencia/shared build`; `pnpm exec jest src/modules/eventos/eventos.service.spec.ts src/modules/eventos/eventos.controller.spec.ts --runInBand`; `pnpm lint`; `pnpm typecheck`; `git diff --check`.
+- Resultado: 2 suítes e 43 testes focados passaram; lint, typecheck e verificação de diff passaram.

@@ -32,7 +32,7 @@ export const localEventoSchema = z.object({
   accessibility: z.string().trim().nullable().optional(),
 }).strict();
 export const atualizarLocalEventoSchema = localEventoSchema.partial().extend({ expectedUpdatedAt: date.optional() }).strict();
-export const atualizarLocalPadraoEventoSchema = z.object({ locationId: z.string().uuid().nullable(), expectedUpdatedAt: date.optional() }).strict();
+export const atualizarLocalPadraoEventoSchema = z.object({ defaultLocationId: z.string().uuid().nullable(), expectedUpdatedAt: date.optional() }).strict();
 export const criarSessaoSchema = z.object({ startsAt: date, endsAt: date, capacity: z.number().int().positive(), locationId: z.string().uuid().optional().nullable(), mapId: z.string().uuid().optional().nullable(), salesStartsAt: date.optional().nullable(), salesEndsAt: date.optional().nullable(), status: eventoSessaoStatusSchema.optional() }).strict();
 export const politicaSchema = z.object({ type: z.enum(["PRIVACIDADE","COMPRA","CANCELAMENTO_REEMBOLSO","ACESSIBILIDADE","CONTATO"]), content: z.string().min(1), version: z.number().int().positive().optional() });
 export const eventoListQuerySchema = z.object({ status: eventoStatusSchema.optional(), search: z.string().max(120).optional() });

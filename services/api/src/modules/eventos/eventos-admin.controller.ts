@@ -90,7 +90,7 @@ export class EventosAdminController {
   async updateDefaultLocation(@Param("id") id: string, @Body() body: unknown, @CurrentUser() actor: any) {
     const parsed = atualizarLocalPadraoEventoSchema.safeParse(body);
     if (!parsed.success) return { success: false, error: { code: "VALIDATION_ERROR", details: parsed.error.flatten() } };
-    return { success: true, data: await this.service.atualizarLocalPadrao(id, parsed.data.locationId, actor, parsed.data.expectedUpdatedAt) };
+    return { success: true, data: await this.service.atualizarLocalPadrao(id, parsed.data.defaultLocationId, actor, parsed.data.expectedUpdatedAt) };
   }
 
   @Get(":id/prontidao")
