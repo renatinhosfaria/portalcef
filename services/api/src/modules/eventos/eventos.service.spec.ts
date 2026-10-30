@@ -227,6 +227,22 @@ describe('EventosService contratos de workspace', () => {
     }, actor)).rejects.toMatchObject({ response: { code: 'SESSION_LOCATION_INVALID' } });
   });
 
+  it('valida o local padrão do evento ao criar sessão sem exceção', async () => {
+    const db = fakeDb({
+      selects: [
+        [event({ defaultLocationId: 'local-externo' })],
+        [{ id: 'local-externo', schoolId: 's2' }],
+      ],
+    });
+
+    await expect(service(db).criarSessao('e1', {
+      startsAt: new Date('2026-11-01T10:00:00Z'),
+      endsAt: new Date('2026-11-01T11:00:00Z'),
+      capacity: 10,
+      mapId: null,
+    }, actor)).rejects.toMatchObject({ response: { code: 'SESSION_LOCATION_INVALID' } });
+  });
+
   it('rejeita atualização de sessão com mapa não confirmado de outro evento', async () => {
     const db = fakeDb({
       selects: [
@@ -265,17 +281,44 @@ describe('EventosService contratos de workspace', () => {
 
     await expect(service(db).removerSessao('e1', 's1', actor)).rejects.toMatchObject({ response: { code: 'SESSION_HAS_DEPENDENCIES' } });
   });
+
+  it('mantém a remoção e a auditoria na mesma transação com lock da sessão', async () => {
+    const lockCalls: string[] = [];
+    const committedDeletes: unknown[] = [];
+    const pendingDeletes: unknown[] = [];
+    const db = fakeDb({
+      lockCalls,
+      selects: [[event()], [{ id: 's1', eventId: 'e1' }], [], [], [], []],
+      delete: (table: unknown) => ({ where: async () => { pendingDeletes.push(table); } }),
+    });
+    db.insert = () => ({ values: async () => { throw new Error('auditoria indisponível'); } });
+    db.transaction = async (callback: (tx: any) => Promise<unknown>) => {
+      try {
+        const result = await callback(db);
+        committedDeletes.push(...pendingDeletes);
+        return result;
+      } catch (error) {
+        pendingDeletes.length = 0;
+        throw error;
+      }
+    };
+
+    await expect(service(db).removerSessao('e1', 's1', actor)).rejects.toThrow('auditoria indisponível');
+    expect(lockCalls).toEqual(['update']);
+    expect(committedDeletes).toHaveLength(0);
+  });
 });
 
 function service(db: any, storage?: any) { return new EventosService({ db } as any, { validarPublicacao: jest.fn() } as any, storage); }
 
-function fakeDb(options: { selects?: unknown[][]; insert?: (values: any) => Promise<any[]>; update?: () => Promise<any[]>; delete?: (table: unknown) => { where: () => Promise<unknown> } } = {}) {
+function fakeDb(options: { selects?: unknown[][]; lockCalls?: string[]; insert?: (values: any) => Promise<any[]>; update?: () => Promise<any[]>; delete?: (table: unknown) => { where: () => Promise<unknown> } } = {}) {
   let selectIndex = 0;
   const selects = options.selects ?? [];
   const db: any = { updated: false };
-  db.select = () => ({ from: () => ({ where: () => { const rows = selects[selectIndex++] ?? []; const promise: any = Promise.resolve(rows); promise.limit = async () => rows; return promise; } }) });
+  db.select = () => ({ from: () => ({ where: () => { const rows = selects[selectIndex++] ?? []; const promise: any = Promise.resolve(rows); promise.limit = async () => rows; promise.for = (mode: string) => { options.lockCalls?.push(mode); return promise; }; return promise; } }) });
   db.insert = (table: any) => ({ values: (values: any) => ({ returning: async () => options.insert ? options.insert(values) : [] }) });
   db.update = () => ({ set: () => ({ where: () => ({ returning: async () => { db.updated = true; return options.update ? options.update() : []; } }) }) });
   db.delete = (table: unknown) => options.delete ? options.delete(table) : ({ where: async () => undefined });
+  db.transaction = async (callback: (tx: any) => Promise<unknown>) => callback(db);
   return db;
 }

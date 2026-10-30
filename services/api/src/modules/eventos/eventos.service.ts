@@ -6,6 +6,8 @@ import { DatabaseService } from "../../common/database/database.service";
 import { RASTER_IMAGE_MIME_TYPES, StorageService } from "../../common/storage/storage.service";
 import { EventosRulesService } from "./eventos-rules.service";
 
+type DbTransaction = Parameters<Database["transaction"]>[0] extends (tx: infer T) => unknown ? T : never;
+
 export function assertSchoolScope(actor: EventoActor, schoolId: string) {
   if (actor.role === "master") return;
   if (!actor.schoolId || actor.schoolId !== schoolId) throw new BadRequestException({ code: "FORBIDDEN", message: "Acesso negado" });
@@ -213,30 +215,35 @@ export class EventosService {
   }
 
   async removerSessao(eventId: string, sessionId: string, actor: EventoActor) {
-    const [event] = await this.db.select().from(eventos).where(eq(eventos.id, eventId));
-    if (!event) throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Evento não encontrado" });
-    this.assertSchoolScope(actor, event.schoolId);
+    return this.db.transaction(async (tx: DbTransaction) => {
+      const [event] = await tx.select().from(eventos).where(eq(eventos.id, eventId));
+      if (!event) throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Evento não encontrado" });
+      this.assertSchoolScope(actor, event.schoolId);
 
-    const [session] = await this.db.select().from(eventoSessoes).where(and(eq(eventoSessoes.id, sessionId), eq(eventoSessoes.eventId, eventId)));
-    if (!session) throw new NotFoundException({ code: "SESSION_NOT_FOUND", message: "Sessão não encontrada" });
+      // O lock impede uma inserção concorrente com FK de passar entre as
+      // guardas de dependência e a exclusão da sessão.
+      const [session] = await tx.select().from(eventoSessoes).where(and(eq(eventoSessoes.id, sessionId), eq(eventoSessoes.eventId, eventId))).for("update");
+      if (!session) throw new NotFoundException({ code: "SESSION_NOT_FOUND", message: "Sessão não encontrada" });
 
-    const [sale] = await this.db.select({ id: eventoPedidos.id }).from(eventoPedidos).where(eq(eventoPedidos.sessionId, sessionId)).limit(1);
-    if (sale) throw new BadRequestException({ code: "EVENT_HAS_SALES", message: "A sessão possui vendas e não pode ser removida" });
+      const [sale] = await tx.select({ id: eventoPedidos.id }).from(eventoPedidos).where(eq(eventoPedidos.sessionId, sessionId)).limit(1);
+      if (sale) throw new BadRequestException({ code: "EVENT_HAS_SALES", message: "A sessão possui vendas e não pode ser removida" });
 
-    const operationalDependencies = [eventoInventarioAssentos, eventoOperacoesAdministrativas, eventoIngressos, eventoCheckins];
-    for (const table of operationalDependencies) {
-      const [dependency] = await this.db.select({ id: table.id }).from(table).where(eq(table.sessionId, sessionId)).limit(1);
-      if (dependency) throw new BadRequestException({ code: "SESSION_HAS_DEPENDENCIES", message: "A sessão possui dados operacionais e não pode ser removida" });
-    }
+      const operationalDependencies = [eventoInventarioAssentos, eventoOperacoesAdministrativas, eventoIngressos, eventoCheckins];
+      for (const table of operationalDependencies) {
+        const [dependency] = await tx.select({ id: table.id }).from(table).where(eq(table.sessionId, sessionId)).limit(1);
+        if (dependency) throw new BadRequestException({ code: "SESSION_HAS_DEPENDENCIES", message: "A sessão possui dados operacionais e não pode ser removida" });
+      }
 
-    await this.db.delete(eventoSessoes).where(and(eq(eventoSessoes.id, sessionId), eq(eventoSessoes.eventId, eventId)));
-    await this.audit(eventId, actor, "ATUALIZADO", "sessao", sessionId, { operacao: "REMOVIDA" });
-    return { id: sessionId };
+      await tx.delete(eventoSessoes).where(and(eq(eventoSessoes.id, sessionId), eq(eventoSessoes.eventId, eventId)));
+      await this.audit(eventId, actor, "ATUALIZADO", "sessao", sessionId, { operacao: "REMOVIDA" }, tx);
+      return { id: sessionId };
+    });
   }
 
   private async validarReferenciasSessao(eventId: string, event: typeof eventos.$inferSelect, input: Partial<CriarSessaoInput>) {
-    if (input.locationId) {
-      const [location] = await this.db.select().from(eventoLocais).where(eq(eventoLocais.id, input.locationId));
+    const locationId = input.locationId === undefined ? event.defaultLocationId : input.locationId;
+    if (locationId) {
+      const [location] = await this.db.select().from(eventoLocais).where(eq(eventoLocais.id, locationId));
       if (!location || location.schoolId !== event.schoolId) throw new BadRequestException({ code: "SESSION_LOCATION_INVALID", message: "O local informado não pertence à escola do evento" });
     }
     if (input.mapId) {

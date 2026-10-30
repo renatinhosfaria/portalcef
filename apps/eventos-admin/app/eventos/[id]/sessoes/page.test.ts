@@ -59,5 +59,13 @@ it("invalida respostas de autosave que chegam depois da remoção", () => {
   expect(source).toContain("mutationGenerationRef");
   expect(source).toContain("clientId");
   expect(source).toContain("descartarSessaoCriadaDepoisDaRemocao");
-  expect(source).toContain("!original?.id");
+  expect(source).toContain("deveCompensar");
+});
+
+it("mescla respostas stale por clientId e não ignora falha de compensação", () => {
+  expect(source).toContain("criarPersistenciaSessao");
+  expect(source).toContain("mesclarRespostaSessao");
+  expect(source).toContain("identidadeSessaoAutosave");
+  expect(source).toContain("assertRespostaApi({ ok: response.ok, status: response.status, body });");
+  expect(source).toContain("Não foi possível limpar a sessão criada após a remoção.");
 });

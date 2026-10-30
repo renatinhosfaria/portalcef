@@ -18,6 +18,12 @@ import {
   type SessionMapOption,
   type SessionOptions,
 } from "@/features/eventos/session-card-contracts";
+import {
+  criarCompensacaoSessao,
+  criarPersistenciaSessao,
+  identidadeSessaoAutosave,
+  mesclarRespostaSessao,
+} from "@/features/eventos/sessoes-autosave";
 import { useEventoAutosave } from "@/features/eventos/use-evento-autosave";
 
 const EMPTY_OPTIONS: SessionOptions = {
@@ -120,19 +126,13 @@ function mesmaSessao(value: SessionValue, other: SessionValue): boolean {
     && value.mapId === other.mapId;
 }
 
-function identidadeSessao(value: SessionValue): string {
-  return value.clientId ?? value.id ?? "sessao-sem-identidade";
-}
-
 async function descartarSessaoCriadaDepoisDaRemocao(eventId: string, sessionId: string): Promise<void> {
-  try {
-    await fetch(`/eventos-admin/api/eventos/admin/${eventId}/sessoes/${sessionId}`, {
-      method: "DELETE",
-      credentials: "include",
-    });
-  } catch {
-    // A resposta stale não deve alterar o estado local mesmo que a limpeza seja reprocessada.
-  }
+  const response = await fetch(`/eventos-admin/api/eventos/admin/${eventId}/sessoes/${sessionId}`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+  const body = await response.json().catch(() => ({}));
+  assertRespostaApi({ ok: response.ok, status: response.status, body });
 }
 
 function restaurarSessaoRemovida(values: SessionValue[], removed: SessionValue, index: number): SessionValue[] {
@@ -155,6 +155,8 @@ export default function SessoesPage() {
   const savedSessionsRef = useRef<SessionValue[]>([]);
   const mutationGenerationRef = useRef(0);
   const removedSessionIdsRef = useRef(new Set<string>());
+  const persistenciaSessaoRef = useRef<ReturnType<typeof criarPersistenciaSessao> | null>(null);
+  const compensacaoSessaoRef = useRef<ReturnType<typeof criarCompensacaoSessao> | null>(null);
   const [dirty, setDirty] = useState(false);
   const [error, setError] = useState("");
   const [options, setOptions] = useState<SessionOptions | null>(null);
@@ -208,43 +210,70 @@ export default function SessoesPage() {
     },
     save: async (items, eventId) => {
       const generation = mutationGenerationRef.current;
-      let savedItems = items;
-      const limparRespostasStale = async () => {
-        for (const candidate of savedItems) {
-          const original = items.find((value) => identidadeSessao(value) === identidadeSessao(candidate));
-          if (removedSessionIdsRef.current.has(identidadeSessao(candidate)) && !original?.id && candidate.id) await descartarSessaoCriadaDepoisDaRemocao(eventId, candidate.id);
-        }
-      };
+      if (!persistenciaSessaoRef.current) {
+        persistenciaSessaoRef.current = criarPersistenciaSessao(async (item, requestEventId) => {
+          const response = await fetch(`/eventos-admin/api/eventos/admin/${requestEventId}/sessoes${item.id ? `/${item.id}` : ""}`, {
+            method: item.id ? "PATCH" : "POST",
+            credentials: "include",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(construirPayloadSessao(item)),
+          });
+          const body = await response.json().catch(() => ({}));
+          assertRespostaApi({ ok: response.ok, status: response.status, body });
+          return (asRecord(body).data ?? body) as { id?: string };
+        });
+      }
+      if (!compensacaoSessaoRef.current) {
+        compensacaoSessaoRef.current = criarCompensacaoSessao(descartarSessaoCriadaDepoisDaRemocao);
+      }
+      let savedItems = [...items];
+      const persistencia = persistenciaSessaoRef.current;
+      const compensacao = compensacaoSessaoRef.current;
       for (const [index] of items.entries()) {
         const item = savedItems[index];
-        if (!item || generation !== mutationGenerationRef.current) {
-          await limparRespostasStale();
-          return;
+        if (!item) return;
+        if (generation !== mutationGenerationRef.current && !sessionsRef.current.some((value) => identidadeSessaoAutosave(value) === identidadeSessaoAutosave(item))) return;
+        let saved: { id?: string };
+        try {
+          saved = await persistencia.enviar(item, eventId);
+        } catch (error) {
+          if (generation !== mutationGenerationRef.current) setError("Não foi possível concluir a gravação concorrente da sessão.");
+          throw error;
         }
-        const response = await fetch(`/eventos-admin/api/eventos/admin/${eventId}/sessoes${item.id ? `/${item.id}` : ""}`, {
-          method: item.id ? "PATCH" : "POST",
-          credentials: "include",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(construirPayloadSessao(item)),
-        });
-        const body = await response.json().catch(() => ({}));
-        assertRespostaApi({ ok: response.ok, status: response.status, body });
-        const saved = (asRecord(body).data ?? body) as { id?: string };
         savedItems = persistirSessaoSalva(savedItems, index, saved);
+        const merged = mesclarRespostaSessao({
+          atuais: sessionsRef.current,
+          salvas: savedSessionsRef.current,
+          enviada: item,
+          resposta: saved,
+          geracaoDaOperacao: generation,
+          geracaoAtual: mutationGenerationRef.current,
+        });
+        sessionsRef.current = merged.atuais;
+        savedSessionsRef.current = merged.salvas;
+        setSessions(merged.atuais);
+        setDirty(temAlteracoesPendentes(merged.atuais, merged.salvas));
+        if (merged.deveCompensar && saved.id) {
+          try {
+            await compensacao.executar(eventId, saved.id);
+            removedSessionIdsRef.current.delete(identidadeSessaoAutosave(item));
+          } catch (error) {
+            setError("Não foi possível limpar a sessão criada após a remoção.");
+            throw error;
+          }
+        }
         if (generation !== mutationGenerationRef.current) {
-          await limparRespostasStale();
           return;
         }
       }
       if (generation !== mutationGenerationRef.current) {
-        await limparRespostasStale();
         return;
       }
       savedSessionsRef.current = savedItems;
       const current = sessionsRef.current;
       const next = current.map((item) => {
-        const original = items.find((candidate) => identidadeSessao(candidate) === identidadeSessao(item));
-        const saved = original ? savedItems.find((candidate) => identidadeSessao(candidate) === identidadeSessao(original)) : undefined;
+        const original = items.find((candidate) => identidadeSessaoAutosave(candidate) === identidadeSessaoAutosave(item));
+        const saved = original ? savedItems.find((candidate) => identidadeSessaoAutosave(candidate) === identidadeSessaoAutosave(original)) : undefined;
         return !original || item.id || !saved?.id || !mesmaSessao(item, original) ? item : { ...item, id: saved.id };
       });
       sessionsRef.current = next;
@@ -255,7 +284,7 @@ export default function SessoesPage() {
 
   const removerSessao = async (index: number, session: SessionValue) => {
     if (!session.id) return;
-    removedSessionIdsRef.current.add(identidadeSessao(session));
+    removedSessionIdsRef.current.add(identidadeSessaoAutosave(session));
     mutationGenerationRef.current += 1;
     autosave.invalidate();
     try {
@@ -267,13 +296,13 @@ export default function SessoesPage() {
       assertRespostaApi({ ok: response.ok, status: response.status, body });
       const savedRemaining = savedSessionsRef.current.filter((value) => value.id !== session.id);
       savedSessionsRef.current = savedRemaining;
-       removedSessionIdsRef.current.delete(identidadeSessao(session));
+      removedSessionIdsRef.current.delete(identidadeSessaoAutosave(session));
       const temAlteracoes = temAlteracoesPendentes(sessionsRef.current, savedRemaining);
       setDirty(temAlteracoes);
       setError("");
       if (!temAlteracoes) router.refresh();
     } catch {
-       removedSessionIdsRef.current.delete(identidadeSessao(session));
+      removedSessionIdsRef.current.delete(identidadeSessaoAutosave(session));
       const restored = restaurarSessaoRemovida(sessionsRef.current, session, index);
       sessionsRef.current = restored;
       setSessions(restored);
@@ -295,11 +324,11 @@ export default function SessoesPage() {
       {optionsLoading && <p role="status" className="text-sm text-slate-600">Carregando opções de local e mapa…</p>}
       {optionsError && <p role="alert" className="text-red-700">{optionsError}</p>}
       <SessionEditor initialValue={sessions} options={options ?? EMPTY_OPTIONS} onRemove={removerSessao} onChange={(next) => {
-        const nextIdentities = new Set(next.map(identidadeSessao));
+        const nextIdentities = new Set(next.map(identidadeSessaoAutosave));
         let removed = false;
         for (const previous of sessionsRef.current) {
-          if (!nextIdentities.has(identidadeSessao(previous))) {
-            removedSessionIdsRef.current.add(identidadeSessao(previous));
+          if (!nextIdentities.has(identidadeSessaoAutosave(previous))) {
+            removedSessionIdsRef.current.add(identidadeSessaoAutosave(previous));
             removed = true;
           }
         }
