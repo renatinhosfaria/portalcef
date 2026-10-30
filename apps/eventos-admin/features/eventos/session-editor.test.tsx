@@ -1,4 +1,7 @@
+// @vitest-environment jsdom
+
 import React from "react";
+import { render, screen } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { confirmarRemocaoSessao, SessionEditor, sessionDraftToValue, sessionValueToDraft, type SessionValue } from "./session-editor";
@@ -68,6 +71,16 @@ describe("SessionEditor", () => {
     expect(html).toContain('value="local-quadra"');
     expect(html).toContain("Quadra Coberta");
     expect(html).not.toContain('value="local-padrao" selected');
+  });
+
+  it("preserva o seletor da exceção ao receber novas opções", () => {
+    const initialValue = [{ ...pronta, inheritLocation: false, locationId: "local-quadra" }];
+    const view = render(<SessionEditor initialValue={initialValue} options={options} />);
+
+    expect((screen.getByLabelText("Local da exceção") as HTMLSelectElement).value).toBe("local-quadra");
+    view.rerender(<SessionEditor initialValue={initialValue} options={{ ...options, defaultLocation: { ...options.locations[1] } }} />);
+
+    expect((screen.getByLabelText("Local da exceção") as HTMLSelectElement).value).toBe("local-quadra");
   });
 
   it("expande seletores avançados somente ao escolher uma exceção", () => {

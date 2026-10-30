@@ -24,3 +24,17 @@ Concluída.
 ## Commit
 
 `feat: integra locais ao workspace de sessoes`
+
+## Fix round 1
+
+- Extraída a recarga conjunta de locais e opções para `workspace-sessions-integration.ts`, permitindo teste executável da atualização das duas fontes.
+- Adicionados testes comportamentais para estado sem padrão, liberação da prontidão após o novo padrão, duas recargas GET e manutenção do `locationId` customizado.
+- Adicionado teste com `rerender` do `SessionEditor` para confirmar que a exceção permanece selecionada quando as opções recebem um novo padrão.
+
+### Verificação do Fix round 1
+
+- Testes focados: 2 arquivos e 23 testes passaram.
+- Suíte do app: 23 arquivos e 112 testes passaram.
+- `pnpm --filter @essencia/eventos-admin typecheck` — passou.
+- `pnpm --filter @essencia/eventos-admin lint` — passou com os avisos preexistentes do app.
+- `git diff --check` — passou.

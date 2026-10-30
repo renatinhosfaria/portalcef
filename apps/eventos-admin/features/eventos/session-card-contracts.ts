@@ -69,3 +69,11 @@ export function validarSessao(draft: SessionDraftState): { ok: boolean; errors: 
   return { ok: Object.keys(errors).length === 0, errors };
 }
 
+export function sessaoProntaParaSalvar(draft: SessionDraftState, options: SessionOptions): boolean {
+  const validation = validarSessao(draft);
+  if (!validation.ok) return false;
+  if (draft.locationMode === "default" && !options.defaultLocation) return false;
+  if (draft.mapMode === "default" && !options.defaultMap) return false;
+  return true;
+}
+
