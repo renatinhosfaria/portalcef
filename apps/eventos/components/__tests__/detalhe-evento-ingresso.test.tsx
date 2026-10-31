@@ -39,6 +39,25 @@ describe("caminho público de ingresso", () => {
     expect(html).toContain("14:00");
   });
 
+  it("exibe janela de venda e orienta os tipos de ingresso", () => {
+    const html = renderToStaticMarkup(<DetalheEvento event={evento} sessions={[criarSessao({
+      salesStartsAt: "2026-01-01T12:00:00.000Z" as unknown as Date,
+      salesEndsAt: "2026-01-02T02:00:00.000Z" as unknown as Date,
+      ticketTypes: [{ id: "meia", name: "Meia-entrada", description: "Com comprovante na entrada", priceCents: 500, maxPerOrder: 2, eligibility: "Estudantes e idosos" }],
+    })]} />);
+    expect(html).toContain("Venda:");
+    expect(html).toContain("01/01/2026");
+    expect(html).toContain("Com comprovante na entrada");
+    expect(html).toContain("Estudantes e idosos");
+  });
+
+  it("usa fallback textual para resumo ausente, imagem pública e raiz sem main aninhado", () => {
+    const html = renderToStaticMarkup(<DetalheEvento event={{ ...evento, summary: null, imageUrl: "https://www.portalcef.com.br/storage/festival.jpg" }} sessions={[]} />);
+    expect(html).toContain("Resumo do evento não informado.");
+    expect(html).toContain("festival.jpg");
+    expect(html).not.toMatch(/^<main/);
+  });
+
   it("não oferece compra para sessão esgotada ou sem mapa", () => {
     const html = renderToStaticMarkup(<DetalheEvento event={evento} sessions={[
       criarSessao({ id: "esgotada", availability: "sold_out" }),

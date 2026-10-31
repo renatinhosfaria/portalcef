@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import React from "react";
 import { describe, expect, it, vi } from "vitest";
-import { ConsultaPedido, ehStatusPendentePedido } from "../consulta-pedido";
+import { ConsultaPedido, ehStatusPendentePedido, rotuloStatusPedido } from "../consulta-pedido";
 
 describe("consulta pública de pedido", () => {
   it("consulta somente por número e não renderiza campos de PII", () => {
@@ -23,5 +23,8 @@ describe("consulta pública de pedido", () => {
     expect(ehStatusPendentePedido("RESERVADO")).toBe(true);
     expect(ehStatusPendentePedido("AGUARDANDO_PAGAMENTO")).toBe(true);
     expect(ehStatusPendentePedido("PAGO")).toBe(false);
+    expect(rotuloStatusPedido("PAGO")).toBe("Pago");
+    expect(rotuloStatusPedido("CANCELADO")).toBe("Cancelado");
+    expect(rotuloStatusPedido("EXPIRADO")).toBe("Expirado");
   });
 });

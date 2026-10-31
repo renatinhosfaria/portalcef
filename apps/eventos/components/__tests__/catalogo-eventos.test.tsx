@@ -51,6 +51,9 @@ describe("catálogo público", () => {
   });
   it("separa estados vazio e erro", () => {
     expect(renderToStaticMarkup(<CatalogoEstados kind="empty" />)).toContain("Nenhum evento disponível");
-    expect(renderToStaticMarkup(<CatalogoEstados kind="error" />)).toContain("Não foi possível carregar");
+    const erro = renderToStaticMarkup(<CatalogoEstados kind="error" onRetry={() => undefined} />);
+    expect(erro).toContain("Não foi possível carregar");
+    expect(erro).toContain("Tentar novamente");
+    expect(erro).toContain('type="button"');
   });
 });

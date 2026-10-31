@@ -50,7 +50,7 @@ async function exercitarViewport(browser, nome, viewport) {
   await mudarCatalogo("empty");
   if (!await pagina.getByText("Nenhum evento disponível").count() || await pagina.locator('p[role="alert"]').count()) throw new Error(`${nome}: catálogo vazio incorreto`);
   await mudarCatalogo("error");
-  if (!await pagina.locator('p[role="alert"]').filter({ hasText: "Não foi possível carregar os eventos" }).count() || await pagina.getByText("Nenhum evento disponível").count()) throw new Error(`${nome}: catálogo de erro incorreto`);
+  if (!await pagina.locator('[role="alert"]').filter({ hasText: "Não foi possível carregar os eventos" }).count() || await pagina.getByText("Nenhum evento disponível").count()) throw new Error(`${nome}: catálogo de erro incorreto`);
   await mudarCatalogo("normal");
   await acessar("/evento/festival-demo");
   if (!await pagina.getByRole("heading", { name: "Festival Demo" }).count() || !await pagina.getByText("Sessões").count() || !await pagina.getByText("Esgotada").count()) throw new Error(`${nome}: detalhe incompleto`);
@@ -68,11 +68,11 @@ async function exercitarViewport(browser, nome, viewport) {
   const caixaBloqueado = await pagina.getByLabel(/Assento B-2/).boundingBox();
   if (!caixaDisponivel || !caixaBloqueado || caixaDisponivel.width <= 0 || caixaDisponivel.height <= 0 || caixaBloqueado.width <= 0 || caixaBloqueado.height <= 0 || caixaDisponivel.x === caixaBloqueado.x || caixaDisponivel.y === caixaBloqueado.y) throw new Error(`${nome}: geometria do mapa não aplicada`);
   await acessar("/checkout?assentos=a1%2Cb2&ticketTypeIds=t1%2Ct2&sessionId=s1&slug=festival-demo");
-  if (!await pagina.getByText("Assento a1: t1").count() || !await pagina.getByText("Assento b2: t2").count() || !await pagina.getByLabel("Nome completo").count()) throw new Error(`${nome}: checkout incompleto`);
+  if (!await pagina.getByText("Assento 1: Inteira · R$ 50,00").count() || !await pagina.getByText("Assento 2: Meia · R$ 25,00").count() || !await pagina.getByLabel("Nome completo").count()) throw new Error(`${nome}: checkout incompleto`);
   await acessar("/pedido/PENDENTE?retorno=sucesso");
   if (!await pagina.getByText("Pagamento pendente").count()) throw new Error(`${nome}: pedido pendente ausente`);
   await acessar("/pedido/CONFIRMADO");
-  if (!await pagina.getByText("CONFIRMADO").count()) throw new Error(`${nome}: pedido conclusivo ausente`);
+  if (!await pagina.getByText("Confirmado").count()) throw new Error(`${nome}: pedido conclusivo ausente`);
   await acessar("/pedido/consulta");
   if (!await pagina.getByRole("textbox", { name: "Número do pedido" }).count() || !await pagina.getByRole("button", { name: "Consultar pedido" }).count()) throw new Error(`${nome}: labels da consulta ausentes`);
   const overflow = await pagina.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);

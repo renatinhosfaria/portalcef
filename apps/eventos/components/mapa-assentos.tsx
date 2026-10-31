@@ -20,6 +20,10 @@ function descricaoAssento(seat: PublicSeat) {
   return `Assento ${seat.rowLabel}-${seat.seatNumber}, ${estadoLabel[seat.state]}${seat.accessible ? ", assento acessível" : ""}`;
 }
 
+function categoriaAssento(seat: PublicSeat) {
+  return seat.category?.trim() || "não informada";
+}
+
 export function MapaAssentos({ map, checkoutHref, ticketTypes, initialTicketTypeId }: { map: PublicMap; checkoutHref: string; ticketTypes: PublicEventTicketType[]; initialTicketTypeId?: string }): React.JSX.Element {
   const [selection, setSelection] = useState<AssentoSelecionado[]>([]);
   const bounds = useMemo(() => calcularBoundsMapa(map.seats), [map.seats]);
@@ -56,6 +60,18 @@ export function MapaAssentos({ map, checkoutHref, ticketTypes, initialTicketType
         })}
       </div>
     </div>
+    <section className="mt-5 rounded-lg border border-slate-200 bg-white p-4" aria-labelledby="lista-assentos-titulo">
+      <h2 id="lista-assentos-titulo" className="text-base font-semibold">Lista de assentos</h2>
+      <ul className="mt-3 grid gap-2 text-sm sm:grid-cols-2" aria-label="Todos os assentos da sessão">
+        {map.seats.map((seat) => {
+          const selecionado = selectedIds.has(seat.id);
+          return <li key={`lista-${seat.id}`} className="rounded border border-slate-200 p-2">
+            <span className="font-medium">Assento {seat.rowLabel}-{seat.seatNumber}</span>
+            <span className="block text-slate-600">Estado: {estadoLabel[seat.state]} · Categoria: {categoriaAssento(seat)}{seat.accessible ? " · acessível" : ""}{selecionado ? " · selecionado" : ""}</span>
+          </li>;
+        })}
+      </ul>
+    </section>
     <ResumoAssentos selection={selection} ticketTypes={ticketTypes} onChangeTicketType={(seatId, ticketTypeId) => setSelection((current) => current.map((item) => item.seatId === seatId ? { ...item, ticketTypeId } : item))} />
     <a aria-disabled={!target} href={target} className={`mt-5 inline-block rounded px-4 py-2 text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 ${target ? "bg-blue-700" : "pointer-events-none bg-slate-400"}`}>Continuar para checkout</a>
     <p className="sr-only" aria-live="polite">{selection.length ? `${selection.length} assento(s) selecionado(s)` : "Nenhum assento selecionado"}</p>

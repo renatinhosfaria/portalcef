@@ -1,6 +1,6 @@
 # Relatório Task 3
 
-Status: implementada e validada; commits `27610707a8a866e9ce346e3ea3376445325ca14f` e correção `f44e19e8e4ee6001c025703b73d4674d03979ce5`.
+Status: implementada e validada; commits `27610707a8a866e9ce346e3ea3376445325ca14f` e faixa de revisão `bdbe4be`.
 
 ## Comandos e resultados
 
@@ -25,3 +25,14 @@ A cobertura não pôde ser gerada porque o pacote `@vitest/coverage-v8` não est
 - Normalização de datas `Date | string` adicionada em `sessoes-evento.tsx` para suportar o wire shape JSON.
 - Teste ISO adicionado; cobertura segue indisponível por `@vitest/coverage-v8` ausente.
 - Verificação: suíte focada 12 testes passando; lint e typecheck passando.
+
+## Rodada de correção final
+
+- Ajustados retry acessível do catálogo, fallback de imagens públicas, janela de vendas, contexto público de ingressos no checkout, lista semântica de assentos e rótulos de status de pedido.
+- Atualizados os testes comportamentais correspondentes.
+- `pnpm --filter @essencia/eventos test`: PASS, 8 arquivos / 57 testes.
+- `pnpm --filter @essencia/eventos lint`: PASS sem erros ou avisos do ESLint.
+- `pnpm --filter @essencia/eventos typecheck`: PASS.
+- `pnpm --filter @essencia/eventos build`: PASS; rotas públicas compiladas.
+- `node apps/eventos/scripts/smoke-publico.mjs`: PASS em mobile (390x844) e desktop (1440x900).
+- `git diff --check`: PASS.

@@ -1,14 +1,14 @@
 import React from "react";
-import Image from "next/image";
 import Link from "next/link";
 import type { PublicEventCard } from "@essencia/shared/types";
 import { formatarDataPublica, formatarPrecoPublico, rotuloDisponibilidade } from "../lib/eventos-formatters";
+import { ImagemPublicaEvento } from "./imagem-publica-evento";
 
 export function EventoCard({ event }: { event: PublicEventCard }): React.JSX.Element {
   const disponivel = event.availability === "available";
   const conteudo = <>
     <div className="relative aspect-[16/9] overflow-hidden bg-[var(--surface-muted)]">
-      {event.imageUrl ? <Image src={event.imageUrl} alt={event.title} fill className="object-cover transition duration-300 group-hover:scale-105" sizes="(min-width: 1024px) 33vw, (min-width: 768px) 50vw, 100vw" /> : <div className="flex h-full items-center justify-center bg-[var(--brand-green)] px-6 text-center font-display text-2xl font-semibold text-white">Essência Feliz</div>}
+      <ImagemPublicaEvento src={event.imageUrl} alt={event.title} fill className="h-full w-full object-cover transition duration-300 group-hover:scale-105" sizes="(min-width: 1024px) 33vw, (min-width: 768px) 50vw, 100vw" />
     </div>
     <div className="flex flex-1 flex-col p-5">
       <div className="flex items-center justify-between gap-3 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--brand-green-dark)]"><span>{event.category ?? "Evento"}</span><span>{rotuloDisponibilidade(event.availability)}</span></div>

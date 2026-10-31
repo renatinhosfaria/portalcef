@@ -12,6 +12,23 @@ export function ehStatusPendentePedido(status: string): boolean {
   return ["INICIADO", "RESERVADO", "AGUARDANDO_PAGAMENTO"].includes(status);
 }
 
+const ROTULOS_STATUS: Record<string, string> = {
+  INICIADO: "Pagamento pendente",
+  RESERVADO: "Pagamento pendente",
+  AGUARDANDO_PAGAMENTO: "Pagamento pendente",
+  PAGO: "Pago",
+  CONCLUIDO: "Concluído",
+  FINALIZADO: "Finalizado",
+  CANCELADO: "Cancelado",
+  EXPIRADO: "Expirado",
+  ESTORNADO: "Estornado",
+  CONFIRMADO: "Confirmado",
+};
+
+export function rotuloStatusPedido(status: string): string {
+  return ROTULOS_STATUS[status] ?? "Status do pedido: indisponível";
+}
+
 export type PedidoPublicoStatusProps = { result: ConsultaPedidoPublica; retorno?: "sucesso" | "cancelado" };
 
 export function PedidoRetorno({ retorno }: { retorno?: "sucesso" | "cancelado" }) {
@@ -27,7 +44,7 @@ export function PedidoPublicoStatus({ result, retorno }: PedidoPublicoStatusProp
     <h2 className="text-xl font-semibold">Pedido {result.orderNumber}</h2>
     <p><strong>Evento:</strong> {result.eventTitle}</p>
     <p><strong>Sessão:</strong> {formatarDataPublica(result.session.startsAt, { hour: "2-digit", minute: "2-digit" })}</p>
-    <p><strong>Status:</strong> {pagamentoPendente ? "Pagamento pendente" : result.status}</p>
+    <p><strong>Status:</strong> {rotuloStatusPedido(result.status)}</p>
     {pagamentoPendente && <p className="rounded bg-amber-50 p-3 text-amber-900">Pagamento pendente: aguardando confirmação do pagamento.</p>}
     <p><strong>Itens:</strong> {result.items.length}</p>
   </section>;

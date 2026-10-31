@@ -60,9 +60,27 @@ describe("formulário de checkout público", () => {
     const html = renderToStaticMarkup(
       <FormularioCheckout seatIds={["A-1", "A-2"]} ticketTypeIds={["inteira", "meia"]} sessionId="sessao-1" politicas={politicas} />,
     );
-    expect(html).toContain("Sessão: sessao-1");
+    expect(html).toContain("Sessão selecionada");
     expect(html).toContain("A-1");
-    expect(html).toContain("inteira");
-    expect(html).toContain("meia");
+    expect(html).toContain("Ingresso selecionado");
+    expect(html).not.toContain("Sessão: sessao-1");
+    expect(html).not.toContain("Assento A-1: inteira");
+  });
+
+  it("mostra contexto público quando o fluxo fornece evento, sessão e ingressos", async () => {
+    const html = renderToStaticMarkup(<FormularioCheckout
+      seatIds={["seat-1"]}
+      ticketTypeIds={["meia"]}
+      sessionId="sessao-1"
+      event={{ title: "Festival da Família", startsAt: "2026-06-20T02:00:00.000Z" as unknown as Date, locationName: "Pátio central" }}
+      session={{ id: "sessao-1", startsAt: "2026-06-20T02:00:00.000Z" as unknown as Date, endsAt: "2026-06-20T04:00:00.000Z" as unknown as Date, status: "PUBLICADA", capacity: 10, location: { name: "Pátio central", address: "Rua A", room: null, instructions: null, accessibility: null }, mapId: "map-1", salesStartsAt: null, salesEndsAt: null, availability: "available", ticketTypes: [{ id: "meia", name: "Meia-entrada", description: "Com comprovante", priceCents: 500, maxPerOrder: 2, eligibility: "Estudantes" }] }}
+      politicas={politicas}
+    />);
+    expect(html).toContain("Festival da Família");
+    expect(html).toContain("Pátio central");
+    expect(html).toContain("Meia-entrada");
+    expect(html).toContain("R$ 5,00");
+    expect(html).not.toContain("sessao-1");
+    expect(html).not.toContain("ticketTypeId");
   });
 });

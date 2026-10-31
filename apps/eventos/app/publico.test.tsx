@@ -65,7 +65,8 @@ describe("vitrine pública de Eventos", () => {
     expect(card).toContain("event.imageUrl");
     expect(card).toContain("/evento/${event.slug}");
     expect(detalhe).toContain("event.imageUrl");
-    expect(detalhe).toContain('alt=""');
+    expect(detalhe).toContain("ImagemPublicaEvento");
+    expect(detalhe).not.toContain("<img");
   });
 
   it("usa somente endpoints públicos e não expõe a superfície administrativa", () => {

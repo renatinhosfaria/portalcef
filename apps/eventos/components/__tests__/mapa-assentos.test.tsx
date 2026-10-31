@@ -42,6 +42,9 @@ describe("mapa público de assentos", () => {
     expect(html).toContain("Reservado");
     expect(html).toContain("Vendido");
     expect(html).toContain("Bloqueado");
+    expect(html).toContain("Lista de assentos");
+    expect(html).toContain("Categoria: plateia");
+    expect(html).toContain("Categoria: não informada");
   });
 
   it("serializa seleção mantendo alinhamento e ordem dos tipos", () => {

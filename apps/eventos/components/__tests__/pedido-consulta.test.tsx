@@ -82,7 +82,7 @@ describe("consulta canônica de pedido", () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(INTERVALO_POLLING_MS * MAX_TENTATIVAS_POLLING); });
 
     expect(apiMocks.consultarPedido).toHaveBeenCalledTimes(1);
-    expect(screen.getByText("PAGO")).toBeTruthy();
+    expect(screen.getByText("Pago")).toBeTruthy();
   });
 
   it("não consulta depois do unmount nem enquanto o número inicial é editado", async () => {

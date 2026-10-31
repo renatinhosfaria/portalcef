@@ -1,8 +1,9 @@
 "use client";
 
 import React, { useMemo, useRef, useState } from "react";
-import type { PoliticaPublica, PedidoPublicoResult } from "@essencia/shared/types";
+import type { PoliticaPublica, PedidoPublicoResult, PublicEventSession } from "@essencia/shared/types";
 import { EventosApiError, finalizarPedido, gerarChaveIdempotenciaPublica, iniciarCheckout, origemPublicaEventos, reservarAssentos } from "../lib/eventos-api";
+import { formatarDataPublica, formatarPrecoPublico } from "../lib/eventos-formatters";
 
 const TIPOS_POLITICA: PoliticaPublica["type"][] = ["PRIVACIDADE", "COMPRA", "CANCELAMENTO_REEMBOLSO", "ACESSIBILIDADE", "CONTATO"];
 const CODIGOS_PEDIDO_ENCERRADO = new Set(["ORDER_NOT_AVAILABLE", "ORDER_NOT_FOUND", "RESERVATION_EXPIRED", "RESERVATION_CANCELLED"]);
@@ -20,10 +21,12 @@ type Props = {
   ticketTypeIds?: string[];
   sessionId?: string;
   politicas?: PoliticaPublica[];
+  event?: { title: string; startsAt: Date | string | null; locationName: string | null };
+  session?: PublicEventSession;
   onComplete?: (pedido: PedidoPublicoResult) => void;
 };
 
-export function FormularioCheckout({ seatIds, ticketTypeIds = [], sessionId, politicas = [], onComplete }: Props) {
+export function FormularioCheckout({ seatIds, ticketTypeIds = [], sessionId, politicas = [], event, session, onComplete }: Props) {
   const reservationKeyRef = useRef<string | null>(null);
   if (!reservationKeyRef.current) reservationKeyRef.current = gerarChaveIdempotenciaPublica("reserva");
   const [accepted, setAccepted] = useState<Record<string, boolean>>({});
@@ -34,6 +37,9 @@ export function FormularioCheckout({ seatIds, ticketTypeIds = [], sessionId, pol
   const hasSeats = seatIds.length > 0 && seatIds.every((seatId) => seatId.trim());
   const tiposPorAssento = useMemo(() => ticketTypeIds.length === seatIds.length ? ticketTypeIds : ticketTypeIds.length === 1 ? seatIds.map(() => ticketTypeIds[0]) : [], [seatIds, ticketTypeIds]);
   const hasTicketTypes = seatIds.length > 0 && tiposPorAssento.length === seatIds.length && tiposPorAssento.every(Boolean);
+  const tiposDisponiveis = session?.ticketTypes ?? [];
+  const resumoSessao = session ? `${formatarDataPublica(session.startsAt, { hour: "2-digit", minute: "2-digit" })}${session.location?.name ? ` · ${session.location.name}` : ""}` : "Sessão selecionada";
+  const rotulosAssentos = seatIds.map((seatId, index) => /^[\p{L}\d]+[- ]\d+$/u.test(seatId) ? seatId : `Assento ${index + 1}`);
 
   async function enviar(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -76,8 +82,16 @@ export function FormularioCheckout({ seatIds, ticketTypeIds = [], sessionId, pol
   return <form onSubmit={enviar} noValidate className="max-w-xl space-y-6 rounded-xl border bg-white p-6" aria-describedby={error ? "checkout-error" : undefined}>
     <section aria-label="Resumo da reserva" className="rounded-lg bg-slate-50 p-4">
       <h2 className="font-semibold">Resumo da reserva</h2>
-      <p className="text-sm text-slate-700">Sessão: {sessionId || "não identificada"}</p>
-      <ul className="mt-2 space-y-1 text-sm text-slate-700">{seatIds.map((seatId, index) => <li key={`${seatId}-${index}`}>Assento {seatId}: {tiposPorAssento[index] || "tipo não identificado"}</li>)}</ul>
+      {event && <p className="text-sm font-medium text-slate-700">{event.title}</p>}
+      <p className="text-sm text-slate-700">Sessão: {resumoSessao}</p>
+      <p className="text-sm text-slate-700">Data: {event ? formatarDataPublica(event.startsAt) : "Data a confirmar"}</p>
+      <p className="text-sm text-slate-700">Local: {event?.locationName ?? session?.location?.name ?? "Local a confirmar"}</p>
+      <ul className="mt-2 space-y-1 text-sm text-slate-700">{seatIds.map((seatId, index) => {
+        const tipo = tiposDisponiveis.find((item) => item.id === tiposPorAssento[index]);
+        const nomeTipo = tipo?.name ?? "Ingresso selecionado";
+        const preco = tipo ? ` · ${formatarPrecoPublico(tipo.priceCents).replace("A partir de ", "")}` : "";
+        return <li key={`${seatId}-${index}`}>{rotulosAssentos[index]}: {nomeTipo}{preco}</li>;
+      })}</ul>
     </section>
     <fieldset className="space-y-3"><legend className="text-lg font-semibold">Dados do comprador</legend>
       <label className="block">Nome completo<input required minLength={2} name="buyerName" autoComplete="name" className="mt-1 w-full rounded border p-2" /></label>
@@ -85,14 +99,14 @@ export function FormularioCheckout({ seatIds, ticketTypeIds = [], sessionId, pol
       <label className="block">Telefone<input required minLength={8} name="buyerPhone" autoComplete="tel" className="mt-1 w-full rounded border p-2" /></label>
     </fieldset>
     <fieldset className="space-y-3"><legend className="text-lg font-semibold">Participantes</legend>
-      {seatIds.map((seatId, index) => <label key={seatId} className="block">Nome do participante do assento {seatId}<input required minLength={2} name={`participant-${index}-fullName`} className="mt-1 w-full rounded border p-2" /></label>)}
+      {seatIds.map((seatId, index) => <label key={seatId} className="block">Nome do participante do {rotulosAssentos[index]}<input required minLength={2} name={`participant-${index}-fullName`} className="mt-1 w-full rounded border p-2" /></label>)}
     </fieldset>
     <fieldset className="space-y-3"><legend className="text-lg font-semibold">Políticas do evento</legend>
       {politicas.map((policy) => <label key={`${policy.type}-${policy.version}`} className="flex items-start gap-2 rounded border p-3"><input type="checkbox" checked={Boolean(accepted[policy.type])} onChange={(event) => setAccepted((current) => ({ ...current, [policy.type]: event.target.checked }))} aria-label={`Aceitar política ${policy.type}`} /><span><strong>{policy.type}</strong> <span className="text-sm text-slate-600">(Versão {policy.version})</span><span className="mt-1 block whitespace-pre-wrap text-sm">{policy.content}</span></span></label>)}
       {politicas.length !== TIPOS_POLITICA.length && <p className="text-sm text-amber-700">As políticas deste evento ainda não estão completas.</p>}
     </fieldset>
     {error && <p id="checkout-error" role="alert" className="rounded border border-red-300 bg-red-50 p-3 text-red-800">{error}</p>}
-    <p className="text-sm text-slate-600">Assentos selecionados: {seatIds.join(", ") || "nenhum"}</p>
+    <p className="text-sm text-slate-600">Assentos selecionados: {rotulosAssentos.join(", ") || "nenhum"}</p>
     <button type="submit" disabled={submitting || !hasAllPolicies || !hasSeats || !hasTicketTypes} className="rounded bg-blue-700 px-4 py-2 text-white disabled:cursor-not-allowed disabled:bg-slate-400">{submitting ? "Processando…" : "Finalizar pedido"}</button>
   </form>;
 }

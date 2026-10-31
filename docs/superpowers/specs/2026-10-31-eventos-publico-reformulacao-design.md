@@ -1,7 +1,7 @@
 # Design: reconstrução da camada pública de Eventos
 
 **Data:** 2026-10-31  
-**Status:** aguardando aprovação
+**Status:** aprovado
 
 ## Intenção
 
