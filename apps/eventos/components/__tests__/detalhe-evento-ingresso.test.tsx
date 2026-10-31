@@ -78,9 +78,9 @@ describe("caminho público de ingresso", () => {
     const destino = "/evento/festival/sessao/primeira-vendavel";
 
     expect(html).toContain('id="sessoes"');
-    expect(html).toContain('href="#sessoes"');
+    expect(html.match(/href="#sessoes"/g)).toHaveLength(2);
     expect(html).toContain(`data-destino-compra="${destino}"`);
-    expect(html).toContain(`href="${destino}"`);
+    expect(html).not.toContain(`href="${destino}"`);
     expect(html.match(/Comprar ingressos/g)).toHaveLength(2);
     expect(html).toMatch(/class="[^"]*hidden[^"]*md:inline-flex/);
     expect(html).toContain("md:hidden");
@@ -147,6 +147,6 @@ describe("caminho público de ingresso", () => {
     expect(html).not.toContain("Escolha seus assentos</a>");
     const sessionPage = readFileSync(new URL("../../app/evento/[slug]/sessao/[sessionId]/page.tsx", import.meta.url), "utf8");
     expect(sessionPage).toContain("session?.ticketTypes.length === 1");
-    expect(sessionPage).toContain("Escolha o tipo de ingresso");
+    expect(sessionPage).toContain("EscolhaTipoIngresso");
   });
 });

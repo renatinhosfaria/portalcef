@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { EscolhaTipoIngresso } from "../../../../../components/escolha-tipo-ingresso";
 import { MapaAssentos } from "../../../../../components/mapa-assentos";
 import { listarSessoesPublicas, obterMapaSessao } from "../../../../../lib/eventos-api";
 
@@ -10,7 +10,7 @@ export default async function Page({ params, searchParams }: { params: Promise<{
   if (!session || session.availability !== "available" || !session.ticketTypes.length || !session.mapId) return <p role="alert" className="rounded border border-red-300 bg-red-50 p-4">Não há ingressos disponíveis para esta sessão.</p>;
   const requestedTicketTypeId = session.ticketTypes.find((type) => type.id === query.ticketTypeId)?.id;
   const selectedTicketTypeId = requestedTicketTypeId || (session?.ticketTypes.length === 1 ? session.ticketTypes[0].id : undefined);
-  if (!selectedTicketTypeId) return <section className="space-y-4"><h1 className="text-2xl font-bold">Escolha o tipo de ingresso</h1><p className="text-slate-600">Selecione uma opção antes de escolher seus assentos.</p><ul className="space-y-2">{session.ticketTypes.map((type) => <li key={type.id}><Link className="text-blue-700 underline" href={`/evento/${slug}/sessao/${sessionId}?ticketTypeId=${encodeURIComponent(type.id)}`}>{type.name} · R$ {(type.priceCents / 100).toFixed(2).replace(".", ",")}</Link></li>)}</ul></section>;
+  if (!selectedTicketTypeId) return <EscolhaTipoIngresso eventSlug={slug} sessionId={sessionId} ticketTypes={session.ticketTypes} />;
   const map = await obterMapaSessao(sessionId);
   return <><h1 className="text-2xl font-bold">Escolha seus assentos</h1><p className="my-2 text-slate-600">Você poderá escolher o tipo de ingresso de cada assento no resumo.</p><p className="my-4 text-slate-600">Assentos cinza estão indisponíveis.</p><MapaAssentos map={map} checkoutHref={`/checkout?slug=${encodeURIComponent(slug)}`} ticketTypes={session.ticketTypes} initialTicketTypeId={selectedTicketTypeId} /></>;
 }
