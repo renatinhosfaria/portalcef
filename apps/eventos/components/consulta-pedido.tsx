@@ -1,14 +1,23 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import type { ConsultaPedidoPublica } from "@essencia/shared/types";
 import { consultarPedido, EventosApiError } from "../lib/eventos-api";
 
-type Props = { initialOrderNumber?: string; initialResult?: ConsultaPedidoPublica | null; onResult?: (result: ConsultaPedidoPublica) => void };
+export const MAX_TENTATIVAS_POLLING = 5;
+export const INTERVALO_POLLING_MS = 1500;
 
-function ResultadoPedido({ result }: { result: ConsultaPedidoPublica }) {
-  const pagamentoPendente = ["INICIADO", "RESERVADO", "AGUARDANDO_PAGAMENTO"].includes(result.status);
+export function ehStatusPendentePedido(status: string): boolean {
+  return ["INICIADO", "RESERVADO", "AGUARDANDO_PAGAMENTO"].includes(status);
+}
+
+export type PedidoPublicoStatusProps = { result: ConsultaPedidoPublica; retorno?: "sucesso" | "cancelado" };
+
+export function PedidoPublicoStatus({ result, retorno }: PedidoPublicoStatusProps) {
+  const pagamentoPendente = ehStatusPendentePedido(result.status);
   return <section aria-live="polite" className="space-y-3 rounded-xl border bg-white p-5">
+    {retorno === "sucesso" && <p className="rounded border border-amber-300 bg-amber-50 p-3 text-amber-900">Pagamento recebido. Estamos aguardando a confirmação automática.</p>}
+    {retorno === "cancelado" && <p className="rounded border border-slate-300 bg-slate-50 p-3">O pagamento não foi concluído. Você pode consultar o pedido novamente.</p>}
     <h2 className="text-xl font-semibold">Pedido {result.orderNumber}</h2>
     <p><strong>Evento:</strong> {result.eventTitle}</p>
     <p><strong>Sessão:</strong> {new Date(result.session.startsAt).toLocaleString("pt-BR")}</p>
@@ -18,30 +27,80 @@ function ResultadoPedido({ result }: { result: ConsultaPedidoPublica }) {
   </section>;
 }
 
-export function ConsultaPedido({ initialOrderNumber = "", initialResult = null, onResult }: Props) {
+type Props = {
+  initialOrderNumber?: string;
+  initialResult?: ConsultaPedidoPublica | null;
+  autoAtualizar?: boolean;
+  retorno?: "sucesso" | "cancelado";
+  onResult?: (result: ConsultaPedidoPublica) => void;
+};
+
+export function ConsultaPedido({ initialOrderNumber = "", initialResult = null, autoAtualizar = false, retorno, onResult }: Props): React.JSX.Element {
   const [number, setNumber] = useState(initialOrderNumber);
   const [result, setResult] = useState<ConsultaPedidoPublica | null>(initialResult);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [limitePolling, setLimitePolling] = useState(false);
 
   useEffect(() => { if (initialResult) onResult?.(initialResult); }, [initialResult, onResult]);
+
+  const atualizarPedido = useCallback(async (orderNumber: string) => {
+    const next = await consultarPedido(orderNumber);
+    setResult(next);
+    onResult?.(next);
+    return next;
+  }, [onResult]);
+
+  useEffect(() => {
+    if (!autoAtualizar || !initialResult || !ehStatusPendentePedido(initialResult.status) || !number.trim()) return undefined;
+    let cancelado = false;
+    let tentativas = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    const polling = async () => {
+      if (cancelado || tentativas >= MAX_TENTATIVAS_POLLING) return;
+      tentativas += 1;
+      try {
+        const next = await consultarPedido(number);
+        if (cancelado) return;
+        setResult(next);
+        onResult?.(next);
+        if (ehStatusPendentePedido(next.status) && tentativas < MAX_TENTATIVAS_POLLING) timer = setTimeout(polling, INTERVALO_POLLING_MS);
+        else if (ehStatusPendentePedido(next.status)) setLimitePolling(true);
+      } catch (cause) {
+        if (cancelado) return;
+        setError(cause instanceof Error ? cause.message : "Não foi possível atualizar o pedido.");
+        if (tentativas < MAX_TENTATIVAS_POLLING) timer = setTimeout(polling, INTERVALO_POLLING_MS);
+        else setLimitePolling(true);
+      }
+    };
+
+    timer = setTimeout(polling, INTERVALO_POLLING_MS);
+    return () => { cancelado = true; if (timer) clearTimeout(timer); };
+  }, [autoAtualizar, initialResult, atualizarPedido, number, onResult]);
 
   async function consultar(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
-    if (!number.trim()) return setError("Informe o número do pedido.");
+    setLimitePolling(false);
+    if (!number.trim()) { setError("Informe o número do pedido."); return; }
     setLoading(true);
-    try {
-      const next = await consultarPedido(number);
-      setResult(next);
-      onResult?.(next);
-    } catch (cause) {
+    try { await atualizarPedido(number); }
+    catch (cause) {
       setResult(null);
       if (cause instanceof EventosApiError && cause.status === 429) setError("Muitas consultas em pouco tempo. Aguarde um instante e tente novamente.");
       else setError(cause instanceof Error ? cause.message : "Pedido não encontrado.");
-    } finally {
-      setLoading(false);
     }
+    finally { setLoading(false); }
+  }
+
+  async function atualizarManualmente() {
+    setError(null);
+    setLimitePolling(false);
+    setLoading(true);
+    try { await atualizarPedido(number); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : "Não foi possível atualizar o pedido."); }
+    finally { setLoading(false); }
   }
 
   return <div className="space-y-5">
@@ -50,6 +109,7 @@ export function ConsultaPedido({ initialOrderNumber = "", initialResult = null, 
       {error && <p id="consulta-error" role="alert" className="rounded border border-red-300 bg-red-50 p-3 text-red-800">{error}</p>}
       <button disabled={loading} className="rounded bg-blue-700 px-4 py-2 text-white disabled:bg-slate-400">{loading ? "Consultando…" : "Consultar pedido"}</button>
     </form>
-    {result && <ResultadoPedido result={result} />}
+    {result && <PedidoPublicoStatus result={result} retorno={retorno} />}
+    {limitePolling && <div className="rounded border border-amber-300 bg-amber-50 p-3 text-amber-900"><p>O pagamento ainda está sendo processado.</p><button type="button" onClick={atualizarManualmente} disabled={loading} className="mt-2 rounded border border-amber-700 px-3 py-1 text-sm">Atualizar agora</button></div>}
   </div>;
 }

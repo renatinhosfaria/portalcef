@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import type { PoliticaPublica } from "@essencia/shared/types";
 import { FormularioCheckout, aceitesCompletos, deveInvalidarChaveReserva } from "../formulario-checkout";
+import { normalizarTiposPorAssento } from "../../app/checkout/page";
 import { EventosApiError } from "../../lib/eventos-api";
 
 const politicas: PoliticaPublica[] = [
@@ -42,5 +43,25 @@ describe("formulário de checkout público", () => {
     expect(deveInvalidarChaveReserva(new EventosApiError("Assento indisponível", 409, "SEAT_UNAVAILABLE"))).toBe(false);
     const source = readFileSync(new URL("../formulario-checkout.tsx", import.meta.url), "utf8");
     expect(source).toContain("reservationKeyRef.current = null");
+  });
+
+  it("alinha um tipo único a todos os assentos", () => {
+    expect(normalizarTiposPorAssento(["A-1", "A-2"], ["inteira"])).toEqual(["inteira", "inteira"]);
+    expect(normalizarTiposPorAssento(["A-1", "A-2"], ["inteira", "meia"])).toEqual(["inteira", "meia"]);
+  });
+
+  it("rejeita quantidade de tipos desalinhada sem fallback único", () => {
+    expect(() => normalizarTiposPorAssento(["A-1", "A-2"], [])).toThrow("tipos de ingresso");
+    expect(() => normalizarTiposPorAssento(["A-1", "A-2"], ["inteira", "meia", "cortesia"])).toThrow("tipos de ingresso");
+  });
+
+  it("mostra o resumo de sessão, assentos e tipos escolhidos", () => {
+    const html = renderToStaticMarkup(
+      <FormularioCheckout seatIds={["A-1", "A-2"]} ticketTypeIds={["inteira", "meia"]} sessionId="sessao-1" politicas={politicas} />,
+    );
+    expect(html).toContain("Sessão: sessao-1");
+    expect(html).toContain("A-1");
+    expect(html).toContain("inteira");
+    expect(html).toContain("meia");
   });
 });

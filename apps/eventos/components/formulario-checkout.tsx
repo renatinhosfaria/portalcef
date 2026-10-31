@@ -32,7 +32,8 @@ export function FormularioCheckout({ seatIds, ticketTypeIds = [], sessionId, pol
   const [pending, setPending] = useState(false);
   const hasAllPolicies = useMemo(() => politicas.length === TIPOS_POLITICA.length && TIPOS_POLITICA.every((type) => accepted[type]), [accepted, politicas.length]);
   const hasSeats = seatIds.length > 0 && seatIds.every((seatId) => seatId.trim());
-  const hasTicketTypes = seatIds.length > 0 && seatIds.every((_, index) => Boolean(ticketTypeIds[index] || ticketTypeIds[0]));
+  const tiposPorAssento = useMemo(() => ticketTypeIds.length === seatIds.length ? ticketTypeIds : ticketTypeIds.length === 1 ? seatIds.map(() => ticketTypeIds[0]) : [], [seatIds, ticketTypeIds]);
+  const hasTicketTypes = seatIds.length > 0 && tiposPorAssento.length === seatIds.length && tiposPorAssento.every(Boolean);
 
   async function enviar(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -51,7 +52,7 @@ export function FormularioCheckout({ seatIds, ticketTypeIds = [], sessionId, pol
     try {
       const reservationKey = reservationKeyRef.current ?? gerarChaveIdempotenciaPublica("reserva");
       reservationKeyRef.current = reservationKey;
-      const reservation = await reservarAssentos({ sessionId, idempotencyKey: reservationKey, seats: seatIds.map((seatId, index) => ({ seatId, ticketTypeId: ticketTypeIds[index] || ticketTypeIds[0] || "", participantIndex: index })), buyer });
+      const reservation = await reservarAssentos({ sessionId, idempotencyKey: reservationKey, seats: seatIds.map((seatId, index) => ({ seatId, ticketTypeId: tiposPorAssento[index] || "", participantIndex: index })), buyer });
       etapa = "finalizacao";
       const pedido = await finalizarPedido(reservation.orderNumber, { participants, acceptances: politicas.map((policy) => ({ type: policy.type, version: policy.version })) });
       setPending(true);
@@ -73,6 +74,11 @@ export function FormularioCheckout({ seatIds, ticketTypeIds = [], sessionId, pol
   if (pending) return <p role="status" className="rounded border border-amber-300 bg-amber-50 p-4">Pagamento pendente: aguardando confirmação do pagamento.</p>;
 
   return <form onSubmit={enviar} noValidate className="max-w-xl space-y-6 rounded-xl border bg-white p-6" aria-describedby={error ? "checkout-error" : undefined}>
+    <section aria-label="Resumo da reserva" className="rounded-lg bg-slate-50 p-4">
+      <h2 className="font-semibold">Resumo da reserva</h2>
+      <p className="text-sm text-slate-700">Sessão: {sessionId || "não identificada"}</p>
+      <ul className="mt-2 space-y-1 text-sm text-slate-700">{seatIds.map((seatId, index) => <li key={`${seatId}-${index}`}>Assento {seatId}: {tiposPorAssento[index] || "tipo não identificado"}</li>)}</ul>
+    </section>
     <fieldset className="space-y-3"><legend className="text-lg font-semibold">Dados do comprador</legend>
       <label className="block">Nome completo<input required minLength={2} name="buyerName" autoComplete="name" className="mt-1 w-full rounded border p-2" /></label>
       <label className="block">E-mail<input required type="email" name="buyerEmail" autoComplete="email" className="mt-1 w-full rounded border p-2" /></label>
