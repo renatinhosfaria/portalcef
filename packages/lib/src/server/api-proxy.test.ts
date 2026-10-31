@@ -77,3 +77,13 @@ it("encaminha multipart como bytes preservando boundary e cookie", async () => {
   expect(options.body).toBeInstanceOf(ArrayBuffer);
   expect(new TextDecoder().decode(options.body as ArrayBuffer)).toContain("bytes");
 });
+
+it("não inventa content-type JSON para POST sem corpo", async () => {
+  const fetchMock = vi.fn().mockResolvedValue(new Response("{}"));
+  vi.stubGlobal("fetch", fetchMock);
+  const request = new NextRequest("http://localhost:3004/api/eventos/admin/1/publicar", { method: "POST" });
+  await proxyRequest(request, "POST", { preservarPrefixoApi: true });
+  const [, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+  expect((options.headers as Record<string, string>) ["Content-Type"]).toBeUndefined();
+  expect(options.body).toBeUndefined();
+});
