@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it } from "vitest";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import type { PublicEventTicketType, PublicMap, PublicSeat } from "@essencia/shared/types";
 import { MapaAssentos } from "../mapa-assentos";
 import { calcularTotalSelecao, ResumoAssentosFixo } from "../resumo-assentos";
@@ -17,6 +17,8 @@ const assentos: PublicSeat[] = [
   { id: "s-4", sessionId: "sessao-1", rowLabel: "B", seatNumber: "2", x: 50, y: 50, width: 20, height: 10, category: null, accessible: false, state: "blocked" },
 ];
 const mapa: PublicMap = { sessionId: "sessao-1", mapId: "mapa-1", seats: assentos };
+
+afterEach(() => cleanup());
 
 describe("mapa público de assentos", () => {
   it("calcula o total pelos tipos de ingresso selecionados", () => {
@@ -71,8 +73,10 @@ describe("mapa público de assentos", () => {
 
   it("torna somente disponíveis selecionáveis e descreve acessibilidade por texto", () => {
     const html = renderToStaticMarkup(<MapaAssentos map={mapa} checkoutHref="/checkout" ticketTypes={[tipoInteira]} />);
-    expect((html.match(/<button/g) ?? []).length).toBe(1);
-    expect((html.match(/role="checkbox"[^>]*aria-disabled="true"/g) ?? []).length).toBe(3);
+    expect(html).toContain('aria-label="Assento A-1, disponível, assento acessível"');
+    expect(html).toContain('role="checkbox" aria-label="Assento A-2, reservado" aria-disabled="true"');
+    expect(html).toContain('role="checkbox" aria-label="Assento B-1, vendido" aria-disabled="true"');
+    expect(html).toContain('role="checkbox" aria-label="Assento B-2, bloqueado" aria-disabled="true"');
     expect(html).toContain("Assento A-1, disponível, assento acessível");
     expect(html).toContain("acessível");
     expect(html).toContain("Reservado");
@@ -80,7 +84,6 @@ describe("mapa público de assentos", () => {
     expect(html).toContain("Bloqueado");
     expect(html).toContain("Lista de assentos");
     expect(html).toContain("Categoria: plateia");
-    expect(html).toContain("Categoria: não informada");
   });
 
   it("serializa seleção mantendo alinhamento e ordem dos tipos", () => {
@@ -99,9 +102,10 @@ describe("mapa público de assentos", () => {
   it("aplica o tipo escolhido ao selecionar dois assentos e inclui sessão no checkout", () => {
     const mapaComDoisDisponiveis: PublicMap = { ...mapa, seats: [assentos[0], { ...assentos[1], id: "s-5", seatNumber: "3", state: "available" }, assentos[2], assentos[3]] };
     render(<MapaAssentos map={mapaComDoisDisponiveis} checkoutHref="/checkout?slug=festival" ticketTypes={[tipoInteira, tipoMeia]} initialTicketTypeId="meia" />);
-    fireEvent.click(screen.getByRole("button", { name: /Assento A-1/ }));
-    fireEvent.click(screen.getByRole("button", { name: /Assento A-3/ }));
-    const selects = screen.getAllByRole("combobox");
+    const lista = screen.getByRole("list", { name: "Assentos da fileira A" });
+    fireEvent.click(within(lista).getByRole("button", { name: /Assento A-1/ }));
+    fireEvent.click(within(lista).getByRole("button", { name: /Assento A-3/ }));
+    const selects = screen.getAllByRole("combobox", { name: /Tipo de ingresso do assento/ });
     expect(selects).toHaveLength(2);
     expect((selects[0] as HTMLSelectElement).value).toBe("meia");
     expect((selects[1] as HTMLSelectElement).value).toBe("meia");
@@ -116,6 +120,55 @@ describe("mapa público de assentos", () => {
     expect(screen.queryByRole("button", { name: /reservado/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /vendido/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /bloqueado/i })).toBeNull();
+  });
+
+  it("oferece fileiras únicas na ordem de aparição e inicia na primeira com disponibilidade", () => {
+    render(<MapaAssentos map={mapa} checkoutHref="/checkout" ticketTypes={[tipoInteira]} />);
+
+    const seletor = screen.getByRole("combobox", { name: "Escolha uma fileira" }) as HTMLSelectElement;
+    expect(Array.from(seletor.options).map((option) => option.value)).toEqual(["A", "B"]);
+    expect(seletor.value).toBe("A");
+  });
+
+  it("filtra a lista mobile pela fileira escolhida", () => {
+    render(<MapaAssentos map={mapa} checkoutHref="/checkout" ticketTypes={[tipoInteira]} />);
+
+    const seletor = screen.getByRole("combobox", { name: "Escolha uma fileira" });
+    const listaA = screen.getByRole("list", { name: "Assentos da fileira A" });
+    expect(within(listaA).getByText("Assento A-1")).toBeTruthy();
+    expect(within(listaA).queryByText("Assento B-1")).toBeNull();
+
+    fireEvent.change(seletor, { target: { value: "B" } });
+    const listaB = screen.getByRole("list", { name: "Assentos da fileira B" });
+    expect(within(listaB).getByText("Assento B-1")).toBeTruthy();
+    expect(within(listaB).queryByText("Assento A-1")).toBeNull();
+  });
+
+  it("oferece modos lista e mapa e orienta sobre o mapa rolável", () => {
+    render(<MapaAssentos map={mapa} checkoutHref="/checkout" ticketTypes={[tipoInteira]} />);
+
+    expect(screen.getByRole("button", { name: "Lista" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: "Mapa" }).getAttribute("aria-pressed")).toBe("false");
+    expect(screen.getByText(/mapa rolável/i)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Mapa" }));
+    expect(screen.getByRole("button", { name: "Mapa" }).getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("mostra estados indisponíveis na lista sem transformá-los em botões", () => {
+    render(<MapaAssentos map={mapa} checkoutHref="/checkout" ticketTypes={[tipoInteira]} />);
+
+    const lista = screen.getByRole("list", { name: "Assentos da fileira A" });
+    expect(within(lista).getByText(/Estado: reservado/)).toBeTruthy();
+    expect(within(lista).queryByRole("button", { name: /reservado/i })).toBeNull();
+  });
+
+  it("informa quando a fileira ativa não tem assentos disponíveis", () => {
+    const mapaIndisponivel: PublicMap = { ...mapa, seats: assentos.map((seat) => ({ ...seat, state: "sold" as const })) };
+    render(<MapaAssentos map={mapaIndisponivel} checkoutHref="/checkout" ticketTypes={[tipoInteira]} />);
+
+    expect(screen.getByText("Nenhum assento disponível nesta fileira.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Assento A-/ })).toBeNull();
   });
 });
 

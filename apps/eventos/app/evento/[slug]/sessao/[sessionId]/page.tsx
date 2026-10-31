@@ -12,5 +12,5 @@ export default async function Page({ params, searchParams }: { params: Promise<{
   const selectedTicketTypeId = requestedTicketTypeId || (session?.ticketTypes.length === 1 ? session.ticketTypes[0].id : undefined);
   if (!selectedTicketTypeId) return <EscolhaTipoIngresso eventSlug={slug} sessionId={sessionId} ticketTypes={session.ticketTypes} />;
   const map = await obterMapaSessao(sessionId);
-  return <><h1 className="text-2xl font-bold">Escolha seus assentos</h1><p className="my-2 text-slate-600">Você poderá escolher o tipo de ingresso de cada assento no resumo.</p><p className="my-4 text-slate-600">Assentos cinza estão indisponíveis.</p><MapaAssentos map={map} checkoutHref={`/checkout?slug=${encodeURIComponent(slug)}`} ticketTypes={session.ticketTypes} initialTicketTypeId={selectedTicketTypeId} /></>;
+  return <><h1 className="text-2xl font-bold">Escolha seus assentos</h1><p className="my-2 text-slate-600">Você poderá escolher o tipo de ingresso de cada assento no resumo.</p><p className="my-4 text-slate-600">Assentos cinza estão indisponíveis. No celular, comece pela lista e escolha uma fileira para encontrar seu lugar.</p><MapaAssentos map={map} checkoutHref={`/checkout?slug=${encodeURIComponent(slug)}`} ticketTypes={session.ticketTypes} initialTicketTypeId={selectedTicketTypeId} /></>;
 }
