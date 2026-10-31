@@ -69,6 +69,35 @@ describe("caminho público de ingresso", () => {
     expect(html).not.toContain("sessao/sem-mapa");
   });
 
+  it("oferece comprar ingressos no hero e na barra móvel para a primeira sessão vendável", () => {
+    const html = renderToStaticMarkup(<DetalheEvento event={evento} sessions={[
+      criarSessao({ id: "indisponivel", availability: "sold_out" }),
+      criarSessao({ id: "primeira-vendavel" }),
+      criarSessao({ id: "segunda-vendavel" }),
+    ]} />);
+    const destino = "/evento/festival/sessao/primeira-vendavel";
+
+    expect(html).toContain('id="sessoes"');
+    expect(html).toContain('href="#sessoes"');
+    expect(html).toContain(`data-destino-compra="${destino}"`);
+    expect(html).toContain(`href="${destino}"`);
+    expect(html.match(/Comprar ingressos/g)).toHaveLength(2);
+    expect(html).toContain("md:hidden");
+    expect(html).toMatch(/(?:fixed|sticky)/);
+    expect(html).toContain("pb-24");
+  });
+
+  it("não exibe CTAs de compra quando nenhuma sessão é vendável", () => {
+    const html = renderToStaticMarkup(<DetalheEvento event={evento} sessions={[
+      criarSessao({ id: "esgotada", availability: "sold_out" }),
+      criarSessao({ id: "sem-mapa", mapId: null }),
+      criarSessao({ id: "sem-tipos", ticketTypes: [] }),
+    ]} />);
+
+    expect(html).not.toContain("Comprar ingressos");
+    expect(html).toContain('id="sessoes"');
+  });
+
   it("mantém escolhas inequívocas para vários tipos e detalhes do local", () => {
     const html = renderToStaticMarkup(<DetalheEvento event={evento} sessions={[criarSessao({ ticketTypes: [
       { id: "adulto", name: "Adulto", description: null, priceCents: 1000, maxPerOrder: null, eligibility: null },
