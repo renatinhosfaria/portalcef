@@ -26,8 +26,9 @@ describe("vitrine pública de Eventos", () => {
     expect(config).toContain('"@essencia/shared"');
     expect(config).toContain('hostname: "www.portalcef.com.br"');
     expect(config).toContain('pathname: "/storage/**"');
-    expect(config).toContain("minio");
-    expect(config).toContain("localhost");
+    expect(config).toContain('protocol: "https", hostname: "minio.essencia.edu.br"');
+    expect(config).toContain('pathname: "/essencia-uploads/**"');
+    expect(config).toContain('protocol: "http", hostname: "localhost", port: "9000"');
   });
 
   it("mantém layout anônimo e catálogo com links públicos", () => {

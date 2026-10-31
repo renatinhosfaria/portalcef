@@ -5,9 +5,8 @@ module.exports = {
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "www.portalcef.com.br", pathname: "/storage/**" },
-      { protocol: "http", hostname: "minio", pathname: "/**" },
-      { protocol: "http", hostname: "localhost", pathname: "/storage/**" },
-      { protocol: "http", hostname: "127.0.0.1", pathname: "/storage/**" },
+      { protocol: "https", hostname: "minio.essencia.edu.br", pathname: "/essencia-uploads/**" },
+      { protocol: "http", hostname: "localhost", port: "9000", pathname: "/essencia-uploads/**" },
     ],
   },
 };
