@@ -82,6 +82,7 @@ describe("caminho público de ingresso", () => {
     expect(html).toContain(`data-destino-compra="${destino}"`);
     expect(html).toContain(`href="${destino}"`);
     expect(html.match(/Comprar ingressos/g)).toHaveLength(2);
+    expect(html).toMatch(/class="[^"]*hidden[^"]*md:inline-flex/);
     expect(html).toContain("md:hidden");
     expect(html).toMatch(/(?:fixed|sticky)/);
     expect(html).toContain("pb-24");
