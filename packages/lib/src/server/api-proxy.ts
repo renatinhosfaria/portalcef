@@ -49,7 +49,9 @@ export async function proxyRequest(
   const headers: Record<string, string> = {
     "x-correlation-id": correlationId,
   };
-  if (contentType) headers["Content-Type"] = contentType;
+  if (contentType || method === "GET" || method === "HEAD") {
+    headers["Content-Type"] = contentType || "application/json";
+  }
 
   for (const nome of CABECALHOS_REPASSADOS) {
     const valor = request.headers.get(nome);
