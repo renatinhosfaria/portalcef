@@ -10,8 +10,32 @@ describe("vitrine pública de Eventos", () => {
     expect(config).not.toContain("basePath");
   });
 
+  it("declara as dependências e a configuração compartilhada da fundação visual", () => {
+    const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+    expect(pkg.dependencies["@essencia/ui"]).toBe("workspace:*");
+    expect(pkg.dependencies["@essencia/tailwind-config"]).toBe("workspace:*");
+
+    const tailwind = readFileSync(new URL("../tailwind.config.ts", import.meta.url), "utf8");
+    expect(tailwind).toContain("@essencia/tailwind-config");
+    expect(tailwind).toContain("packages/ui");
+  });
+
+  it("transpila a UI e permite imagens do storage público", () => {
+    const config = readFileSync(new URL("../next.config.js", import.meta.url), "utf8");
+    expect(config).toContain('"@essencia/ui"');
+    expect(config).toContain('"@essencia/shared"');
+    expect(config).toContain('hostname: "www.portalcef.com.br"');
+    expect(config).toContain('pathname: "/storage/**"');
+    expect(config).toContain("minio");
+    expect(config).toContain("localhost");
+  });
+
   it("mantém layout anônimo e catálogo com links públicos", () => {
     const layout = readFileSync(new URL("./layout.tsx", import.meta.url), "utf8");
+    expect(layout).toContain('lang="pt-BR"');
+    expect(layout).toContain("export const metadata");
+    expect(layout).toContain("export const viewport");
+    expect(layout).toContain("/pedido/consulta");
     expect(layout).not.toContain("TenantProvider");
     expect(layout).not.toContain("Shell");
     expect(layout).not.toContain("/api/auth/me");
