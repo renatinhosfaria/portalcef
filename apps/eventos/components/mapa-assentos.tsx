@@ -20,7 +20,7 @@ function descricaoAssento(seat: PublicSeat) {
   return `Assento ${seat.rowLabel}-${seat.seatNumber}, ${estadoLabel[seat.state]}${seat.accessible ? ", assento acessível" : ""}`;
 }
 
-export function MapaAssentos({ map, checkoutHref, ticketTypes }: { map: PublicMap; checkoutHref: string; ticketTypes: PublicEventTicketType[] }): React.JSX.Element {
+export function MapaAssentos({ map, checkoutHref, ticketTypes, initialTicketTypeId }: { map: PublicMap; checkoutHref: string; ticketTypes: PublicEventTicketType[]; initialTicketTypeId?: string }): React.JSX.Element {
   const [selection, setSelection] = useState<AssentoSelecionado[]>([]);
   const bounds = useMemo(() => calcularBoundsMapa(map.seats), [map.seats]);
   const selectedIds = new Set(selection.map((item) => item.seatId));
@@ -34,7 +34,7 @@ export function MapaAssentos({ map, checkoutHref, ticketTypes }: { map: PublicMa
     if (seat.state !== "available") return;
     setSelection((current) => selectedIds.has(seat.id)
       ? current.filter((item) => item.seatId !== seat.id)
-      : [...current, { seatId: seat.id, ticketTypeId: ticketTypes[0]?.id ?? "", label: `${seat.rowLabel}-${seat.seatNumber}`, accessible: seat.accessible }]);
+      : [...current, { seatId: seat.id, ticketTypeId: initialTicketTypeId && ticketTypes.some((type) => type.id === initialTicketTypeId) ? initialTicketTypeId : ticketTypes[0]?.id ?? "", label: `${seat.rowLabel}-${seat.seatNumber}`, accessible: seat.accessible }]);
   }
 
   return <div>

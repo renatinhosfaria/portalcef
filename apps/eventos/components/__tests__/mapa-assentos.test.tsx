@@ -1,6 +1,8 @@
+// @vitest-environment jsdom
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
 import type { PublicEventTicketType, PublicMap, PublicSeat } from "@essencia/shared/types";
 import { MapaAssentos } from "../mapa-assentos";
 import { calcularBoundsMapa, estiloAssento, serializarSelecaoAssentos } from "../mapa-assentos-utils";
@@ -54,12 +56,34 @@ describe("mapa público de assentos", () => {
     expect(html).toContain('aria-disabled="true"');
     expect(html).not.toContain('href="/checkout?');
   });
+
+  it("aplica o tipo escolhido ao selecionar dois assentos e inclui sessão no checkout", () => {
+    const mapaComDoisDisponiveis: PublicMap = { ...mapa, seats: [assentos[0], { ...assentos[1], id: "s-5", seatNumber: "3", state: "available" }, assentos[2], assentos[3]] };
+    render(<MapaAssentos map={mapaComDoisDisponiveis} checkoutHref="/checkout?slug=festival" ticketTypes={[tipoInteira, tipoMeia]} initialTicketTypeId="meia" />);
+    fireEvent.click(screen.getByRole("button", { name: /Assento A-1/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Assento A-3/ }));
+    const selects = screen.getAllByRole("combobox");
+    expect(selects).toHaveLength(2);
+    expect((selects[0] as HTMLSelectElement).value).toBe("meia");
+    expect((selects[1] as HTMLSelectElement).value).toBe("meia");
+    fireEvent.change(selects[0], { target: { value: "inteira" } });
+    const href = screen.getByRole("link", { name: "Continuar para checkout" }).getAttribute("href");
+    expect(href).toContain("sessionId=sessao-1");
+    expect(href).toContain("ticketTypeIds=inteira%2Cmeia");
+  });
+
+  it("não permite selecionar assentos indisponíveis", () => {
+    render(<MapaAssentos map={mapa} checkoutHref="/checkout" ticketTypes={[tipoInteira]} />);
+    expect(screen.queryByRole("button", { name: /reservado/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /vendido/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /bloqueado/i })).toBeNull();
+  });
 });
 
   it("mantém os tipos de ingresso alinhados no checkout e evita mapa de sessão não vendável", async () => {
     const { readFileSync } = await import("node:fs");
-    const checkout = readFileSync(new URL("../../app/checkout/page.tsx", import.meta.url), "utf8");
-    const sessionPage = readFileSync(new URL("../../app/evento/[slug]/sessao/[sessionId]/page.tsx", import.meta.url), "utf8");
+    const checkout = readFileSync("app/checkout/page.tsx", "utf8");
+    const sessionPage = readFileSync("app/evento/[slug]/sessao/[sessionId]/page.tsx", "utf8");
     expect(checkout).toContain("ticketTypeIds");
     expect(checkout).toContain("split(\",\")");
     expect(sessionPage).toContain("if (!session || session.availability !== \"available\"");
