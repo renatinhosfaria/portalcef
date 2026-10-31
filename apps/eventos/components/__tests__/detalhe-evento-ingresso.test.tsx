@@ -82,6 +82,29 @@ describe("caminho público de ingresso", () => {
     expect(html).toContain("Rampas disponíveis");
   });
 
+  it("apresenta cada tipo vendável como card com preço, detalhes e ação explícita", () => {
+    const html = renderToStaticMarkup(<DetalheEvento event={evento} sessions={[criarSessao({ ticketTypes: [
+      { id: "adulto", name: "Adulto", description: "Acesso à programação completa", priceCents: 1000, maxPerOrder: null, eligibility: null },
+      { id: "meia", name: "Meia", description: "Com comprovante", priceCents: 500, maxPerOrder: null, eligibility: "Estudante" },
+    ] })]} />);
+    expect(html).toContain("Escolher assentos");
+    expect(html.match(/Escolher assentos/g)).toHaveLength(2);
+    expect(html).toContain("Adulto");
+    expect(html).toContain("R$ 10,00");
+    expect(html).toContain("Acesso à programação completa");
+    expect(html).toContain("Elegibilidade: Estudante");
+    expect(html).toContain("ticketTypeId=adulto");
+    expect(html).toContain("ticketTypeId=meia");
+  });
+
+  it("não exibe ação explícita em sessão esgotada ou não vendável", () => {
+    const html = renderToStaticMarkup(<DetalheEvento event={evento} sessions={[
+      criarSessao({ id: "esgotada", availability: "sold_out" }),
+      criarSessao({ id: "sem-mapa", mapId: null }),
+    ]} />);
+    expect(html).not.toContain("Escolher assentos");
+  });
+
   it("oferece tipo de ingresso quando a sessão é renderizada sem query", () => {
     const session: PublicEventSession = {
       id: "session-1", startsAt: new Date("2026-01-01T10:00:00Z"), endsAt: new Date("2026-01-01T12:00:00Z"), status: "PUBLICADA", capacity: 10,
