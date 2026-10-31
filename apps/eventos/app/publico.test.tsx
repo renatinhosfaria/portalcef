@@ -75,7 +75,11 @@ describe("vitrine pública de Eventos", () => {
     expect(api).not.toContain("/eventos-admin");
 
     const appRoot = new URL(".", import.meta.url).pathname;
-    const arquivos = procurarArquivos(appRoot).filter((arquivo) => /\.(tsx?|css)$/.test(arquivo) && !arquivo.endsWith("publico.test.tsx"));
+    const diretorioComponentes = new URL("../components/", import.meta.url).pathname;
+    const diretorioLib = new URL("../lib/", import.meta.url).pathname;
+    const arquivos = [appRoot, diretorioComponentes, diretorioLib]
+      .flatMap((diretorio) => procurarArquivos(diretorio))
+      .filter((arquivo) => /\.(tsx?|css)$/.test(arquivo) && !arquivo.endsWith(".test.ts") && !arquivo.endsWith(".test.tsx"));
     for (const arquivo of arquivos) {
       expect(readFileSync(arquivo, "utf8"), arquivo).not.toContain("/eventos-admin");
     }
