@@ -41,9 +41,17 @@ describe("utilidades do mapa de assentos", () => {
   });
 
   it("separa assentos indisponíveis e não os inclui na seleção", () => {
-    expect(reidratarSelecaoAssentos(map, ["s-1", "s-3"], ["inteira", "inteira"])).toEqual({
+    const mapaComEstadosIndisponiveis: PublicMap = {
+      ...map,
+      seats: [
+        ...seats,
+        { ...seats[0], id: "s-4", seatNumber: "2", state: "sold" },
+        { ...seats[0], id: "s-5", seatNumber: "3", state: "blocked" },
+      ],
+    };
+    expect(reidratarSelecaoAssentos(mapaComEstadosIndisponiveis, ["s-1", "s-3", "s-4", "s-5"], ["inteira", "inteira", "inteira", "inteira"])).toEqual({
       selection: [{ seatId: "s-1", ticketTypeId: "inteira", label: "A-1", accessible: true }],
-      unavailableSeatIds: ["s-3"],
+      unavailableSeatIds: ["s-3", "s-4", "s-5"],
       invalid: false,
     });
   });
