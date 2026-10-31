@@ -58,4 +58,3 @@ A abordagem híbrida foi escolhida porque mantém a referência espacial existen
 - O link gerado mantém os assentos na ordem correta, os tipos alinhados e o `sessionId` atual.
 - Nenhuma chamada de backend ou regra de compra existente é alterada.
 - Testes da app, lint e typecheck passam.
-

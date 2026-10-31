@@ -204,4 +204,3 @@
   git add apps/eventos
   git commit -m "test: valida fluxo responsivo de compra de eventos"
   ```
-
