@@ -40,13 +40,22 @@ export class MapasService {
       const existingSeatIds = new Set(existing.map((item: any) => item.seatId));
       for (const seat of seats) {
         if (existingSeatIds.has(seat.id)) continue;
-        await db.insert(eventoInventarioAssentos).values({
+        const insertQuery = db.insert(eventoInventarioAssentos).values({
           sessionId: session.id,
           seatId: seat.id,
           status: seat.sellable === false ? "BLOQUEADO" : "DISPONIVEL",
           blockedReason: seat.sellable === false ? "MAPA_ASSENTO_NAO_VENDAVEL" : null,
         });
-        inventoryCreatedCount += 1;
+        let inserted = true;
+        if (typeof (insertQuery as any).onConflictDoNothing === "function") {
+          const conflictQuery = (insertQuery as any).onConflictDoNothing({ target: [eventoInventarioAssentos.sessionId, eventoInventarioAssentos.seatId] });
+          inserted = typeof conflictQuery.returning === "function"
+            ? (await conflictQuery.returning({ id: eventoInventarioAssentos.id })).length > 0
+            : true;
+        } else {
+          await insertQuery;
+        }
+        if (inserted) inventoryCreatedCount += 1;
       }
     }
 
