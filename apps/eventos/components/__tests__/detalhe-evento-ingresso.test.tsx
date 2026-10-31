@@ -32,6 +32,13 @@ describe("caminho público de ingresso", () => {
     expect(grupos[1].sessions.map((item) => item.id)).toEqual(["tarde"]);
   });
 
+  it("renderiza sessões com datas ISO vindas do JSON da API", () => {
+    const sessaoWire = criarSessao({ startsAt: "2026-01-02T15:00:00.000Z" as unknown as Date, endsAt: "2026-01-02T17:00:00.000Z" as unknown as Date });
+    const html = renderToStaticMarkup(<DetalheEvento event={evento} sessions={[sessaoWire]} />);
+    expect(html).toContain("12:00");
+    expect(html).toContain("14:00");
+  });
+
   it("não oferece compra para sessão esgotada ou sem mapa", () => {
     const html = renderToStaticMarkup(<DetalheEvento event={evento} sessions={[
       criarSessao({ id: "esgotada", availability: "sold_out" }),

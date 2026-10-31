@@ -5,8 +5,12 @@ import { formatarPrecoPublico, rotuloDisponibilidade } from "../lib/eventos-form
 
 const fuso = "America/Sao_Paulo";
 
-function chaveDoDia(value: Date): string {
-  const partes = new Intl.DateTimeFormat("en-CA", { timeZone: fuso, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(value);
+function normalizarData(value: Date | string): Date {
+  return value instanceof Date ? value : new Date(value);
+}
+
+function chaveDoDia(value: Date | string): string {
+  const partes = new Intl.DateTimeFormat("en-CA", { timeZone: fuso, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(normalizarData(value));
   return `${partes.find((item) => item.type === "year")?.value}-${partes.find((item) => item.type === "month")?.value}-${partes.find((item) => item.type === "day")?.value}`;
 }
 
@@ -19,12 +23,12 @@ export function agruparSessoesPorDia(sessions: PublicEventSession[]) {
   return [...grupos.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([key, items]) => ({
     key,
     label: new Intl.DateTimeFormat("pt-BR", { dateStyle: "full", timeZone: fuso }).format(new Date(`${key}T12:00:00-03:00`)),
-    sessions: items.sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime()),
+    sessions: items.sort((a, b) => normalizarData(a.startsAt).getTime() - normalizarData(b.startsAt).getTime()),
   }));
 }
 
-function horario(value: Date) {
-  return new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: fuso }).format(value);
+function horario(value: Date | string) {
+  return new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: fuso }).format(normalizarData(value));
 }
 
 export function SessoesEvento({ eventSlug, sessions }: { eventSlug: string; sessions: PublicEventSession[] }): React.ReactElement {
