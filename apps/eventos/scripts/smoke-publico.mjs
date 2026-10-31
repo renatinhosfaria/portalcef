@@ -1,0 +1,59 @@
+import { chromium } from "@playwright/test";
+import { spawn } from "node:child_process";
+import { createServer } from "node:http";
+
+const baseUrl = "http://127.0.0.1:3014";
+const apiPort = 4100;
+
+const evento = { id: "e1", slug: "festival-demo", title: "Festival Demo", summary: "Experiência", description: "Descrição", category: "Cultura", imageUrl: "https://www.portalcef.com.br/storage/demo.jpg", startsAt: "2026-11-05T18:00:00Z", locationName: "Auditório", fromPriceCents: 5000, availability: "available" };
+const sessoes = [{ id: "s1", startsAt: "2026-11-05T18:00:00Z", endsAt: "2026-11-05T20:00:00Z", availability: "available", mapId: "m1", location: { name: "Auditório", room: "Sala A", address: "Rua A", accessibility: "Rampa" }, ticketTypes: [{ id: "t1", name: "Inteira", priceCents: 5000 }, { id: "t2", name: "Meia", priceCents: 2500 }] }, { id: "s2", startsAt: "2026-11-06T18:00:00Z", availability: "sold_out", mapId: null, location: { name: "Auditório" }, ticketTypes: [] }];
+const mapa = { sessionId: "s1", seats: [{ id: "a1", rowLabel: "A", seatNumber: 1, x: 0, y: 0, width: 1, height: 1, state: "available", accessible: true }, { id: "a2", rowLabel: "A", seatNumber: 2, x: 2, y: 0, width: 1, height: 1, state: "reserved", accessible: false }, { id: "b1", rowLabel: "B", seatNumber: 1, x: 0, y: 2, width: 1, height: 1, state: "sold", accessible: false }, { id: "b2", rowLabel: "B", seatNumber: 2, x: 2, y: 2, width: 1, height: 1, state: "blocked", accessible: false }] };
+
+function resposta(path) {
+  if (path === "/api/eventos/public") return [evento, { ...evento, id: "e2", slug: "sem-imagem", title: "Sem imagem", imageUrl: null, availability: "sold_out" }];
+  if (path === "/api/eventos/public/festival-demo") return evento;
+  if (path === "/api/eventos/public/festival-demo/sessoes") return sessoes;
+  if (path === "/api/eventos/public/festival-demo/politicas") return ["PRIVACIDADE", "COMPRA", "CANCELAMENTO_REEMBOLSO", "ACESSIBILIDADE", "CONTATO"].map((type) => ({ type, version: 1, content: "Política" }));
+  if (path === "/api/eventos/public/sessoes/s1/map") return mapa;
+  if (path.startsWith("/api/eventos/public/pedidos/")) { const orderNumber = path.split("/").pop(); return { orderNumber, eventTitle: evento.title, status: orderNumber === "PENDENTE" ? "AGUARDANDO_PAGAMENTO" : "CONFIRMADO", session: sessoes[0], items: [{ seatId: "a1" }] }; }
+  return undefined;
+}
+
+function iniciarApi() {
+  const server = createServer((request, response) => { const body = resposta((request.url ?? "").split("?")[0]); response.statusCode = body ? 200 : 404; response.setHeader("content-type", "application/json"); response.end(JSON.stringify(body ?? { message: "not found" })); });
+  return new Promise((resolve) => server.listen(apiPort, "127.0.0.1", () => resolve(server)));
+}
+
+async function aguardarServidor() { for (let tentativa = 0; tentativa < 30; tentativa += 1) { try { const response = await fetch(`${baseUrl}/pedido/consulta`); if (response.ok) return; } catch {} await new Promise((resolve) => setTimeout(resolve, 1000)); } throw new Error("Servidor Next não iniciou a tempo"); }
+
+async function exercitarViewport(browser, nome, viewport) {
+  const contexto = await browser.newContext({ viewport, reducedMotion: "reduce" });
+  const pagina = await contexto.newPage();
+  const acessar = async (url) => pagina.goto(`${baseUrl}${url}`, { waitUntil: "networkidle", timeout: 30000 });
+  await acessar("/");
+  if (!await pagina.getByText("Festival Demo").count() || !await pagina.getByText("Sem imagem").count() || !await pagina.locator('img[alt="Festival Demo"]').count() || !await pagina.getByRole("link", { name: /Festival Demo/ }).count()) throw new Error(`${nome}: catálogo incompleto`);
+  await acessar("/evento/festival-demo");
+  if (!await pagina.getByRole("heading", { name: "Festival Demo" }).count() || !await pagina.getByText("Sessões").count() || !await pagina.getByText("Esgotada").count()) throw new Error(`${nome}: detalhe incompleto`);
+  await acessar("/evento/festival-demo/sessao/s1?ticketTypeId=t1");
+  if (await pagina.getByRole("button", { name: /A-2/ }).count()) throw new Error(`${nome}: assento indisponível acionável`);
+  await pagina.getByRole("button", { name: /A-1/ }).focus();
+  if (!await pagina.getByRole("button", { name: /A-1/ }).evaluate((element) => document.activeElement === element)) throw new Error(`${nome}: foco de teclado ausente`);
+  await pagina.getByRole("button", { name: /A-1/ }).click();
+  if (!await pagina.getByRole("region", { name: "Resumo dos assentos selecionados" }).count() || !(await pagina.getByRole("link", { name: /Continuar/ }).getAttribute("href")).includes("sessionId=s1")) throw new Error(`${nome}: mapa/resumo incompleto`);
+  await acessar("/checkout?assentos=a1%2Cb2&ticketTypeIds=t1%2Ct2&sessionId=s1&slug=festival-demo");
+  if (!await pagina.getByText("Assento a1: t1").count() || !await pagina.getByText("Assento b2: t2").count() || !await pagina.getByLabel("Nome completo").count()) throw new Error(`${nome}: checkout incompleto`);
+  await acessar("/pedido/PENDENTE?retorno=sucesso");
+  if (!await pagina.getByText("Pagamento pendente").count()) throw new Error(`${nome}: pedido pendente ausente`);
+  await acessar("/pedido/CONFIRMADO");
+  if (!await pagina.getByText("CONFIRMADO").count()) throw new Error(`${nome}: pedido conclusivo ausente`);
+  await acessar("/pedido/consulta");
+  if (!await pagina.getByRole("textbox", { name: "Número do pedido" }).count() || !await pagina.getByRole("button", { name: "Consultar pedido" }).count()) throw new Error(`${nome}: labels da consulta ausentes`);
+  const overflow = await pagina.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
+  if (overflow) throw new Error(`${nome}: overflow horizontal`);
+  const transition = await pagina.evaluate(() => getComputedStyle(document.body).transitionDuration);
+  return `${nome}: PASS (viewport ${viewport.width}x${viewport.height}, reduced-motion ${transition})`;
+}
+
+const api = await iniciarApi();
+const next = spawn("pnpm", ["--filter", "@essencia/eventos", "dev"], { env: { ...process.env, API_INTERNAL_URL: `http://127.0.0.1:${apiPort}` }, stdio: "ignore" });
+try { await aguardarServidor(); const browser = await chromium.launch({ headless: true }); try { console.log(await exercitarViewport(browser, "mobile", { width: 390, height: 844 })); console.log(await exercitarViewport(browser, "desktop", { width: 1440, height: 900 })); } finally { await browser.close(); } } finally { next.kill("SIGTERM"); next.kill("SIGKILL"); api.closeAllConnections?.(); api.close(); }
