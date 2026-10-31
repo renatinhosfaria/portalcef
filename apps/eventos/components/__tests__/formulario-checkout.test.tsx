@@ -51,6 +51,7 @@ describe("formulário de checkout público", () => {
   });
 
   it("rejeita quantidade de tipos desalinhada sem fallback único", () => {
+    expect(() => normalizarTiposPorAssento([], ["inteira"])).toThrow("tipos de ingresso");
     expect(() => normalizarTiposPorAssento(["A-1", "A-2"], [])).toThrow("tipos de ingresso");
     expect(() => normalizarTiposPorAssento(["A-1", "A-2"], ["inteira", "meia", "cortesia"])).toThrow("tipos de ingresso");
   });
