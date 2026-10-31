@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import type { PublicEventTicketType, PublicMap, PublicSeat } from "@essencia/shared/types";
 import { MapaAssentos } from "../mapa-assentos";
+import { calcularTotalSelecao, ResumoAssentosFixo } from "../resumo-assentos";
 import { calcularBoundsMapa, estiloAssento, serializarSelecaoAssentos } from "../mapa-assentos-utils";
 
 const tipoInteira: PublicEventTicketType = { id: "inteira", name: "Inteira", description: null, priceCents: 1000, maxPerOrder: null, eligibility: null };
@@ -18,6 +19,41 @@ const assentos: PublicSeat[] = [
 const mapa: PublicMap = { sessionId: "sessao-1", mapId: "mapa-1", seats: assentos };
 
 describe("mapa público de assentos", () => {
+  it("calcula o total pelos tipos de ingresso selecionados", () => {
+    expect(calcularTotalSelecao([
+      { seatId: "s-1", ticketTypeId: "inteira" },
+      { seatId: "s-2", ticketTypeId: "meia" },
+    ], [tipoInteira, tipoMeia])).toBe(1500);
+  });
+
+  it("mantém o resumo fixo desabilitado quando não há seleção", () => {
+    const html = renderToStaticMarkup(<ResumoAssentosFixo selection={[]} ticketTypes={[tipoInteira]} onChangeTicketType={() => undefined} />);
+
+    expect(html).toContain("Nenhum assento selecionado");
+    expect(html).toContain("R$ 0,00");
+    expect(html).toContain('aria-disabled="true"');
+    expect(html).not.toContain('href="/checkout');
+  });
+
+  it("exibe quantidade, total e checkout quando a seleção está completa", () => {
+    const html = renderToStaticMarkup(<ResumoAssentosFixo selection={[
+      { seatId: "s-1", ticketTypeId: "inteira", label: "A-1" },
+      { seatId: "s-2", ticketTypeId: "meia", label: "A-2" },
+    ]} ticketTypes={[tipoInteira, tipoMeia]} checkoutHref="/checkout?assentos=s-1%2Cs-2" onChangeTicketType={() => undefined} />);
+
+    expect(html).toContain("2 assento(s) selecionado(s)");
+    expect(html).toContain("R$ 15,00");
+    expect(html).toContain('href="/checkout?assentos=s-1%2Cs-2"');
+    expect(html).toContain('aria-disabled="false"');
+  });
+
+  it("mantém o checkout desabilitado quando algum assento ainda não tem tipo", () => {
+    const html = renderToStaticMarkup(<ResumoAssentosFixo selection={[{ seatId: "s-1", ticketTypeId: "" }]} ticketTypes={[tipoInteira]} checkoutHref="/checkout?assentos=s-1" onChangeTicketType={() => undefined} />);
+
+    expect(html).toContain('aria-disabled="true"');
+    expect(html).not.toContain('href="/checkout?assentos=s-1"');
+  });
+
   it("calcula bounds a partir da geometria completa dos assentos", () => {
     expect(calcularBoundsMapa(assentos)).toEqual({ minX: 10, minY: 20, width: 60, height: 40 });
     expect(calcularBoundsMapa([{ ...assentos[0], x: 4, y: 8, width: 0, height: 0 }])).toEqual({ minX: 4, minY: 8, width: 1, height: 1 });
@@ -70,7 +106,7 @@ describe("mapa público de assentos", () => {
     expect((selects[0] as HTMLSelectElement).value).toBe("meia");
     expect((selects[1] as HTMLSelectElement).value).toBe("meia");
     fireEvent.change(selects[0], { target: { value: "inteira" } });
-    const href = screen.getByRole("link", { name: "Continuar para checkout" }).getAttribute("href");
+    const href = screen.getAllByRole("link", { name: "Continuar para checkout" }).at(-1)?.getAttribute("href");
     expect(href).toContain("sessionId=sessao-1");
     expect(href).toContain("ticketTypeIds=inteira%2Cmeia");
   });

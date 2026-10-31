@@ -2,7 +2,7 @@
 
 import React, { useMemo, useState } from "react";
 import type { PublicEventTicketType, PublicMap, PublicSeat } from "@essencia/shared/types";
-import { ResumoAssentos, type AssentoSelecionado } from "./resumo-assentos";
+import { ResumoAssentos, ResumoAssentosFixo, type AssentoSelecionado } from "./resumo-assentos";
 import { calcularBoundsMapa, estiloAssento, serializarSelecaoAssentos } from "./mapa-assentos-utils";
 
 export function classeEstadoAssento(state: PublicSeat["state"]): string {
@@ -73,6 +73,7 @@ export function MapaAssentos({ map, checkoutHref, ticketTypes, initialTicketType
       </ul>
     </section>
     <ResumoAssentos selection={selection} ticketTypes={ticketTypes} onChangeTicketType={(seatId, ticketTypeId) => setSelection((current) => current.map((item) => item.seatId === seatId ? { ...item, ticketTypeId } : item))} />
+    <ResumoAssentosFixo selection={selection} ticketTypes={ticketTypes} checkoutHref={target} onChangeTicketType={(seatId, ticketTypeId) => setSelection((current) => current.map((item) => item.seatId === seatId ? { ...item, ticketTypeId } : item))} />
     <a aria-disabled={!target} href={target} className={`mt-5 inline-block rounded px-4 py-2 text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 ${target ? "bg-blue-700" : "pointer-events-none bg-slate-400"}`}>Continuar para checkout</a>
     <p className="sr-only" aria-live="polite">{selection.length ? `${selection.length} assento(s) selecionado(s)` : "Nenhum assento selecionado"}</p>
   </div>;
