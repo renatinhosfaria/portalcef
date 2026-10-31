@@ -1,15 +1,16 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { and, eq, eventoInventarioAssentos, eventoMapas, eventoPoliticas, eventoSessoes, eventoTiposIngresso, eventos } from '@essencia/db';
 import type { EventoActor } from '@essencia/shared/types';
 import { DatabaseService } from '../../common/database/database.service';
 import { assertSchoolScope } from './eventos.service';
+import { MapasService } from './mapas/mapas.service';
 
 export type ProntidaoItem = { key: string; label: string; state: 'BLOQUEADOR' | 'AVISO' | 'OK'; href?: string; message?: string };
 export type ProntidaoResult = { eventId: string; status: string; progress: number; items: ProntidaoItem[] };
 
 @Injectable()
 export class EventosReadinessService {
-  constructor(private readonly database: DatabaseService) {}
+  constructor(private readonly database: DatabaseService, @Optional() private readonly mapas?: MapasService) {}
   private get db() { return this.database.db; }
   private async rows(table: any, predicate?: any) { const query = this.db.select().from(table); return predicate === undefined ? query : query.where(predicate); }
   async verificar(eventId: string, actor: EventoActor): Promise<ProntidaoResult> {
@@ -20,6 +21,14 @@ export class EventosReadinessService {
     const maps: any[] = await this.rows(eventoMapas, eq(eventoMapas.eventId, eventId));
     const tickets: any[] = await this.rows(eventoTiposIngresso, and(eq(eventoTiposIngresso.eventId, eventId), eq(eventoTiposIngresso.active, true)));
     const policies: any[] = await this.rows(eventoPoliticas, and(eq(eventoPoliticas.eventId, eventId), eq(eventoPoliticas.active, true)));
+    if (this.mapas) {
+      const confirmedMapIds = new Set<string>();
+      for (const session of sessions) {
+        const effectiveMapId = session.mapId ?? event.defaultMapId;
+        if (effectiveMapId && maps.some((map) => map.id === effectiveMapId && map.status === 'CONFIRMADO')) confirmedMapIds.add(effectiveMapId);
+      }
+      for (const mapId of confirmedMapIds) await this.mapas.sincronizarInventarioMapa(this.db, eventId, mapId, actor);
+    }
     const items: ProntidaoItem[] = [];
     const textOk = Boolean(event.title?.trim() && event.description?.trim() && event.cancellationPolicy?.trim() && event.contactEmail?.trim());
     items.push(textOk ? { key: 'TEXTOS_OBRIGATORIOS', label: 'Textos obrigatórios', state: 'OK' } : { key: 'TEXTOS_OBRIGATORIOS', label: 'Textos obrigatórios', state: 'BLOQUEADOR', href: '#informacoes', message: 'Preencha descrição, contato e política de cancelamento' });

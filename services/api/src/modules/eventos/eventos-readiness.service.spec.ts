@@ -24,6 +24,20 @@ describe('EventosReadinessService', () => {
     expect(result.items.find((item) => item.key === 'INVENTARIO_SESSOES')).toMatchObject({ state: 'BLOQUEADOR' });
   });
 
+  it('sincroniza mapas confirmados antes de calcular o inventário', async () => {
+    const db = fakeDb([
+      [{ id: 'e1', schoolId: 's1', title: 'Evento', slug: 'evento', status: 'RASCUNHO', description: 'x', cancellationPolicy: 'x', contactEmail: 'a@b.com', defaultMapId: 'm1' }],
+      [{ id: 'sess1', eventId: 'e1', startsAt: new Date('2026-11-01T10:00:00Z'), endsAt: new Date('2026-11-01T11:00:00Z'), capacity: 1, locationId: 'l1', mapId: null, salesStartsAt: null, salesEndsAt: null }],
+      [{ id: 'm1', eventId: 'e1', status: 'CONFIRMADO' }],
+      [],
+      [{ eventId: 'e1', active: true, priceCents: 100 }],
+      [{ eventId: 'e1', active: true, type: 'PRIVACIDADE' }, { eventId: 'e1', active: true, type: 'COMPRA' }, { eventId: 'e1', active: true, type: 'CANCELAMENTO_REEMBOLSO' }, { eventId: 'e1', active: true, type: 'ACESSIBILIDADE' }, { eventId: 'e1', active: true, type: 'CONTATO' }],
+    ]);
+    const mapas = { sincronizarInventarioMapa: jest.fn().mockResolvedValue({ inventorySessionIds: ['sess1'], inventoryCreatedCount: 1 }) };
+    await new EventosReadinessService({ db } as any, mapas as any).verificar('e1', { userId: 'u1', role: 'diretora_geral', schoolId: 's1' });
+    expect(mapas.sincronizarInventarioMapa).toHaveBeenCalledWith(db, 'e1', 'm1', expect.objectContaining({ userId: 'u1' }));
+  });
+
   it('rejeita tenant divergente antes de consultar o checklist', async () => {
     const db = fakeDb([[{ id: 'e1', schoolId: 's1', title: 'Evento', status: 'RASCUNHO' }]]);
     await expect(new EventosReadinessService({ db } as any).verificar('e1', { userId: 'u2', role: 'diretora_geral', schoolId: 's2' })).rejects.toMatchObject({ response: { code: 'FORBIDDEN' } });
