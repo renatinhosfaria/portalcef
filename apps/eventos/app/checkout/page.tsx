@@ -1,17 +1,8 @@
 import { FormularioCheckout } from "../../components/formulario-checkout";
 import { listarPoliticasPublicas } from "../../lib/eventos-api";
+import { normalizarTiposPorAssento } from "../../lib/checkout-utils";
 
 type Params = Promise<{ assentos?: string; ticketTypeIds?: string; ticketTypeId?: string; sessionId?: string; slug?: string }>;
-
-export function normalizarTiposPorAssento(seatIds: string[], ticketTypeIds: string[]): string[] {
-  if (seatIds.length === 0) {
-    if (ticketTypeIds.length === 0) return [];
-    throw new Error(`A quantidade de tipos de ingresso (${ticketTypeIds.length}) não corresponde aos assentos selecionados (0).`);
-  }
-  if (ticketTypeIds.length === seatIds.length) return ticketTypeIds;
-  if (ticketTypeIds.length === 1 && ticketTypeIds[0]) return seatIds.map(() => ticketTypeIds[0]);
-  throw new Error(`A quantidade de tipos de ingresso (${ticketTypeIds.length}) não corresponde aos assentos selecionados (${seatIds.length}).`);
-}
 
 function lerLista(valor?: string) {
   return valor?.split(",").map((item) => decodeURIComponent(item)).filter(Boolean) ?? [];

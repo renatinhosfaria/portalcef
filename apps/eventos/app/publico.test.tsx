@@ -1,8 +1,9 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { CatalogoPublico } from "./page";
+import { CatalogoPublico } from "../components/catalogo-publico";
 
 describe("vitrine pública de Eventos", () => {
   it("declara pacote público na porta 3014 sem basePath", () => {
@@ -49,12 +50,50 @@ describe("vitrine pública de Eventos", () => {
     expect(catalog).toContain("/evento/");
   });
 
+  it("integra a vitrine ao shell compartilhado e à consulta pública", () => {
+    const layout = readFileSync(new URL("./layout.tsx", import.meta.url), "utf8");
+    const consulta = readFileSync(new URL("./pedido/consulta/page.tsx", import.meta.url), "utf8");
+    const catalog = readFileSync(new URL("../components/catalogo-eventos.tsx", import.meta.url), "utf8");
+    const card = readFileSync(new URL("../components/evento-card.tsx", import.meta.url), "utf8");
+    const detalhe = readFileSync(new URL("../components/detalhe-evento.tsx", import.meta.url), "utf8");
+
+    expect(layout).toContain('import "@essencia/ui/globals.css"');
+    expect(layout).toContain('import "./globals.css"');
+    expect(layout).toContain('href="/pedido/consulta"');
+    expect(consulta).toContain("ConsultaPedido");
+    expect(catalog).toContain("<EventoCard");
+    expect(card).toContain("event.imageUrl");
+    expect(card).toContain("/evento/${event.slug}");
+    expect(detalhe).toContain("event.imageUrl");
+    expect(detalhe).toContain('alt=""');
+  });
+
+  it("usa somente endpoints públicos e não expõe a superfície administrativa", () => {
+    const api = readFileSync(new URL("../lib/eventos-api.ts", import.meta.url), "utf8");
+    expect(api).toContain('"/eventos/public"');
+    expect(api).toContain("credentials: \"omit\"");
+    expect(api).not.toContain("/eventos-admin");
+
+    const appRoot = new URL(".", import.meta.url).pathname;
+    const arquivos = procurarArquivos(appRoot).filter((arquivo) => /\.(tsx?|css)$/.test(arquivo) && !arquivo.endsWith("publico.test.tsx"));
+    for (const arquivo of arquivos) {
+      expect(readFileSync(arquivo, "utf8"), arquivo).not.toContain("/eventos-admin");
+    }
+  });
+
   it("representa estados de assento sem liberar reservado, vendido ou bloqueado", () => {
     const source = readFileSync(new URL("../components/mapa-assentos.tsx", import.meta.url), "utf8");
     for (const state of ["available", "reserved", "sold", "blocked"]) expect(source).toContain(state);
     expect(source).toContain("disabled");
   });
 });
+
+function procurarArquivos(diretorio: string): string[] {
+  return readdirSync(diretorio, { withFileTypes: true }).flatMap((entrada) => {
+    const caminho = join(diretorio, entrada.name);
+    return entrada.isDirectory() ? procurarArquivos(caminho) : [caminho];
+  });
+}
 
 import { classeEstadoAssento } from "../components/mapa-assentos";
 

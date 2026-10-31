@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import type { PoliticaPublica } from "@essencia/shared/types";
 import { FormularioCheckout, aceitesCompletos, deveInvalidarChaveReserva } from "../formulario-checkout";
-import { normalizarTiposPorAssento } from "../../app/checkout/page";
+import { normalizarTiposPorAssento } from "../../lib/checkout-utils";
 import { EventosApiError } from "../../lib/eventos-api";
 
 const politicas: PoliticaPublica[] = [

@@ -1,12 +1,7 @@
 import React from "react";
 import type { PublicEventCard } from "@essencia/shared/types";
-import { CatalogoEstados } from "../components/catalogo-estados";
-import { CatalogoEventos } from "../components/catalogo-eventos";
+import { CatalogoPublico } from "../components/catalogo-publico";
 import { listarEventosPublicos } from "../lib/eventos-api";
-
-export function CatalogoPublico({ events, error }: { events: PublicEventCard[]; error: boolean }): React.JSX.Element {
-  return <>{error ? <CatalogoEstados kind="error" /> : events.length ? <CatalogoEventos events={events} /> : <CatalogoEstados kind="empty" />}</>;
-}
 
 export default async function Page() {
   // O estado de erro usa role="alert" e a mensagem "Não foi possível carregar os eventos".
