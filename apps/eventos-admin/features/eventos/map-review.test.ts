@@ -34,3 +34,11 @@ it("valida success:false nas operações do mapa", () => {
   const page = readFileSync(new URL("../../app/eventos/[id]/mapa/page.tsx", import.meta.url), "utf8");
   expect(page).toContain("body.success === false");
 });
+it("exibe o resultado da geração automática do inventário", () => {
+  expect(source).toContain("inventoryCreatedCount");
+  const page = readFileSync(new URL("../../app/eventos/[id]/mapa/page.tsx", import.meta.url), "utf8");
+  expect(page).toContain("inventorySessionIds");
+  expect(page).toContain("setInventoryCreatedCount");
+  expect(page).toContain("const confirmado");
+  expect(page).toContain("router.refresh()");
+});
