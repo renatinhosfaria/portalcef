@@ -2,8 +2,9 @@
 
 import React from "react";
 import type { PublicEventTicketType } from "@essencia/shared/types";
+import type { AssentoSelecionado } from "./assentos-types";
 
-export type AssentoSelecionado = { seatId: string; ticketTypeId: string; label?: string; accessible?: boolean };
+export type { AssentoSelecionado } from "./assentos-types";
 
 export type ResumoAssentosProps = {
   selection: AssentoSelecionado[];
