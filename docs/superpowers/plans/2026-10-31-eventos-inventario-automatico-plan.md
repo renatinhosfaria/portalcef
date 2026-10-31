@@ -75,4 +75,3 @@
 - [ ] **Passo 4: fazer commit final**, se houver ajustes de integração.
 - [ ] **Passo 5: executar `git push origin main`**.
 - [ ] **Passo 6: executar `./scripts/deploy.sh`** e confirmar health check externo, containers, PostgreSQL, Redis e MinIO.
-
