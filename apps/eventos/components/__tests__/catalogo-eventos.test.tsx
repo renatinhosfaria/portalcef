@@ -37,11 +37,13 @@ describe("catálogo público", () => {
     for (const text of ["Uma tarde especial", "Cultura", "Pátio central", "19/06/2026", "A partir de R$ 12,50", "Disponível"]) expect(html).toContain(text);
   });
   it("usa fallback quando não há imagem e evita compra em estados indisponíveis", () => {
-    const html = renderToStaticMarkup(<EventoCard event={{ ...evento, imageUrl: null, availability: "sold_out" }} />);
-    expect(html).toContain("Essência Feliz");
-    expect(html).toContain("Esgotado");
-    expect(html).not.toContain("Comprar");
-    expect(html).not.toContain('href="/evento/festa-junina"');
+    for (const availability of ["sold_out", "unavailable"] as const) {
+      const html = renderToStaticMarkup(<EventoCard event={{ ...evento, imageUrl: null, availability }} />);
+      expect(html).toContain("Essência Feliz");
+      expect(html).toContain(availability === "sold_out" ? "Esgotado" : "Indisponível");
+      expect(html).not.toContain("Comprar");
+      expect(html).not.toContain('href="/evento/festa-junina"');
+    }
   });
   it("mantém ordem recebida pela API", () => {
     const html = renderToStaticMarkup(<CatalogoEventos events={[evento, { ...evento, id: "evento-2", slug: "segundo", title: "Segundo" }]} />);

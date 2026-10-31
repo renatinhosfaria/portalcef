@@ -1,5 +1,8 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import React from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { CatalogoPublico } from "./page";
 
 describe("vitrine pública de Eventos", () => {
   it("declara pacote público na porta 3014 sem basePath", () => {
@@ -68,5 +71,15 @@ describe("comportamento da vitrine", () => {
     const page = readFileSync(new URL("./page.tsx", import.meta.url), "utf8");
     expect(page).toContain("Não foi possível carregar os eventos");
     expect(page).toContain("role=\"alert\"");
+  });
+
+  it("renderiza comportamentalmente erro e catálogo vazio como estados distintos", () => {
+    const erro = renderToStaticMarkup(<CatalogoPublico events={[]} error />);
+    const vazio = renderToStaticMarkup(<CatalogoPublico events={[]} error={false} />);
+    expect(erro).toContain("Não foi possível carregar os eventos");
+    expect(erro).toContain('role="alert"');
+    expect(erro).not.toContain("Nenhum evento disponível");
+    expect(vazio).toContain("Nenhum evento disponível");
+    expect(vazio).not.toContain('role="alert"');
   });
 });
