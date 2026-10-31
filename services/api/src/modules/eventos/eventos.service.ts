@@ -5,6 +5,7 @@ import type { EventoActor, EventoResumo, PublicEventCard, PublicEventDetail, Pub
 import { DatabaseService } from "../../common/database/database.service";
 import { RASTER_IMAGE_MIME_TYPES, StorageService } from "../../common/storage/storage.service";
 import { EventosRulesService } from "./eventos-rules.service";
+import { MapasService } from "./mapas/mapas.service";
 
 type DbTransaction = Parameters<Database["transaction"]>[0] extends (tx: infer T) => unknown ? T : never;
 
@@ -15,7 +16,7 @@ export function assertSchoolScope(actor: EventoActor, schoolId: string) {
 
 @Injectable()
 export class EventosService {
-  constructor(private readonly database: DatabaseService, private readonly rules: EventosRulesService, @Optional() @Inject(StorageService) private readonly storage: StorageService | undefined) {}
+  constructor(private readonly database: DatabaseService, private readonly rules: EventosRulesService, @Optional() @Inject(StorageService) private readonly storage: StorageService | undefined, @Optional() private readonly mapas: MapasService | undefined) {}
   private get db(): Database { return this.database.db; }
   private normalizeSlug(slug: string) { return slug.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""); }
   private resumo(event: typeof eventos.$inferSelect): EventoResumo { return { id: event.id, schoolId: event.schoolId, slug: event.slug, title: event.title, status: event.status as EventoResumo["status"], publishedAt: event.publishedAt, plannedPublicationAt: event.plannedPublicationAt }; }
@@ -162,11 +163,12 @@ export class EventosService {
       for (const session of inherited) {
         await db.update(eventoInventarioAssentos).set({ status: "BLOQUEADO", blockedReason: "MAPA_PADRAO_ALTERADO", updatedAt: now }).where(and(eq(eventoInventarioAssentos.sessionId, session.id), inArray(eventoInventarioAssentos.status, ["DISPONIVEL", "LIBERADO"])));
       }
+      const inventory = this.mapas ? await this.mapas.sincronizarInventarioMapa(db, eventId, mapId, actor) : { inventorySessionIds: inherited.map((session: any) => session.id), inventoryCreatedCount: 0 };
       await this.audit(eventId, actor, "ATUALIZADO", "mapa_padrao", eventId, { etapa: "mapa", previousMapId: event.defaultMapId, nextMapId: mapId, inheritedSessionIds: inherited.map((session: any) => session.id), inventory: "REVISAR_REGENERAR" }, db);
-      return { updated, inheritedSessionIds: inherited.map((session: any) => session.id) };
+      return { updated, inheritedSessionIds: inherited.map((session: any) => session.id), inventory };
     };
     const result = typeof transaction === "function" ? await transaction.call(this.db, run) : await run(this.db);
-    return { ...this.resumo(result.updated), inheritedSessionIds: result.inheritedSessionIds, inventoryRequiresReview: result.inheritedSessionIds.length > 0 };
+    return { ...this.resumo(result.updated), inheritedSessionIds: result.inheritedSessionIds, inventorySessionIds: result.inventory.inventorySessionIds, inventoryCreatedCount: result.inventory.inventoryCreatedCount, inventoryRequiresReview: result.inheritedSessionIds.length > 0 };
   }
 
   async listarAdmin(query: EventoListQuery = {}, actor?: EventoActor) {

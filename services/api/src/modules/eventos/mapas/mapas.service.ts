@@ -1,5 +1,5 @@
 import { BadRequestException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common";
-import { and, eq, eventoAuditorias, eventoDeteccoesMapa, eventoImportacoesMapa, eventoMapaAssentos, eventoMapas, eventoSessoes, eventos, type Database } from "@essencia/db";
+import { and, eq, eventoAuditorias, eventoDeteccoesMapa, eventoImportacoesMapa, eventoInventarioAssentos, eventoMapaAssentos, eventoMapas, eventoSessoes, eventos, type Database } from "@essencia/db";
 import type { MultipartFile } from "@fastify/multipart";
 import type { EventoActor } from "@essencia/shared/types";
 import { DatabaseService } from "../../../common/database/database.service";
@@ -26,6 +26,32 @@ export class MapasService {
   private async transaction<T>(fn: (db: Database) => Promise<T>): Promise<T> {
     const tx = (this.db as any).transaction;
     return typeof tx === "function" ? tx.call(this.db, fn) : fn(this.db);
+  }
+
+  async sincronizarInventarioMapa(db: Database, eventId: string, mapId: string, actor: EventoActor) {
+    const [event] = await db.select().from(eventos).where(eq(eventos.id, eventId));
+    const sessions = await db.select().from(eventoSessoes).where(eq(eventoSessoes.eventId, eventId));
+    const seats = await db.select().from(eventoMapaAssentos).where(eq(eventoMapaAssentos.mapId, mapId));
+    const targetSessions = sessions.filter((session: any) => session.mapId === mapId || (!session.mapId && (!event?.defaultMapId || event.defaultMapId === mapId)));
+    let inventoryCreatedCount = 0;
+
+    for (const session of targetSessions) {
+      const existing = await db.select().from(eventoInventarioAssentos).where(eq(eventoInventarioAssentos.sessionId, session.id));
+      const existingSeatIds = new Set(existing.map((item: any) => item.seatId));
+      for (const seat of seats) {
+        if (existingSeatIds.has(seat.id)) continue;
+        await db.insert(eventoInventarioAssentos).values({
+          sessionId: session.id,
+          seatId: seat.id,
+          status: seat.sellable === false ? "BLOQUEADO" : "DISPONIVEL",
+          blockedReason: seat.sellable === false ? "MAPA_ASSENTO_NAO_VENDAVEL" : null,
+        });
+        inventoryCreatedCount += 1;
+      }
+    }
+
+    await this.audit(eventId, actor, mapId, { action: "gerar_inventario", inventorySessionIds: targetSessions.map((session: any) => session.id), inventoryCreatedCount }, db);
+    return { inventorySessionIds: targetSessions.map((session: any) => session.id), inventoryCreatedCount };
   }
 
   async importar(eventId: string, file: MultipartFile, actor: EventoActor): Promise<MapImportSummary> {
@@ -94,16 +120,17 @@ export class MapasService {
     if (!corrections.seats.length) throw new BadRequestException({ code: "MAP_EMPTY", message: "O mapa precisa de pelo menos um assento" });
     const unique = new Set(corrections.seats.map((seat) => `${seat.rowLabel}:${seat.seatNumber}`));
     if (unique.size !== corrections.seats.length) throw new BadRequestException({ code: "MAP_DUPLICATE_SEAT", message: "Existem assentos duplicados" });
-    const { confirmed, imp } = await this.transaction(async (db) => {
+    const { confirmed, imp, inventory } = await this.transaction(async (db) => {
       if (typeof (db as any).delete === "function") await db.delete(eventoMapaAssentos).where(eq(eventoMapaAssentos.mapId, map.id));
       for (const seat of corrections.seats) await db.insert(eventoMapaAssentos).values({ mapId: map.id, rowLabel: seat.rowLabel, seatNumber: seat.seatNumber, x: seat.x, y: seat.y, width: seat.width ?? 1, height: seat.height ?? 1, category: seat.category ?? null, accessible: seat.accessible ?? false, sellable: seat.sellable ?? true });
       const [next] = await db.update(eventoMapas).set({ status: "CONFIRMADO", confirmedAt: new Date(), confirmedBy: actor.userId, updatedAt: new Date() }).where(eq(eventoMapas.id, map.id)).returning();
       const [importRow] = await db.select().from(eventoImportacoesMapa).where(eq(eventoImportacoesMapa.mapId, map.id));
       if (importRow) await db.update(eventoImportacoesMapa).set({ status: "CONFIRMADA", reviewedBy: actor.userId, reviewedAt: new Date(), updatedAt: new Date() }).where(eq(eventoImportacoesMapa.id, importRow.id));
+      const inventory = await this.sincronizarInventarioMapa(db, eventId, map.id, actor);
       await this.audit(eventId, actor, map.id, { action: "confirmar", reason: corrections.reason ?? null, seats: corrections.seats.length }, db);
-      return { confirmed: next, imp: importRow };
+      return { confirmed: next, imp: importRow, inventory };
     });
-    return { map: confirmed ?? map, seats: corrections.seats };
+    return { map: confirmed ?? map, seats: corrections.seats, ...inventory };
   }
 
   async arquivar(eventId: string, versionId: string, actor: EventoActor) {

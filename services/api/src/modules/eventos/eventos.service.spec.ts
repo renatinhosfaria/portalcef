@@ -203,13 +203,15 @@ describe('EventosService contratos de workspace', () => {
       }),
     });
 
-    await service(db).atualizarMapaPadrao('e1', 'map-novo', actor);
+    const mapas = { sincronizarInventarioMapa: jest.fn().mockResolvedValue({ inventorySessionIds: ['sessao-herdada'], inventoryCreatedCount: 2 }) };
+    await service(db, undefined, mapas).atualizarMapaPadrao('e1', 'map-novo', actor);
 
     expect(updates).toHaveLength(2);
     expect(updates.map((item) => item.values)).toEqual(expect.arrayContaining([
       { defaultMapId: 'map-novo', updatedAt: expect.any(Date) },
       { status: 'BLOQUEADO', blockedReason: 'MAPA_PADRAO_ALTERADO', updatedAt: expect.any(Date) },
     ]));
+    expect(mapas.sincronizarInventarioMapa).toHaveBeenCalledWith(db, 'e1', 'map-novo', actor);
   });
 
   it('envia a imagem do evento, atualiza a URL e remove a imagem anterior', async () => {
@@ -428,7 +430,7 @@ describe('EventosService contratos de workspace', () => {
   });
 });
 
-function service(db: any, storage?: any) { return new EventosService({ db } as any, { validarPublicacao: jest.fn() } as any, storage); }
+function service(db: any, storage?: any, mapas?: any) { return new EventosService({ db } as any, { validarPublicacao: jest.fn() } as any, storage, mapas); }
 
 function fakeDb(options: { selects?: unknown[][]; lockCalls?: string[]; insert?: (values: any) => Promise<any[]>; update?: () => Promise<any[]>; delete?: (table: unknown) => { where: () => Promise<unknown> } } = {}) {
   let selectIndex = 0;

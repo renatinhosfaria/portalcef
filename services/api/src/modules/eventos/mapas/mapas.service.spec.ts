@@ -1,6 +1,6 @@
 import { BadRequestException } from "@nestjs/common";
 import "reflect-metadata";
-jest.mock("@essencia/db", () => ({ eventos: {}, eventoMapas: {}, eventoSessoes: {}, eventoImportacoesMapa: {}, eventoDeteccoesMapa: {}, eventoMapaAssentos: {}, eventoAuditorias: {}, eq: jest.fn(), and: jest.fn() }));
+jest.mock("@essencia/db", () => ({ eventos: {}, eventoMapas: {}, eventoSessoes: {}, eventoImportacoesMapa: {}, eventoDeteccoesMapa: {}, eventoMapaAssentos: {}, eventoInventarioAssentos: {}, eventoAuditorias: {}, eq: jest.fn(), and: jest.fn() }));
 import { MapasService } from "./mapas.service";
 import { StorageService } from "../../../common/storage/storage.service";
 
@@ -31,6 +31,68 @@ describe("MapasService", () => {
     const db: any = { select: () => ({ from: () => ({ where: async () => [{ id: "event-1", schoolId: "school-1" }] }) }) };
     const maps = new MapasService({ db } as any, undefined, {} as any);
     await expect(maps.confirmar("event-1", "map-1", { seats: [] }, actor)).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it("gera inventário por sessão, bloqueia assentos não vendáveis e preserva estados existentes", async () => {
+    const dbModule = jest.requireMock("@essencia/db") as typeof import("@essencia/db");
+    const sessions = [
+      { id: "session-inherited", eventId: "event-1", mapId: null },
+      { id: "session-specific", eventId: "event-1", mapId: "map-1" },
+      { id: "session-other-map", eventId: "event-1", mapId: "map-2" },
+    ];
+    const mapSeats = [
+      { id: "seat-1", mapId: "map-1", rowLabel: "A", seatNumber: "1", sellable: true },
+      { id: "seat-2", mapId: "map-1", rowLabel: "A", seatNumber: "2", sellable: false },
+    ];
+    const existingInventory = [
+      { id: "inventory-1", sessionId: "session-inherited", seatId: "seat-1", status: "RESERVADO" },
+      { id: "inventory-2", sessionId: "session-specific", seatId: "seat-2", status: "BLOQUEADO", blockedReason: "cadeirante" },
+    ];
+    const inserted: Array<{ table: unknown; values: Record<string, unknown> }> = [];
+    let selectCall = 0;
+    const select = jest.fn(() => ({
+      from: () => ({
+        where: async () => {
+          selectCall += 1;
+          if (selectCall === 1) return [{ id: "event-1", schoolId: "school-1", defaultMapId: "map-1" }];
+          if (selectCall === 2) return [{ id: "map-1", eventId: "event-1", status: "EM_REVISAO" }];
+          if (selectCall === 3) return [{ id: "import-1" }];
+          if (selectCall === 4) return [{ id: "event-1", schoolId: "school-1", defaultMapId: "map-1" }];
+          if (selectCall === 5) return sessions;
+          if (selectCall === 6) return mapSeats;
+          if (selectCall === 7) return existingInventory.filter((item) => item.sessionId === "session-inherited");
+          if (selectCall === 8) return existingInventory.filter((item) => item.sessionId === "session-specific");
+          return [];
+        },
+      }),
+    }));
+    const insert = jest.fn((table: unknown) => ({
+      values: (values: Record<string, unknown>) => {
+        inserted.push({ table, values });
+        return { returning: async () => [{ id: `generated-${inserted.length}`, ...values }] };
+      },
+    }));
+    const db: any = {
+      select,
+      insert,
+      delete: () => ({ where: async () => undefined }),
+      update: () => ({ set: () => ({ where: () => ({ returning: async () => [{ id: "map-1", status: "CONFIRMADO" }] }) }) }),
+      transaction: async (callback: (tx: any) => Promise<unknown>) => callback(db),
+    };
+    const maps = new MapasService({ db } as any, undefined, {} as any);
+
+    const result = await maps.confirmar("event-1", "map-1", {
+      seats: mapSeats.map((seat) => ({ rowLabel: seat.rowLabel, seatNumber: seat.seatNumber, x: 1, y: 1, sellable: seat.sellable })),
+    }, actor);
+
+    const inventoryInserts = inserted.filter((item) => item.table === dbModule.eventoInventarioAssentos);
+    expect(inventoryInserts.map((item) => item.values)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ sessionId: "session-inherited", seatId: "seat-2", status: "BLOQUEADO" }),
+      expect.objectContaining({ sessionId: "session-specific", seatId: "seat-1", status: "DISPONIVEL" }),
+    ]));
+    expect(inventoryInserts).toHaveLength(2);
+    expect(result.inventorySessionIds).toEqual(expect.arrayContaining(["session-inherited", "session-specific"]));
+    expect(result.inventoryCreatedCount).toBe(2);
   });
 
   it("rejeita reconfirmação e arquivamento inválido", async () => {
