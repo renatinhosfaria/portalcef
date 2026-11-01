@@ -42,3 +42,23 @@ it("exibe o resultado da geração automática do inventário", () => {
   expect(page).toContain("const confirmado");
   expect(page).toContain("router.refresh()");
 });
+
+it("comunica o arquivamento concluído da versão anterior", () => {
+  expect(source).toContain("previousMapArchive");
+  expect(source).toContain("ARCHIVED");
+  expect(source).toContain("Versão anterior arquivada");
+});
+
+it("comunica preservação do mapa anterior em uso e suas sessões", () => {
+  expect(source).toContain("MAP_IN_USE");
+  expect(source).toContain("previousMapArchive.sessionIds");
+  expect(source).toContain("preservado");
+});
+
+it("mantém retry da substituição sem upload novo", () => {
+  const page = readFileSync(new URL("../../app/eventos/[id]/mapa/page.tsx", import.meta.url), "utf8");
+  expect(page).toContain("mapa-padrao/substituir");
+  expect(page).toContain("setMapaPadraoPendente(true)");
+  expect(page).toContain("retrySubstituicao");
+  expect(page).toContain("body: JSON.stringify({ mapId })");
+});
