@@ -75,13 +75,21 @@ describe("mapa público de assentos", () => {
 
   it("mantém conflito indisponível no SVG e bloqueia checkout de seleção inválida", () => {
     const mapaDisponivel: PublicMap = { ...mapa, seats: assentos.map((seat) => seat.id === "s-1" ? { ...seat, state: "available" as const } : seat) };
-    render(<MapaAssentos map={mapaDisponivel} checkoutHref="/checkout" ticketTypes={[tipoInteira]} unavailableSeatIds={["s-1"]} initialSelectionInvalid />);
+    render(<MapaAssentos map={mapaDisponivel} checkoutHref="/checkout" ticketTypes={[tipoInteira]} unavailableSeatIds={["s-1"]} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Mapa" }));
     expect(screen.queryByRole("button", { name: /Assento A-1/ })).toBeNull();
     expect(screen.getByRole("img", { name: /Assento A-1, indisponível/ }).getAttribute("aria-disabled")).toBe("true");
+  });
+
+  it("mantém checkout bloqueado até a pessoa corrigir uma seleção inválida", () => {
+    render(<MapaAssentos map={mapa} checkoutHref="/checkout" ticketTypes={[tipoInteira]} initialSelectionInvalid />);
+
     expect(screen.getByText(/Não foi possível restaurar/)).toBeTruthy();
     expect(Array.from(document.querySelectorAll("a")).every((link) => !link.hasAttribute("href"))).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: /Assento A-1, disponível/ }));
+    expect(screen.queryByText(/Não foi possível restaurar/)).toBeNull();
+    expect(screen.getAllByRole("link", { name: "Continuar para checkout" }).some((link) => link.getAttribute("href")?.includes("assentos=s-1"))).toBe(true);
   });
 
   it("calcula o total pelos tipos de ingresso selecionados", () => {

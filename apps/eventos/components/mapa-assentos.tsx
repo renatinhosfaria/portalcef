@@ -55,6 +55,7 @@ export type MapaAssentosProps = {
 
 export function MapaAssentos({ map, checkoutHref, ticketTypes, initialTicketTypeId, initialSelection = [], unavailableSeatIds = [], initialSelectionInvalid = false }: MapaAssentosProps): React.JSX.Element {
   const [selection, setSelection] = useState<AssentoSelecionado[]>(() => normalizarSelecaoInicial(map, initialSelection, unavailableSeatIds));
+  const [selectionInvalid, setSelectionInvalid] = useState(initialSelectionInvalid);
   const [fileiraSelecionada, setFileiraSelecionada] = useState("");
   const [modoVisualizacao, setModoVisualizacao] = useState<"lista" | "mapa">("lista");
 
@@ -85,10 +86,11 @@ export function MapaAssentos({ map, checkoutHref, ticketTypes, initialTicketType
   const query = selection.length && !hasIncompleteSelection
     ? `${serializarSelecaoAssentos(selection)}&sessionId=${encodeURIComponent(map.sessionId)}`
     : undefined;
-  const target = query && !initialSelectionInvalid ? `${checkoutHref}${checkoutHref.includes("?") ? "&" : "?"}${query}` : undefined;
+  const target = query && !selectionInvalid ? `${checkoutHref}${checkoutHref.includes("?") ? "&" : "?"}${query}` : undefined;
 
   function alternarAssento(seat: PublicSeat) {
     if (seat.state !== "available" || indisponiveis.has(seat.id)) return;
+    if (!selectedIds.has(seat.id)) setSelectionInvalid(false);
     setSelection((current) => {
       if (current.some((item) => item.seatId === seat.id)) return current.filter((item) => item.seatId !== seat.id);
       const ticketTypeId = initialTicketTypeId && ticketTypes.some((type) => type.id === initialTicketTypeId) ? initialTicketTypeId : ticketTypes[0]?.id ?? "";
@@ -97,6 +99,7 @@ export function MapaAssentos({ map, checkoutHref, ticketTypes, initialTicketType
   }
 
   function alterarTipoIngresso(seatId: string, ticketTypeId: string) {
+    if (ticketTypes.some((type) => type.id === ticketTypeId)) setSelectionInvalid(false);
     setSelection((current) => current.map((item) => item.seatId === seatId ? { ...item, ticketTypeId } : item));
   }
 
@@ -125,7 +128,7 @@ export function MapaAssentos({ map, checkoutHref, ticketTypes, initialTicketType
     {conflitos.length > 0 && <div role="alert" className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
       {conflitos.map((seat) => <p key={`conflito-${seat.id}`}>Assento {rotuloAssento(seat)} ficou indisponível e foi removido da seleção.</p>)}
     </div>}
-    {initialSelectionInvalid && <p role="alert" className="mb-4 rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-950">Não foi possível restaurar a seleção de assentos. Revise os lugares antes de continuar.</p>}
+    {selectionInvalid && <p role="alert" className="mb-4 rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-950">Não foi possível restaurar a seleção de assentos. Revise os lugares antes de continuar.</p>}
 
     <div className="mb-4 flex flex-wrap items-center gap-3">
       <div className="flex rounded-lg border border-slate-200 bg-slate-50 p-1" role="group" aria-label="Modo de visualização dos assentos">
