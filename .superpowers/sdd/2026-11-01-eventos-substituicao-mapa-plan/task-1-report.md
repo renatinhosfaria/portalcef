@@ -25,7 +25,7 @@ O painel não foi alterado nesta task.
   `pnpm --filter @essencia/api test -- --runInBand src/modules/eventos/mapas/mapas.service.spec.ts -t 'serializa arquivamento'`.
 - Falha observada: o fake registrou 2 locks (`evento` e `mapa`), mas o contrato exigia 3 incluindo `eventoSessoes`.
 
-Os cenários de rollback, sessões explícitas, estados de inventário e preview foram escritos contra um fake inicialmente sequencial; a implementação do fake foi então fortalecida para executar as mutações reais e restaurar o snapshot em erro. O teste de auditoria falha depois do bloqueio, da sincronização e do arquivamento, garantindo que a verificação não depende de `update` não ter sido chamado.
+Os cenários de rollback, sessões explícitas, estados de inventário e preview foram escritos contra um fake inicialmente sequencial; a implementação do fake foi então fortalecida para executar as mutações reais e restaurar o snapshot em erro. O teste de auditoria falha depois do bloqueio, da sincronização e do primeiro registro de auditoria. Como a sessão explícita ainda referencia o mapa antigo, o resultado de arquivamento é `MAP_IN_USE` e o update de arquivamento não é executado; o fake reverte evento, inventário e auditoria após a falha posterior. O caminho feliz de arquivamento e limpeza do preview é coberto separadamente.
 
 ### GREEN
 
@@ -40,7 +40,7 @@ A suíte de mapas agora verifica explicitamente:
 
 - sessão explícita apontando para o mapa novo sem sincronização ou mutação;
 - estados `RESERVADO`, `VENDIDO` e histórico preservados;
-- rollback de evento, mapa, inventário e auditoria em falha posterior;
+- rollback de evento, inventário e auditoria em falha posterior, com o mapa antigo preservado por referência explícita;
 - auditoria persistida antes da limpeza e preview removido apenas após commit;
 - falha de limpeza do storage sem rollback;
 - lock transacional compartilhado por evento, sessões e mapa em `arquivar`.
