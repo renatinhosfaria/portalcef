@@ -1,10 +1,13 @@
+// @vitest-environment jsdom
 import { renderToStaticMarkup } from "react-dom/server";
 import React from "react";
 import { readFileSync } from "node:fs";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { PoliticaPublica } from "@essencia/shared/types";
 import { FormularioCheckout, aceitesCompletos, deveInvalidarChaveReserva } from "../formulario-checkout";
 import { normalizarTiposPorAssento } from "../../lib/checkout-utils";
+import * as eventosApi from "../../lib/eventos-api";
 import { EventosApiError } from "../../lib/eventos-api";
 
 const politicas: PoliticaPublica[] = [
@@ -14,6 +17,19 @@ const politicas: PoliticaPublica[] = [
   "ACESSIBILIDADE",
   "CONTATO",
 ].map((type, index) => ({ type: type as PoliticaPublica["type"], version: index + 1, content: `Conteúdo ${type}` }));
+
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
+
+function preencherCheckout() {
+  fireEvent.change(screen.getByRole("textbox", { name: "Nome completo" }), { target: { value: "Ana da Silva" } });
+  fireEvent.change(screen.getByRole("textbox", { name: "E-mail" }), { target: { value: "ana@example.com" } });
+  fireEvent.change(screen.getByRole("textbox", { name: "Telefone" }), { target: { value: "11999999999" } });
+  fireEvent.change(screen.getByRole("textbox", { name: "Nome do participante do seat-1" }), { target: { value: "Miguel da Silva" } });
+  for (const checkbox of screen.getAllByRole("checkbox")) fireEvent.click(checkbox);
+}
 
 describe("formulário de checkout público", () => {
   it("exige comprador, participantes e todos os aceites das políticas ativas", () => {
@@ -41,7 +57,7 @@ describe("formulário de checkout público", () => {
     expect(deveInvalidarChaveReserva(new EventosApiError("Pedido expirado", 400, "ORDER_NOT_AVAILABLE"))).toBe(true);
     expect(deveInvalidarChaveReserva(new EventosApiError("Pedido não encontrado", 404, "ORDER_NOT_FOUND"))).toBe(true);
     expect(deveInvalidarChaveReserva(new EventosApiError("Assento indisponível", 409, "SEAT_UNAVAILABLE"))).toBe(false);
-    const source = readFileSync(new URL("../formulario-checkout.tsx", import.meta.url), "utf8");
+    const source = readFileSync("components/formulario-checkout.tsx", "utf8");
     expect(source).toContain("reservationKeyRef.current = null");
   });
 
@@ -82,5 +98,28 @@ describe("formulário de checkout público", () => {
     expect(html).toContain("R$ 5,00");
     expect(html).not.toContain("sessao-1");
     expect(html).not.toContain("ticketTypeId");
+  });
+
+  it("exibe o conflito e o retorno explícito ao mapa quando um assento fica indisponível", async () => {
+    vi.spyOn(eventosApi, "reservarAssentos").mockRejectedValue(new EventosApiError("Um dos assentos selecionados ficou indisponível. Escolha novamente.", 409, "SEAT_UNAVAILABLE"));
+    render(<FormularioCheckout seatIds={["seat-1"]} ticketTypeIds={["ticket-1"]} sessionId="sessao-1" mapHref="/evento/ballet/sessao/sessao-1?assentos=seat-1&ticketTypeIds=ticket-1&conflito=disponibilidade" politicas={politicas} />);
+    preencherCheckout();
+
+    fireEvent.submit(screen.getByRole("button", { name: "Finalizar pedido" }).closest("form")!);
+
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("indisponível"));
+    const revisar = screen.getByRole("link", { name: "Revisar assentos" });
+    expect(revisar.getAttribute("href")).toContain("conflito=disponibilidade");
+  });
+
+  it("não oferece retorno ao mapa para outro erro 409", async () => {
+    vi.spyOn(eventosApi, "reservarAssentos").mockRejectedValue(new EventosApiError("Conflito de idempotência", 409, "IDEMPOTENCY_CONFLICT"));
+    render(<FormularioCheckout seatIds={["seat-1"]} ticketTypeIds={["ticket-1"]} sessionId="sessao-1" mapHref="/evento/ballet/sessao/sessao-1?assentos=seat-1&ticketTypeIds=ticket-1&conflito=disponibilidade" politicas={politicas} />);
+    preencherCheckout();
+
+    fireEvent.submit(screen.getByRole("button", { name: "Finalizar pedido" }).closest("form")!);
+
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("idempotência"));
+    expect(screen.queryByRole("link", { name: "Revisar assentos" })).toBeNull();
   });
 });

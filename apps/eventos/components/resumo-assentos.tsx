@@ -2,8 +2,9 @@
 
 import React from "react";
 import type { PublicEventTicketType } from "@essencia/shared/types";
+import type { AssentoSelecionado } from "./assentos-types";
 
-export type AssentoSelecionado = { seatId: string; ticketTypeId: string; label?: string; accessible?: boolean };
+export type { AssentoSelecionado } from "./assentos-types";
 
 export type ResumoAssentosProps = {
   selection: AssentoSelecionado[];
@@ -31,7 +32,7 @@ export function ResumoAssentosFixo({ selection, ticketTypes, checkoutHref }: Res
     <div className="mx-auto flex max-w-5xl items-center justify-between gap-3">
       <div className="min-w-0">
         <p className="truncate text-sm font-semibold text-slate-950">{selection.length ? `${selection.length} assento(s) selecionado(s)` : "Nenhum assento selecionado"}</p>
-        <p className="text-sm text-slate-600">Total: {formatarPreco(total)}</p>
+        <p className="text-sm text-slate-600" aria-live="polite">Total: {formatarPreco(total)}</p>
       </div>
       <a aria-disabled={!href} href={href} className={`inline-flex min-h-11 shrink-0 items-center justify-center rounded-lg px-4 py-2 text-sm font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 ${href ? "bg-blue-700 hover:bg-blue-800" : "pointer-events-none bg-slate-400"}`}>Continuar para checkout</a>
     </div>
@@ -54,6 +55,6 @@ export function ResumoAssentos({ selection, ticketTypes, onChangeTicketType }: R
         </label>
       </li>)}
     </ul>
-    <p className="mt-4 text-right font-semibold">Total: {formatarPreco(total)}</p>
+    <p className="mt-4 text-right font-semibold" aria-live="polite">Total: {formatarPreco(total)}</p>
   </section>;
 }
