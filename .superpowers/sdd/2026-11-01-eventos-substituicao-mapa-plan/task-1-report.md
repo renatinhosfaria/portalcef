@@ -50,7 +50,7 @@ A suíte de mapas agora verifica explicitamente:
 - `11d14fb feat: adiciona substituicao segura do mapa de eventos`
 - `b4124b2 test: cobre substituicao segura do mapa`
 - `7b80a90 fix: torna substituicao de mapa fluxo unico`
-- commit adicional desta rodada: `test: fecha evidencias da substituicao transacional` (hash informado após o commit).
+- commit adicional desta rodada: `5553776 test: fecha evidencias da substituicao transacional`.
 
 ## Preocupações
 
