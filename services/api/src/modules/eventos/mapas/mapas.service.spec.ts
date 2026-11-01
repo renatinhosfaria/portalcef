@@ -56,12 +56,13 @@ describe("MapasService", () => {
           selectCall += 1;
           if (selectCall === 1) return [{ id: "event-1", schoolId: "school-1", defaultMapId: "map-1" }];
           if (selectCall === 2) return [{ id: "map-1", eventId: "event-1", status: "EM_REVISAO" }];
-          if (selectCall === 3) return [{ id: "import-1" }];
-          if (selectCall === 4) return [{ id: "event-1", schoolId: "school-1", defaultMapId: "map-1" }];
-          if (selectCall === 5) return sessions;
-          if (selectCall === 6) return mapSeats;
-          if (selectCall === 7) return existingInventory.filter((item) => item.sessionId === "session-inherited");
-          if (selectCall === 8) return existingInventory.filter((item) => item.sessionId === "session-specific");
+          if (selectCall === 3) return [{ id: "event-1", schoolId: "school-1", defaultMapId: "map-1" }];
+          if (selectCall === 4) return [{ id: "import-1" }];
+          if (selectCall === 5) return [{ id: "event-1", schoolId: "school-1", defaultMapId: "map-1" }];
+          if (selectCall === 6) return sessions;
+          if (selectCall === 7) return mapSeats;
+          if (selectCall === 8) return existingInventory.filter((item) => item.sessionId === "session-inherited");
+          if (selectCall === 9) return existingInventory.filter((item) => item.sessionId === "session-specific");
           return [];
         },
       }),
@@ -93,6 +94,58 @@ describe("MapasService", () => {
     expect(inventoryInserts).toHaveLength(2);
     expect(result.inventorySessionIds).toEqual(expect.arrayContaining(["session-inherited", "session-specific"]));
     expect(result.inventoryCreatedCount).toBe(2);
+  });
+
+  it("adia o inventário do primeiro mapa para a substituição e mantém os assentos disponíveis", async () => {
+    const dbModule = jest.requireMock("@essencia/db") as typeof import("@essencia/db");
+    const state: any = {
+      event: { id: "event-1", schoolId: "school-1", defaultMapId: null },
+      map: { id: "map-primeiro", eventId: "event-1", status: "EM_REVISAO", previewFileKey: null },
+      seats: [] as any[],
+      sessions: [{ id: "sessao-herdada", eventId: "event-1", mapId: null }],
+      inventory: [] as any[],
+      audits: [] as any[],
+    };
+    const rows = (table: unknown) => {
+      if (table === dbModule.eventos) return [state.event];
+      if (table === dbModule.eventoMapas) return [state.map];
+      if (table === dbModule.eventoSessoes) return state.sessions;
+      if (table === dbModule.eventoMapaAssentos) return state.seats;
+      if (table === dbModule.eventoInventarioAssentos) return state.inventory.filter((item: any) => item.sessionId === "sessao-herdada");
+      if (table === dbModule.eventoImportacoesMapa) return [];
+      if (table === dbModule.eventoAuditorias) return state.audits;
+      return [];
+    };
+    const db: any = {
+      select: () => ({ from: (table: unknown) => ({ where: () => {
+        const query: any = Promise.resolve(rows(table));
+        query.for = () => Promise.resolve(rows(table));
+        return query;
+      } }) }),
+      delete: () => ({ where: async () => undefined }),
+      update: (table: unknown) => ({ set: (values: any) => ({ where: () => ({ returning: async () => {
+        if (table === dbModule.eventoMapas) Object.assign(state.map, values);
+        if (table === dbModule.eventos) Object.assign(state.event, values);
+        return [table === dbModule.eventoMapas ? state.map : state.event];
+      } }) }) }),
+      insert: (table: unknown) => ({ values: (values: any) => {
+        if (table === dbModule.eventoMapaAssentos) state.seats.push({ id: `seat-${state.seats.length + 1}`, ...values });
+        if (table === dbModule.eventoInventarioAssentos) state.inventory.push({ id: `inventory-${state.inventory.length + 1}`, ...values });
+        if (table === dbModule.eventoAuditorias) state.audits.push(values);
+        return { returning: async () => [{ id: `inserted-${state.audits.length}` }] };
+      } }),
+      transaction: async (callback: (tx: any) => Promise<unknown>) => callback(db),
+    };
+    const maps = new MapasService({ db } as any, undefined, {} as any);
+    const seats = [{ rowLabel: "A", seatNumber: "1", x: 1, y: 1, sellable: true }];
+
+    const confirmed = await maps.confirmar("event-1", "map-primeiro", { seats }, actor);
+    const replaced = await maps.substituirMapaPadrao("event-1", "map-primeiro", actor);
+
+    expect(confirmed.inventoryCreatedCount).toBe(0);
+    expect(replaced.previousMapArchive).toEqual({ archived: false, code: "NO_PREVIOUS_MAP" });
+    expect(replaced.inventoryCreatedCount).toBe(1);
+    expect(state.inventory).toEqual([expect.objectContaining({ status: "DISPONIVEL", sessionId: "sessao-herdada" })]);
   });
 
   it("rejeita reconfirmação e arquivamento inválido", async () => {
@@ -210,6 +263,42 @@ describe("MapasService", () => {
     await new MapasService({ db } as any, undefined, {} as any).arquivar("event-1", "map-1", actor);
     expect(locks).toHaveLength(3);
     expect(locks.every((lock) => lock.mode === "update")).toBe(true);
+  });
+
+  it("trava o evento e depois relê as sessões antes de classificar herdadas", async () => {
+    const dbModule = jest.requireMock("@essencia/db") as typeof import("@essencia/db");
+    const locks: unknown[] = [];
+    let mapReads = 0;
+    const db: any = {
+      select: () => ({ from: (table: unknown) => ({ where: () => {
+        const query: any = Promise.resolve(
+          table === dbModule.eventos
+            ? [{ id: "event-1", schoolId: "school-1", defaultMapId: "map-antigo" }]
+            : table === dbModule.eventoSessoes
+              ? [{ id: "sessao-herdada", eventId: "event-1", mapId: null }]
+              : table === dbModule.eventoMapas
+                ? [mapReads++ === 0 ? { id: "map-novo", eventId: "event-1", status: "CONFIRMADO" } : { id: "map-antigo", eventId: "event-1", status: "CONFIRMADO", previewFileKey: null }]
+                : table === dbModule.eventoMapaAssentos
+                  ? [{ id: "seat-novo", mapId: "map-novo", sellable: true }]
+                  : []
+        );
+        query.for = (mode: string) => { locks.push({ table, mode }); return query; };
+        return query;
+      } }) }),
+      update: () => ({ set: () => ({ where: () => ({ returning: async () => [{ id: "event-1" }] }) }) }),
+      insert: () => ({ values: () => ({ returning: async () => [{ id: "audit-1" }] }) }),
+      transaction: async (callback: (tx: any) => Promise<unknown>) => callback(db),
+    };
+    const maps = new MapasService({ db } as any, undefined, {} as any);
+    (maps as any).sincronizarInventarioMapa = jest.fn().mockResolvedValue({ inventorySessionIds: ["sessao-herdada"], inventoryCreatedCount: 1 });
+
+    await maps.substituirMapaPadrao("event-1", "map-novo", actor);
+
+    expect(locks.slice(0, 3)).toEqual([
+      { table: dbModule.eventos, mode: "update" },
+      { table: dbModule.eventoSessoes, mode: "update" },
+      { table: dbModule.eventoMapas, mode: "update" },
+    ]);
   });
 
   describe("substituirMapaPadrao", () => {
@@ -375,9 +464,9 @@ describe("MapasService", () => {
         select: () => ({ from: () => ({ where: async () => {
           selects += 1;
           return selects === 1 ? [{ id: "event-1", schoolId: "school-1", defaultMapId: "map-antigo" }]
-            : selects === 2 ? [novoMapa]
-              : selects === 3 ? [assento]
-                : selects === 4 ? [{ id: "sessao-herdada", eventId: "event-1", mapId: null }]
+            : selects === 2 ? [{ id: "sessao-herdada", eventId: "event-1", mapId: null }]
+              : selects === 3 ? [novoMapa]
+                : selects === 4 ? [assento]
                   : selects === 5 ? [{ id: "event-1", schoolId: "school-1", defaultMapId: "map-novo" }]
                     : selects === 6 ? [{ id: "sessao-herdada", eventId: "event-1", mapId: null }]
                       : selects === 7 ? [assento]
@@ -422,8 +511,64 @@ describe("MapasService", () => {
       const update = jest.fn();
       const db: any = { select: () => ({ from: () => ({ where: async () => ++call === 1 ? [{ id: "event-1", schoolId: "school-1", defaultMapId: "map-novo" }] : [{ ...novoMapa }] }) }), update };
       const result = await new MapasService({ db } as any, undefined, {} as any).substituirMapaPadrao("event-1", "map-novo", actor);
-      expect(result.previousMapArchive.code).toBe("MAP_IN_USE");
+      expect(result.previousMapArchive).toEqual({ archived: false, code: "NO_PREVIOUS_MAP" });
       expect(update).not.toHaveBeenCalled();
+    });
+
+    it("recupera o resultado persistido no retry depois de arquivar o mapa anterior", async () => {
+      const dbModule = jest.requireMock("@essencia/db") as typeof import("@essencia/db");
+      const state: any = {
+        event: { id: "event-1", schoolId: "school-1", defaultMapId: "map-antigo" },
+        maps: [
+          { id: "map-novo", eventId: "event-1", status: "CONFIRMADO", version: 2, previewFileKey: null },
+          { id: "map-antigo", eventId: "event-1", status: "CONFIRMADO", version: 1, previewFileKey: "preview/antigo.svg" },
+        ],
+        sessions: [{ id: "sessao-herdada", eventId: "event-1", mapId: null }],
+        seats: [{ id: "seat-novo", mapId: "map-novo", sellable: true }],
+        audits: [] as any[],
+      };
+      let mapReads = 0;
+      const rows = (table: unknown) => {
+        if (table === dbModule.eventos) return [state.event];
+        if (table === dbModule.eventoSessoes) return state.sessions;
+        if (table === dbModule.eventoMapas) return [state.maps[mapReads++ % 3 === 1 ? 1 : 0]];
+        if (table === dbModule.eventoMapaAssentos) return state.seats;
+        if (table === dbModule.eventoAuditorias) return state.audits;
+        return [];
+      };
+      const db: any = {
+        select: () => ({ from: (table: unknown) => ({ where: () => {
+          const query: any = { then: (resolve: (value: unknown) => unknown) => Promise.resolve(rows(table)).then(resolve) };
+          query.for = () => Promise.resolve(rows(table));
+          return query;
+        } }) }),
+        update: (table: unknown) => ({ set: (values: any) => ({ where: () => ({ returning: async () => {
+          if (table === dbModule.eventos) Object.assign(state.event, values);
+          if (table === dbModule.eventoMapas) Object.assign(state.maps[1], values);
+          return [table === dbModule.eventos ? state.event : state.maps[1]];
+        } }) }) }),
+        insert: (table: unknown) => ({ values: (values: any) => {
+          if (table === dbModule.eventoAuditorias) state.audits.push(values);
+          return { returning: async () => [{ id: "audit-1" }] };
+        } }),
+        transaction: async (callback: (tx: any) => Promise<unknown>) => callback(db),
+      };
+      const maps = new MapasService({ db } as any, undefined, {} as any);
+      (maps as any).sincronizarInventarioMapa = jest.fn().mockResolvedValue({ inventorySessionIds: ["sessao-herdada"], inventoryCreatedCount: 2 });
+
+      const first = await maps.substituirMapaPadrao("event-1", "map-novo", actor);
+      state.event.defaultMapId = "map-novo";
+      const retry = await maps.substituirMapaPadrao("event-1", "map-novo", actor);
+
+      expect(first.previousMapArchive).toEqual({ archived: true, code: "ARCHIVED" });
+      expect(retry).toMatchObject({
+        previousMapId: "map-antigo",
+        inheritedSessionIds: ["sessao-herdada"],
+        inventorySessionIds: ["sessao-herdada"],
+        inventoryCreatedCount: 2,
+        previousMapArchive: { archived: true, code: "ARCHIVED" },
+      });
+      expect((maps as any).sincronizarInventarioMapa).toHaveBeenCalledTimes(1);
     });
 
     it("preserva mapa anterior quando uma sessão tem referência explícita", async () => {
@@ -432,7 +577,7 @@ describe("MapasService", () => {
       const db: any = {
         select: () => ({ from: () => ({ where: async () => {
           selects += 1;
-          return selects === 1 ? [{ id: "event-1", schoolId: "school-1", defaultMapId: "map-antigo" }] : selects === 2 ? [novoMapa] : selects === 3 ? [assento] : selects === 4 ? [{ id: "sessao-explicita", mapId: "map-antigo" }] : selects === 5 ? [{ id: "event-1", defaultMapId: "map-novo" }] : selects === 6 ? [{ id: "sessao-explicita", mapId: "map-antigo" }] : selects === 7 ? [] : selects === 8 ? [assento] : [];
+          return selects === 1 ? [{ id: "event-1", schoolId: "school-1", defaultMapId: "map-antigo" }] : selects === 2 ? [{ id: "sessao-explicita", mapId: "map-antigo" }] : selects === 3 ? [novoMapa] : selects === 4 ? [assento] : selects === 5 ? [{ id: "event-1", defaultMapId: "map-novo" }] : selects === 6 ? [{ id: "sessao-explicita", mapId: "map-antigo" }] : selects === 7 ? [] : selects === 8 ? [assento] : [];
         } }) }),
         update: () => ({ set: (values: any) => { updates.push(values); return { where: () => ({ returning: async () => [{ id: "event-1" }] }) }; } }),
         insert: () => ({ values: () => ({ returning: async () => [{ id: "audit-1" }] }) }),
@@ -461,7 +606,7 @@ describe("MapasService", () => {
       const db: any = {
         select: () => ({ from: () => ({ where: async () => {
           selects += 1;
-          return selects === 1 ? [{ id: "event-1", schoolId: "school-1", defaultMapId: "map-antigo" }] : selects === 2 ? [novoMapa] : selects === 3 ? [assento] : selects === 4 ? [{ id: "sessao-herdada", mapId: null }, { id: "sessao-explicita", mapId: "map-novo" }] : selects === 5 ? [{ id: "event-1", defaultMapId: "map-novo" }] : [];
+          return selects === 1 ? [{ id: "event-1", schoolId: "school-1", defaultMapId: "map-antigo" }] : selects === 2 ? [{ id: "sessao-herdada", mapId: null }, { id: "sessao-explicita", mapId: "map-novo" }] : selects === 3 ? [novoMapa] : selects === 4 ? [assento] : selects === 5 ? [{ id: "event-1", defaultMapId: "map-novo" }] : [];
         } }) }),
         update: () => ({ set: () => ({ where: () => ({ returning: async () => [{ id: "event-1" }] }) }) }),
         insert: () => ({ values: () => ({ returning: async () => [{ id: "audit-1" }] }) }),
@@ -485,7 +630,7 @@ describe("MapasService", () => {
       const db: any = {
         select: () => ({ from: () => ({ where: async () => {
           selects += 1;
-          return selects === 1 ? [{ id: "event-1", schoolId: "school-1", defaultMapId: "map-antigo" }] : selects === 2 ? [novoMapa] : selects === 3 ? [assento] : selects === 4 ? [{ id: "sessao", mapId: null }] : selects === 5 ? [{ id: "event-1", defaultMapId: "map-novo" }] : selects === 6 ? [{ id: "sessao", mapId: null }] : selects === 7 ? [] : [];
+          return selects === 1 ? [{ id: "event-1", schoolId: "school-1", defaultMapId: "map-antigo" }] : selects === 2 ? [{ id: "sessao", mapId: null }] : selects === 3 ? [novoMapa] : selects === 4 ? [assento] : selects === 5 ? [{ id: "event-1", defaultMapId: "map-novo" }] : selects === 6 ? [{ id: "sessao", mapId: null }] : selects === 7 ? [] : [];
         } }) }),
         update,
         insert: () => ({ values: async () => { state.audits += 1; throw new Error("auditoria falhou"); } }),
@@ -507,7 +652,7 @@ describe("MapasService", () => {
       const db: any = {
         select: () => ({ from: () => ({ where: async () => {
           selects += 1;
-          return selects === 1 ? [{ id: "event-1", schoolId: "school-1", defaultMapId: "map-antigo" }] : selects === 2 ? [novoMapa] : selects === 3 ? [assento] : selects === 4 ? [{ id: "sessao", mapId: null }] : selects === 5 ? [{ id: "map-antigo", eventId: "event-1", previewFileKey: "preview/antigo.svg", status: "CONFIRMADO" }] : [];
+          return selects === 1 ? [{ id: "event-1", schoolId: "school-1", defaultMapId: "map-antigo" }] : selects === 2 ? [{ id: "sessao", mapId: null }] : selects === 3 ? [novoMapa] : selects === 4 ? [assento] : selects === 5 ? [{ id: "map-antigo", eventId: "event-1", previewFileKey: "preview/antigo.svg", status: "CONFIRMADO" }] : [];
         } }) }),
         update: () => ({ set: () => ({ where: () => ({ returning: async () => [{ id: "event-1" }] }) }) }),
         insert: () => ({ values: (values: any) => { audits.push(values); return { returning: async () => [{ id: "audit-1" }] }; } }),

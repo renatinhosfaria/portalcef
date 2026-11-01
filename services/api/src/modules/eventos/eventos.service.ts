@@ -188,13 +188,13 @@ export class EventosService {
 
   async atualizarSessao(eventId: string, sessionId: string, input: Partial<CriarSessaoInput>, actor?: EventoActor) {
     const run = async (db: any) => {
-    const sessionQuery = db.select().from(eventoSessoes).where(and(eq(eventoSessoes.id, sessionId), eq(eventoSessoes.eventId, eventId)));
-    const [session] = await (typeof sessionQuery.for === "function" ? sessionQuery.for("update") : sessionQuery);
-    if (!session) throw new NotFoundException({ code: "SESSION_NOT_FOUND", message: "Sessão não encontrada" });
     const eventQuery = db.select().from(eventos).where(eq(eventos.id, eventId));
     const [event] = await (typeof eventQuery.for === "function" ? eventQuery.for("update") : eventQuery);
     if (!event) throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Evento não encontrado" });
     if (actor) this.assertSchoolScope(actor, event.schoolId);
+    const sessionQuery = db.select().from(eventoSessoes).where(and(eq(eventoSessoes.id, sessionId), eq(eventoSessoes.eventId, eventId)));
+    const [session] = await (typeof sessionQuery.for === "function" ? sessionQuery.for("update") : sessionQuery);
+    if (!session) throw new NotFoundException({ code: "SESSION_NOT_FOUND", message: "Sessão não encontrada" });
     await this.validarReferenciasSessao(eventId, event, input, db);
     const [sale] = await db.select({ id: eventoPedidos.id }).from(eventoPedidos).where(eq(eventoPedidos.sessionId, sessionId)).limit(1);
     if (sale) throw new BadRequestException({ code: "EVENT_HAS_SALES", message: "A sessão possui vendas e não pode ser alterada" });

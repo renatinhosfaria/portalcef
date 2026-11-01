@@ -340,13 +340,35 @@ describe('EventosService contratos de workspace', () => {
   it('rejeita atualização de sessão com mapa não confirmado de outro evento', async () => {
     const db = fakeDb({
       selects: [
-        [{ id: 's1', eventId: 'e1' }],
         [event()],
+        [{ id: 's1', eventId: 'e1' }],
         [{ id: 'mapa-externo', eventId: 'outro-evento', status: 'EM_REVISAO' }],
       ],
     });
 
     await expect(service(db).atualizarSessao('e1', 's1', { mapId: 'mapa-externo' }, actor)).rejects.toMatchObject({ response: { code: 'SESSION_MAP_INVALID' } });
+  });
+
+  it('trava o evento antes da sessão ao atualizar a referência do mapa', async () => {
+    const lockOrder: unknown[] = [];
+    let selectCount = 0;
+    const db: any = {
+      select: () => ({ from: () => ({ where: () => {
+        selectCount += 1;
+        const rows = selectCount === 1 ? [event()] : selectCount === 2 ? [{ id: 's1', eventId: 'e1', mapId: null }] : [];
+        const query: any = Promise.resolve(rows);
+        query.for = () => { lockOrder.push(selectCount); return query; };
+        query.limit = async () => rows;
+        return query;
+      } }) }),
+      update: () => ({ set: () => ({ where: () => ({ returning: async () => [{ id: 's1', eventId: 'e1' }] }) }) }),
+      insert: () => ({ values: async () => undefined }),
+      transaction: async (callback: (tx: any) => Promise<unknown>) => callback(db),
+    };
+
+    await service(db).atualizarSessao('e1', 's1', { capacity: 12 }, actor);
+
+    expect(lockOrder).toEqual([1, 2]);
   });
 
   it('bloqueia remoção quando a sessão possui inventário operacional', async () => {
