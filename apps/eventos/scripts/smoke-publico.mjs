@@ -4,7 +4,7 @@ import { createServer } from "node:http";
 
 const evento = { id: "e1", slug: "festival-demo", title: "Festival Demo", summary: "Experiência", description: "Descrição", category: "Cultura", imageUrl: "https://www.portalcef.com.br/storage/demo.jpg", startsAt: "2026-11-05T18:00:00Z", locationName: "Auditório", fromPriceCents: 5000, availability: "available" };
 const sessoes = [{ id: "s1", startsAt: "2026-11-05T18:00:00Z", endsAt: "2026-11-05T20:00:00Z", availability: "available", mapId: "m1", location: { name: "Auditório", room: "Sala A", address: "Rua A", accessibility: "Rampa" }, ticketTypes: [{ id: "t1", name: "Inteira", priceCents: 5000 }, { id: "t2", name: "Meia", priceCents: 2500 }] }, { id: "s3", startsAt: "2026-11-05T16:00:00Z", availability: "available", mapId: "m1", location: { name: "Auditório" }, ticketTypes: [{ id: "t1", name: "Inteira", priceCents: 5000 }] }, { id: "s2", startsAt: "2026-11-06T18:00:00Z", availability: "sold_out", mapId: null, location: { name: "Auditório" }, ticketTypes: [] }];
-const mapa = { sessionId: "s1", seats: [{ id: "a1", rowLabel: "A", seatNumber: 1, x: 0, y: 0, width: 1, height: 1, state: "available", accessible: true }, { id: "a2", rowLabel: "A", seatNumber: 2, x: 2, y: 0, width: 1, height: 1, state: "reserved", accessible: false }, { id: "a3", rowLabel: "A", seatNumber: 3, x: 4, y: 0, width: 1, height: 1, state: "available", accessible: false }, { id: "b1", rowLabel: "B", seatNumber: 1, x: 0, y: 2, width: 1, height: 1, state: "sold", accessible: false }, { id: "b2", rowLabel: "B", seatNumber: 2, x: 2, y: 2, width: 1, height: 1, state: "blocked", accessible: false }, { id: "b3", rowLabel: "B", seatNumber: 3, x: 4, y: 2, width: 1, height: 1, state: "available", accessible: false }] };
+const mapa = { sessionId: "s1", seats: [{ id: "c1", rowLabel: "C", seatNumber: 1, x: 0, y: -1, width: 1, height: 1, state: "blocked", accessible: false }, { id: "a1", rowLabel: "A", seatNumber: 1, x: 0, y: 0, width: 1, height: 1, state: "available", accessible: true }, { id: "a2", rowLabel: "A", seatNumber: 2, x: 2, y: 0, width: 1, height: 1, state: "reserved", accessible: false }, { id: "a3", rowLabel: "A", seatNumber: 3, x: 4, y: 0, width: 1, height: 1, state: "available", accessible: false }, { id: "b1", rowLabel: "B", seatNumber: 1, x: 0, y: 1, width: 1, height: 1, state: "sold", accessible: false }, { id: "b2", rowLabel: "B", seatNumber: 2, x: 2, y: 1, width: 1, height: 1, state: "blocked", accessible: false }, { id: "b3", rowLabel: "B", seatNumber: 3, x: 0, y: 1, width: 1, height: 1, state: "blocked", accessible: false }] };
 
 let catalogoModo = "normal";
 function resposta(path) {
@@ -45,7 +45,7 @@ async function exercitarViewport(browser, nome, viewport) {
   const pagina = await contexto.newPage();
   const errosConsole = [];
   const respostasErro = [];
-  let imagemRemotaConhecidaFalhou = false;
+  const respostasImagemConhecida = [];
   const postsReserva = [];
   pagina.on("console", (mensagem) => { if (mensagem.type() === "error") errosConsole.push(`${mensagem.text()} [${mensagem.location().url}]`); });
   pagina.on("pageerror", (erro) => errosConsole.push(erro.message));
@@ -53,7 +53,7 @@ async function exercitarViewport(browser, nome, viewport) {
     if (response.status() < 400) return;
     const url = response.url();
     respostasErro.push(`${response.status()} ${url}`);
-    if (response.status() === 403 && url.includes("/_next/image") && decodeURIComponent(url).includes("www.portalcef.com.br")) imagemRemotaConhecidaFalhou = true;
+    if (response.status() === 403 && url.includes("/_next/image") && decodeURIComponent(url).includes("www.portalcef.com.br")) respostasImagemConhecida.push(url);
   });
   pagina.on("request", (request) => {
     if (request.method() === "POST" && new URL(request.url()).pathname === "/api/eventos/public/reservas") postsReserva.push(request.url());
@@ -74,20 +74,22 @@ async function exercitarViewport(browser, nome, viewport) {
   if (await grupos.count() !== 2) throw new Error(`${nome}: agrupamento de sessões incorreto`);
   const primeiroGrupo = await grupos.nth(0).innerText();
   if (primeiroGrupo.indexOf("13:00") === -1 || primeiroGrupo.indexOf("15:00") === -1 || primeiroGrupo.indexOf("13:00") > primeiroGrupo.indexOf("15:00")) throw new Error(`${nome}: ordenação de sessões incorreta`);
-  const errosAntesMapa = errosConsole.length;
+  await pagina.waitForTimeout(100);
+  const indiceInicioMapa = errosConsole.length;
   const respostasAntesMapa = respostasErro.length;
+  const imagensConhecidasNoBaseline = respostasImagemConhecida.length;
+  const erros403NoBaseline = errosConsole.filter((erro) => erro.includes("403 (Forbidden)")).length;
   await acessar("/evento/festival-demo/sessao/s1?ticketTypeId=t1");
   const lista = pagina.getByRole("button", { name: "Lista", exact: true });
   const mapaBotao = pagina.getByRole("button", { name: "Mapa", exact: true });
   const modoEsperado = viewport.width < 768 ? "lista" : "mapa";
-  const filtrarErrosConhecidos = (erros) => erros.filter((erro) => !(imagemRemotaConhecidaFalhou && erro.includes("403 (Forbidden)")));
   await pagina.waitForFunction((esperado) => {
     const grupo = document.querySelector('[aria-label="Modo de visualização dos assentos"]');
     const botao = grupo?.querySelector(`button[aria-pressed="true"]`);
     return botao?.textContent?.trim().toLowerCase() === esperado;
   }, modoEsperado);
-  const errosMapaInicial = filtrarErrosConhecidos(errosConsole.slice(errosAntesMapa));
-  if (errosMapaInicial.length) throw new Error(`${nome}: erros de console no carregamento inicial do mapa (${errosMapaInicial.join(" | ")}; rede: ${respostasErro.slice(respostasAntesMapa).join(" | ")})`);
+  const errosMapaInicial = errosConsole.slice(indiceInicioMapa);
+  if (errosMapaInicial.length) throw new Error(`${nome}: erros de console no carregamento inicial do mapa (${errosMapaInicial.join(" | ")}; rede: ${respostasErro.slice(respostasAntesMapa).join(" | ")}; baseline 403 imagem=${imagensConhecidasNoBaseline}/${erros403NoBaseline})`);
   if (await lista.getAttribute("aria-pressed") !== String(modoEsperado === "lista") || await mapaBotao.getAttribute("aria-pressed") !== String(modoEsperado === "mapa")) throw new Error(`${nome}: modo inicial não respeita o viewport`);
   await (modoEsperado === "lista" ? mapaBotao : lista).click();
   if (await lista.getAttribute("aria-pressed") !== String(modoEsperado !== "lista") || await mapaBotao.getAttribute("aria-pressed") !== String(modoEsperado === "lista")) throw new Error(`${nome}: alternância para o modo oposto falhou`);
@@ -98,8 +100,7 @@ async function exercitarViewport(browser, nome, viewport) {
   const svg = pagina.locator('section[aria-label="Mapa de assentos"] svg');
   await svg.waitFor({ state: "visible" });
   const grupoSvg = svg.locator(":scope > g").first();
-  await pagina.getByRole("button", { name: "Centralizar mapa" }).click();
-  await pagina.waitForTimeout(30);
+  await pagina.waitForFunction(() => Boolean(document.querySelector('section[aria-label="Mapa de assentos"] svg > g')?.getAttribute("transform")));
   const transformInicial = await grupoSvg.getAttribute("transform");
   await pagina.getByRole("button", { name: "Aumentar zoom" }).click();
   const transformAumentado = await grupoSvg.getAttribute("transform");
@@ -119,15 +120,26 @@ async function exercitarViewport(browser, nome, viewport) {
   if (!transformFileiraA || !transformFileiraB || transformFileiraA === transformFileiraB) throw new Error(`${nome}: foco do mapa não acompanha a fileira`);
 
   if (await pagina.getByRole("button", { name: /A-2/ }).count() || await pagina.getByRole("button", { name: /B-1/ }).count() || await pagina.getByRole("button", { name: /B-2/ }).count()) throw new Error(`${nome}: assento indisponível acionável`);
-  const assentoDisponivel = svg.locator('[data-seat-id="a1"][role="button"]');
+  const assentoDisponivel = svg.locator('[data-seat-id="a3"][role="button"]');
   await assentoDisponivel.focus();
   if (!await assentoDisponivel.evaluate((element) => document.activeElement === element)) throw new Error(`${nome}: foco de teclado ausente`);
-  const pontoClique = await assentoDisponivel.boundingBox();
+  const pontoClique = await assentoDisponivel.locator("rect").evaluate((rect) => {
+    const caixa = rect.getBoundingClientRect();
+    for (const fatorX of [0.2, 0.5, 0.8]) for (const fatorY of [0.2, 0.5, 0.8]) {
+      const x = caixa.left + caixa.width * fatorX;
+      const y = caixa.top + caixa.height * fatorY;
+      if (document.elementFromPoint(x, y)?.closest('[data-seat-id="a3"]')) return { x, y };
+    }
+    return null;
+  });
   if (!pontoClique) throw new Error(`${nome}: geometria do assento disponível ausente`);
-  await pagina.mouse.click(pontoClique.x + pontoClique.width / 2, pontoClique.y + pontoClique.height / 2);
+  await pagina.mouse.click(pontoClique.x, pontoClique.y);
   await pagina.waitForTimeout(30);
   const assentoDisponivelSelecionado = await assentoDisponivel.getAttribute("aria-pressed");
-  if (assentoDisponivelSelecionado !== "true") throw new Error(`${nome}: seleção de assento disponível falhou (aria-pressed=${assentoDisponivelSelecionado})`);
+  if (assentoDisponivelSelecionado !== "true") {
+    const atingido = await pagina.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.closest("[data-seat-id]")?.getAttribute("data-seat-id"), pontoClique);
+    throw new Error(`${nome}: seleção de assento disponível falhou (aria-pressed=${assentoDisponivelSelecionado}, atingido=${atingido}, ponto=${JSON.stringify(pontoClique)})`);
+  }
   const caixaDisponivel = await assentoDisponivel.boundingBox();
   const caixaBloqueado = await pagina.getByRole("img", { name: /Assento B-2/ }).boundingBox();
   if (!caixaDisponivel || !caixaBloqueado || caixaDisponivel.width <= 0 || caixaDisponivel.height <= 0 || caixaBloqueado.width <= 0 || caixaBloqueado.height <= 0 || caixaDisponivel.x === caixaBloqueado.x || caixaDisponivel.y === caixaBloqueado.y) throw new Error(`${nome}: geometria do mapa não aplicada`);
@@ -136,6 +148,10 @@ async function exercitarViewport(browser, nome, viewport) {
 
   await lista.click();
   const listaAssentos = pagina.getByRole("list", { name: "Assentos da fileira A" });
+  await listaAssentos.getByRole("button", { name: /A-3, disponível/ }).click();
+  await pagina.waitForTimeout(30);
+  await listaAssentos.getByRole("button", { name: /A-1, disponível/ }).click();
+  await pagina.waitForTimeout(30);
   await listaAssentos.getByRole("button", { name: /A-3, disponível/ }).click();
   await pagina.waitForTimeout(30);
   await pagina.getByRole("combobox", { name: /Tipo de ingresso do assento A-3/ }).selectOption("t2");
@@ -164,8 +180,8 @@ async function exercitarViewport(browser, nome, viewport) {
   await mapaBotao.click();
   const assentoConflito = pagina.getByRole("button", { name: /A-1, disponível/ }).first();
   if (!await pagina.getByRole("alert").filter({ hasText: "Assento A-2 ficou indisponível" }).count() || !await assentoConflito.count() || await assentoConflito.getAttribute("aria-pressed") !== "true" || !await pagina.getByRole("img", { name: /A-2, indisponível/ }).count() || await pagina.getByRole("button", { name: /A-2/ }).count()) throw new Error(`${nome}: conflito não reidrata seleção no mapa`);
-  const errosMapa = filtrarErrosConhecidos(errosConsole.slice(errosAntesMapa));
-  if (errosMapa.length) throw new Error(`${nome}: erros de console durante a experiência do mapa (${errosMapa.join(" | ")}; rede: ${respostasErro.slice(respostasAntesMapa).join(" | ")})`);
+  const errosMapa = errosConsole.slice(indiceInicioMapa);
+  if (errosMapa.length) throw new Error(`${nome}: erros de console durante a experiência do mapa (${errosMapa.join(" | ")}; rede: ${respostasErro.slice(respostasAntesMapa).join(" | ")}; baseline 403 imagem=${imagensConhecidasNoBaseline}/${erros403NoBaseline})`);
   await acessar("/checkout?assentos=a1%2Cb2&ticketTypeIds=t1%2Ct2&sessionId=s1&slug=festival-demo");
   if (!await pagina.getByText("Assento 1: Inteira · R$ 50,00").count() || !await pagina.getByText("Assento 2: Meia · R$ 25,00").count() || !await pagina.getByLabel("Nome completo").count()) throw new Error(`${nome}: checkout incompleto`);
   await acessar("/pedido/PENDENTE?retorno=sucesso");
