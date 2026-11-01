@@ -18,7 +18,7 @@ afterEach(() => cleanup());
 describe("MapaAssentosSvg", () => {
   it("renderiza SVG com viewBox derivado e um elemento por assento", () => {
     render(<MapaAssentosSvg map={mapa} selection={[]} onToggleSeat={() => undefined} />);
-    expect(screen.getByRole("img", { name: "Planta de assentos" }).getAttribute("viewBox")).toBe("10 20 60 40");
+    expect(screen.getByRole("group", { name: "Planta de assentos" }).getAttribute("viewBox")).toBe("10 20 60 40");
     expect(document.querySelectorAll("[data-seat-id]")).toHaveLength(3);
   });
 

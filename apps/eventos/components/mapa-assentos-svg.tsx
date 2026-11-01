@@ -18,17 +18,19 @@ function rotuloAssento(seat: PublicSeat): string {
   return `${seat.rowLabel}-${seat.seatNumber}`;
 }
 
-function descricaoAssento(seat: PublicSeat): string {
+function descricaoAssento(seat: PublicSeat, indisponivelPorConflito = false): string {
   const acessibilidade = seat.accessible ? ", assento acessível" : ", assento não acessível";
-  return `Assento ${rotuloAssento(seat)}, ${estadoLabel[seat.state]}${acessibilidade}`;
+  const estado = indisponivelPorConflito ? "indisponível" : estadoLabel[seat.state];
+  return `Assento ${rotuloAssento(seat)}, ${estado}${acessibilidade}`;
 }
 
 function categoriaAssento(seat: PublicSeat): string {
   return seat.category?.trim() || "não informada";
 }
 
-function corAssento(seat: PublicSeat, selecionado: boolean): string {
+function corAssento(seat: PublicSeat, selecionado: boolean, indisponivelPorConflito = false): string {
   if (selecionado) return "#1d4ed8";
+  if (indisponivelPorConflito) return "#cbd5e1";
   if (seat.state === "available") return "#ffffff";
   if (seat.state === "reserved") return "#fef3c7";
   if (seat.state === "sold") return "#fee2e2";
@@ -47,13 +49,14 @@ function limitarTransform(transform: ZoomTransform, bounds: Bounds): ZoomTransfo
   );
 }
 
-export function MapaAssentosSvg({ map, selection, focusRow, onToggleSeat }: { map: PublicMap; selection: AssentoSelecionado[]; focusRow?: string; onToggleSeat: (seat: PublicSeat) => void }): React.JSX.Element {
+export function MapaAssentosSvg({ map, selection, focusRow, unavailableSeatIds = [], onToggleSeat }: { map: PublicMap; selection: AssentoSelecionado[]; focusRow?: string; unavailableSeatIds?: string[]; onToggleSeat: (seat: PublicSeat) => void }): React.JSX.Element {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const grupoRef = useRef<SVGGElement | null>(null);
   const zoomRef = useRef<ZoomBehavior<SVGSVGElement, unknown> | null>(null);
   const bounds = useMemo(() => calcularBoundsMapa(map.seats), [map.seats]);
   const viewBox = useMemo(() => calcularViewBoxMapa(bounds), [bounds]);
   const selectedIds = useMemo(() => new Set(selection.map((item) => item.seatId)), [selection]);
+  const unavailableIds = useMemo(() => new Set(unavailableSeatIds), [unavailableSeatIds]);
 
   const aplicarTransform = useCallback((transform: ZoomTransform) => {
     const svg = svgRef.current;
@@ -100,8 +103,8 @@ export function MapaAssentosSvg({ map, selection, focusRow, onToggleSeat }: { ma
 
   const centralizar = () => aplicarTransform(zoomIdentity);
 
-  const ativarAssento = (seat: PublicSeat, event: React.KeyboardEvent<SVGGElement>) => {
-    if (seat.state !== "available") return;
+  const ativarAssento = (seat: PublicSeat, indisponivel: boolean, event: React.KeyboardEvent<SVGGElement>) => {
+    if (indisponivel) return;
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
       onToggleSeat(seat);
@@ -114,15 +117,16 @@ export function MapaAssentosSvg({ map, selection, focusRow, onToggleSeat }: { ma
       <button type="button" tabIndex={0} aria-label="Reduzir zoom" onClick={() => ajustarZoom(-1)} className="rounded border px-3 py-2 focus-visible:outline focus-visible:outline-2">−</button>
       <button type="button" tabIndex={0} aria-label="Centralizar mapa" onClick={centralizar} className="rounded border px-3 py-2 focus-visible:outline focus-visible:outline-2">Centralizar</button>
     </div>
-    <svg ref={svgRef} role="img" aria-label="Planta de assentos" viewBox={viewBox} className="h-96 w-full touch-none" preserveAspectRatio="xMidYMid meet">
-      <title>Planta de assentos</title>
+    <svg ref={svgRef} role="group" aria-labelledby="mapa-assentos-titulo" viewBox={viewBox} className="h-96 w-full touch-none" preserveAspectRatio="xMidYMid meet">
+      <title id="mapa-assentos-titulo">Planta de assentos</title>
       <g ref={grupoRef}>
         {map.seats.map((seat) => {
           const selecionado = selectedIds.has(seat.id);
-          const label = descricaoAssento(seat);
-          const indisponivel = seat.state !== "available";
-          return <g key={seat.id} data-seat-id={seat.id} role={indisponivel ? "img" : "button"} tabIndex={indisponivel ? -1 : 0} aria-label={`${label}, categoria ${categoriaAssento(seat)}`} aria-disabled={indisponivel ? "true" : undefined} aria-pressed={!indisponivel ? selecionado : undefined} className={`${selecionado ? "assento-selecionado" : ""} ${indisponivel ? "" : "cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-700"}`} onClick={() => { if (!indisponivel) onToggleSeat(seat); }} onKeyDown={(event) => ativarAssento(seat, event)}>
-            <rect x={seat.x} y={seat.y} width={Math.max(1, seat.width)} height={Math.max(1, seat.height)} rx={Math.min(2, Math.max(0, seat.height / 5))} fill={corAssento(seat, selecionado)} stroke={selecionado ? "#1e3a8a" : "#475569"} strokeWidth={selecionado ? 1.5 : 0.8} />
+          const indisponivelPorConflito = unavailableIds.has(seat.id);
+          const indisponivel = seat.state !== "available" || indisponivelPorConflito;
+          const label = descricaoAssento(seat, indisponivelPorConflito);
+          return <g key={seat.id} data-seat-id={seat.id} role={indisponivel ? "img" : "button"} tabIndex={indisponivel ? -1 : 0} aria-label={`${label}, categoria ${categoriaAssento(seat)}`} aria-disabled={indisponivel ? "true" : undefined} aria-pressed={!indisponivel ? selecionado : undefined} className={`${selecionado ? "assento-selecionado" : ""} ${indisponivel ? "" : "cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-700"}`} onClick={() => { if (!indisponivel) onToggleSeat(seat); }} onKeyDown={(event) => ativarAssento(seat, indisponivel, event)}>
+            <rect x={seat.x} y={seat.y} width={Math.max(1, seat.width)} height={Math.max(1, seat.height)} rx={Math.min(2, Math.max(0, seat.height / 5))} fill={corAssento(seat, selecionado, indisponivelPorConflito)} stroke={selecionado ? "#1e3a8a" : "#475569"} strokeWidth={selecionado ? 1.5 : 0.8} />
             <text x={seat.x + Math.max(1, seat.width) / 2} y={seat.y + Math.max(1, seat.height) / 2} textAnchor="middle" dominantBaseline="middle" fontSize={Math.max(2, Math.min(8, seat.height * 0.55))} fill={selecionado ? "#ffffff" : "#0f172a"}>{rotuloAssento(seat)}</text>
             <title>{`${label}, categoria ${categoriaAssento(seat)}`}</title>
           </g>;

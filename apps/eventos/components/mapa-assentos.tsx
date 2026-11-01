@@ -50,9 +50,10 @@ export type MapaAssentosProps = {
   initialTicketTypeId?: string;
   initialSelection?: AssentoSelecionado[];
   unavailableSeatIds?: string[];
+  initialSelectionInvalid?: boolean;
 };
 
-export function MapaAssentos({ map, checkoutHref, ticketTypes, initialTicketTypeId, initialSelection = [], unavailableSeatIds = [] }: MapaAssentosProps): React.JSX.Element {
+export function MapaAssentos({ map, checkoutHref, ticketTypes, initialTicketTypeId, initialSelection = [], unavailableSeatIds = [], initialSelectionInvalid = false }: MapaAssentosProps): React.JSX.Element {
   const [selection, setSelection] = useState<AssentoSelecionado[]>(() => normalizarSelecaoInicial(map, initialSelection, unavailableSeatIds));
   const [fileiraSelecionada, setFileiraSelecionada] = useState("");
   const [modoVisualizacao, setModoVisualizacao] = useState<"lista" | "mapa">("lista");
@@ -84,7 +85,7 @@ export function MapaAssentos({ map, checkoutHref, ticketTypes, initialTicketType
   const query = selection.length && !hasIncompleteSelection
     ? `${serializarSelecaoAssentos(selection)}&sessionId=${encodeURIComponent(map.sessionId)}`
     : undefined;
-  const target = query ? `${checkoutHref}${checkoutHref.includes("?") ? "&" : "?"}${query}` : undefined;
+  const target = query && !initialSelectionInvalid ? `${checkoutHref}${checkoutHref.includes("?") ? "&" : "?"}${query}` : undefined;
 
   function alternarAssento(seat: PublicSeat) {
     if (seat.state !== "available" || indisponiveis.has(seat.id)) return;
@@ -124,6 +125,7 @@ export function MapaAssentos({ map, checkoutHref, ticketTypes, initialTicketType
     {conflitos.length > 0 && <div role="alert" className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
       {conflitos.map((seat) => <p key={`conflito-${seat.id}`}>Assento {rotuloAssento(seat)} ficou indisponível e foi removido da seleção.</p>)}
     </div>}
+    {initialSelectionInvalid && <p role="alert" className="mb-4 rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-950">Não foi possível restaurar a seleção de assentos. Revise os lugares antes de continuar.</p>}
 
     <div className="mb-4 flex flex-wrap items-center gap-3">
       <div className="flex rounded-lg border border-slate-200 bg-slate-50 p-1" role="group" aria-label="Modo de visualização dos assentos">
@@ -145,7 +147,7 @@ export function MapaAssentos({ map, checkoutHref, ticketTypes, initialTicketType
     </section>
 
     <section aria-label="Mapa de assentos" hidden={modoVisualizacao !== "mapa"} aria-hidden={modoVisualizacao !== "mapa"}>
-      <MapaAssentosSvg map={map} selection={selection} focusRow={fileiraAtiva} onToggleSeat={alternarAssento} />
+      <MapaAssentosSvg map={map} selection={selection} focusRow={fileiraAtiva} unavailableSeatIds={unavailableSeatIds} onToggleSeat={alternarAssento} />
     </section>
 
     <ResumoAssentos selection={selection} ticketTypes={ticketTypes} onChangeTicketType={alterarTipoIngresso} />

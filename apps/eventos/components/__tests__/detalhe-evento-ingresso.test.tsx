@@ -148,5 +148,7 @@ describe("caminho público de ingresso", () => {
     const sessionPage = readFileSync(new URL("../../app/evento/[slug]/sessao/[sessionId]/page.tsx", import.meta.url), "utf8");
     expect(sessionPage).toContain("session?.ticketTypes.length === 1");
     expect(sessionPage).toContain("EscolhaTipoIngresso");
+    expect(sessionPage).toContain("initialSelectionInvalid={rehidratacao.invalid}");
+    expect(sessionPage).toContain("unavailableSeatIds={rehidratacao.unavailableSeatIds}");
   });
 });

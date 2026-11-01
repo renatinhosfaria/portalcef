@@ -26,7 +26,7 @@ describe("mapa público de assentos", () => {
 
     expect(html).toContain("<svg");
     expect(html).toContain('data-seat-id="s-1"');
-    expect(html).toContain('aria-label="Planta de assentos"');
+    expect(html).toContain('aria-labelledby="mapa-assentos-titulo"');
     expect(html).toContain('aria-label="Lista de assentos"');
     expect(html).toContain('aria-hidden="true"');
     expect(html).toContain("hidden");
@@ -70,7 +70,18 @@ describe("mapa público de assentos", () => {
     const lista = screen.getByLabelText("Lista de assentos");
     expect(lista.getAttribute("aria-hidden")).toBe("true");
     expect(lista.hasAttribute("hidden")).toBe(true);
-    expect(screen.getByRole("img", { name: "Planta de assentos" })).toBeTruthy();
+    expect(screen.getByRole("group", { name: "Planta de assentos" })).toBeTruthy();
+  });
+
+  it("mantém conflito indisponível no SVG e bloqueia checkout de seleção inválida", () => {
+    const mapaDisponivel: PublicMap = { ...mapa, seats: assentos.map((seat) => seat.id === "s-1" ? { ...seat, state: "available" as const } : seat) };
+    render(<MapaAssentos map={mapaDisponivel} checkoutHref="/checkout" ticketTypes={[tipoInteira]} unavailableSeatIds={["s-1"]} initialSelectionInvalid />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Mapa" }));
+    expect(screen.queryByRole("button", { name: /Assento A-1/ })).toBeNull();
+    expect(screen.getByRole("img", { name: /Assento A-1, indisponível/ }).getAttribute("aria-disabled")).toBe("true");
+    expect(screen.getByText(/Não foi possível restaurar/)).toBeTruthy();
+    expect(Array.from(document.querySelectorAll("a")).every((link) => !link.hasAttribute("href"))).toBe(true);
   });
 
   it("calcula o total pelos tipos de ingresso selecionados", () => {
