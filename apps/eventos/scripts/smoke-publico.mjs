@@ -56,9 +56,11 @@ async function exercitarViewport(browser, nome, viewport) {
     }
   };
   const eh403ImagemRemotaConhecida = (status, url) => status === 403 && ehImagemRemotaConhecida(url);
-  const ehErroConsoleImagemRemotaConhecida = ({ url }) => urlsImagensRemotasConhecidas.has(url);
-  const filtrarErrosConsole = (erros) => erros.filter((erro) => !ehErroConsoleImagemRemotaConhecida(erro));
-  const filtrarRespostasErro = (respostas) => respostas.filter((resposta) => !resposta.imagemRemotaConhecida);
+  const chaveRespostaErro = ({ status, url }) => `${status} ${url}`;
+  const ehErroConsoleImagemRemotaConhecida = ({ url }, snapshot) => snapshot.urls.includes(url);
+  const ehRespostaImagemRemotaConhecida = (resposta, snapshot) => snapshot.respostas.includes(chaveRespostaErro(resposta));
+  const filtrarErrosConsole = (erros, snapshot) => erros.filter((erro) => !ehErroConsoleImagemRemotaConhecida(erro, snapshot));
+  const filtrarRespostasErro = (respostas, snapshot) => respostas.filter((resposta) => !ehRespostaImagemRemotaConhecida(resposta, snapshot));
   const descreverErrosConsole = (erros) => erros.map(({ texto, url }) => `${texto}${url ? ` [${url}]` : ""}`).join(" | ");
   const descreverRespostasErro = (respostas) => respostas.map(({ status, url }) => `${status} ${url}`).join(" | ");
   pagina.on("console", (mensagem) => { if (mensagem.type() === "error") errosConsole.push({ texto: mensagem.text(), url: mensagem.location().url }); });
@@ -68,7 +70,7 @@ async function exercitarViewport(browser, nome, viewport) {
     const url = response.url();
     const imagemRemotaConhecida = eh403ImagemRemotaConhecida(response.status(), url);
     if (imagemRemotaConhecida) urlsImagensRemotasConhecidas.add(url);
-    respostasErro.push({ status: response.status(), url, imagemRemotaConhecida });
+    respostasErro.push({ status: response.status(), url });
   });
   pagina.on("request", (request) => {
     if (request.method() === "POST" && new URL(request.url()).pathname === "/api/eventos/public/reservas") postsReserva.push(request.url());
@@ -89,7 +91,14 @@ async function exercitarViewport(browser, nome, viewport) {
   if (await grupos.count() !== 2) throw new Error(`${nome}: agrupamento de sessões incorreto`);
   const primeiroGrupo = await grupos.nth(0).innerText();
   if (primeiroGrupo.indexOf("13:00") === -1 || primeiroGrupo.indexOf("15:00") === -1 || primeiroGrupo.indexOf("13:00") > primeiroGrupo.indexOf("15:00")) throw new Error(`${nome}: ordenação de sessões incorreta`);
-  const inicioSessao = { errosConsole: errosConsole.length, respostasErro: respostasErro.length };
+  const inicioSessao = {
+    errosConsole: errosConsole.length,
+    respostasErro: respostasErro.length,
+    snapshotConhecido: Object.freeze({
+      urls: Object.freeze([...urlsImagensRemotasConhecidas]),
+      respostas: Object.freeze(respostasErro.filter((resposta) => eh403ImagemRemotaConhecida(resposta.status, resposta.url)).map(chaveRespostaErro)),
+    }),
+  };
   await acessar("/evento/festival-demo/sessao/s1?ticketTypeId=t1");
   const lista = pagina.getByRole("button", { name: "Lista", exact: true });
   const mapaBotao = pagina.getByRole("button", { name: "Mapa", exact: true });
@@ -99,8 +108,9 @@ async function exercitarViewport(browser, nome, viewport) {
     const botao = grupo?.querySelector(`button[aria-pressed="true"]`);
     return botao?.textContent?.trim().toLowerCase() === esperado;
   }, modoEsperado);
-  const errosMapaInicial = filtrarErrosConsole(errosConsole.slice(inicioSessao.errosConsole));
-  const respostasMapaInicial = filtrarRespostasErro(respostasErro.slice(inicioSessao.respostasErro));
+  const fimCarregamentoInicial = { errosConsole: errosConsole.length, respostasErro: respostasErro.length };
+  const errosMapaInicial = filtrarErrosConsole(errosConsole.slice(inicioSessao.errosConsole, fimCarregamentoInicial.errosConsole), inicioSessao.snapshotConhecido);
+  const respostasMapaInicial = filtrarRespostasErro(respostasErro.slice(inicioSessao.respostasErro, fimCarregamentoInicial.respostasErro), inicioSessao.snapshotConhecido);
   if (errosMapaInicial.length || respostasMapaInicial.length) throw new Error(`${nome}: erros no carregamento inicial do mapa (console: ${descreverErrosConsole(errosMapaInicial)}; rede: ${descreverRespostasErro(respostasMapaInicial)})`);
   if (await lista.getAttribute("aria-pressed") !== String(modoEsperado === "lista") || await mapaBotao.getAttribute("aria-pressed") !== String(modoEsperado === "mapa")) throw new Error(`${nome}: modo inicial não respeita o viewport`);
   await (modoEsperado === "lista" ? mapaBotao : lista).click();
@@ -192,8 +202,14 @@ async function exercitarViewport(browser, nome, viewport) {
   await mapaBotao.click();
   const assentoConflito = pagina.getByRole("button", { name: /A-1, disponível/ }).first();
   if (!await pagina.getByRole("alert").filter({ hasText: "Assento A-2 ficou indisponível" }).count() || !await assentoConflito.count() || await assentoConflito.getAttribute("aria-pressed") !== "true" || !await pagina.getByRole("img", { name: /A-2, indisponível/ }).count() || await pagina.getByRole("button", { name: /A-2/ }).count()) throw new Error(`${nome}: conflito não reidrata seleção no mapa`);
-  const errosMapa = filtrarErrosConsole(errosConsole.slice(inicioSessao.errosConsole));
-  const respostasMapa = filtrarRespostasErro(respostasErro.slice(inicioSessao.respostasErro));
+  const errosMapa = [
+    ...filtrarErrosConsole(errosConsole.slice(inicioSessao.errosConsole, fimCarregamentoInicial.errosConsole), inicioSessao.snapshotConhecido),
+    ...errosConsole.slice(fimCarregamentoInicial.errosConsole),
+  ];
+  const respostasMapa = [
+    ...filtrarRespostasErro(respostasErro.slice(inicioSessao.respostasErro, fimCarregamentoInicial.respostasErro), inicioSessao.snapshotConhecido),
+    ...respostasErro.slice(fimCarregamentoInicial.respostasErro),
+  ];
   if (errosMapa.length || respostasMapa.length) throw new Error(`${nome}: erros durante a experiência do mapa (console: ${descreverErrosConsole(errosMapa)}; rede: ${descreverRespostasErro(respostasMapa)})`);
   await acessar("/checkout?assentos=a1%2Cb2&ticketTypeIds=t1%2Ct2&sessionId=s1&slug=festival-demo");
   if (!await pagina.getByText("Assento 1: Inteira · R$ 50,00").count() || !await pagina.getByText("Assento 2: Meia · R$ 25,00").count() || !await pagina.getByLabel("Nome completo").count()) throw new Error(`${nome}: checkout incompleto`);
