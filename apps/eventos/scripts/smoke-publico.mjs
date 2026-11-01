@@ -45,15 +45,30 @@ async function exercitarViewport(browser, nome, viewport) {
   const pagina = await contexto.newPage();
   const errosConsole = [];
   const respostasErro = [];
-  const respostasImagemConhecida = [];
+  const urlsImagensRemotasConhecidas = new Set();
   const postsReserva = [];
-  pagina.on("console", (mensagem) => { if (mensagem.type() === "error") errosConsole.push(`${mensagem.text()} [${mensagem.location().url}]`); });
-  pagina.on("pageerror", (erro) => errosConsole.push(erro.message));
+  const ehImagemRemotaConhecida = (url) => {
+    try {
+      const endereco = new URL(url);
+      return endereco.pathname === "/_next/image" && decodeURIComponent(endereco.href).includes("www.portalcef.com.br");
+    } catch {
+      return false;
+    }
+  };
+  const eh403ImagemRemotaConhecida = (status, url) => status === 403 && ehImagemRemotaConhecida(url);
+  const ehErroConsoleImagemRemotaConhecida = ({ url }) => urlsImagensRemotasConhecidas.has(url);
+  const filtrarErrosConsole = (erros) => erros.filter((erro) => !ehErroConsoleImagemRemotaConhecida(erro));
+  const filtrarRespostasErro = (respostas) => respostas.filter((resposta) => !resposta.imagemRemotaConhecida);
+  const descreverErrosConsole = (erros) => erros.map(({ texto, url }) => `${texto}${url ? ` [${url}]` : ""}`).join(" | ");
+  const descreverRespostasErro = (respostas) => respostas.map(({ status, url }) => `${status} ${url}`).join(" | ");
+  pagina.on("console", (mensagem) => { if (mensagem.type() === "error") errosConsole.push({ texto: mensagem.text(), url: mensagem.location().url }); });
+  pagina.on("pageerror", (erro) => errosConsole.push({ texto: erro.message, url: "" }));
   pagina.on("response", (response) => {
     if (response.status() < 400) return;
     const url = response.url();
-    respostasErro.push(`${response.status()} ${url}`);
-    if (response.status() === 403 && url.includes("/_next/image") && decodeURIComponent(url).includes("www.portalcef.com.br")) respostasImagemConhecida.push(url);
+    const imagemRemotaConhecida = eh403ImagemRemotaConhecida(response.status(), url);
+    if (imagemRemotaConhecida) urlsImagensRemotasConhecidas.add(url);
+    respostasErro.push({ status: response.status(), url, imagemRemotaConhecida });
   });
   pagina.on("request", (request) => {
     if (request.method() === "POST" && new URL(request.url()).pathname === "/api/eventos/public/reservas") postsReserva.push(request.url());
@@ -74,11 +89,7 @@ async function exercitarViewport(browser, nome, viewport) {
   if (await grupos.count() !== 2) throw new Error(`${nome}: agrupamento de sessões incorreto`);
   const primeiroGrupo = await grupos.nth(0).innerText();
   if (primeiroGrupo.indexOf("13:00") === -1 || primeiroGrupo.indexOf("15:00") === -1 || primeiroGrupo.indexOf("13:00") > primeiroGrupo.indexOf("15:00")) throw new Error(`${nome}: ordenação de sessões incorreta`);
-  await pagina.waitForTimeout(100);
-  const indiceInicioMapa = errosConsole.length;
-  const respostasAntesMapa = respostasErro.length;
-  const imagensConhecidasNoBaseline = respostasImagemConhecida.length;
-  const erros403NoBaseline = errosConsole.filter((erro) => erro.includes("403 (Forbidden)")).length;
+  const inicioSessao = { errosConsole: errosConsole.length, respostasErro: respostasErro.length };
   await acessar("/evento/festival-demo/sessao/s1?ticketTypeId=t1");
   const lista = pagina.getByRole("button", { name: "Lista", exact: true });
   const mapaBotao = pagina.getByRole("button", { name: "Mapa", exact: true });
@@ -88,8 +99,9 @@ async function exercitarViewport(browser, nome, viewport) {
     const botao = grupo?.querySelector(`button[aria-pressed="true"]`);
     return botao?.textContent?.trim().toLowerCase() === esperado;
   }, modoEsperado);
-  const errosMapaInicial = errosConsole.slice(indiceInicioMapa);
-  if (errosMapaInicial.length) throw new Error(`${nome}: erros de console no carregamento inicial do mapa (${errosMapaInicial.join(" | ")}; rede: ${respostasErro.slice(respostasAntesMapa).join(" | ")}; baseline 403 imagem=${imagensConhecidasNoBaseline}/${erros403NoBaseline})`);
+  const errosMapaInicial = filtrarErrosConsole(errosConsole.slice(inicioSessao.errosConsole));
+  const respostasMapaInicial = filtrarRespostasErro(respostasErro.slice(inicioSessao.respostasErro));
+  if (errosMapaInicial.length || respostasMapaInicial.length) throw new Error(`${nome}: erros no carregamento inicial do mapa (console: ${descreverErrosConsole(errosMapaInicial)}; rede: ${descreverRespostasErro(respostasMapaInicial)})`);
   if (await lista.getAttribute("aria-pressed") !== String(modoEsperado === "lista") || await mapaBotao.getAttribute("aria-pressed") !== String(modoEsperado === "mapa")) throw new Error(`${nome}: modo inicial não respeita o viewport`);
   await (modoEsperado === "lista" ? mapaBotao : lista).click();
   if (await lista.getAttribute("aria-pressed") !== String(modoEsperado !== "lista") || await mapaBotao.getAttribute("aria-pressed") !== String(modoEsperado === "lista")) throw new Error(`${nome}: alternância para o modo oposto falhou`);
@@ -180,8 +192,9 @@ async function exercitarViewport(browser, nome, viewport) {
   await mapaBotao.click();
   const assentoConflito = pagina.getByRole("button", { name: /A-1, disponível/ }).first();
   if (!await pagina.getByRole("alert").filter({ hasText: "Assento A-2 ficou indisponível" }).count() || !await assentoConflito.count() || await assentoConflito.getAttribute("aria-pressed") !== "true" || !await pagina.getByRole("img", { name: /A-2, indisponível/ }).count() || await pagina.getByRole("button", { name: /A-2/ }).count()) throw new Error(`${nome}: conflito não reidrata seleção no mapa`);
-  const errosMapa = errosConsole.slice(indiceInicioMapa);
-  if (errosMapa.length) throw new Error(`${nome}: erros de console durante a experiência do mapa (${errosMapa.join(" | ")}; rede: ${respostasErro.slice(respostasAntesMapa).join(" | ")}; baseline 403 imagem=${imagensConhecidasNoBaseline}/${erros403NoBaseline})`);
+  const errosMapa = filtrarErrosConsole(errosConsole.slice(inicioSessao.errosConsole));
+  const respostasMapa = filtrarRespostasErro(respostasErro.slice(inicioSessao.respostasErro));
+  if (errosMapa.length || respostasMapa.length) throw new Error(`${nome}: erros durante a experiência do mapa (console: ${descreverErrosConsole(errosMapa)}; rede: ${descreverRespostasErro(respostasMapa)})`);
   await acessar("/checkout?assentos=a1%2Cb2&ticketTypeIds=t1%2Ct2&sessionId=s1&slug=festival-demo");
   if (!await pagina.getByText("Assento 1: Inteira · R$ 50,00").count() || !await pagina.getByText("Assento 2: Meia · R$ 25,00").count() || !await pagina.getByLabel("Nome completo").count()) throw new Error(`${nome}: checkout incompleto`);
   await acessar("/pedido/PENDENTE?retorno=sucesso");
