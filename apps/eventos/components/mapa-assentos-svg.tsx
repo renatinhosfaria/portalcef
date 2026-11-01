@@ -19,7 +19,7 @@ function rotuloAssento(seat: PublicSeat): string {
 }
 
 function descricaoAssento(seat: PublicSeat): string {
-  const acessibilidade = seat.accessible ? ", assento acessível" : "";
+  const acessibilidade = seat.accessible ? ", assento acessível" : ", assento não acessível";
   return `Assento ${rotuloAssento(seat)}, ${estadoLabel[seat.state]}${acessibilidade}`;
 }
 

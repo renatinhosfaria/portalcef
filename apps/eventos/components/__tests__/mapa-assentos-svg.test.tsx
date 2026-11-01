@@ -29,6 +29,7 @@ describe("MapaAssentosSvg", () => {
     expect(disponivel.getAttribute("data-seat-id")).toBe("s-1");
     expect(disponivel.getAttribute("tabindex")).toBe("0");
     expect(screen.getByRole("img", { name: /Assento A-2/ }).getAttribute("aria-disabled")).toBe("true");
+    expect(screen.getByRole("img", { name: /Assento A-2/ }).getAttribute("aria-label")).toMatch(/não acessível/);
     expect(screen.getByRole("img", { name: /Assento B-1/ }).getAttribute("aria-disabled")).toBe("true");
     fireEvent.click(disponivel);
     fireEvent.keyDown(disponivel, { key: "Enter" });
