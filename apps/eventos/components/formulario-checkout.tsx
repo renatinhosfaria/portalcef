@@ -23,15 +23,17 @@ type Props = {
   politicas?: PoliticaPublica[];
   event?: { title: string; startsAt: Date | string | null; locationName: string | null };
   session?: PublicEventSession;
+  mapHref?: string;
   onComplete?: (pedido: PedidoPublicoResult) => void;
 };
 
-export function FormularioCheckout({ seatIds, ticketTypeIds = [], sessionId, politicas = [], event, session, onComplete }: Props) {
+export function FormularioCheckout({ seatIds, ticketTypeIds = [], sessionId, politicas = [], event, session, mapHref, onComplete }: Props) {
   const reservationKeyRef = useRef<string | null>(null);
   if (!reservationKeyRef.current) reservationKeyRef.current = gerarChaveIdempotenciaPublica("reserva");
   const [accepted, setAccepted] = useState<Record<string, boolean>>({});
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [seatUnavailable, setSeatUnavailable] = useState(false);
   const [pending, setPending] = useState(false);
   const hasAllPolicies = useMemo(() => politicas.length === TIPOS_POLITICA.length && TIPOS_POLITICA.every((type) => accepted[type]), [accepted, politicas.length]);
   const hasSeats = seatIds.length > 0 && seatIds.every((seatId) => seatId.trim());
@@ -44,6 +46,7 @@ export function FormularioCheckout({ seatIds, ticketTypeIds = [], sessionId, pol
   async function enviar(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
+    setSeatUnavailable(false);
     if (!hasSeats) return setError("Selecione ao menos um assento disponível.");
     if (!hasTicketTypes) return setError("Não foi possível identificar o tipo de ingresso selecionado.");
     if (!sessionId) return setError("Não foi possível identificar a sessão. Volte ao mapa e tente novamente.");
@@ -69,6 +72,7 @@ export function FormularioCheckout({ seatIds, ticketTypeIds = [], sessionId, pol
     } catch (cause) {
       if (etapa !== "checkout" && deveInvalidarChaveReserva(cause)) reservationKeyRef.current = null;
       setPending(false);
+      setSeatUnavailable(cause instanceof EventosApiError && cause.code === "SEAT_UNAVAILABLE");
       if (cause instanceof EventosApiError && cause.status === 409) setError(cause.message);
       else if (cause instanceof EventosApiError && cause.status === 429) setError("Muitas tentativas em pouco tempo. Aguarde um instante e tente novamente.");
       else setError(cause instanceof Error ? cause.message : "Não foi possível iniciar o pagamento. Tente novamente.");
@@ -105,7 +109,7 @@ export function FormularioCheckout({ seatIds, ticketTypeIds = [], sessionId, pol
       {politicas.map((policy) => <label key={`${policy.type}-${policy.version}`} className="flex items-start gap-2 rounded border p-3"><input type="checkbox" checked={Boolean(accepted[policy.type])} onChange={(event) => setAccepted((current) => ({ ...current, [policy.type]: event.target.checked }))} aria-label={`Aceitar política ${policy.type}`} /><span><strong>{policy.type}</strong> <span className="text-sm text-slate-600">(Versão {policy.version})</span><span className="mt-1 block whitespace-pre-wrap text-sm">{policy.content}</span></span></label>)}
       {politicas.length !== TIPOS_POLITICA.length && <p className="text-sm text-amber-700">As políticas deste evento ainda não estão completas.</p>}
     </fieldset>
-    {error && <p id="checkout-error" role="alert" className="rounded border border-red-300 bg-red-50 p-3 text-red-800">{error}</p>}
+    {error && <p id="checkout-error" role="alert" className="rounded border border-red-300 bg-red-50 p-3 text-red-800">{error}{seatUnavailable && mapHref && <><br /><a href={mapHref} className="mt-2 inline-block font-semibold underline">Revisar assentos</a></>}</p>}
     <p className="text-sm text-slate-600">Assentos selecionados: {rotulosAssentos.join(", ") || "nenhum"}</p>
     <button type="submit" disabled={submitting || !hasAllPolicies || !hasSeats || !hasTicketTypes} className="rounded bg-blue-700 px-4 py-2 text-white disabled:cursor-not-allowed disabled:bg-slate-400">{submitting ? "Processando…" : "Finalizar pedido"}</button>
   </form>;

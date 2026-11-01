@@ -33,12 +33,16 @@ export default async function Page({ params, searchParams }: { params: Promise<{
   const selectedTicketTypeId = requestedTicketTypeId || (session?.ticketTypes.length === 1 ? session.ticketTypes[0].id : undefined);
   const seatIdsFromUrl = separarIds(query.assentos);
   const ticketTypeIdsFromUrl = separarIds(query.ticketTypeIds);
+  const conflitoDisponibilidade = primeiroParametro(query.conflito) === "disponibilidade";
   const hasSelectionInUrl = seatIdsFromUrl.length > 0;
   if (!selectedTicketTypeId && !hasSelectionInUrl) return <EscolhaTipoIngresso eventSlug={slug} sessionId={sessionId} ticketTypes={session.ticketTypes} />;
 
   const map = await obterMapaSessao(sessionId);
-  const rehidratacao = hasSelectionInUrl
+  const rehidratacaoBase = hasSelectionInUrl || conflitoDisponibilidade
     ? reidratarSelecaoAssentos(map, seatIdsFromUrl, ticketTypeIdsFromUrl)
     : { selection: [], unavailableSeatIds: [], invalid: false };
+  const rehidratacao = conflitoDisponibilidade && rehidratacaoBase.unavailableSeatIds.length > 0
+    ? { ...rehidratacaoBase, invalid: true }
+    : rehidratacaoBase;
   return <><h1 className="text-2xl font-bold">Escolha seus assentos</h1><p className="my-2 text-slate-600">Você poderá escolher o tipo de ingresso de cada assento no resumo.</p><p className="my-4 text-slate-600">Assentos cinza estão indisponíveis. No celular, comece pela lista e escolha uma fileira para encontrar seu lugar.</p><MapaAssentos map={map} checkoutHref={`/checkout?slug=${encodeURIComponent(slug)}`} ticketTypes={session.ticketTypes} initialTicketTypeId={selectedTicketTypeId} initialSelection={rehidratacao.selection} unavailableSeatIds={rehidratacao.unavailableSeatIds} initialSelectionInvalid={rehidratacao.invalid} /></>;
 }
