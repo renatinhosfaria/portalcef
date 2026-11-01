@@ -147,28 +147,9 @@ export class EventosService {
   }
 
   async atualizarMapaPadrao(eventId: string, mapId: string, actor: EventoActor) {
-    const [event] = await this.db.select().from(eventos).where(eq(eventos.id, eventId));
-    if (!event) throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Evento não encontrado" });
-    this.assertSchoolScope(actor, event.schoolId);
-    const transaction = (this.db as any).transaction;
-    const run = async (db: any) => {
-      const now = new Date();
-      const [map] = await db.select().from(eventoMapas).where(eq(eventoMapas.id, mapId));
-      if (!map) throw new NotFoundException({ code: "MAP_NOT_FOUND", message: "Mapa não encontrado" });
-      if (map.eventId !== eventId) throw new BadRequestException({ code: "MAP_EVENT_MISMATCH", message: "O mapa informado pertence a outro evento" });
-      const sessions = await db.select().from(eventoSessoes).where(eq(eventoSessoes.eventId, eventId));
-      const inherited = sessions.filter((session: any) => session.mapId == null);
-      const [updated] = await db.update(eventos).set({ defaultMapId: mapId, updatedAt: now }).where(eq(eventos.id, eventId)).returning();
-      if (!updated) throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Evento não encontrado" });
-      for (const session of inherited) {
-        await db.update(eventoInventarioAssentos).set({ status: "BLOQUEADO", blockedReason: "MAPA_PADRAO_ALTERADO", updatedAt: now }).where(and(eq(eventoInventarioAssentos.sessionId, session.id), inArray(eventoInventarioAssentos.status, ["DISPONIVEL", "LIBERADO"])));
-      }
-      const inventory = this.mapas ? await this.mapas.sincronizarInventarioMapa(db, eventId, mapId, actor) : { inventorySessionIds: inherited.map((session: any) => session.id), inventoryCreatedCount: 0 };
-      await this.audit(eventId, actor, "ATUALIZADO", "mapa_padrao", eventId, { etapa: "mapa", previousMapId: event.defaultMapId, nextMapId: mapId, inheritedSessionIds: inherited.map((session: any) => session.id), inventory: "REVISAR_REGENERAR" }, db);
-      return { updated, inheritedSessionIds: inherited.map((session: any) => session.id), inventory };
-    };
-    const result = typeof transaction === "function" ? await transaction.call(this.db, run) : await run(this.db);
-    return { ...this.resumo(result.updated), inheritedSessionIds: result.inheritedSessionIds, inventorySessionIds: result.inventory.inventorySessionIds, inventoryCreatedCount: result.inventory.inventoryCreatedCount, inventoryRequiresReview: result.inheritedSessionIds.length > 0 };
+    if (!this.mapas) throw new BadRequestException({ code: "MAP_SERVICE_UNAVAILABLE", message: "Serviço de mapas indisponível" });
+    const result = await this.mapas.substituirMapaPadrao(eventId, mapId, actor);
+    return { ...this.resumo(result.updated as typeof eventos.$inferSelect), inheritedSessionIds: result.inheritedSessionIds, inventorySessionIds: result.inventorySessionIds, inventoryCreatedCount: result.inventoryCreatedCount, inventoryRequiresReview: result.inheritedSessionIds.length > 0 };
   }
 
   async listarAdmin(query: EventoListQuery = {}, actor?: EventoActor) {
@@ -191,29 +172,38 @@ export class EventosService {
   }
 
   async criarSessao(eventId: string, input: CriarSessaoInput, actor?: EventoActor, audit = true) {
-    const [event] = await this.db.select().from(eventos).where(eq(eventos.id, eventId));
-    if (!event) throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Evento não encontrado" });
-    if (actor) this.assertSchoolScope(actor, event.schoolId);
-    await this.validarReferenciasSessao(eventId, event, input);
-    if (input.status === "PUBLICADA") throw new BadRequestException({ code: "SESSION_PUBLICATION_REQUIRES_INVENTORY", message: "Publique a sessão pelo fluxo de publicação após inicializar o inventário" });
-    const [session] = await this.db.insert(eventoSessoes).values({ eventId, startsAt: input.startsAt, endsAt: input.endsAt, capacity: input.capacity, locationId: input.locationId === undefined ? event.defaultLocationId : input.locationId, mapId: input.mapId ?? null, salesStartsAt: input.salesStartsAt ?? null, salesEndsAt: input.salesEndsAt ?? null, status: input.status ?? "RASCUNHO" }).returning();
-    if (audit && session) await this.audit(eventId, actor, "ATUALIZADO", "sessao", session.id);
-    return session;
+    const run = async (db: any) => {
+      const query = db.select().from(eventos).where(eq(eventos.id, eventId));
+      const [event] = await (typeof query.for === "function" ? query.for("update") : query);
+      if (!event) throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Evento não encontrado" });
+      if (actor) this.assertSchoolScope(actor, event.schoolId);
+      await this.validarReferenciasSessao(eventId, event, input, db);
+      if (input.status === "PUBLICADA") throw new BadRequestException({ code: "SESSION_PUBLICATION_REQUIRES_INVENTORY", message: "Publique a sessão pelo fluxo de publicação após inicializar o inventário" });
+      const [session] = await db.insert(eventoSessoes).values({ eventId, startsAt: input.startsAt, endsAt: input.endsAt, capacity: input.capacity, locationId: input.locationId === undefined ? event.defaultLocationId : input.locationId, mapId: input.mapId ?? null, salesStartsAt: input.salesStartsAt ?? null, salesEndsAt: input.salesEndsAt ?? null, status: input.status ?? "RASCUNHO" }).returning();
+      if (audit && session) await this.audit(eventId, actor, "ATUALIZADO", "sessao", session.id, undefined, db);
+      return session;
+    };
+    return typeof (this.db as any).transaction === "function" ? (this.db as any).transaction(run) : run(this.db);
   }
 
   async atualizarSessao(eventId: string, sessionId: string, input: Partial<CriarSessaoInput>, actor?: EventoActor) {
-    const [session] = await this.db.select().from(eventoSessoes).where(and(eq(eventoSessoes.id, sessionId), eq(eventoSessoes.eventId, eventId)));
-    if (!session) throw new NotFoundException({ code: "SESSION_NOT_FOUND", message: "Sessão não encontrada" });
-    const [event] = await this.db.select().from(eventos).where(eq(eventos.id, eventId));
+    const run = async (db: any) => {
+    const eventQuery = db.select().from(eventos).where(eq(eventos.id, eventId));
+    const [event] = await (typeof eventQuery.for === "function" ? eventQuery.for("update") : eventQuery);
     if (!event) throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Evento não encontrado" });
     if (actor) this.assertSchoolScope(actor, event.schoolId);
-    await this.validarReferenciasSessao(eventId, event, input);
-    const [sale] = await this.db.select({ id: eventoPedidos.id }).from(eventoPedidos).where(eq(eventoPedidos.sessionId, sessionId)).limit(1);
+    const sessionQuery = db.select().from(eventoSessoes).where(and(eq(eventoSessoes.id, sessionId), eq(eventoSessoes.eventId, eventId)));
+    const [session] = await (typeof sessionQuery.for === "function" ? sessionQuery.for("update") : sessionQuery);
+    if (!session) throw new NotFoundException({ code: "SESSION_NOT_FOUND", message: "Sessão não encontrada" });
+    await this.validarReferenciasSessao(eventId, event, input, db);
+    const [sale] = await db.select({ id: eventoPedidos.id }).from(eventoPedidos).where(eq(eventoPedidos.sessionId, sessionId)).limit(1);
     if (sale) throw new BadRequestException({ code: "EVENT_HAS_SALES", message: "A sessão possui vendas e não pode ser alterada" });
     if (input.status === "PUBLICADA") throw new BadRequestException({ code: "SESSION_PUBLICATION_REQUIRES_INVENTORY", message: "Publique a sessão pelo fluxo de publicação após inicializar o inventário" });
-    const [updated] = await this.db.update(eventoSessoes).set({ ...input, updatedAt: new Date() }).where(eq(eventoSessoes.id, sessionId)).returning();
-    if (updated) await this.audit(eventId, actor, "ATUALIZADO", "sessao", sessionId);
+    const [updated] = await db.update(eventoSessoes).set({ ...input, updatedAt: new Date() }).where(eq(eventoSessoes.id, sessionId)).returning();
+    if (updated) await this.audit(eventId, actor, "ATUALIZADO", "sessao", sessionId, undefined, db);
     return updated;
+    };
+    return typeof (this.db as any).transaction === "function" ? (this.db as any).transaction(run) : run(this.db);
   }
 
   async removerSessao(eventId: string, sessionId: string, actor: EventoActor) {
@@ -242,14 +232,15 @@ export class EventosService {
     });
   }
 
-  private async validarReferenciasSessao(eventId: string, event: typeof eventos.$inferSelect, input: Partial<CriarSessaoInput>) {
+  private async validarReferenciasSessao(eventId: string, event: typeof eventos.$inferSelect, input: Partial<CriarSessaoInput>, db: any = this.db) {
     const locationId = input.locationId === undefined ? event.defaultLocationId : input.locationId;
     if (locationId) {
-      const [location] = await this.db.select().from(eventoLocais).where(eq(eventoLocais.id, locationId));
+      const [location] = await db.select().from(eventoLocais).where(eq(eventoLocais.id, locationId));
       if (!location || location.schoolId !== event.schoolId) throw new BadRequestException({ code: "SESSION_LOCATION_INVALID", message: "O local informado não pertence à escola do evento" });
     }
     if (input.mapId) {
-      const [map] = await this.db.select().from(eventoMapas).where(eq(eventoMapas.id, input.mapId));
+      const mapQuery = db.select().from(eventoMapas).where(eq(eventoMapas.id, input.mapId));
+      const [map] = await (typeof mapQuery.for === "function" ? mapQuery.for("update") : mapQuery);
       if (!map || map.eventId !== eventId || map.status !== "CONFIRMADO") throw new BadRequestException({ code: "SESSION_MAP_INVALID", message: "O mapa informado não está confirmado para este evento" });
     }
   }
