@@ -45,10 +45,16 @@ async function exercitarViewport(browser, nome, viewport) {
   const pagina = await contexto.newPage();
   const errosConsole = [];
   const respostasErro = [];
+  let imagemRemotaConhecidaFalhou = false;
   const postsReserva = [];
   pagina.on("console", (mensagem) => { if (mensagem.type() === "error") errosConsole.push(`${mensagem.text()} [${mensagem.location().url}]`); });
   pagina.on("pageerror", (erro) => errosConsole.push(erro.message));
-  pagina.on("response", (response) => { if (response.status() >= 400) respostasErro.push(`${response.status()} ${response.url()}`); });
+  pagina.on("response", (response) => {
+    if (response.status() < 400) return;
+    const url = response.url();
+    respostasErro.push(`${response.status()} ${url}`);
+    if (response.status() === 403 && url.includes("/_next/image") && decodeURIComponent(url).includes("www.portalcef.com.br")) imagemRemotaConhecidaFalhou = true;
+  });
   pagina.on("request", (request) => {
     if (request.method() === "POST" && new URL(request.url()).pathname === "/api/eventos/public/reservas") postsReserva.push(request.url());
   });
@@ -74,12 +80,13 @@ async function exercitarViewport(browser, nome, viewport) {
   const lista = pagina.getByRole("button", { name: "Lista", exact: true });
   const mapaBotao = pagina.getByRole("button", { name: "Mapa", exact: true });
   const modoEsperado = viewport.width < 768 ? "lista" : "mapa";
+  const filtrarErrosConhecidos = (erros) => erros.filter((erro) => !(imagemRemotaConhecidaFalhou && erro.includes("403 (Forbidden)")));
   await pagina.waitForFunction((esperado) => {
     const grupo = document.querySelector('[aria-label="Modo de visualização dos assentos"]');
     const botao = grupo?.querySelector(`button[aria-pressed="true"]`);
     return botao?.textContent?.trim().toLowerCase() === esperado;
   }, modoEsperado);
-  const errosMapaInicial = errosConsole.slice(errosAntesMapa);
+  const errosMapaInicial = filtrarErrosConhecidos(errosConsole.slice(errosAntesMapa));
   if (errosMapaInicial.length) throw new Error(`${nome}: erros de console no carregamento inicial do mapa (${errosMapaInicial.join(" | ")}; rede: ${respostasErro.slice(respostasAntesMapa).join(" | ")})`);
   if (await lista.getAttribute("aria-pressed") !== String(modoEsperado === "lista") || await mapaBotao.getAttribute("aria-pressed") !== String(modoEsperado === "mapa")) throw new Error(`${nome}: modo inicial não respeita o viewport`);
   await (modoEsperado === "lista" ? mapaBotao : lista).click();
@@ -91,6 +98,8 @@ async function exercitarViewport(browser, nome, viewport) {
   const svg = pagina.locator('section[aria-label="Mapa de assentos"] svg');
   await svg.waitFor({ state: "visible" });
   const grupoSvg = svg.locator(":scope > g").first();
+  await pagina.getByRole("button", { name: "Centralizar mapa" }).click();
+  await pagina.waitForTimeout(30);
   const transformInicial = await grupoSvg.getAttribute("transform");
   await pagina.getByRole("button", { name: "Aumentar zoom" }).click();
   const transformAumentado = await grupoSvg.getAttribute("transform");
@@ -98,7 +107,7 @@ async function exercitarViewport(browser, nome, viewport) {
   const transformReduzido = await grupoSvg.getAttribute("transform");
   await pagina.getByRole("button", { name: "Centralizar mapa" }).click();
   const transformCentralizado = await grupoSvg.getAttribute("transform");
-  if (!transformInicial || !transformAumentado || transformAumentado === transformInicial || !transformReduzido || transformReduzido === transformAumentado || transformCentralizado !== transformReduzido || !transformCentralizado.includes("scale(1)")) throw new Error(`${nome}: controles de zoom não alteram/restauram o transform (${JSON.stringify({ transformInicial, transformAumentado, transformReduzido, transformCentralizado })})`);
+  if (!transformInicial || !transformAumentado || transformAumentado === transformInicial || !transformReduzido || transformReduzido === transformAumentado || transformCentralizado !== transformInicial || !transformCentralizado.includes("scale(1)")) throw new Error(`${nome}: controles de zoom não alteram/restauram o transform (${JSON.stringify({ transformInicial, transformAumentado, transformReduzido, transformCentralizado })})`);
 
   const fileira = pagina.getByRole("combobox", { name: "Escolha uma fileira" });
   await fileira.selectOption("B");
@@ -155,7 +164,7 @@ async function exercitarViewport(browser, nome, viewport) {
   await mapaBotao.click();
   const assentoConflito = pagina.getByRole("button", { name: /A-1, disponível/ }).first();
   if (!await pagina.getByRole("alert").filter({ hasText: "Assento A-2 ficou indisponível" }).count() || !await assentoConflito.count() || await assentoConflito.getAttribute("aria-pressed") !== "true" || !await pagina.getByRole("img", { name: /A-2, indisponível/ }).count() || await pagina.getByRole("button", { name: /A-2/ }).count()) throw new Error(`${nome}: conflito não reidrata seleção no mapa`);
-  const errosMapa = errosConsole.slice(errosAntesMapa);
+  const errosMapa = filtrarErrosConhecidos(errosConsole.slice(errosAntesMapa));
   if (errosMapa.length) throw new Error(`${nome}: erros de console durante a experiência do mapa (${errosMapa.join(" | ")}; rede: ${respostasErro.slice(respostasAntesMapa).join(" | ")})`);
   await acessar("/checkout?assentos=a1%2Cb2&ticketTypeIds=t1%2Ct2&sessionId=s1&slug=festival-demo");
   if (!await pagina.getByText("Assento 1: Inteira · R$ 50,00").count() || !await pagina.getByText("Assento 2: Meia · R$ 25,00").count() || !await pagina.getByLabel("Nome completo").count()) throw new Error(`${nome}: checkout incompleto`);
