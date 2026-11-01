@@ -36,11 +36,13 @@ export class MapasService {
     return typeof tx === "function" ? tx.call(this.db, fn) : fn(this.db);
   }
 
-  async sincronizarInventarioMapa(db: Database, eventId: string, mapId: string, actor: EventoActor) {
+  async sincronizarInventarioMapa(db: Database, eventId: string, mapId: string, actor: EventoActor, sessionIds?: string[]) {
     const [event] = await db.select().from(eventos).where(eq(eventos.id, eventId));
     const sessions = await db.select().from(eventoSessoes).where(eq(eventoSessoes.eventId, eventId));
     const seats = await db.select().from(eventoMapaAssentos).where(eq(eventoMapaAssentos.mapId, mapId));
-    const targetSessions = sessions.filter((session: any) => session.mapId === mapId || (!session.mapId && (!event?.defaultMapId || event.defaultMapId === mapId)));
+    const targetSessions = sessionIds
+      ? sessions.filter((session: any) => sessionIds.includes(session.id))
+      : sessions.filter((session: any) => session.mapId === mapId || (!session.mapId && (!event?.defaultMapId || event.defaultMapId === mapId)));
     let inventoryCreatedCount = 0;
 
     for (const session of targetSessions) {
@@ -172,27 +174,24 @@ export class MapasService {
   }
 
   async substituirMapaPadrao(eventId: string, mapId: string, actor: EventoActor): Promise<MapReplacementResult> {
-    const event = await this.assertEvent(eventId, actor);
-    const [map] = await this.db.select().from(eventoMapas).where(eq(eventoMapas.id, mapId));
-    if (!map) throw new NotFoundException({ code: "MAP_NOT_FOUND", message: "Mapa não encontrado" });
-    if (map.eventId !== eventId) throw new BadRequestException({ code: "MAP_EVENT_MISMATCH", message: "O mapa informado pertence a outro evento" });
-    if (map.status !== "CONFIRMADO") throw new BadRequestException({ code: "MAP_NOT_CONFIRMED", message: "Somente mapas confirmados podem ser associados" });
-    const mapSeats = await this.db.select().from(eventoMapaAssentos).where(eq(eventoMapaAssentos.mapId, mapId));
-    if (!mapSeats.length) throw new BadRequestException({ code: "MAP_EMPTY", message: "O mapa precisa de pelo menos um assento" });
-
-    if (event.defaultMapId === mapId) {
-      return {
-        updated: event,
-        previousMapId: mapId,
-        inheritedSessionIds: [],
-        inventorySessionIds: [],
-        inventoryCreatedCount: 0,
-        previousMapArchive: { archived: false, code: "MAP_IN_USE", sessionIds: [] },
-      };
-    }
-
     const result = await this.transaction(async (db) => {
       const now = new Date();
+      const lock = async (query: any) => {
+        const locked = typeof query.for === "function" ? query.for("update") : query;
+        return locked;
+      };
+      const eventQuery = await lock(db.select().from(eventos).where(eq(eventos.id, eventId)));
+      const [event] = await eventQuery;
+      if (!event) throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Evento não encontrado" });
+      if (actor.role !== "master" && event.schoolId !== actor.schoolId) throw new BadRequestException({ code: "FORBIDDEN", message: "Acesso negado" });
+      const mapQuery = await lock(db.select().from(eventoMapas).where(eq(eventoMapas.id, mapId)));
+      const [map] = await mapQuery;
+      if (!map) throw new NotFoundException({ code: "MAP_NOT_FOUND", message: "Mapa não encontrado" });
+      if (map.eventId !== eventId) throw new BadRequestException({ code: "MAP_EVENT_MISMATCH", message: "O mapa informado pertence a outro evento" });
+      if (map.status !== "CONFIRMADO") throw new BadRequestException({ code: "MAP_NOT_CONFIRMED", message: "Somente mapas confirmados podem ser associados" });
+      const mapSeats = await db.select().from(eventoMapaAssentos).where(eq(eventoMapaAssentos.mapId, mapId));
+      if (!mapSeats.length) throw new BadRequestException({ code: "MAP_EMPTY", message: "O mapa precisa de pelo menos um assento" });
+      if (event.defaultMapId === mapId) return { updated: event, previousMapId: mapId, inheritedSessionIds: [], inventory: { inventorySessionIds: [], inventoryCreatedCount: 0 }, previousMapArchive: { archived: false, code: "MAP_IN_USE" as const, sessionIds: [] }, previousMapPreviewKey: null };
       const sessions = await db.select().from(eventoSessoes).where(eq(eventoSessoes.eventId, eventId));
       const inherited = sessions.filter((session: any) => session.mapId == null);
       const previousMapId = event.defaultMapId ?? null;
@@ -201,7 +200,7 @@ export class MapasService {
       for (const session of inherited) {
         await db.update(eventoInventarioAssentos).set({ status: "BLOQUEADO", blockedReason: "MAPA_PADRAO_ALTERADO", updatedAt: now }).where(and(eq(eventoInventarioAssentos.sessionId, session.id), inArray(eventoInventarioAssentos.status, ["DISPONIVEL", "LIBERADO"])));
       }
-      const inventory = await this.sincronizarInventarioMapa(db, eventId, mapId, actor);
+      const inventory = await this.sincronizarInventarioMapa(db, eventId, mapId, actor, inherited.map((session: any) => session.id));
       let previousMapArchive: MapReplacementResult["previousMapArchive"] = { archived: false, code: "NO_PREVIOUS_MAP" };
       if (previousMapId) {
         const references = sessions.filter((session: any) => session.mapId === previousMapId).map((session: any) => session.id);

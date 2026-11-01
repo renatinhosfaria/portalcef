@@ -171,47 +171,20 @@ describe('EventosService contratos de workspace', () => {
   });
 
   it('rejeita mapa pertencente a outro evento', async () => {
-    const db = fakeDb({ selects: [[event()], [{ id: 'mapa-externo', eventId: 'outro-evento' }]] });
-    await expect(service(db).atualizarMapaPadrao('e1', 'mapa-externo', actor)).rejects.toMatchObject({ response: { code: 'MAP_EVENT_MISMATCH' } });
+    const mapas = { substituirMapaPadrao: jest.fn().mockRejectedValue(new BadRequestException({ code: 'MAP_EVENT_MISMATCH' })) };
+    await expect(service(fakeDb(), undefined, mapas).atualizarMapaPadrao('e1', 'mapa-externo', actor)).rejects.toMatchObject({ response: { code: 'MAP_EVENT_MISMATCH' } });
+  });
+
+  it('rejeita mapa em revisão pelo PATCH legado', async () => {
+    const mapas = { substituirMapaPadrao: jest.fn().mockRejectedValue(new BadRequestException({ code: 'MAP_NOT_CONFIRMED' })) };
+    await expect(service(fakeDb(), undefined, mapas).atualizarMapaPadrao('e1', 'mapa-em-revisao', actor)).rejects.toMatchObject({ response: { code: 'MAP_NOT_CONFIRMED' } });
   });
 
   it('propaga mapa padrão somente para sessões herdadas e invalida seus inventários', async () => {
-    const updates: Array<{ table: unknown; values: unknown }> = [];
-    const db = fakeDb({
-      selects: [
-        [event({ defaultMapId: 'map-antigo' })],
-        [{ id: 'map-novo', eventId: 'e1' }],
-        [
-          { id: 'sessao-herdada', eventId: 'e1', mapId: null },
-          { id: 'sessao-especifica', eventId: 'e1', mapId: 'map-especifico' },
-        ],
-      ],
-      update: async () => [event({ defaultMapId: 'map-novo' })],
-    });
-    db.update = (table: unknown) => ({
-      set: (values: unknown) => ({
-        where: () => ({
-          then: async (resolve: (value: unknown) => void) => {
-            updates.push({ table, values });
-            resolve([]);
-          },
-          returning: async () => {
-            updates.push({ table, values });
-            return [event({ defaultMapId: 'map-novo' })];
-          },
-        }),
-      }),
-    });
-
-    const mapas = { sincronizarInventarioMapa: jest.fn().mockResolvedValue({ inventorySessionIds: ['sessao-herdada'], inventoryCreatedCount: 2 }) };
-    await service(db, undefined, mapas).atualizarMapaPadrao('e1', 'map-novo', actor);
-
-    expect(updates).toHaveLength(2);
-    expect(updates.map((item) => item.values)).toEqual(expect.arrayContaining([
-      { defaultMapId: 'map-novo', updatedAt: expect.any(Date) },
-      { status: 'BLOQUEADO', blockedReason: 'MAPA_PADRAO_ALTERADO', updatedAt: expect.any(Date) },
-    ]));
-    expect(mapas.sincronizarInventarioMapa).toHaveBeenCalledWith(db, 'e1', 'map-novo', actor);
+    const mapas = { substituirMapaPadrao: jest.fn().mockResolvedValue({ updated: event({ defaultMapId: 'map-novo' }), inheritedSessionIds: ['sessao-herdada'], inventorySessionIds: ['sessao-herdada'], inventoryCreatedCount: 2 }) };
+    const result = await service(fakeDb(), undefined, mapas).atualizarMapaPadrao('e1', 'map-novo', actor);
+    expect(result.inheritedSessionIds).toEqual(['sessao-herdada']);
+    expect(mapas.substituirMapaPadrao).toHaveBeenCalledWith('e1', 'map-novo', actor);
   });
 
   it('envia a imagem do evento, atualiza a URL e remove a imagem anterior', async () => {
