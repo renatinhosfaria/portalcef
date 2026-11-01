@@ -153,24 +153,27 @@ export class MapasService {
   }
 
   async arquivar(eventId: string, versionId: string, actor: EventoActor) {
-    const event = await this.assertEvent(eventId, actor);
-    // O original permanece privado no MinIO; projeções públicas usam apenas
-    // assentos estruturados de mapas confirmados e nunca retornam essa chave.
-    if (event.defaultMapId === versionId) throw new BadRequestException({ code: "MAP_IN_USE", message: "Mapa está em uso pelo evento" });
-    const references = await this.db.select({ mapId: eventoSessoes.mapId }).from(eventoSessoes).where(eq(eventoSessoes.eventId, eventId));
-    if (references.some((row: any) => row.mapId === versionId)) throw new BadRequestException({ code: "MAP_IN_USE", message: "Mapa está em uso por uma sessão" });
-    const [current] = await this.db.select().from(eventoMapas).where(and(eq(eventoMapas.id, versionId), eq(eventoMapas.eventId, eventId)));
-    if (!current) throw new NotFoundException({ code: "MAP_NOT_FOUND", message: "Versão não encontrada" });
-    if (current.status !== "EM_REVISAO" && current.status !== "CONFIRMADO") throw new BadRequestException({ code: "MAP_INVALID_TRANSITION", message: "Mapa já arquivado ou em estado inválido" });
-    const map = await this.transaction(async (db) => {
+    const result = await this.transaction(async (db) => {
+      const eventQuery = db.select().from(eventos).where(eq(eventos.id, eventId));
+      const [event] = await (typeof (eventQuery as any).for === "function" ? (eventQuery as any).for("update") : eventQuery);
+      if (!event) throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Evento não encontrado" });
+      if (actor.role !== "master" && event.schoolId !== actor.schoolId) throw new BadRequestException({ code: "FORBIDDEN", message: "Acesso negado" });
+      if (event.defaultMapId === versionId) throw new BadRequestException({ code: "MAP_IN_USE", message: "Mapa está em uso pelo evento" });
+      const referencesQuery = db.select({ mapId: eventoSessoes.mapId }).from(eventoSessoes).where(eq(eventoSessoes.eventId, eventId));
+      const references = await (typeof (referencesQuery as any).for === "function" ? (referencesQuery as any).for("update") : referencesQuery);
+      if (references.some((row: any) => row.mapId === versionId)) throw new BadRequestException({ code: "MAP_IN_USE", message: "Mapa está em uso por uma sessão" });
+      const mapQuery = db.select().from(eventoMapas).where(and(eq(eventoMapas.id, versionId), eq(eventoMapas.eventId, eventId)));
+      const [current] = await (typeof (mapQuery as any).for === "function" ? (mapQuery as any).for("update") : mapQuery);
+      if (!current) throw new NotFoundException({ code: "MAP_NOT_FOUND", message: "Versão não encontrada" });
+      if (current.status !== "EM_REVISAO" && current.status !== "CONFIRMADO") throw new BadRequestException({ code: "MAP_INVALID_TRANSITION", message: "Mapa já arquivado ou em estado inválido" });
       const [next] = await db.update(eventoMapas).set({ status: "ARQUIVADO", updatedAt: new Date() }).where(and(eq(eventoMapas.id, versionId), eq(eventoMapas.eventId, eventId))).returning();
       if (!next) return undefined;
       await this.audit(eventId, actor, versionId, { action: "arquivar" }, db);
-      return next;
+      return { map: next, previewFileKey: current.previewFileKey };
     });
-    if (!map) throw new NotFoundException({ code: "MAP_NOT_FOUND", message: "Versão não encontrada" });
-    if (current.previewFileKey && this.storage) await this.storage.deleteFile(current.previewFileKey);
-    return map;
+    if (!result) throw new NotFoundException({ code: "MAP_NOT_FOUND", message: "Versão não encontrada" });
+    if (result.previewFileKey && this.storage) await this.storage.deleteFile(result.previewFileKey).catch(() => undefined);
+    return result.map;
   }
 
   async substituirMapaPadrao(eventId: string, mapId: string, actor: EventoActor): Promise<MapReplacementResult> {

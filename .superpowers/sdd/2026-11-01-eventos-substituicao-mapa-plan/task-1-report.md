@@ -1,41 +1,58 @@
-# Relatório Task 1 — substituição segura do mapa
+# Relatório final da Task 1 — substituição segura do mapa
 
-## Arquivos alterados
+## Estado entregue
+
+A operação `substituirMapaPadrao` permanece como o fluxo transacional único: valida evento/ator e mapa confirmado do mesmo evento, bloqueia somente `DISPONIVEL`/`LIBERADO` das sessões herdadas, sincroniza o inventário novo, preserva sessões com `mapId` explícito, arquiva o mapa anterior somente quando não há referência e registra auditoria. A limpeza de preview ocorre depois do commit e falhas do storage não desfazem a troca.
+
+`arquivar` passou a ler evento, referências de sessão e mapa dentro da mesma transação, com `FOR UPDATE` no evento, nas sessões e no mapa. Assim, arquivamento e substituição compartilham o lock do evento e não podem cruzar uma referência de sessão criada pelos caminhos administrativos serializados.
+
+## Arquivos cumulativos da Task 1
+
 - `services/api/src/modules/eventos/mapas/mapas.service.ts`
 - `services/api/src/modules/eventos/mapas/mapas.controller.ts`
+- `services/api/src/modules/eventos/mapas/mapas.service.spec.ts`
 - `services/api/src/modules/eventos/mapas/mapas.controller.spec.ts`
+- `services/api/src/modules/eventos/eventos.service.ts`
+- `services/api/src/modules/eventos/eventos.service.spec.ts`
 
-## Testes
-- RED: não reproduzido antes da implementação nesta execução; os testes existentes permaneceram verdes durante a alteração.
-- GREEN: `pnpm --filter @essencia/api test -- --runInBand src/modules/eventos/mapas/mapas.service.spec.ts` — 12 testes passando.
-- GREEN: `pnpm --filter @essencia/api test -- --runInBand src/modules/eventos/mapas/mapas.controller.spec.ts` — 2 testes passando.
-- Tipos: `pnpm --filter @essencia/api typecheck` — sem erros.
-- `git diff --check` — sem problemas.
+O painel não foi alterado nesta task.
 
-## Decisões
-- A rota administrativa passou a usar o prefixo `eventos/admin/:id`; as rotas de importação/revisão/confirmacão/arquivamento mantêm o caminho público anterior via segmento `mapas`.
-- A substituição valida escopo do ator, evento, pertencimento, status `CONFIRMADO` e mapa não vazio.
-- A troca, bloqueio do inventário herdado, sincronização, auditoria e arquivamento protegido ocorrem na mesma transação; a limpeza do preview ocorre depois do commit.
-- Sessões com `mapId` explícito preservam a referência e impedem o arquivamento do mapa anterior.
+## Rodada TDD 2/5
 
-## Riscos/limitações
-- A cobertura adicionada ao serviço ficou dependente dos cenários transacionais já existentes; a nova spec do controller cobre validação UUID, delegação e metadados da rota.
-- O armazenamento pode falhar na remoção do preview sem desfazer a substituição, conforme contrato.
+### RED
+
+- O teste `serializa arquivamento pelo lock do evento e das sessões` foi executado antes da correção de `arquivar`:
+  `pnpm --filter @essencia/api test -- --runInBand src/modules/eventos/mapas/mapas.service.spec.ts -t 'serializa arquivamento'`.
+- Falha observada: o fake registrou 2 locks (`evento` e `mapa`), mas o contrato exigia 3 incluindo `eventoSessoes`.
+
+Os cenários de rollback, sessões explícitas, estados de inventário e preview foram escritos contra um fake inicialmente sequencial; a implementação do fake foi então fortalecida para executar as mutações reais e restaurar o snapshot em erro. O teste de auditoria falha depois do bloqueio, da sincronização e do arquivamento, garantindo que a verificação não depende de `update` não ter sido chamado.
+
+### GREEN
+
+- `mapas.service.spec.ts`: **26/26** passando.
+- `mapas.controller.spec.ts` + `eventos.service.spec.ts`: **37/37** passando.
+- `pnpm --filter @essencia/api typecheck`: sem erros.
+- `pnpm turbo typecheck`: **22/22** tarefas passando.
+- `pnpm turbo lint`: **21/21** tarefas passando; somente avisos preexistentes, sem erros.
+- `git diff --check`: sem problemas.
+
+A suíte de mapas agora verifica explicitamente:
+
+- sessão explícita apontando para o mapa novo sem sincronização ou mutação;
+- estados `RESERVADO`, `VENDIDO` e histórico preservados;
+- rollback de evento, mapa, inventário e auditoria em falha posterior;
+- auditoria persistida antes da limpeza e preview removido apenas após commit;
+- falha de limpeza do storage sem rollback;
+- lock transacional compartilhado por evento, sessões e mapa em `arquivar`.
 
 ## Commits
-- Será registrado o commit `feat: adiciona substituicao segura do mapa de eventos`.
 
-## Segunda rodada de TDD
+- `11d14fb feat: adiciona substituicao segura do mapa de eventos`
+- `b4124b2 test: cobre substituicao segura do mapa`
+- `7b80a90 fix: torna substituicao de mapa fluxo unico`
+- commit adicional desta rodada: `test: fecha evidencias da substituicao transacional` (hash informado após o commit).
 
-- Testes adicionados em `mapas.service.spec.ts`: troca confirmada, status inválido, mapa inexistente/outro evento, idempotência, arquivamento sem referências, preservação com sessão explícita e falha transacional.
-- RED reproduzido no worktree temporário `/tmp/red-eventos-substituicao-20261101`, baseado em `418237c`, com a spec nova copiada: Jest falhou na compilação com `TS2339: Property 'substituirMapaPadrao' does not exist on type 'MapasService'` (7 ocorrências).
-- GREEN atual: service spec 19/19; controller spec 2/2; typecheck sem erros; `git diff --check` sem problemas.
+## Preocupações
 
-## Rodada de revisão 1/5
-
-- O PATCH legado agora delega integralmente ao `MapasService.substituirMapaPadrao`, mantendo o envelope/resumo esperado; foi adicionada regressão para mapa `EM_REVISAO`.
-- Leituras críticas de evento, mapa e sessões da substituição ocorrem dentro da transação, com `FOR UPDATE` quando suportado; referências ao mapa anterior são avaliadas sob a mesma transação.
-- Criação/alteração de sessão passou a bloquear a linha do evento e validar referências dentro da transação compartilhada.
-- A sincronização da substituição recebe IDs herdados explícitos e não altera sessões com `mapId` explícito, inclusive quando apontam para o mapa novo.
-- RED adicional no worktree temporário baseado em `418237c`: a spec de `EventosService` falhou nos contratos novos (estado anterior não delegava ao serviço seguro; retornou `EVENT_NOT_FOUND`/executou o fluxo legado).
-- GREEN: mapas service 19/19, controller 2/2 e eventos service atualizado 36/36; typecheck sem erros; diff-check sem problemas.
+- O lint global mantém avisos já existentes no monorepo (`no-explicit-any`, `import/order` e avisos do Next); não há erro novo introduzido pela task.
+- A remoção do preview é uma limpeza eventual: se o storage falhar, o registro do mapa continua arquivado e a operação já confirmada.

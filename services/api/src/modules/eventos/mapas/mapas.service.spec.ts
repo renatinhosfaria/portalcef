@@ -183,13 +183,194 @@ describe("MapasService", () => {
     expect(update).toHaveBeenCalled();
   });
 
+  it("serializa arquivamento pelo lock do evento e das sessões", async () => {
+    const dbModule = jest.requireMock("@essencia/db") as typeof import("@essencia/db");
+    const locks: Array<{ table: unknown; mode: string }> = [];
+    const rows = new Map<unknown, any[]>([
+      [dbModule.eventos, [{ id: "event-1", schoolId: "school-1", defaultMapId: null }]],
+      [dbModule.eventoSessoes, []],
+      [dbModule.eventoMapas, [{ id: "map-1", eventId: "event-1", status: "CONFIRMADO", previewFileKey: null }]],
+    ]);
+    const db: any = {
+      select: () => ({
+        from: (table: unknown) => ({
+          where: () => ({
+            for: jest.fn((mode: string) => {
+              locks.push({ table, mode });
+              return rows.get(table) ?? [];
+            }),
+            then: (resolve: (value: any[]) => unknown) => Promise.resolve(rows.get(table) ?? []).then(resolve),
+          }),
+        }),
+      }),
+      update: (table: unknown) => ({ set: () => ({ where: () => ({ returning: async () => [{ id: table === dbModule.eventoMapas ? "map-1" : "event-1", status: "ARQUIVADO" }] }) }) }),
+      insert: () => ({ values: () => ({ returning: async () => [{ id: "audit-1" }] }) }),
+      transaction: async (fn: any) => fn(db),
+    };
+    await new MapasService({ db } as any, undefined, {} as any).arquivar("event-1", "map-1", actor);
+    expect(locks).toHaveLength(3);
+    expect(locks.every((lock) => lock.mode === "update")).toBe(true);
+  });
+
   describe("substituirMapaPadrao", () => {
     const novoMapa = { id: "map-novo", eventId: "event-1", status: "CONFIRMADO", previewFileKey: null };
     const assento = { id: "seat-1", mapId: "map-novo", sellable: true };
 
+    function fakeTransacional(options: { falharNoSegundoAudit?: boolean; storage?: any } = {}) {
+      const dbModule = jest.requireMock("@essencia/db") as typeof import("@essencia/db");
+      const state: any = {
+        event: { id: "event-1", schoolId: "school-1", defaultMapId: "map-antigo" },
+        maps: [
+          { id: "map-novo", eventId: "event-1", status: "CONFIRMADO", previewFileKey: null },
+          { id: "map-antigo", eventId: "event-1", status: "CONFIRMADO", previewFileKey: "preview/antigo.svg" },
+        ],
+        sessions: [
+          { id: "sessao-herdada", eventId: "event-1", mapId: null },
+          { id: "sessao-explicita-novo", eventId: "event-1", mapId: "map-novo" },
+          { id: "sessao-explicita-antigo", eventId: "event-1", mapId: "map-antigo" },
+        ],
+        seats: [
+          { id: "seat-novo-1", mapId: "map-novo", sellable: true },
+          { id: "seat-novo-2", mapId: "map-novo", sellable: false },
+        ],
+        inventory: [
+          { id: "inv-herdada-disponivel", sessionId: "sessao-herdada", seatId: "seat-antigo-1", status: "DISPONIVEL" },
+          { id: "inv-herdada-liberado", sessionId: "sessao-herdada", seatId: "seat-antigo-2", status: "LIBERADO" },
+          { id: "inv-herdada-reservado", sessionId: "sessao-herdada", seatId: "seat-antigo-3", status: "RESERVADO", reservedByOrderId: "pedido-1" },
+          { id: "inv-herdada-vendido", sessionId: "sessao-herdada", seatId: "seat-antigo-4", status: "VENDIDO", soldAt: new Date("2026-10-31T12:00:00Z") },
+          { id: "inv-explicita-novo", sessionId: "sessao-explicita-novo", seatId: "seat-novo-1", status: "RESERVADO", reservedByOrderId: "pedido-2" },
+          { id: "inv-explicita-antigo", sessionId: "sessao-explicita-antigo", seatId: "seat-antigo-5", status: "VENDIDO", soldAt: new Date("2026-10-30T12:00:00Z") },
+          { id: "inv-historico", sessionId: "sessao-herdada", seatId: "seat-antigo-6", status: "BLOQUEADO", blockedReason: "historico" },
+        ],
+        audits: [],
+      };
+      let mapSelects = 0;
+      let inventorySelects = 0;
+      let auditCalls = 0;
+      const updates: any[] = [];
+      let committed = false;
+      const clone = () => JSON.parse(JSON.stringify(state));
+      const rowsFor = (table: unknown) => {
+        if (table === dbModule.eventos) return [state.event];
+        if (table === dbModule.eventoMapas) return [state.maps[mapSelects++]];
+        if (table === dbModule.eventoMapaAssentos) return state.seats;
+        if (table === dbModule.eventoSessoes) return state.sessions;
+        if (table === dbModule.eventoInventarioAssentos) {
+          inventorySelects += 1;
+          return state.inventory.filter((item: any) => item.sessionId === "sessao-herdada");
+        }
+        return [];
+      };
+      const db: any = {
+        select: () => ({
+          from: (table: unknown) => ({
+            where: () => {
+              const query: any = {
+                for: () => Promise.resolve(rowsFor(table)),
+                then: (resolve: (value: any[]) => unknown) => Promise.resolve(rowsFor(table)).then(resolve),
+              };
+              return query;
+            },
+          }),
+        }),
+        update: (table: unknown) => ({
+          set: (values: any) => {
+            let applied = false;
+            const apply = () => {
+              if (applied) return;
+              applied = true;
+                updates.push({ table, values });
+                if (table === dbModule.eventos) Object.assign(state.event, values);
+                if (table === dbModule.eventoMapas) Object.assign(state.maps.find((map: any) => map.id === "map-antigo"), values);
+                if (table === dbModule.eventoInventarioAssentos || values.status === "BLOQUEADO") {
+                  for (const item of state.inventory.filter((item: any) => item.sessionId === "sessao-herdada" && ["DISPONIVEL", "LIBERADO"].includes(item.status))) Object.assign(item, values);
+                }
+            };
+            return {
+              where: () => {
+                apply();
+                const result: any = {
+                  returning: async () => [{ id: table === dbModule.eventos ? "event-1" : "map-antigo", ...values }],
+                  then: (resolve: (value: unknown) => unknown) => Promise.resolve(undefined).then(resolve),
+                };
+                return result;
+              },
+            };
+          },
+        }),
+        insert: (table: unknown) => ({
+          values: async (values: any) => {
+            if (table === dbModule.eventoInventarioAssentos) state.inventory.push({ id: `inv-novo-${state.inventory.length}`, ...values });
+            if (table === dbModule.eventoAuditorias) {
+              auditCalls += 1;
+              if (options.falharNoSegundoAudit && auditCalls === 2) throw new Error("auditoria falhou");
+              state.audits.push(values);
+            }
+          },
+        }),
+        transaction: async (fn: any) => {
+          const snapshot = clone();
+          committed = false;
+          try {
+            const result = await fn(db);
+            committed = true;
+            return result;
+          } catch (error) {
+            Object.assign(state, snapshot);
+            throw error;
+          }
+        },
+      };
+      return { db, state, storage: options.storage, updates, get committed() { return committed; }, get inventorySelects() { return inventorySelects; } };
+    }
+
+    it("aplica a substituição preservando reservas, vendas, históricos e sessão explícita no mapa novo", async () => {
+      const storage = { deleteFile: jest.fn() };
+      const fake = fakeTransacional({ storage });
+      const result = await new MapasService({ db: fake.db } as any, storage as any, {} as any).substituirMapaPadrao("event-1", "map-novo", actor);
+      expect(fake.state.event.defaultMapId).toBe("map-novo");
+      expect(fake.state.maps.find((map: any) => map.id === "map-antigo").status).toBe("CONFIRMADO");
+      expect(fake.state.inventory).toEqual(expect.arrayContaining([
+        expect.objectContaining({ id: "inv-herdada-disponivel", status: "BLOQUEADO", blockedReason: "MAPA_PADRAO_ALTERADO" }),
+        expect.objectContaining({ id: "inv-herdada-liberado", status: "BLOQUEADO", blockedReason: "MAPA_PADRAO_ALTERADO" }),
+        expect.objectContaining({ id: "inv-herdada-reservado", status: "RESERVADO" }),
+        expect.objectContaining({ id: "inv-herdada-vendido", status: "VENDIDO" }),
+        expect.objectContaining({ id: "inv-historico", status: "BLOQUEADO", blockedReason: "historico" }),
+        expect.objectContaining({ id: "inv-explicita-novo", status: "RESERVADO" }),
+      ]));
+      expect(fake.state.inventory.filter((item: any) => item.sessionId === "sessao-explicita-novo")).toHaveLength(1);
+      expect(result.inheritedSessionIds).toEqual(["sessao-herdada"]);
+      expect(result.previousMapArchive).toEqual({ archived: false, code: "MAP_IN_USE", sessionIds: ["sessao-explicita-antigo"] });
+      expect(storage.deleteFile).not.toHaveBeenCalled();
+    });
+
+    it("desfaz todas as mutações do fake transacional quando a auditoria falha após o inventário", async () => {
+      const fake = fakeTransacional({ falharNoSegundoAudit: true });
+      const before = JSON.parse(JSON.stringify(fake.state));
+      await expect(new MapasService({ db: fake.db } as any, undefined, {} as any).substituirMapaPadrao("event-1", "map-novo", actor)).rejects.toThrow("auditoria falhou");
+      expect(fake.state).toEqual(before);
+      expect(fake.inventorySelects).toBe(1);
+    });
+
+    it("remove o preview somente depois do commit e não desfaz a troca se o storage falhar", async () => {
+      const storage = { deleteFile: jest.fn() };
+      const fake = fakeTransacional({ storage });
+      storage.deleteFile.mockImplementation(async () => {
+        expect(fake.committed).toBe(true);
+        throw new Error("storage indisponível");
+      });
+      fake.state.sessions = fake.state.sessions.filter((session: any) => session.id !== "sessao-explicita-antigo");
+      const result = await new MapasService({ db: fake.db } as any, storage as any, {} as any).substituirMapaPadrao("event-1", "map-novo", actor);
+      expect(result.previousMapArchive).toEqual({ archived: true, code: "ARCHIVED" });
+      expect(fake.state.event.defaultMapId).toBe("map-novo");
+      expect(storage.deleteFile).toHaveBeenCalledWith("preview/antigo.svg");
+      expect(fake.state.audits).toEqual(expect.arrayContaining([expect.objectContaining({ metadata: expect.objectContaining({ action: "substituir_mapa_padrao" }) })]));
+    });
+
     it("troca mapa confirmado, bloqueia herdadas, sincroniza inventário e arquiva o anterior", async () => {
       const updates: any[] = [];
       let selects = 0;
+      const audits: any[] = [];
       const db: any = {
         select: () => ({ from: () => ({ where: async () => {
           selects += 1;
@@ -205,7 +386,7 @@ describe("MapasService", () => {
                             : [];
         } }) }),
         update: (table: unknown) => ({ set: (values: any) => { updates.push({ table, values }); return { where: () => ({ returning: async () => [{ id: table === (jest.requireMock("@essencia/db") as any).eventos ? "event-1" : "map-antigo", status: values.status ?? "CONFIRMADO" }] }) }; } }),
-        insert: () => ({ values: () => ({ returning: async () => [{ id: "audit-1" }] }) }),
+        insert: () => ({ values: (values: any) => { audits.push(values); return { returning: async () => [{ id: "audit-1" }] }; } }),
         transaction: async (fn: any) => fn(db),
       };
       const maps = new MapasService({ db } as any, undefined, {} as any);
@@ -272,6 +453,71 @@ describe("MapasService", () => {
       };
       await expect(new MapasService({ db } as any, undefined, {} as any).substituirMapaPadrao("event-1", "map-novo", actor)).rejects.toThrow();
       expect(update).toHaveBeenCalledTimes(0);
+    });
+
+    it("não sincroniza sessão explícita que já aponta para o mapa novo", async () => {
+      let selects = 0;
+      const sincronizar = jest.fn().mockResolvedValue({ inventorySessionIds: ["sessao-herdada"], inventoryCreatedCount: 1 });
+      const db: any = {
+        select: () => ({ from: () => ({ where: async () => {
+          selects += 1;
+          return selects === 1 ? [{ id: "event-1", schoolId: "school-1", defaultMapId: "map-antigo" }] : selects === 2 ? [novoMapa] : selects === 3 ? [assento] : selects === 4 ? [{ id: "sessao-herdada", mapId: null }, { id: "sessao-explicita", mapId: "map-novo" }] : selects === 5 ? [{ id: "event-1", defaultMapId: "map-novo" }] : [];
+        } }) }),
+        update: () => ({ set: () => ({ where: () => ({ returning: async () => [{ id: "event-1" }] }) }) }),
+        insert: () => ({ values: () => ({ returning: async () => [{ id: "audit-1" }] }) }),
+        transaction: async (fn: any) => fn(db),
+      };
+      const maps = new MapasService({ db } as any, undefined, {} as any);
+      (maps as any).sincronizarInventarioMapa = sincronizar;
+      await maps.substituirMapaPadrao("event-1", "map-novo", actor);
+      expect(sincronizar).toHaveBeenCalledWith(db, "event-1", "map-novo", actor, ["sessao-herdada"]);
+    });
+
+    it("restaura evento, mapa, inventário e auditoria quando a transação falha", async () => {
+      const state = { defaultMapId: "map-antigo", previousStatus: "CONFIRMADO", inventoryStatus: "DISPONIVEL", audits: 0 };
+      let selects = 0;
+      const update = (table: unknown) => ({ set: (values: any) => ({ where: () => ({ returning: async () => {
+        if (table === (jest.requireMock("@essencia/db") as any).eventos) state.defaultMapId = values.defaultMapId;
+        if (values.status === "ARQUIVADO") state.previousStatus = "ARQUIVADO";
+        if (values.blockedReason) state.inventoryStatus = "BLOQUEADO";
+        return [{ id: "event-1", defaultMapId: state.defaultMapId, status: state.previousStatus }];
+      } }) }) });
+      const db: any = {
+        select: () => ({ from: () => ({ where: async () => {
+          selects += 1;
+          return selects === 1 ? [{ id: "event-1", schoolId: "school-1", defaultMapId: "map-antigo" }] : selects === 2 ? [novoMapa] : selects === 3 ? [assento] : selects === 4 ? [{ id: "sessao", mapId: null }] : selects === 5 ? [{ id: "event-1", defaultMapId: "map-novo" }] : selects === 6 ? [{ id: "sessao", mapId: null }] : selects === 7 ? [] : [];
+        } }) }),
+        update,
+        insert: () => ({ values: async () => { state.audits += 1; throw new Error("auditoria falhou"); } }),
+      };
+      db.transaction = async (fn: any) => {
+        const snapshot = { ...state };
+        try { return await fn(db); } catch (error) { Object.assign(state, snapshot); throw error; }
+      };
+      const maps = new MapasService({ db } as any, undefined, {} as any);
+      (maps as any).sincronizarInventarioMapa = jest.fn().mockResolvedValue({ inventorySessionIds: ["sessao"], inventoryCreatedCount: 1 });
+      await expect(maps.substituirMapaPadrao("event-1", "map-novo", actor)).rejects.toThrow("auditoria falhou");
+      expect(state).toEqual({ defaultMapId: "map-antigo", previousStatus: "CONFIRMADO", inventoryStatus: "DISPONIVEL", audits: 0 });
+    });
+
+    it("remove preview somente após commit e ignora falha de limpeza", async () => {
+      let selects = 0;
+      const audits: any[] = [];
+      const storage = { deleteFile: jest.fn().mockRejectedValue(new Error("storage indisponível")) };
+      const db: any = {
+        select: () => ({ from: () => ({ where: async () => {
+          selects += 1;
+          return selects === 1 ? [{ id: "event-1", schoolId: "school-1", defaultMapId: "map-antigo" }] : selects === 2 ? [novoMapa] : selects === 3 ? [assento] : selects === 4 ? [{ id: "sessao", mapId: null }] : selects === 5 ? [{ id: "map-antigo", eventId: "event-1", previewFileKey: "preview/antigo.svg", status: "CONFIRMADO" }] : [];
+        } }) }),
+        update: () => ({ set: () => ({ where: () => ({ returning: async () => [{ id: "event-1" }] }) }) }),
+        insert: () => ({ values: (values: any) => { audits.push(values); return { returning: async () => [{ id: "audit-1" }] }; } }),
+        transaction: async (fn: any) => fn(db),
+      };
+      const maps = new MapasService({ db } as any, storage as any, {} as any);
+      (maps as any).sincronizarInventarioMapa = jest.fn().mockResolvedValue({ inventorySessionIds: ["sessao"], inventoryCreatedCount: 1 });
+      await expect(maps.substituirMapaPadrao("event-1", "map-novo", actor)).resolves.toMatchObject({ previousMapArchive: { code: "ARCHIVED" } });
+      expect(storage.deleteFile).toHaveBeenCalledWith("preview/antigo.svg");
+      expect(audits).toEqual(expect.arrayContaining([expect.objectContaining({ metadata: expect.objectContaining({ action: "substituir_mapa_padrao" }) })]));
     });
   });
 });
