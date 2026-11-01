@@ -44,9 +44,11 @@ async function exercitarViewport(browser, nome, viewport) {
   const contexto = await browser.newContext({ viewport, reducedMotion: "reduce" });
   const pagina = await contexto.newPage();
   const errosConsole = [];
+  const respostasErro = [];
   const postsReserva = [];
-  pagina.on("console", (mensagem) => { if (mensagem.type() === "error") errosConsole.push(mensagem.text()); });
+  pagina.on("console", (mensagem) => { if (mensagem.type() === "error") errosConsole.push(`${mensagem.text()} [${mensagem.location().url}]`); });
   pagina.on("pageerror", (erro) => errosConsole.push(erro.message));
+  pagina.on("response", (response) => { if (response.status() >= 400) respostasErro.push(`${response.status()} ${response.url()}`); });
   pagina.on("request", (request) => {
     if (request.method() === "POST" && new URL(request.url()).pathname === "/api/eventos/public/reservas") postsReserva.push(request.url());
   });
@@ -66,8 +68,9 @@ async function exercitarViewport(browser, nome, viewport) {
   if (await grupos.count() !== 2) throw new Error(`${nome}: agrupamento de sessões incorreto`);
   const primeiroGrupo = await grupos.nth(0).innerText();
   if (primeiroGrupo.indexOf("13:00") === -1 || primeiroGrupo.indexOf("15:00") === -1 || primeiroGrupo.indexOf("13:00") > primeiroGrupo.indexOf("15:00")) throw new Error(`${nome}: ordenação de sessões incorreta`);
+  const errosAntesMapa = errosConsole.length;
+  const respostasAntesMapa = respostasErro.length;
   await acessar("/evento/festival-demo/sessao/s1?ticketTypeId=t1");
-  errosConsole.length = 0;
   const lista = pagina.getByRole("button", { name: "Lista", exact: true });
   const mapaBotao = pagina.getByRole("button", { name: "Mapa", exact: true });
   const modoEsperado = viewport.width < 768 ? "lista" : "mapa";
@@ -76,6 +79,8 @@ async function exercitarViewport(browser, nome, viewport) {
     const botao = grupo?.querySelector(`button[aria-pressed="true"]`);
     return botao?.textContent?.trim().toLowerCase() === esperado;
   }, modoEsperado);
+  const errosMapaInicial = errosConsole.slice(errosAntesMapa);
+  if (errosMapaInicial.length) throw new Error(`${nome}: erros de console no carregamento inicial do mapa (${errosMapaInicial.join(" | ")}; rede: ${respostasErro.slice(respostasAntesMapa).join(" | ")})`);
   if (await lista.getAttribute("aria-pressed") !== String(modoEsperado === "lista") || await mapaBotao.getAttribute("aria-pressed") !== String(modoEsperado === "mapa")) throw new Error(`${nome}: modo inicial não respeita o viewport`);
   await (modoEsperado === "lista" ? mapaBotao : lista).click();
   if (await lista.getAttribute("aria-pressed") !== String(modoEsperado !== "lista") || await mapaBotao.getAttribute("aria-pressed") !== String(modoEsperado === "lista")) throw new Error(`${nome}: alternância para o modo oposto falhou`);
@@ -93,7 +98,7 @@ async function exercitarViewport(browser, nome, viewport) {
   const transformReduzido = await grupoSvg.getAttribute("transform");
   await pagina.getByRole("button", { name: "Centralizar mapa" }).click();
   const transformCentralizado = await grupoSvg.getAttribute("transform");
-  if (!transformInicial || !transformAumentado || transformAumentado === transformInicial || !transformReduzido || transformReduzido === transformAumentado || !transformCentralizado?.includes("scale(1)")) throw new Error(`${nome}: controles de zoom não alteram/restauram o transform`);
+  if (!transformInicial || !transformAumentado || transformAumentado === transformInicial || !transformReduzido || transformReduzido === transformAumentado || transformCentralizado !== transformReduzido || !transformCentralizado.includes("scale(1)")) throw new Error(`${nome}: controles de zoom não alteram/restauram o transform (${JSON.stringify({ transformInicial, transformAumentado, transformReduzido, transformCentralizado })})`);
 
   const fileira = pagina.getByRole("combobox", { name: "Escolha uma fileira" });
   await fileira.selectOption("B");
@@ -105,15 +110,20 @@ async function exercitarViewport(browser, nome, viewport) {
   if (!transformFileiraA || !transformFileiraB || transformFileiraA === transformFileiraB) throw new Error(`${nome}: foco do mapa não acompanha a fileira`);
 
   if (await pagina.getByRole("button", { name: /A-2/ }).count() || await pagina.getByRole("button", { name: /B-1/ }).count() || await pagina.getByRole("button", { name: /B-2/ }).count()) throw new Error(`${nome}: assento indisponível acionável`);
-  const assentoDisponivel = pagina.getByRole("button", { name: /A-1, disponível/ }).first();
+  const assentoDisponivel = svg.locator('[data-seat-id="a1"][role="button"]');
   await assentoDisponivel.focus();
   if (!await assentoDisponivel.evaluate((element) => document.activeElement === element)) throw new Error(`${nome}: foco de teclado ausente`);
-  await assentoDisponivel.press("Enter");
+  const pontoClique = await assentoDisponivel.boundingBox();
+  if (!pontoClique) throw new Error(`${nome}: geometria do assento disponível ausente`);
+  await pagina.mouse.click(pontoClique.x + pontoClique.width / 2, pontoClique.y + pontoClique.height / 2);
   await pagina.waitForTimeout(30);
-  if (await pagina.getByRole("button", { name: /A-1, disponível/ }).getAttribute("aria-pressed") !== "true") throw new Error(`${nome}: seleção de assento disponível falhou`);
-  const caixaDisponivel = await pagina.getByRole("button", { name: /A-1/ }).boundingBox();
+  const assentoDisponivelSelecionado = await assentoDisponivel.getAttribute("aria-pressed");
+  if (assentoDisponivelSelecionado !== "true") throw new Error(`${nome}: seleção de assento disponível falhou (aria-pressed=${assentoDisponivelSelecionado})`);
+  const caixaDisponivel = await assentoDisponivel.boundingBox();
   const caixaBloqueado = await pagina.getByRole("img", { name: /Assento B-2/ }).boundingBox();
   if (!caixaDisponivel || !caixaBloqueado || caixaDisponivel.width <= 0 || caixaDisponivel.height <= 0 || caixaBloqueado.width <= 0 || caixaBloqueado.height <= 0 || caixaDisponivel.x === caixaBloqueado.x || caixaDisponivel.y === caixaBloqueado.y) throw new Error(`${nome}: geometria do mapa não aplicada`);
+  const overflowMapa = await pagina.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
+  if (overflowMapa) throw new Error(`${nome}: overflow horizontal no mapa visível`);
 
   await lista.click();
   const listaAssentos = pagina.getByRole("list", { name: "Assentos da fileira A" });
@@ -125,8 +135,8 @@ async function exercitarViewport(browser, nome, viewport) {
   const alinhamento = { resumo: await pagina.getByRole("region", { name: "Resumo dos assentos selecionados" }).count(), href: hrefCheckout, a1: await listaAssentos.getByText("Assento A-1").count(), a3: await listaAssentos.getByText("Assento A-3").count(), tipoA1: await pagina.getByRole("combobox", { name: /Tipo de ingresso do assento A-1/ }).inputValue(), tipoA3: await pagina.getByRole("combobox", { name: /Tipo de ingresso do assento A-3/ }).inputValue() };
   if (!alinhamento.resumo || !hrefCheckout?.includes("sessionId=s1") || !hrefCheckout.includes("assentos=a1%2Ca3") || !hrefCheckout.includes("ticketTypeIds=t1%2Ct2") || !alinhamento.a1 || !alinhamento.a3 || alinhamento.tipoA1 !== "t1" || alinhamento.tipoA3 !== "t2") throw new Error(`${nome}: resumo, sessão, assentos e tipos desalinhados (${JSON.stringify(alinhamento)})`);
   if (postsReserva.length) throw new Error(`${nome}: seleção acionou POST de reserva`);
-  const overflow = await pagina.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
-  if (overflow) throw new Error(`${nome}: overflow horizontal no mapa`);
+  const overflowLista = await pagina.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
+  if (overflowLista) throw new Error(`${nome}: overflow horizontal na lista`);
   const resumoFixo = pagina.getByRole("region", { name: "Resumo fixo da seleção" });
   if (await resumoFixo.count()) {
     const caixaResumo = await resumoFixo.boundingBox();
@@ -145,7 +155,8 @@ async function exercitarViewport(browser, nome, viewport) {
   await mapaBotao.click();
   const assentoConflito = pagina.getByRole("button", { name: /A-1, disponível/ }).first();
   if (!await pagina.getByRole("alert").filter({ hasText: "Assento A-2 ficou indisponível" }).count() || !await assentoConflito.count() || await assentoConflito.getAttribute("aria-pressed") !== "true" || !await pagina.getByRole("img", { name: /A-2, indisponível/ }).count() || await pagina.getByRole("button", { name: /A-2/ }).count()) throw new Error(`${nome}: conflito não reidrata seleção no mapa`);
-  if (errosConsole.length) throw new Error(`${nome}: erros de console (${errosConsole.join(" | ")})`);
+  const errosMapa = errosConsole.slice(errosAntesMapa);
+  if (errosMapa.length) throw new Error(`${nome}: erros de console durante a experiência do mapa (${errosMapa.join(" | ")}; rede: ${respostasErro.slice(respostasAntesMapa).join(" | ")})`);
   await acessar("/checkout?assentos=a1%2Cb2&ticketTypeIds=t1%2Ct2&sessionId=s1&slug=festival-demo");
   if (!await pagina.getByText("Assento 1: Inteira · R$ 50,00").count() || !await pagina.getByText("Assento 2: Meia · R$ 25,00").count() || !await pagina.getByLabel("Nome completo").count()) throw new Error(`${nome}: checkout incompleto`);
   await acessar("/pedido/PENDENTE?retorno=sucesso");
