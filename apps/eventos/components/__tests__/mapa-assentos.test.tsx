@@ -144,11 +144,11 @@ describe("mapa público de assentos", () => {
 
   it("torna somente disponíveis selecionáveis e descreve acessibilidade por texto", () => {
     const html = renderToStaticMarkup(<MapaAssentos map={mapa} checkoutHref="/checkout" ticketTypes={[tipoInteira]} />);
-    expect(html).toContain('aria-label="Assento A-1, disponível, assento acessível"');
-    expect(html).toContain('aria-label="Assento A-2, reservado'); expect(html).toContain('aria-disabled="true"');
-    expect(html).toContain('aria-label="Assento B-1, vendido');
-    expect(html).toContain('aria-label="Assento B-2, bloqueado');
-    expect(html).toContain("Assento A-1, disponível, assento acessível");
+    expect(html).toContain('aria-label="Assento A-1, disponível, categoria plateia, assento acessível"');
+    expect(html).toContain('aria-label="Assento A-2, reservado, categoria plateia'); expect(html).toContain('aria-disabled="true"');
+    expect(html).toContain('aria-label="Assento B-1, vendido, assento não acessível, categoria não informada');
+    expect(html).toContain('aria-label="Assento B-2, bloqueado, assento não acessível, categoria não informada');
+    expect(html).toContain("Assento A-1, disponível, categoria plateia, assento acessível");
     expect(html).toContain("acessível");
     expect(html).toContain("Reservado");
     expect(html).toContain("Vendido");
@@ -248,6 +248,6 @@ describe("mapa público de assentos", () => {
     const checkout = readFileSync("app/checkout/page.tsx", "utf8");
     const sessionPage = readFileSync("app/evento/[slug]/sessao/[sessionId]/page.tsx", "utf8");
     expect(checkout).toContain("ticketTypeIds");
-    expect(checkout).toContain("split(\",\")");
+    expect(checkout).toContain("lerListaQuery");
     expect(sessionPage).toContain("if (!session || session.availability !== \"available\"");
   });

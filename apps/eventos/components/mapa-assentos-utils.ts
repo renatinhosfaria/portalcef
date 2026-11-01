@@ -55,8 +55,14 @@ export function reidratarSelecaoAssentos(map: PublicMap, seatIds: string[], tick
   const selection: AssentoSelecionado[] = [];
   const unavailableSeatIds: string[] = [];
   let invalid = invalidInput;
+  const seenSeatIds = new Set<string>();
   for (let index = 0; index < seatIds.length; index += 1) {
     const seatId = seatIds[index];
+    if (seenSeatIds.has(seatId)) {
+      invalid = true;
+      continue;
+    }
+    seenSeatIds.add(seatId);
     const seat = seatsById.get(seatId);
     if (!seat) {
       invalid = true;

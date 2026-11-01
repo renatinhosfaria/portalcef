@@ -1,3 +1,15 @@
+export function lerListaQuery(valor?: string): { values: string[]; invalid: boolean } {
+  if (!valor) return { values: [], invalid: false };
+  try {
+    return {
+      values: valor.split(",").map((item) => decodeURIComponent(item)).filter(Boolean),
+      invalid: false,
+    };
+  } catch {
+    return { values: [], invalid: true };
+  }
+}
+
 export function normalizarTiposPorAssento(seatIds: string[], ticketTypeIds: string[]): string[] {
   if (seatIds.length === 0) {
     if (ticketTypeIds.length === 0) return [];

@@ -1,24 +1,27 @@
+import React from "react";
 import { FormularioCheckout } from "../../components/formulario-checkout";
 import { listarPoliticasPublicas, listarSessoesPublicas, obterEventoPublico } from "../../lib/eventos-api";
-import { montarHrefRetornoMapa, normalizarTiposPorAssento } from "../../lib/checkout-utils";
+import { lerListaQuery, montarHrefRetornoMapa, normalizarTiposPorAssento } from "../../lib/checkout-utils";
 
 type Params = Promise<{ assentos?: string; ticketTypeIds?: string; ticketTypeId?: string; sessionId?: string; slug?: string }>;
 
-function lerLista(valor?: string) {
-  return valor?.split(",").map((item) => decodeURIComponent(item)).filter(Boolean) ?? [];
-}
-
 export default async function Page({ searchParams }: { searchParams: Params }) {
   const query = await searchParams;
-  const seatIds = lerLista(query.assentos);
-  const ticketTypeIdsInformados = lerLista(query.ticketTypeIds);
+  const assentosInformados = lerListaQuery(query.assentos);
+  const tiposInformados = lerListaQuery(query.ticketTypeIds);
+  const seatIds = assentosInformados.values;
+  const ticketTypeIdsInformados = tiposInformados.values;
   if (!ticketTypeIdsInformados.length && query.ticketTypeId) ticketTypeIdsInformados.push(query.ticketTypeId);
   let ticketTypeIds: string[] = [];
-  let erroSelecao: string | null = null;
-  try {
-    ticketTypeIds = normalizarTiposPorAssento(seatIds, ticketTypeIdsInformados);
-  } catch (error) {
-    erroSelecao = error instanceof Error ? error.message : "Não foi possível validar os tipos de ingresso selecionados.";
+  let erroSelecao: string | null = assentosInformados.invalid || tiposInformados.invalid
+    ? "Não foi possível interpretar a seleção de assentos informada."
+    : null;
+  if (!erroSelecao) {
+    try {
+      ticketTypeIds = normalizarTiposPorAssento(seatIds, ticketTypeIdsInformados);
+    } catch (error) {
+      erroSelecao = error instanceof Error ? error.message : "Não foi possível validar os tipos de ingresso selecionados.";
+    }
   }
   const [politicas, evento, sessoes] = query.slug ? await Promise.all([
     listarPoliticasPublicas(query.slug).catch(() => []),

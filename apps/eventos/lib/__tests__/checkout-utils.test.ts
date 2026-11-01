@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
-import { montarHrefRetornoMapa } from "../checkout-utils";
+import { lerListaQuery, montarHrefRetornoMapa } from "../checkout-utils";
 
 describe("utilidades do checkout", () => {
+  it("trata percent-encoding inválido sem lançar e marca a consulta como inválida", () => {
+    expect(lerListaQuery("%")).toEqual({ values: [], invalid: true });
+    expect(lerListaQuery("s-1,s-2")).toEqual({ values: ["s-1", "s-2"], invalid: false });
+  });
+
   it("monta a rota do mapa preservando a ordem dos assentos e dos tipos", () => {
     expect(montarHrefRetornoMapa({
       slug: "ballet",

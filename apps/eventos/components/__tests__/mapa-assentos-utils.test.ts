@@ -61,6 +61,14 @@ describe("utilidades do mapa de assentos", () => {
     expect(reidratarSelecaoAssentos(map, ["s-1", "s-2"], []).invalid).toBe(true);
   });
 
+  it("marca IDs duplicados como inválidos e não duplica a seleção", () => {
+    expect(reidratarSelecaoAssentos(map, ["s-1", "s-1"], ["inteira", "inteira"])).toEqual({
+      selection: [{ seatId: "s-1", ticketTypeId: "inteira", label: "A-1", accessible: true }],
+      unavailableSeatIds: [],
+      invalid: true,
+    });
+  });
+
   it("mantém a ordem ao serializar a seleção", () => {
     expect(serializarSelecaoAssentos([
       { seatId: "s-2", ticketTypeId: "meia" },

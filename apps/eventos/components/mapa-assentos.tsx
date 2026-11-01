@@ -18,7 +18,7 @@ export function classeEstadoAssento(state: PublicSeat["state"]): string {
 const estadoLabel: Record<PublicSeat["state"], string> = { available: "disponível", reserved: "reservado", sold: "vendido", blocked: "bloqueado" };
 
 function descricaoAssento(seat: PublicSeat) {
-  return `Assento ${seat.rowLabel}-${seat.seatNumber}, ${estadoLabel[seat.state]}${seat.accessible ? ", assento acessível" : ""}`;
+  return `Assento ${seat.rowLabel}-${seat.seatNumber}, ${estadoLabel[seat.state]}, categoria ${categoriaAssento(seat)}${seat.accessible ? ", assento acessível" : ", assento não acessível"}`;
 }
 
 function categoriaAssento(seat: PublicSeat) {
