@@ -1,6 +1,6 @@
 import { BadRequestException } from "@nestjs/common";
 import "reflect-metadata";
-jest.mock("@essencia/db", () => ({ eventos: {}, eventoMapas: {}, eventoSessoes: {}, eventoImportacoesMapa: {}, eventoDeteccoesMapa: {}, eventoMapaAssentos: {}, eventoInventarioAssentos: {}, eventoAuditorias: {}, eq: jest.fn(), and: jest.fn() }));
+jest.mock("@essencia/db", () => ({ eventos: {}, eventoMapas: {}, eventoSessoes: {}, eventoImportacoesMapa: {}, eventoDeteccoesMapa: {}, eventoMapaAssentos: {}, eventoInventarioAssentos: {}, eventoAuditorias: {}, eq: jest.fn(), and: jest.fn(), inArray: jest.fn() }));
 import { MapasService } from "./mapas.service";
 import { StorageService } from "../../../common/storage/storage.service";
 
@@ -181,5 +181,97 @@ describe("MapasService", () => {
     const result = await maps.arquivar("event-1", "map-1", actor);
     expect(result.status).toBe("ARQUIVADO");
     expect(update).toHaveBeenCalled();
+  });
+
+  describe("substituirMapaPadrao", () => {
+    const novoMapa = { id: "map-novo", eventId: "event-1", status: "CONFIRMADO", previewFileKey: null };
+    const assento = { id: "seat-1", mapId: "map-novo", sellable: true };
+
+    it("troca mapa confirmado, bloqueia herdadas, sincroniza inventário e arquiva o anterior", async () => {
+      const updates: any[] = [];
+      let selects = 0;
+      const db: any = {
+        select: () => ({ from: () => ({ where: async () => {
+          selects += 1;
+          return selects === 1 ? [{ id: "event-1", schoolId: "school-1", defaultMapId: "map-antigo" }]
+            : selects === 2 ? [novoMapa]
+              : selects === 3 ? [assento]
+                : selects === 4 ? [{ id: "sessao-herdada", eventId: "event-1", mapId: null }]
+                  : selects === 5 ? [{ id: "event-1", schoolId: "school-1", defaultMapId: "map-novo" }]
+                    : selects === 6 ? [{ id: "sessao-herdada", eventId: "event-1", mapId: null }]
+                      : selects === 7 ? [assento]
+                        : selects === 8 ? []
+                          : selects === 9 ? [{ id: "map-antigo", eventId: "event-1", status: "CONFIRMADO", previewFileKey: null }]
+                            : [];
+        } }) }),
+        update: (table: unknown) => ({ set: (values: any) => { updates.push({ table, values }); return { where: () => ({ returning: async () => [{ id: table === (jest.requireMock("@essencia/db") as any).eventos ? "event-1" : "map-antigo", status: values.status ?? "CONFIRMADO" }] }) }; } }),
+        insert: () => ({ values: () => ({ returning: async () => [{ id: "audit-1" }] }) }),
+        transaction: async (fn: any) => fn(db),
+      };
+      const maps = new MapasService({ db } as any, undefined, {} as any);
+      const result = await maps.substituirMapaPadrao("event-1", "map-novo", actor);
+      expect(result.previousMapId).toBe("map-antigo");
+      expect(result.inheritedSessionIds).toEqual(["sessao-herdada"]);
+      expect(result.previousMapArchive).toEqual({ archived: true, code: "ARCHIVED" });
+      expect(updates.some((item) => item.values.blockedReason === "MAPA_PADRAO_ALTERADO")).toBe(true);
+    });
+
+    it.each([
+      ["EM_REVISAO", "MAP_NOT_CONFIRMED"],
+      ["ARQUIVADO", "MAP_NOT_CONFIRMED"],
+    ])("rejeita mapa com status %s", async (status, code) => {
+      let call = 0;
+      const db: any = { select: () => ({ from: () => ({ where: async () => ++call === 1 ? [{ id: "event-1", schoolId: "school-1", defaultMapId: null }] : [{ id: "map-novo", eventId: "event-1", status }] }) }) };
+      const maps = new MapasService({ db } as any, undefined, {} as any);
+      await expect(maps.substituirMapaPadrao("event-1", "map-novo", actor)).rejects.toMatchObject({ response: { code } });
+    });
+
+    it("rejeita mapa inexistente ou de outro evento", async () => {
+      let call = 0;
+      const db: any = { select: () => ({ from: () => ({ where: async () => ++call === 1 ? [{ id: "event-1", schoolId: "school-1" }] : [] }) }) };
+      const maps = new MapasService({ db } as any, undefined, {} as any);
+      await expect(maps.substituirMapaPadrao("event-1", "inexistente", actor)).rejects.toMatchObject({ response: { code: "MAP_NOT_FOUND" } });
+      call = 0;
+      const outroDb: any = { select: () => ({ from: () => ({ where: async () => ++call === 1 ? [{ id: "event-1", schoolId: "school-1" }] : [{ id: "map-novo", eventId: "event-2", status: "CONFIRMADO" }] }) }) };
+      await expect(new MapasService({ db: outroDb } as any, undefined, {} as any).substituirMapaPadrao("event-1", "map-novo", actor)).rejects.toMatchObject({ response: { code: "MAP_EVENT_MISMATCH" } });
+    });
+
+    it("é idempotente quando o mapa já é o padrão", async () => {
+      let call = 0;
+      const update = jest.fn();
+      const db: any = { select: () => ({ from: () => ({ where: async () => ++call === 1 ? [{ id: "event-1", schoolId: "school-1", defaultMapId: "map-novo" }] : [{ ...novoMapa }] }) }), update };
+      const result = await new MapasService({ db } as any, undefined, {} as any).substituirMapaPadrao("event-1", "map-novo", actor);
+      expect(result.previousMapArchive.code).toBe("MAP_IN_USE");
+      expect(update).not.toHaveBeenCalled();
+    });
+
+    it("preserva mapa anterior quando uma sessão tem referência explícita", async () => {
+      let selects = 0;
+      const updates: any[] = [];
+      const db: any = {
+        select: () => ({ from: () => ({ where: async () => {
+          selects += 1;
+          return selects === 1 ? [{ id: "event-1", schoolId: "school-1", defaultMapId: "map-antigo" }] : selects === 2 ? [novoMapa] : selects === 3 ? [assento] : selects === 4 ? [{ id: "sessao-explicita", mapId: "map-antigo" }] : selects === 5 ? [{ id: "event-1", defaultMapId: "map-novo" }] : selects === 6 ? [{ id: "sessao-explicita", mapId: "map-antigo" }] : selects === 7 ? [] : selects === 8 ? [assento] : [];
+        } }) }),
+        update: () => ({ set: (values: any) => { updates.push(values); return { where: () => ({ returning: async () => [{ id: "event-1" }] }) }; } }),
+        insert: () => ({ values: () => ({ returning: async () => [{ id: "audit-1" }] }) }),
+        transaction: async (fn: any) => fn(db),
+      };
+      const result = await new MapasService({ db } as any, undefined, {} as any).substituirMapaPadrao("event-1", "map-novo", actor);
+      expect(result.previousMapArchive).toEqual({ archived: false, code: "MAP_IN_USE", sessionIds: ["sessao-explicita"] });
+      expect(updates.some((values) => values.status === "ARQUIVADO")).toBe(false);
+    });
+
+    it("propaga falha da sincronização e não conclui a troca", async () => {
+      const update = jest.fn(() => ({ set: () => ({ where: () => ({ returning: async () => [{ id: "event-1" }] }) }) }));
+      let call = 0;
+      const db: any = {
+        select: () => ({ from: () => ({ where: async () => ++call === 1 ? [{ id: "event-1", schoolId: "school-1", defaultMapId: "map-antigo" }] : ++call === 3 ? [{ id: "seat-1", mapId: "map-novo" }] : call === 2 ? [novoMapa] : [{ id: "sessao", mapId: null }] }) }),
+        update,
+        transaction: async (fn: any) => fn({ ...db, insert: () => ({ values: async () => { throw new Error("inventário falhou"); } }) }),
+      };
+      await expect(new MapasService({ db } as any, undefined, {} as any).substituirMapaPadrao("event-1", "map-novo", actor)).rejects.toThrow();
+      expect(update).toHaveBeenCalledTimes(0);
+    });
   });
 });

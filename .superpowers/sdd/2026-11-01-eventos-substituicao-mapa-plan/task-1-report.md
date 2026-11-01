@@ -24,3 +24,9 @@
 
 ## Commits
 - Será registrado o commit `feat: adiciona substituicao segura do mapa de eventos`.
+
+## Segunda rodada de TDD
+
+- Testes adicionados em `mapas.service.spec.ts`: troca confirmada, status inválido, mapa inexistente/outro evento, idempotência, arquivamento sem referências, preservação com sessão explícita e falha transacional.
+- RED reproduzido no worktree temporário `/tmp/red-eventos-substituicao-20261101`, baseado em `418237c`, com a spec nova copiada: Jest falhou na compilação com `TS2339: Property 'substituirMapaPadrao' does not exist on type 'MapasService'` (7 ocorrências).
+- GREEN atual: service spec 19/19; controller spec 2/2; typecheck sem erros; `git diff --check` sem problemas.
