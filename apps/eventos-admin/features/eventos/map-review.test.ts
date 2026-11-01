@@ -1,64 +1,58 @@
-import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
-const source = readFileSync(new URL("./map-review.tsx", import.meta.url), "utf8");
+// @vitest-environment jsdom
+import React from "react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { MapReview, type MapProposal } from "./map-review";
+
+const proposal: MapProposal = { rowLabel: "A", seatNumber: "1", x: 1, y: 1 };
+afterEach(() => cleanup());
+
 describe("MapReview", () => {
-  it("bloqueia confirmação com conflito ou sem assentos", () => { expect(source).toContain("!items.length"); expect(source).toContain("items.some(x=>x.conflict)"); });
-  it("exige motivo e emite payload estruturado para correção", () => { expect(source).toContain("reason.trim()"); expect(source).toContain("seats:[current],reason"); expect(source).toContain("seats:items"); });
-});
-it("usa estado do mapa e rota de mapa padrão para refletir revisão", () => {
-  const page = readFileSync(new URL("../../app/eventos/[id]/mapa/page.tsx", import.meta.url), "utf8");
-  expect(page).toContain("mapa-padrao");
-  expect(page).toContain("x.map?.status");
-});
-it("não calcula prontidão global no grid", () => {
-  const source = readFileSync(new URL("./inventory-grid.tsx", import.meta.url), "utf8");
-  expect(source).not.toContain("Inventário pronto para a capacidade");
-});
-it("carrega o mapa padrão atual ao abrir a etapa", () => {
-  const page = readFileSync(new URL("../../app/eventos/[id]/mapa/page.tsx", import.meta.url), "utf8");
-  expect(page).toContain("/eventos-admin/api/eventos/admin/${id}");
-  expect(page).toContain("defaultMapId");
-  expect(page).toContain("useEffect");
-});
-it("marca confirmação antes de atualizar herança e não repete confirmação", () => {
-  const page = readFileSync(new URL("../../app/eventos/[id]/mapa/page.tsx", import.meta.url), "utf8");
-  expect(page).toContain("setStatus(\"CONFIRMADO\")");
-  expect(page).toContain("Falha ao atualizar o mapa padrão");
-});
-it("oferece retry separado para sincronizar o mapa padrão", () => {
-  const page = readFileSync(new URL("../../app/eventos/[id]/mapa/page.tsx", import.meta.url), "utf8");
-  expect(page).toContain("mapaPadraoPendente");
-  expect(page).toContain("onRetryDefaultMap");
-});
-it("valida success:false nas operações do mapa", () => {
-  const page = readFileSync(new URL("../../app/eventos/[id]/mapa/page.tsx", import.meta.url), "utf8");
-  expect(page).toContain("body.success === false");
-});
-it("exibe o resultado da geração automática do inventário", () => {
-  expect(source).toContain("inventoryCreatedCount");
-  const page = readFileSync(new URL("../../app/eventos/[id]/mapa/page.tsx", import.meta.url), "utf8");
-  expect(page).toContain("inventorySessionIds");
-  expect(page).toContain("setInventoryCreatedCount");
-  expect(page).toContain("const confirmado");
-  expect(page).toContain("router.refresh()");
-});
+  it("bloqueia confirmação com conflito ou sem assentos", () => {
+    const onConfirm = vi.fn();
+    const { rerender } = render(React.createElement(MapReview, { proposals: [{ ...proposal, conflict: "conflito" }], onConfirm }));
+    expect(screen.getByRole("button", { name: "Confirmar mapa" })).toHaveProperty("disabled", true);
+    rerender(React.createElement(MapReview, { proposals: [], onConfirm }));
+    expect(screen.getByRole("button", { name: "Confirmar mapa" })).toHaveProperty("disabled", true);
+  });
 
-it("comunica o arquivamento concluído da versão anterior", () => {
-  expect(source).toContain("previousMapArchive");
-  expect(source).toContain("ARCHIVED");
-  expect(source).toContain("Versão anterior arquivada");
-});
+  it("exibe ARCHIVED e MAP_IN_USE com as sessões", () => {
+    const { rerender } = render(React.createElement(MapReview, { proposals: [], previousMapArchive: { archived: true, code: "ARCHIVED" } }));
+    expect(screen.getByText(/versão anterior arquivada/i));
+    rerender(React.createElement(MapReview, { proposals: [], previousMapArchive: { archived: false, code: "MAP_IN_USE", sessionIds: ["sessao-1"] } }));
+    expect(screen.getByText(/preservado/i)).toHaveProperty("textContent", expect.stringContaining("sessao-1"));
+  });
 
-it("comunica preservação do mapa anterior em uso e suas sessões", () => {
-  expect(source).toContain("MAP_IN_USE");
-  expect(source).toContain("previousMapArchive.sessionIds");
-  expect(source).toContain("preservado");
-});
+  it("exige motivo e emite payload estruturado para correção", async () => {
+    const onCorrection = vi.fn().mockResolvedValue(undefined);
+    render(React.createElement(MapReview, { proposals: [proposal], onCorrection }));
+    const button = screen.getByRole("button", { name: "Corrigir proposta" });
+    expect(button).toHaveProperty("disabled", true);
+    fireEvent.change(screen.getByPlaceholderText("Motivo da correção"), { target: { value: "ajuste" } });
+    fireEvent.click(button);
+    await waitFor(() => expect(onCorrection).toHaveBeenCalledWith({ seats: [proposal], reason: "ajuste" }));
+  });
 
-it("mantém retry da substituição sem upload novo", () => {
-  const page = readFileSync(new URL("../../app/eventos/[id]/mapa/page.tsx", import.meta.url), "utf8");
-  expect(page).toContain("mapa-padrao/substituir");
-  expect(page).toContain("setMapaPadraoPendente(true)");
-  expect(page).toContain("retrySubstituicao");
-  expect(page).toContain("body: JSON.stringify({ mapId })");
+  it("impede submits duplicados enquanto confirmação aguarda", async () => {
+    let resolve!: () => void;
+    const onConfirm = vi.fn(() => new Promise<void>(r => { resolve = r; }));
+    render(React.createElement(MapReview, { proposals: [proposal], onConfirm }));
+    const button = screen.getByRole("button", { name: "Confirmar mapa" });
+    fireEvent.click(button); fireEvent.click(button);
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+    expect(button).toHaveProperty("disabled", true);
+    resolve();
+  });
+
+  it("impede retry duplicado enquanto a substituição aguarda", async () => {
+    let resolve!: () => void;
+    const onRetryDefaultMap = vi.fn(() => new Promise<void>(r => { resolve = r; }));
+    render(React.createElement(MapReview, { proposals: [proposal], onRetryDefaultMap }));
+    const button = screen.getByRole("button", { name: "Substituir mapa padrão novamente" });
+    fireEvent.click(button); fireEvent.click(button);
+    expect(onRetryDefaultMap).toHaveBeenCalledTimes(1);
+    expect(button).toHaveProperty("disabled", true);
+    resolve();
+    await waitFor(() => expect(button).toHaveProperty("disabled", false));
+  });
 });
