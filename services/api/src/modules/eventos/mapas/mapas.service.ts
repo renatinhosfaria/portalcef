@@ -1,5 +1,5 @@
 import { BadRequestException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common";
-import { and, eq, eventoAuditorias, eventoDeteccoesMapa, eventoImportacoesMapa, eventoInventarioAssentos, eventoMapaAssentos, eventoMapas, eventoSessoes, eventos, type Database } from "@essencia/db";
+import { and, eq, inArray, eventoAuditorias, eventoDeteccoesMapa, eventoImportacoesMapa, eventoInventarioAssentos, eventoMapaAssentos, eventoMapas, eventoSessoes, eventos, type Database } from "@essencia/db";
 import type { MultipartFile } from "@fastify/multipart";
 import type { EventoActor } from "@essencia/shared/types";
 import { DatabaseService } from "../../../common/database/database.service";
@@ -9,6 +9,14 @@ import { sanitizeSvg } from "./map-sanitizer";
 
 export interface ConfirmMapInput { seats: Array<{ id?: string; rowLabel: string; seatNumber: string; x: number; y: number; width?: number; height?: number; category?: string | null; accessible?: boolean; sellable?: boolean }>; reason?: string; }
 export interface MapImportSummary { importId: string; mapId: string; status: string; proposalCount: number; conflictCount: number; detection: MapDetectionResult; }
+export interface MapReplacementResult {
+  updated: unknown;
+  previousMapId: string | null;
+  inheritedSessionIds: string[];
+  inventorySessionIds: string[];
+  inventoryCreatedCount: number;
+  previousMapArchive: { archived: boolean; code: "ARCHIVED" | "MAP_IN_USE" | "NO_PREVIOUS_MAP"; sessionIds?: string[] };
+}
 
 @Injectable()
 export class MapasService {
@@ -161,5 +169,53 @@ export class MapasService {
     if (!map) throw new NotFoundException({ code: "MAP_NOT_FOUND", message: "Versão não encontrada" });
     if (current.previewFileKey && this.storage) await this.storage.deleteFile(current.previewFileKey);
     return map;
+  }
+
+  async substituirMapaPadrao(eventId: string, mapId: string, actor: EventoActor): Promise<MapReplacementResult> {
+    const event = await this.assertEvent(eventId, actor);
+    const [map] = await this.db.select().from(eventoMapas).where(eq(eventoMapas.id, mapId));
+    if (!map) throw new NotFoundException({ code: "MAP_NOT_FOUND", message: "Mapa não encontrado" });
+    if (map.eventId !== eventId) throw new BadRequestException({ code: "MAP_EVENT_MISMATCH", message: "O mapa informado pertence a outro evento" });
+    if (map.status !== "CONFIRMADO") throw new BadRequestException({ code: "MAP_NOT_CONFIRMED", message: "Somente mapas confirmados podem ser associados" });
+    const mapSeats = await this.db.select().from(eventoMapaAssentos).where(eq(eventoMapaAssentos.mapId, mapId));
+    if (!mapSeats.length) throw new BadRequestException({ code: "MAP_EMPTY", message: "O mapa precisa de pelo menos um assento" });
+
+    if (event.defaultMapId === mapId) {
+      return {
+        updated: event,
+        previousMapId: mapId,
+        inheritedSessionIds: [],
+        inventorySessionIds: [],
+        inventoryCreatedCount: 0,
+        previousMapArchive: { archived: false, code: "MAP_IN_USE", sessionIds: [] },
+      };
+    }
+
+    const result = await this.transaction(async (db) => {
+      const now = new Date();
+      const sessions = await db.select().from(eventoSessoes).where(eq(eventoSessoes.eventId, eventId));
+      const inherited = sessions.filter((session: any) => session.mapId == null);
+      const previousMapId = event.defaultMapId ?? null;
+      const [updated] = await db.update(eventos).set({ defaultMapId: mapId, updatedAt: now }).where(eq(eventos.id, eventId)).returning();
+      if (!updated) throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Evento não encontrado" });
+      for (const session of inherited) {
+        await db.update(eventoInventarioAssentos).set({ status: "BLOQUEADO", blockedReason: "MAPA_PADRAO_ALTERADO", updatedAt: now }).where(and(eq(eventoInventarioAssentos.sessionId, session.id), inArray(eventoInventarioAssentos.status, ["DISPONIVEL", "LIBERADO"])));
+      }
+      const inventory = await this.sincronizarInventarioMapa(db, eventId, mapId, actor);
+      let previousMapArchive: MapReplacementResult["previousMapArchive"] = { archived: false, code: "NO_PREVIOUS_MAP" };
+      if (previousMapId) {
+        const references = sessions.filter((session: any) => session.mapId === previousMapId).map((session: any) => session.id);
+        if (references.length) {
+          previousMapArchive = { archived: false, code: "MAP_IN_USE", sessionIds: references };
+        } else {
+          const [archived] = await db.update(eventoMapas).set({ status: "ARQUIVADO", updatedAt: now }).where(and(eq(eventoMapas.id, previousMapId), eq(eventoMapas.eventId, eventId))).returning();
+          if (archived) previousMapArchive = { archived: true, code: "ARCHIVED" };
+        }
+      }
+      await this.audit(eventId, actor, eventId, { action: "substituir_mapa_padrao", previousMapId, nextMapId: mapId, inheritedSessionIds: inherited.map((session: any) => session.id), previousMapArchive }, db);
+      return { updated, previousMapId, inheritedSessionIds: inherited.map((session: any) => session.id), inventory, previousMapArchive, previousMapPreviewKey: previousMapId ? (await db.select().from(eventoMapas).where(eq(eventoMapas.id, previousMapId)))[0]?.previewFileKey : null };
+    });
+    if (result.previousMapArchive.archived && result.previousMapPreviewKey && this.storage) await this.storage.deleteFile(result.previousMapPreviewKey).catch(() => undefined);
+    return { updated: result.updated, previousMapId: result.previousMapId, inheritedSessionIds: result.inheritedSessionIds, inventorySessionIds: result.inventory.inventorySessionIds, inventoryCreatedCount: result.inventory.inventoryCreatedCount, previousMapArchive: result.previousMapArchive };
   }
 }
