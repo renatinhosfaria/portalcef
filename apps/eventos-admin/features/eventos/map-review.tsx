@@ -14,7 +14,7 @@ export function MapReview({ proposals, status = "EM_REVISAO", affectedSessionIds
   useEffect(() => setItems(proposals), [proposals]);
   const current = items[selected];
   const edit = (key: keyof MapProposal, value: string) => setItems(a => a.map((x, i) => i === selected ? { ...x, [key]: key === "x" || key === "y" ? Number(value) : value } : x));
-  const run = async (action?: () => void | Promise<void>) => { if (submitting || !action) return; setSubmitting(true); try { await action(); } finally { setSubmitting(false); } };
+  const run = async (action?: () => void | Promise<void>) => { if (submitting || !action) return; setSubmitting(true); try { await action(); } catch { /* o callback mantém o alerta de erro no painel */ } finally { setSubmitting(false); } };
   return <div className="space-y-3 rounded border bg-white p-5">
     <p role="status">{status === "EM_REVISAO" ? "Mapa em revisão" : "Mapa confirmado"}</p>
     {previousMapArchive?.code === "ARCHIVED" && <p className="text-emerald-700" role="status">Versão anterior arquivada com sucesso.</p>}

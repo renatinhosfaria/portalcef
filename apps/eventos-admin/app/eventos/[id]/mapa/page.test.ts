@@ -166,4 +166,29 @@ describe("MapaPage substituição segura", () => {
     expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith("/mapas/mapa-atual/confirmar"))).toHaveLength(1);
     resolver(resposta({}));
   });
+
+  it("consome falha da correção, mantém o alerta e não gera rejeição não tratada", async () => {
+    const rejeicoes: unknown[] = [];
+    const aoRejeitar = (motivo: unknown) => rejeicoes.push(motivo);
+    process.on("unhandledRejection", aoRejeitar);
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/eventos/admin/evento-1")) return resposta({ defaultMapId: "mapa-atual" });
+      if (url.endsWith("/mapas/mapa-atual/revisao")) return resposta({ map: { status: "EM_REVISAO" }, detections: [mapa] });
+      if (url.endsWith("/mapas/mapa-atual/deteccoes")) return resposta({}, false);
+      throw new Error(`URL inesperada: ${url}`);
+    }));
+    try {
+      render(React.createElement(MapaPage));
+      await waitFor(() => expect(screen.getByRole("button", { name: "A · 1" })).toBeTruthy());
+      fireEvent.change(screen.getByPlaceholderText("Motivo da correção"), { target: { value: "ajuste" } });
+      fireEvent.click(screen.getByRole("button", { name: "Corrigir proposta" }));
+      await waitFor(() => expect(screen.getByRole("alert").textContent).toMatch(/falha ao corrigir detecção/i));
+      await waitFor(() => expect(screen.getByRole("button", { name: "Corrigir proposta" })).toHaveProperty("disabled", false));
+      await new Promise(resolve => setTimeout(resolve, 0));
+      expect(rejeicoes).toHaveLength(0);
+    } finally {
+      process.off("unhandledRejection", aoRejeitar);
+    }
+  });
 });

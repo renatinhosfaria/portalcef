@@ -30,3 +30,9 @@
 
 Base: `feat: integra substituicao segura no painel de mapas`.
 Rodada de correção: commit adicional com as correções P1/P2 e testes comportamentais.
+
+## Re-revisão — rejeição da correção
+
+- RED: o cenário de `onCorrection` rejeitado capturou uma rejeição não tratada com `Error("correction")`, apesar de o alerta de falha permanecer visível.
+- GREEN: `MapReview.run` agora consome a rejeição depois que o callback atualiza o alerta; o botão volta a ficar disponível e não há evento `unhandledRejection`.
+- A suíte comportamental passou com 13 testes; typecheck, build e `git diff --check` passaram.
