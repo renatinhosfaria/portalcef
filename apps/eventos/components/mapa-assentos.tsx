@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import type { PublicEventTicketType, PublicMap, PublicSeat } from "@essencia/shared/types";
+import { MapaAssentosSvg } from "./mapa-assentos-svg";
 import { ResumoAssentos, ResumoAssentosFixo, type AssentoSelecionado } from "./resumo-assentos";
-import { calcularBoundsMapa, estiloAssento, serializarSelecaoAssentos } from "./mapa-assentos-utils";
+import { serializarSelecaoAssentos } from "./mapa-assentos-utils";
 
 export function classeEstadoAssento(state: PublicSeat["state"]): string {
   return {
@@ -28,59 +29,83 @@ function rotuloAssento(seat: PublicSeat) {
   return `${seat.rowLabel}-${seat.seatNumber}`;
 }
 
-export function MapaAssentos({ map, checkoutHref, ticketTypes, initialTicketTypeId }: { map: PublicMap; checkoutHref: string; ticketTypes: PublicEventTicketType[]; initialTicketTypeId?: string }): React.JSX.Element {
-  const [selection, setSelection] = useState<AssentoSelecionado[]>([]);
-  const bounds = useMemo(() => calcularBoundsMapa(map.seats), [map.seats]);
-  const selectedIds = new Set(selection.map((item) => item.seatId));
-  const fileiras = useMemo(() => Array.from(new Set(map.seats.map((seat) => seat.rowLabel))), [map.seats]);
-  const fileirasComDisponibilidade = useMemo(() => fileiras.filter((fileira) => map.seats.some((seat) => seat.rowLabel === fileira && seat.state === "available")), [fileiras, map.seats]);
-  const primeiraFileira = fileirasComDisponibilidade[0] ?? fileiras[0] ?? "";
-  const [fileiraSelecionada, setFileiraSelecionada] = useState(primeiraFileira);
+function normalizarSelecaoInicial(map: PublicMap, selection: AssentoSelecionado[], unavailableSeatIds: string[]) {
+  const indisponiveis = new Set(unavailableSeatIds);
+  const seatsById = new Map(map.seats.map((seat) => [seat.id, seat]));
+  return selection.flatMap((item) => {
+    const seat = seatsById.get(item.seatId);
+    if (!seat || seat.state !== "available" || indisponiveis.has(seat.id)) return [];
+    return [{
+      ...item,
+      label: item.label ?? rotuloAssento(seat),
+      accessible: item.accessible ?? seat.accessible,
+    }];
+  });
+}
+
+export type MapaAssentosProps = {
+  map: PublicMap;
+  checkoutHref: string;
+  ticketTypes: PublicEventTicketType[];
+  initialTicketTypeId?: string;
+  initialSelection?: AssentoSelecionado[];
+  unavailableSeatIds?: string[];
+};
+
+export function MapaAssentos({ map, checkoutHref, ticketTypes, initialTicketTypeId, initialSelection = [], unavailableSeatIds = [] }: MapaAssentosProps): React.JSX.Element {
+  const [selection, setSelection] = useState<AssentoSelecionado[]>(() => normalizarSelecaoInicial(map, initialSelection, unavailableSeatIds));
+  const [fileiraSelecionada, setFileiraSelecionada] = useState("");
   const [modoVisualizacao, setModoVisualizacao] = useState<"lista" | "mapa">("lista");
+
+  useEffect(() => {
+    const media = typeof window !== "undefined" && typeof window.matchMedia === "function"
+      ? window.matchMedia("(min-width: 768px)")
+      : undefined;
+    if (!media) return undefined;
+    const atualizarModo = (event?: MediaQueryListEvent) => setModoVisualizacao((event?.matches ?? media.matches) ? "mapa" : "lista");
+    atualizarModo();
+    media.addEventListener?.("change", atualizarModo);
+    media.addListener?.(atualizarModo);
+    return () => {
+      media.removeEventListener?.("change", atualizarModo);
+      media.removeListener?.(atualizarModo);
+    };
+  }, []);
+
+  const selectedIds = useMemo(() => new Set(selection.map((item) => item.seatId)), [selection]);
+  const fileiras = useMemo(() => Array.from(new Set(map.seats.map((seat) => seat.rowLabel))), [map.seats]);
+  const indisponiveis = useMemo(() => new Set(unavailableSeatIds), [unavailableSeatIds]);
+  const fileirasComDisponibilidade = useMemo(() => fileiras.filter((fileira) => map.seats.some((seat) => seat.rowLabel === fileira && seat.state === "available" && !indisponiveis.has(seat.id))), [fileiras, indisponiveis, map.seats]);
+  const primeiraFileira = fileirasComDisponibilidade[0] ?? fileiras[0] ?? "";
   const fileiraAtiva = fileiras.includes(fileiraSelecionada) ? fileiraSelecionada : primeiraFileira;
   const assentosDaFileira = useMemo(() => map.seats.filter((seat) => seat.rowLabel === fileiraAtiva), [fileiraAtiva, map.seats]);
-  const hasIncompleteSelection = selection.some((item) => !item.ticketTypeId);
+  const conflitos = useMemo(() => unavailableSeatIds.map((id) => map.seats.find((seat) => seat.id === id)).filter((seat): seat is PublicSeat => Boolean(seat)), [map.seats, unavailableSeatIds]);
+  const hasIncompleteSelection = selection.some((item) => !item.ticketTypeId || !ticketTypes.some((type) => type.id === item.ticketTypeId));
   const query = selection.length && !hasIncompleteSelection
     ? `${serializarSelecaoAssentos(selection)}&sessionId=${encodeURIComponent(map.sessionId)}`
     : undefined;
   const target = query ? `${checkoutHref}${checkoutHref.includes("?") ? "&" : "?"}${query}` : undefined;
 
   function alternarAssento(seat: PublicSeat) {
-    if (seat.state !== "available") return;
-    setSelection((current) => selectedIds.has(seat.id)
-      ? current.filter((item) => item.seatId !== seat.id)
-      : [...current, { seatId: seat.id, ticketTypeId: initialTicketTypeId && ticketTypes.some((type) => type.id === initialTicketTypeId) ? initialTicketTypeId : ticketTypes[0]?.id ?? "", label: rotuloAssento(seat), accessible: seat.accessible }]);
+    if (seat.state !== "available" || indisponiveis.has(seat.id)) return;
+    setSelection((current) => {
+      if (current.some((item) => item.seatId === seat.id)) return current.filter((item) => item.seatId !== seat.id);
+      const ticketTypeId = initialTicketTypeId && ticketTypes.some((type) => type.id === initialTicketTypeId) ? initialTicketTypeId : ticketTypes[0]?.id ?? "";
+      return [...current, { seatId: seat.id, ticketTypeId, label: rotuloAssento(seat), accessible: seat.accessible }];
+    });
   }
 
   function alterarTipoIngresso(seatId: string, ticketTypeId: string) {
     setSelection((current) => current.map((item) => item.seatId === seatId ? { ...item, ticketTypeId } : item));
   }
 
-  function renderAssentoNoMapa(seat: PublicSeat) {
-    const active = selectedIds.has(seat.id);
-    const className = `absolute rounded border px-1 py-1 text-xs ${classeEstadoAssento(seat.state)} ${active ? "ring-2 ring-blue-700" : ""} motion-safe:transition-shadow motion-reduce:transition-none`;
-    const label = descricaoAssento(seat);
-    const content = <><span>{rotuloAssento(seat)}</span>{seat.accessible && <span className="sr-only"> assento acessível</span>}</>;
-    if (seat.state === "available") return <button key={seat.id} type="button" aria-label={label} aria-pressed={active} onClick={() => alternarAssento(seat)} className={className} style={estiloAssento(seat, bounds)}>{content}</button>;
-    return <span key={seat.id} role="checkbox" aria-label={label} aria-disabled="true" aria-checked="false" className={className} style={estiloAssento(seat, bounds)}>{content}</span>;
-  }
-
-  function renderMapaVisual(label: string) {
-    return <div className="relative min-h-64 w-full overflow-auto rounded-lg border border-slate-200 bg-slate-50 p-3" aria-label={label}>
-      <p className="mb-2 text-xs text-slate-600">Use a rolagem horizontal para visualizar toda a planta.</p>
-      <div className="relative min-h-56 min-w-[24rem]" style={{ aspectRatio: `${bounds.width} / ${bounds.height}` }}>
-        {map.seats.map(renderAssentoNoMapa)}
-      </div>
-    </div>;
-  }
-
   function renderAssentoNaLista(seat: PublicSeat) {
     const selecionado = selectedIds.has(seat.id);
     const detalhe = `Estado: ${estadoLabel[seat.state]} · Categoria: ${categoriaAssento(seat)}${seat.accessible ? " · acessível" : ""}${selecionado ? " · selecionado" : ""}`;
     return <li key={`lista-${seat.id}`} className="rounded-lg border border-slate-200 bg-white p-3">
-      {seat.state === "available" ? <button type="button" aria-label={descricaoAssento(seat)} aria-pressed={selecionado} onClick={() => alternarAssento(seat)} className={`flex min-h-12 w-full items-center justify-between gap-3 text-left ${selecionado ? "text-blue-800" : "text-slate-950"}`}>
+      {seat.state === "available" && !indisponiveis.has(seat.id) ? <button type="button" aria-label={descricaoAssento(seat)} aria-pressed={selecionado} onClick={() => alternarAssento(seat)} className={`flex min-h-12 w-full items-center justify-between gap-3 text-left ${selecionado ? "text-blue-800" : "text-slate-950"}`}>
         <span><span className="block font-semibold">Assento {rotuloAssento(seat)}</span><span className="mt-1 block text-sm text-slate-600">{detalhe}</span></span>
-        <span className="shrink-0 rounded-full bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-800">Selecionar</span>
+        <span className="shrink-0 rounded-full bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-800">{selecionado ? "Selecionado" : "Selecionar"}</span>
       </button> : <div className="flex min-h-12 items-center justify-between gap-3 text-slate-700" aria-label={descricaoAssento(seat)} aria-disabled="true">
         <span><span className="block font-semibold">Assento {rotuloAssento(seat)}</span><span className="mt-1 block text-sm text-slate-600">{detalhe}</span></span>
         <span className="shrink-0 rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">Indisponível</span>
@@ -96,30 +121,31 @@ export function MapaAssentos({ map, checkoutHref, ticketTypes, initialTicketType
       <span className="rounded border border-slate-500 bg-slate-400 px-2 py-1">Bloqueado</span>
     </div>
 
-    <section className="md:hidden" aria-label="Seleção de assentos no celular">
+    {conflitos.length > 0 && <div role="alert" className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
+      {conflitos.map((seat) => <p key={`conflito-${seat.id}`}>Assento {rotuloAssento(seat)} ficou indisponível e foi removido da seleção.</p>)}
+    </div>}
+
+    <div className="mb-4 flex flex-wrap items-center gap-3">
       <div className="flex rounded-lg border border-slate-200 bg-slate-50 p-1" role="group" aria-label="Modo de visualização dos assentos">
-        <button type="button" aria-pressed={modoVisualizacao === "lista"} onClick={() => setModoVisualizacao("lista")} className={`min-h-11 flex-1 rounded-md px-3 text-sm font-semibold ${modoVisualizacao === "lista" ? "bg-white text-blue-700 shadow-sm" : "text-slate-600"}`}>Lista</button>
-        <button type="button" aria-pressed={modoVisualizacao === "mapa"} onClick={() => setModoVisualizacao("mapa")} className={`min-h-11 flex-1 rounded-md px-3 text-sm font-semibold ${modoVisualizacao === "mapa" ? "bg-white text-blue-700 shadow-sm" : "text-slate-600"}`}>Mapa</button>
+        <button type="button" aria-pressed={modoVisualizacao === "lista"} onClick={() => setModoVisualizacao("lista")} className={`min-h-11 rounded-md px-4 text-sm font-semibold ${modoVisualizacao === "lista" ? "bg-white text-blue-700 shadow-sm" : "text-slate-600"}`}>Lista</button>
+        <button type="button" aria-pressed={modoVisualizacao === "mapa"} onClick={() => setModoVisualizacao("mapa")} className={`min-h-11 rounded-md px-4 text-sm font-semibold ${modoVisualizacao === "mapa" ? "bg-white text-blue-700 shadow-sm" : "text-slate-600"}`}>Mapa</button>
       </div>
+      <label htmlFor="escolha-fileira" className="text-sm font-semibold text-slate-950">Escolha uma fileira</label>
+      <select id="escolha-fileira" aria-label="Escolha uma fileira" value={fileiraAtiva} onChange={(event) => setFileiraSelecionada(event.target.value)} className="min-h-11 rounded-lg border border-slate-300 bg-white px-3 text-base">
+        {fileiras.length ? fileiras.map((fileira) => <option key={fileira} value={fileira}>{fileira}</option>) : <option value="">Nenhuma fileira</option>}
+      </select>
+    </div>
 
-      <div className="mt-4">
-        <label htmlFor="escolha-fileira" className="block text-sm font-semibold text-slate-950">Escolha uma fileira</label>
-        <select id="escolha-fileira" aria-label="Escolha uma fileira" value={fileiraAtiva} onChange={(event) => setFileiraSelecionada(event.target.value)} className="mt-2 min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-base">
-          {fileiras.length ? fileiras.map((fileira) => <option key={fileira} value={fileira}>{fileira}</option>) : <option value="">Nenhuma fileira</option>}
-        </select>
-      </div>
+    <p className="mb-3 text-sm text-slate-600">Escolha uma fileira para localizar os lugares. No mapa, use zoom, rolagem horizontal e teclado para navegar; o mapa rolável funciona melhor na horizontal.</p>
 
-      <p className="mt-3 text-sm text-slate-600">Escolha uma fileira para conferir os lugares. O mapa rolável funciona melhor na horizontal.</p>
-
-      {modoVisualizacao === "lista" ? <div className="mt-4">
-        <h2 className="text-base font-semibold">Lista de assentos</h2>
-        {assentosDaFileira.length ? <ul className="mt-3 space-y-2" aria-label={`Assentos da fileira ${fileiraAtiva}`}>{assentosDaFileira.map(renderAssentoNaLista)}</ul> : <p className="mt-3 rounded-lg border border-dashed border-slate-300 p-4 text-sm text-slate-600" aria-live="polite">Nenhum assento disponível nesta fileira.</p>}
-        {assentosDaFileira.length > 0 && !assentosDaFileira.some((seat) => seat.state === "available") && <p className="mt-3 rounded-lg border border-dashed border-slate-300 p-4 text-sm text-slate-600" aria-live="polite">Nenhum assento disponível nesta fileira.</p>}
-      </div> : <div className="mt-4">{renderMapaVisual("Planta de assentos móvel")}</div>}
+    <section aria-label="Lista de assentos" hidden={modoVisualizacao !== "lista"} aria-hidden={modoVisualizacao !== "lista"}>
+      <h2 className="text-base font-semibold">Lista de assentos</h2>
+      {assentosDaFileira.length ? <ul className="mt-3 space-y-2" aria-label={`Assentos da fileira ${fileiraAtiva}`}>{assentosDaFileira.map(renderAssentoNaLista)}</ul> : <p className="mt-3 rounded-lg border border-dashed border-slate-300 p-4 text-sm text-slate-600" aria-live="polite">Nenhum assento disponível nesta fileira.</p>}
+      {assentosDaFileira.length > 0 && !assentosDaFileira.some((seat) => seat.state === "available" && !indisponiveis.has(seat.id)) && <p className="mt-3 rounded-lg border border-dashed border-slate-300 p-4 text-sm text-slate-600" aria-live="polite">Nenhum assento disponível nesta fileira.</p>}
     </section>
 
-    <section className="hidden md:block" aria-label="Mapa de assentos para computador">
-      {renderMapaVisual("Planta de assentos")}
+    <section aria-label="Mapa de assentos" hidden={modoVisualizacao !== "mapa"} aria-hidden={modoVisualizacao !== "mapa"}>
+      <MapaAssentosSvg map={map} selection={selection} focusRow={fileiraAtiva} onToggleSeat={alternarAssento} />
     </section>
 
     <ResumoAssentos selection={selection} ticketTypes={ticketTypes} onChangeTicketType={alterarTipoIngresso} />

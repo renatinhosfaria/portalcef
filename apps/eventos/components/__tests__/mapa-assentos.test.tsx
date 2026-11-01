@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import type { PublicEventTicketType, PublicMap, PublicSeat } from "@essencia/shared/types";
 import { MapaAssentos } from "../mapa-assentos";
@@ -21,6 +21,58 @@ const mapa: PublicMap = { sessionId: "sessao-1", mapId: "mapa-1", seats: assento
 afterEach(() => cleanup());
 
 describe("mapa público de assentos", () => {
+  it("renderiza a planta SVG e mantém mapa e lista em modos acessíveis", () => {
+    const html = renderToStaticMarkup(<MapaAssentos map={mapa} checkoutHref="/checkout" ticketTypes={[tipoInteira]} />);
+
+    expect(html).toContain("<svg");
+    expect(html).toContain('data-seat-id="s-1"');
+    expect(html).toContain('aria-label="Planta de assentos"');
+    expect(html).toContain('aria-label="Lista de assentos"');
+    expect(html).toContain('aria-hidden="true"');
+    expect(html).toContain("hidden");
+  });
+
+  it("rehidrata seleção inicial, nomeia conflitos e preserva total", () => {
+    render(<MapaAssentos
+      map={mapa}
+      checkoutHref="/checkout"
+      ticketTypes={[tipoInteira, tipoMeia]}
+      initialSelection={[{ seatId: "s-1", ticketTypeId: "meia", label: "A-1", accessible: true }]}
+      unavailableSeatIds={["s-2"]}
+    />);
+
+    expect(screen.getByText(/Assento A-2 ficou indisponível/)).toBeTruthy();
+    expect(screen.getAllByText("Assento A-1").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/R\$ 5,00/).length).toBeGreaterThan(0);
+  });
+
+  it("sincroniza seleção entre mapa e lista sem fazer reserva", () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    render(<MapaAssentos map={mapa} checkoutHref="/checkout" ticketTypes={[tipoInteira]} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Mapa/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Assento A-1, disponível/ }));
+    expect(screen.getByRole("button", { name: /Assento A-1, disponível/ }).getAttribute("aria-pressed")).toBe("true");
+
+    fireEvent.click(screen.getByRole("button", { name: /Lista/ }));
+    const lista = screen.getByRole("list", { name: "Assentos da fileira A" });
+    expect(within(lista).getByRole("button", { name: /Assento A-1/ }).getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(within(lista).getByRole("button", { name: /Assento A-1/ }));
+    expect(screen.getByText("Nenhum assento selecionado.")).toBeTruthy();
+    expect(fetchSpy).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
+  });
+
+  it("oculta lista da árvore acessível quando o modo mapa está ativo", () => {
+    render(<MapaAssentos map={mapa} checkoutHref="/checkout" ticketTypes={[tipoInteira]} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Mapa" }));
+    const lista = screen.getByLabelText("Lista de assentos");
+    expect(lista.getAttribute("aria-hidden")).toBe("true");
+    expect(lista.hasAttribute("hidden")).toBe(true);
+    expect(screen.getByRole("img", { name: "Planta de assentos" })).toBeTruthy();
+  });
+
   it("calcula o total pelos tipos de ingresso selecionados", () => {
     expect(calcularTotalSelecao([
       { seatId: "s-1", ticketTypeId: "inteira" },
@@ -74,9 +126,9 @@ describe("mapa público de assentos", () => {
   it("torna somente disponíveis selecionáveis e descreve acessibilidade por texto", () => {
     const html = renderToStaticMarkup(<MapaAssentos map={mapa} checkoutHref="/checkout" ticketTypes={[tipoInteira]} />);
     expect(html).toContain('aria-label="Assento A-1, disponível, assento acessível"');
-    expect(html).toContain('role="checkbox" aria-label="Assento A-2, reservado" aria-disabled="true"');
-    expect(html).toContain('role="checkbox" aria-label="Assento B-1, vendido" aria-disabled="true"');
-    expect(html).toContain('role="checkbox" aria-label="Assento B-2, bloqueado" aria-disabled="true"');
+    expect(html).toContain('aria-label="Assento A-2, reservado'); expect(html).toContain('aria-disabled="true"');
+    expect(html).toContain('aria-label="Assento B-1, vendido');
+    expect(html).toContain('aria-label="Assento B-2, bloqueado');
     expect(html).toContain("Assento A-1, disponível, assento acessível");
     expect(html).toContain("acessível");
     expect(html).toContain("Reservado");
