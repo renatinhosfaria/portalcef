@@ -1,5 +1,7 @@
 import { ConflictException, BadRequestException } from '@nestjs/common';
+import 'reflect-metadata';
 import { EventosService } from './eventos.service';
+import { MapasService } from './mapas/mapas.service';
 
 const actor = { userId: 'u1', role: 'diretora_geral', schoolId: 's1' };
 const event = (extra: Record<string, unknown> = {}) => ({
@@ -10,6 +12,11 @@ const event = (extra: Record<string, unknown> = {}) => ({
 });
 
 describe('EventosService contratos de workspace', () => {
+  it('registra MapasService como token de DI mesmo sendo opcional', () => {
+    const selfParamTypes = Reflect.getMetadata('self:paramtypes', EventosService) as Array<{ index: number; param: unknown }>;
+    expect(selfParamTypes).toEqual(expect.arrayContaining([{ index: 3, param: MapasService }]));
+  });
+
   it('lista locais da escola do evento com indicação do padrão', async () => {
     const updatedAt = new Date('2026-10-29T10:00:00Z');
     const db = fakeDb({
