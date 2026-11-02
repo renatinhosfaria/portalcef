@@ -85,6 +85,19 @@ describe("MapasService", () => {
     expect(storage.deleteFile).toHaveBeenCalledWith("preview/old.svg");
   });
 
+  it("mantém a migração concluída quando a limpeza do storage falha após o commit", async () => {
+    const fixture = migrationFixture();
+    fixture.state.maps.find((map: any) => map.id === "map-old").originalFileKey = "original/old.svg";
+    fixture.state.maps.find((map: any) => map.id === "map-old").previewFileKey = "preview/old.svg";
+    fixture.storage.deleteFile.mockRejectedValue(new Error("storage indisponível"));
+
+    await expect(fixture.maps.migrarSessoesEExcluir("event-1", "map-old", { targetMapId: "map-new" }, actor)).resolves.toEqual(expect.objectContaining({ deletedMap: { deleted: true, code: "DELETED" } }));
+    expect(fixture.state.maps).toEqual([expect.objectContaining({ id: "map-new" })]);
+    expect(fixture.state.inventory).toEqual([expect.objectContaining({ sessionId: "session-1", seatId: "new-seat-1" })]);
+    expect(fixture.storage.deleteFile).toHaveBeenNthCalledWith(1, "original/old.svg");
+    expect(fixture.storage.deleteFile).toHaveBeenNthCalledWith(2, "preview/old.svg");
+  });
+
   function migrationFixture(overrides: any = {}) {
     const dbModule = jest.requireMock("@essencia/db") as typeof import("@essencia/db");
     const state: any = {
