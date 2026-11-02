@@ -122,6 +122,28 @@ describe("MapaPage substituição segura", () => {
     expect(chamadas.filter(url => url.endsWith("/mapa-padrao"))).toHaveLength(1);
   });
 
+  it("recupera no reload a ação de migrar quando o PATCH encontra MAP_IN_USE", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/eventos/admin/evento-1")) return resposta({ defaultMapId: "mapa-atual" });
+      if (url.endsWith("/mapas/mapa-atual/revisao")) return resposta({ map: { status: "CONFIRMADO" }, detections: [mapa] });
+      if (url.endsWith("/mapa-padrao")) return resposta({
+        previousMapId: "mapa-anterior",
+        inheritedSessionIds: ["sessao-herdada"],
+        inventorySessionIds: ["sessao-herdada"],
+        inventoryCreatedCount: 0,
+        previousMapArchive: { archived: false, code: "MAP_IN_USE" as const, sessionIds: ["sessao-explicita", "sessao-herdada"] },
+      });
+      if (url.endsWith("/mapas/mapa-anterior/migrar-e-excluir")) return resposta({ oldMapId: "mapa-anterior", targetMapId: "mapa-atual", migratedSessionIds: ["sessao-explicita", "sessao-herdada"], inheritedSessionIds: ["sessao-herdada"], inventoryCreatedCount: 4, deletedMap: { deleted: true, code: "DELETED" as const } });
+      throw new Error(`URL inesperada: ${url}`);
+    }));
+    render(React.createElement(MapaPage));
+    const migrate = await screen.findByRole("button", { name: "Migrar sessões e excluir mapa anterior" });
+    fireEvent.click(migrate);
+    await waitFor(() => expect(screen.getByText(/mapa anterior excluído/i)).toBeTruthy());
+  });
+
   it("remove os avisos de inventário da troca anterior após novo upload", async () => {
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);

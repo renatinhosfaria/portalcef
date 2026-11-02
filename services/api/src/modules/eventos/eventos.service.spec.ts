@@ -194,6 +194,21 @@ describe('EventosService contratos de workspace', () => {
     expect(mapas.substituirMapaPadrao).toHaveBeenCalledWith('e1', 'map-novo', actor);
   });
 
+  it('devolve previousMapId e previousMapArchive no PATCH para permitir retomada após reload', async () => {
+    const mapas = { substituirMapaPadrao: jest.fn().mockResolvedValue({
+      updated: event({ defaultMapId: 'mapa-novo' }),
+      previousMapId: 'mapa-anterior',
+      inheritedSessionIds: ['sessao-herdada'],
+      inventorySessionIds: ['sessao-herdada'],
+      inventoryCreatedCount: 2,
+      previousMapArchive: { archived: false, code: 'MAP_IN_USE', sessionIds: ['sessao-explicita', 'sessao-herdada'] },
+    }) };
+    await expect(service(fakeDb(), undefined, mapas).atualizarMapaPadrao('e1', 'mapa-novo', actor)).resolves.toEqual(expect.objectContaining({
+      previousMapId: 'mapa-anterior',
+      previousMapArchive: { archived: false, code: 'MAP_IN_USE', sessionIds: ['sessao-explicita', 'sessao-herdada'] },
+    }));
+  });
+
   it('envia a imagem do evento, atualiza a URL e remove a imagem anterior', async () => {
     const db = fakeDb({ selects: [[event({ imageUrl: 'https://www.portalcef.com.br/storage/essencia-uploads/eventos/e1/imagem/antiga.jpg' })]], update: async () => [event({ imageUrl: 'https://www.portalcef.com.br/storage/essencia-uploads/eventos/e1/imagem/nova.jpg' })] });
     const storage = { uploadBuffer: jest.fn().mockResolvedValue({ url: 'https://www.portalcef.com.br/storage/essencia-uploads/eventos/e1/imagem/nova.jpg' }), deletePublicUrl: jest.fn() };

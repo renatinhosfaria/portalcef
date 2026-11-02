@@ -56,7 +56,7 @@ export default function MapaPage() {
   const confirmationPromise = useRef<Promise<void> | null>(null);
 
   const aplicarResultado = (data: ReplacementData) => {
-    setAffectedSessionIds(data.inheritedSessionIds ?? []);
+    setAffectedSessionIds([...new Set([...(data.previousMapArchive?.sessionIds ?? []), ...(data.inheritedSessionIds ?? [])])]);
     setInventoryCreatedCount(data.inventoryCreatedCount ?? 0);
     setInventorySessionIds(data.inventorySessionIds ?? []);
     setPreviousMapArchive(data.previousMapArchive);
