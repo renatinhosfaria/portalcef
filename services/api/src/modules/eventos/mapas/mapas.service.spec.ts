@@ -1,11 +1,183 @@
 import { BadRequestException } from "@nestjs/common";
 import "reflect-metadata";
-jest.mock("@essencia/db", () => ({ eventos: {}, eventoMapas: {}, eventoSessoes: {}, eventoImportacoesMapa: {}, eventoDeteccoesMapa: {}, eventoMapaAssentos: {}, eventoInventarioAssentos: {}, eventoAuditorias: {}, eq: jest.fn(), and: jest.fn(), inArray: jest.fn() }));
+jest.mock("@essencia/db", () => ({ eventos: {}, eventoMapas: {}, eventoSessoes: {}, eventoImportacoesMapa: {}, eventoDeteccoesMapa: {}, eventoMapaAssentos: {}, eventoInventarioAssentos: {}, eventoPedidos: {}, eventoReservas: {}, eventoIngressos: {}, eventoCheckins: {}, eventoOperacoesAdministrativas: {}, eventoAuditorias: {}, eq: jest.fn(), and: jest.fn(), inArray: jest.fn(), desc: jest.fn() }));
 import { MapasService } from "./mapas.service";
 import { StorageService } from "../../../common/storage/storage.service";
 
 describe("MapasService", () => {
   const actor = { userId: "user-1", role: "diretora_geral", schoolId: "school-1" };
+
+  it("migra a sessão, recria o inventário e exclui o mapa antigo", async () => {
+    const dbModule = jest.requireMock("@essencia/db") as typeof import("@essencia/db");
+    const state: any = {
+      event: { id: "event-1", schoolId: "school-1", defaultMapId: "map-old" },
+      sessions: [{ id: "session-1", eventId: "event-1", mapId: "map-old" }],
+      maps: [
+        { id: "map-old", eventId: "event-1", status: "CONFIRMADO", originalFileKey: "original/old.svg", previewFileKey: "preview/old.svg" },
+        { id: "map-new", eventId: "event-1", status: "CONFIRMADO" },
+      ],
+      seats: [{ id: "new-seat-1", mapId: "map-new", rowLabel: "A", seatNumber: "1", sellable: true }],
+      inventory: [{ id: "inventory-old", sessionId: "session-1", seatId: "old-seat-1", status: "DISPONIVEL" }],
+      audits: [],
+      pedidos: [],
+      reservas: [],
+      ingressos: [],
+      checkins: [],
+      operacoes: [],
+    };
+    const rows = (table: unknown) => table === dbModule.eventos ? [state.event]
+      : table === dbModule.eventoSessoes ? state.sessions
+        : table === dbModule.eventoMapas ? state.maps
+          : table === dbModule.eventoMapaAssentos ? state.seats
+            : table === dbModule.eventoInventarioAssentos ? state.inventory
+              : table === dbModule.eventoPedidos ? state.pedidos
+                : table === dbModule.eventoReservas ? state.reservas
+                  : table === dbModule.eventoIngressos ? state.ingressos
+                    : table === dbModule.eventoCheckins ? state.checkins
+                      : table === dbModule.eventoOperacoesAdministrativas ? state.operacoes
+                        : table === dbModule.eventoAuditorias ? state.audits
+                          : [];
+    const db: any = {
+      select: () => ({ from: (table: unknown) => ({ where: () => {
+        const query: any = Promise.resolve(rows(table));
+        query.for = () => query;
+        query.orderBy = () => query;
+        return query;
+      } }) }),
+      update: (table: unknown) => ({ set: (values: any) => {
+        const apply = () => {
+          if (table === dbModule.eventos) Object.assign(state.event, values);
+          if (table === dbModule.eventoSessoes) state.sessions.forEach((session: any) => Object.assign(session, values));
+          return table === dbModule.eventos ? [state.event] : state.sessions;
+        };
+        return { where: () => { apply(); return { returning: async () => apply() }; } };
+      } }),
+      delete: (table: unknown) => ({ where: async () => {
+        if (table === dbModule.eventoInventarioAssentos) state.inventory = [];
+        if (table === dbModule.eventoMapas) state.maps = state.maps.filter((map: any) => map.id !== "map-old");
+        if (table === dbModule.eventoMapaAssentos) state.seats = state.seats.filter((seat: any) => seat.mapId !== "map-old");
+      } }),
+      insert: (table: unknown) => ({ values: (values: any) => {
+        if (table === dbModule.eventoInventarioAssentos) state.inventory.push({ id: `inventory-${state.inventory.length + 1}`, ...values });
+        if (table === dbModule.eventoAuditorias) state.audits.push(values);
+        return { returning: async () => [{ id: `inserted-${state.audits.length}`, ...values }] };
+      } }),
+      transaction: async (callback: (tx: any) => Promise<unknown>) => callback(db),
+    };
+    const storage = { deleteFile: jest.fn().mockResolvedValue(undefined), deleteFileStrict: jest.fn().mockResolvedValue(undefined) };
+    const maps = new MapasService({ db } as any, storage as any, {} as any);
+
+    const result = await maps.migrarSessoesEExcluir("event-1", "map-old", { targetMapId: "map-new" }, actor);
+
+    expect(result).toEqual(expect.objectContaining({
+      oldMapId: "map-old",
+      targetMapId: "map-new",
+      migratedSessionIds: ["session-1"],
+      inheritedSessionIds: [],
+      inventoryCreatedCount: 1,
+      deletedMap: { deleted: true, code: "DELETED" },
+    }));
+    expect(state.event.defaultMapId).toBe("map-new");
+    expect(state.sessions[0].mapId).toBe("map-new");
+    expect(state.inventory).toEqual([expect.objectContaining({ sessionId: "session-1", seatId: "new-seat-1" })]);
+    expect(state.maps).toEqual([expect.objectContaining({ id: "map-new" })]);
+    expect(storage.deleteFile).toHaveBeenCalledWith("original/old.svg");
+    expect(storage.deleteFile).toHaveBeenCalledWith("preview/old.svg");
+  });
+
+  function migrationFixture(overrides: any = {}) {
+    const dbModule = jest.requireMock("@essencia/db") as typeof import("@essencia/db");
+    const state: any = {
+      event: { id: "event-1", schoolId: "school-1", defaultMapId: "map-old" },
+      sessions: [{ id: "session-1", eventId: "event-1", mapId: "map-old" }],
+      maps: [
+        { id: "map-old", eventId: "event-1", status: "CONFIRMADO", originalFileKey: null, previewFileKey: null },
+        { id: "map-new", eventId: "event-1", status: "CONFIRMADO" },
+      ],
+      seats: [{ id: "old-seat-1", mapId: "map-old", sellable: true }, { id: "new-seat-1", mapId: "map-new", sellable: true }],
+      inventory: [{ id: "inventory-old", sessionId: "session-1", seatId: "old-seat-1", status: "DISPONIVEL" }],
+      pedidos: [], reservas: [], ingressos: [], checkins: [], operacoes: [], audits: [],
+      ...overrides,
+    };
+    const rows = (table: unknown) => table === dbModule.eventos ? [state.event]
+      : table === dbModule.eventoSessoes ? state.sessions : table === dbModule.eventoMapas ? state.maps
+        : table === dbModule.eventoMapaAssentos ? state.seats : table === dbModule.eventoInventarioAssentos ? state.inventory
+          : table === dbModule.eventoPedidos ? state.pedidos : table === dbModule.eventoReservas ? state.reservas
+            : table === dbModule.eventoIngressos ? state.ingressos : table === dbModule.eventoCheckins ? state.checkins
+              : table === dbModule.eventoOperacoesAdministrativas ? state.operacoes : table === dbModule.eventoAuditorias ? state.audits : [];
+    const db: any = {
+      select: () => ({ from: (table: unknown) => ({ where: () => {
+        const query: any = Promise.resolve(rows(table));
+        query.for = () => query;
+        return query;
+      } }) }),
+      update: (table: unknown) => ({ set: (values: any) => ({ where: () => {
+        if (table === dbModule.eventos) Object.assign(state.event, values);
+        if (table === dbModule.eventoSessoes) state.sessions.forEach((session: any) => Object.assign(session, values));
+        return { returning: async () => table === dbModule.eventos ? [state.event] : state.sessions };
+      } }) }),
+      delete: (table: unknown) => ({ where: async () => {
+        if (table === dbModule.eventoInventarioAssentos) state.inventory = [];
+        if (table === dbModule.eventoMapas) state.maps = state.maps.filter((map: any) => map.id !== "map-old");
+      } }),
+      insert: (table: unknown) => ({ values: (values: any) => {
+        if (table === dbModule.eventoInventarioAssentos) state.inventory.push({ id: `inventory-${state.inventory.length + 1}`, ...values });
+        if (table === dbModule.eventoAuditorias) state.audits.push(values);
+        return { returning: async () => [{ id: `inserted-${state.audits.length}`, ...values }] };
+      } }),
+      transaction: async (callback: (tx: any) => Promise<unknown>) => callback(db),
+    };
+    const storage = { deleteFile: jest.fn().mockResolvedValue(undefined) };
+    return { state, db, maps: new MapasService({ db } as any, storage as any, {} as any), storage };
+  }
+
+  it("detecta sessão herdada pelo inventário e atualiza o mapa padrão", async () => {
+    const fixture = migrationFixture({
+      sessions: [{ id: "session-inherited", eventId: "event-1", mapId: null }],
+      inventory: [{ id: "inventory-old", sessionId: "session-inherited", seatId: "old-seat-1", status: "DISPONIVEL" }],
+    });
+    const result = await fixture.maps.migrarSessoesEExcluir("event-1", "map-old", { targetMapId: "map-new" }, actor);
+    expect(result.inheritedSessionIds).toEqual(["session-inherited"]);
+    expect(result.migratedSessionIds).toEqual(["session-inherited"]);
+    expect(fixture.state.event.defaultMapId).toBe("map-new");
+    expect(fixture.state.inventory).toEqual([expect.objectContaining({ sessionId: "session-inherited", seatId: "new-seat-1" })]);
+  });
+
+  it.each([
+    ["pedido", "pedidos", { id: "order-1", sessionId: "session-1" }],
+    ["reserva", "reservas", { id: "reservation-1", inventorySeatId: "inventory-old" }],
+    ["ingresso", "ingressos", { id: "ticket-1", sessionId: "session-1" }],
+    ["check-in", "checkins", { id: "checkin-1", sessionId: "session-1" }],
+    ["operação administrativa", "operacoes", { id: "operation-1", sessionId: "session-1" }],
+  ])("bloqueia migração quando existe %s", async (_label, property, dependency) => {
+    const fixture = migrationFixture({ [property]: [dependency] });
+    await expect(fixture.maps.migrarSessoesEExcluir("event-1", "map-old", { targetMapId: "map-new" }, actor)).rejects.toMatchObject({ response: { code: "SESSION_HAS_DEPENDENCIES" } });
+    expect(fixture.state.maps).toHaveLength(2);
+    expect(fixture.state.inventory).toEqual([expect.objectContaining({ seatId: "old-seat-1" })]);
+  });
+
+  it("exige a seleção completa das sessões impactadas", async () => {
+    const fixture = migrationFixture({ sessions: [{ id: "session-1", eventId: "event-1", mapId: "map-old" }, { id: "session-2", eventId: "event-1", mapId: "map-old" }] });
+    await expect(fixture.maps.migrarSessoesEExcluir("event-1", "map-old", { targetMapId: "map-new", sessionIds: ["session-1"] }, actor)).rejects.toMatchObject({ response: { code: "SESSION_SELECTION_INCOMPLETE" } });
+  });
+
+  it.each([
+    ["mapa de outro evento", { maps: [{ id: "map-old", eventId: "event-1", status: "CONFIRMADO" }, { id: "map-new", eventId: "event-2", status: "CONFIRMADO" }] }, "MAP_EVENT_MISMATCH"],
+    ["mapa não confirmado", { maps: [{ id: "map-old", eventId: "event-1", status: "CONFIRMADO" }, { id: "map-new", eventId: "event-1", status: "EM_REVISAO" }] }, "MAP_NOT_CONFIRMED"],
+    ["mapa vazio", { seats: [{ id: "old-seat-1", mapId: "map-old", sellable: true }] }, "MAP_EMPTY"],
+  ])("rejeita %s", async (_label, override, code) => {
+    const fixture = migrationFixture(override);
+    await expect(fixture.maps.migrarSessoesEExcluir("event-1", "map-old", { targetMapId: "map-new" }, actor)).rejects.toMatchObject({ response: { code } });
+  });
+
+  it("rejeita mapas iguais e retorna a auditoria no retry", async () => {
+    const fixture = migrationFixture();
+    await expect(fixture.maps.migrarSessoesEExcluir("event-1", "map-old", { targetMapId: "map-old" }, actor)).rejects.toMatchObject({ response: { code: "SAME_MAP" } });
+    const first = await fixture.maps.migrarSessoesEExcluir("event-1", "map-old", { targetMapId: "map-new" }, actor);
+    const second = await fixture.maps.migrarSessoesEExcluir("event-1", "map-old", { targetMapId: "map-new" }, actor);
+    expect(second).toEqual(first);
+    expect(fixture.state.inventory).toHaveLength(1);
+  });
   function service() {
     const db: any = {
       select: () => ({ from: () => ({ where: async () => [{ id: "event-1", schoolId: "school-1", status: "EM_REVISAO" }] }) }),
