@@ -1,5 +1,5 @@
 import { BadRequestException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common";
-import { and, desc, eq, inArray, eventoAuditorias, eventoCheckins, eventoDeteccoesMapa, eventoImportacoesMapa, eventoIngressos, eventoInventarioAssentos, eventoMapaAssentos, eventoMapas, eventoOperacoesAdministrativas, eventoPedidos, eventoReservas, eventoSessoes, eventos, type Database } from "@essencia/db";
+import { and, asc, desc, eq, inArray, eventoAuditorias, eventoCheckins, eventoDeteccoesMapa, eventoImportacoesMapa, eventoIngressos, eventoInventarioAssentos, eventoMapaAssentos, eventoMapas, eventoOperacoesAdministrativas, eventoPedidos, eventoReservas, eventoSessoes, eventos, type Database } from "@essencia/db";
 import type { MultipartFile } from "@fastify/multipart";
 import type { EventoActor } from "@essencia/shared/types";
 import { DatabaseService } from "../../../common/database/database.service";
@@ -278,6 +278,15 @@ export class MapasService {
 
   async migrarSessoesEExcluir(eventId: string, mapId: string, input: { targetMapId: string; sessionIds?: string[] }, actor: EventoActor): Promise<MapMigrationResult> {
     const result = await this.transaction(async (db) => {
+      const eventQuery = db.select().from(eventos).where(eq(eventos.id, eventId));
+      const [event] = await this.lockRows(eventQuery);
+      if (!event) throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Evento não encontrado" });
+      if (actor.role !== "master" && event.schoolId !== actor.schoolId) throw new BadRequestException({ code: "FORBIDDEN", message: "Acesso negado" });
+
+      const sessionsQuery = db.select().from(eventoSessoes).where(eq(eventoSessoes.eventId, eventId));
+      const orderedSessionsQuery = typeof (sessionsQuery as any).orderBy === "function" ? (sessionsQuery as any).orderBy(asc(eventoSessoes.id)) : sessionsQuery;
+      const sessions = await this.lockRows(orderedSessionsQuery);
+      if (mapId === input.targetMapId) throw new BadRequestException({ code: "SAME_MAP", message: "O mapa de origem e o mapa de destino devem ser diferentes" });
       const auditQuery = db.select().from(eventoAuditorias).where(and(eq(eventoAuditorias.eventId, eventId), eq(eventoAuditorias.resourceType, "mapa"), eq(eventoAuditorias.resourceId, mapId)));
       const priorAudits = await auditQuery;
       const prior = (priorAudits ?? []).find((audit: any) => audit?.metadata?.action === "migrar_sessoes_e_excluir" && audit.metadata.targetMapId === input.targetMapId);
@@ -290,17 +299,10 @@ export class MapasService {
           inheritedSessionIds: Array.isArray(metadata.inheritedSessionIds) ? metadata.inheritedSessionIds : [],
           inventoryCreatedCount: typeof metadata.inventoryCreatedCount === "number" ? metadata.inventoryCreatedCount : 0,
           deletedMap: { deleted: true, code: "DELETED" as const },
-          storageKeys: [] as string[],
+          storageKeys: Array.isArray(metadata.storageKeys) ? metadata.storageKeys.filter((key: unknown): key is string => typeof key === "string") : [],
         };
       }
 
-      if (mapId === input.targetMapId) throw new BadRequestException({ code: "SAME_MAP", message: "O mapa de origem e o mapa de destino devem ser diferentes" });
-      const eventQuery = db.select().from(eventos).where(eq(eventos.id, eventId));
-      const [event] = await this.lockRows(eventQuery);
-      if (!event) throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Evento não encontrado" });
-      if (actor.role !== "master" && event.schoolId !== actor.schoolId) throw new BadRequestException({ code: "FORBIDDEN", message: "Acesso negado" });
-
-      const sessions = await this.lockRows(db.select().from(eventoSessoes).where(eq(eventoSessoes.eventId, eventId)));
       const maps = await this.lockRows(db.select().from(eventoMapas).where(inArray(eventoMapas.id, [mapId, input.targetMapId].sort())));
       const oldMap = maps.find((map: any) => map.id === mapId);
       const targetMap = maps.find((map: any) => map.id === input.targetMapId);
@@ -317,8 +319,9 @@ export class MapasService {
       const oldSeatIds = new Set(oldSeats.map((seat: any) => seat.id));
       const inventoryRows = await db.select().from(eventoInventarioAssentos).where(oldSeatIds.size ? inArray(eventoInventarioAssentos.seatId, [...oldSeatIds]) : eq(eventoInventarioAssentos.sessionId, "__nenhuma__"));
       const explicitSessions = sessions.filter((session: any) => session.mapId === mapId);
-      const inheritedSessions = sessions.filter((session: any) => session.mapId == null && inventoryRows.some((inventory: any) => inventory.sessionId === session.id && oldSeatIds.has(inventory.seatId)));
-      const impacted = [...new Map([...explicitSessions, ...inheritedSessions].map((session: any) => [session.id, session])).values()];
+      const inventorySessions = sessions.filter((session: any) => inventoryRows.some((inventory: any) => inventory.sessionId === session.id && oldSeatIds.has(inventory.seatId)));
+      const inheritedSessions = inventorySessions.filter((session: any) => session.mapId == null);
+      const impacted = [...new Map([...explicitSessions, ...inventorySessions].map((session: any) => [session.id, session])).values()];
       const migratedSessionIds = impacted.map((session: any) => session.id);
       const inheritedSessionIds = inheritedSessions.map((session: any) => session.id);
       if (input.sessionIds !== undefined) {
@@ -360,9 +363,9 @@ export class MapasService {
           inventoryCreatedCount += 1;
         }
       }
-      const metadata = { action: "migrar_sessoes_e_excluir", oldMapId: mapId, targetMapId: input.targetMapId, migratedSessionIds, inheritedSessionIds, inventoryCreatedCount, reason: "migração segura de sessões" };
-      await this.audit(eventId, actor, mapId, metadata, db);
       const storageKeys = [oldMap.originalFileKey, oldMap.previewFileKey].filter((key): key is string => typeof key === "string" && key.length > 0);
+      const metadata = { action: "migrar_sessoes_e_excluir", oldMapId: mapId, targetMapId: input.targetMapId, migratedSessionIds, inheritedSessionIds, inventoryCreatedCount, storageKeys, reason: "migração segura de sessões" };
+      await this.audit(eventId, actor, mapId, metadata, db);
       try {
         await db.delete(eventoMapas).where(and(eq(eventoMapas.id, mapId), eq(eventoMapas.eventId, eventId)));
       } catch (error) {
@@ -371,7 +374,11 @@ export class MapasService {
       return { oldMapId: mapId, targetMapId: input.targetMapId, migratedSessionIds, inheritedSessionIds, inventoryCreatedCount, deletedMap: { deleted: true, code: "DELETED" as const }, storageKeys };
     });
     if (result.storageKeys && this.storage) {
-      await Promise.all(result.storageKeys.map((key: string) => this.storage!.deleteFile(key).catch(() => undefined)));
+      await Promise.all(result.storageKeys.map(async (key: string) => {
+        const storage = this.storage as any;
+        const remover = typeof storage.deleteFile === "function" ? storage.deleteFile.bind(storage) : storage.deleteFileStrict?.bind(storage);
+        if (remover) await remover(key).catch(() => undefined);
+      }));
     }
     const { storageKeys: _storageKeys, ...response } = result;
     return response as MapMigrationResult;

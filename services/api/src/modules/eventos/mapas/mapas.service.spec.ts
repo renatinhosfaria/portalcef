@@ -1,6 +1,6 @@
 import { BadRequestException } from "@nestjs/common";
 import "reflect-metadata";
-jest.mock("@essencia/db", () => ({ eventos: {}, eventoMapas: {}, eventoSessoes: {}, eventoImportacoesMapa: {}, eventoDeteccoesMapa: {}, eventoMapaAssentos: {}, eventoInventarioAssentos: {}, eventoPedidos: {}, eventoReservas: {}, eventoIngressos: {}, eventoCheckins: {}, eventoOperacoesAdministrativas: {}, eventoAuditorias: {}, eq: jest.fn(), and: jest.fn(), inArray: jest.fn(), desc: jest.fn() }));
+jest.mock("@essencia/db", () => ({ eventos: {}, eventoMapas: {}, eventoSessoes: {}, eventoImportacoesMapa: {}, eventoDeteccoesMapa: {}, eventoMapaAssentos: {}, eventoInventarioAssentos: {}, eventoPedidos: {}, eventoReservas: {}, eventoIngressos: {}, eventoCheckins: {}, eventoOperacoesAdministrativas: {}, eventoAuditorias: {}, eq: jest.fn(), and: jest.fn(), inArray: jest.fn(), asc: jest.fn(), desc: jest.fn() }));
 import { MapasService } from "./mapas.service";
 import { StorageService } from "../../../common/storage/storage.service";
 
@@ -99,6 +99,9 @@ describe("MapasService", () => {
       pedidos: [], reservas: [], ingressos: [], checkins: [], operacoes: [], audits: [],
       ...overrides,
     };
+    const orderByCalls: unknown[][] = [];
+    const snapshot = () => ({ event: { ...state.event }, sessions: state.sessions.map((row: any) => ({ ...row })), maps: state.maps.map((row: any) => ({ ...row })), seats: state.seats.map((row: any) => ({ ...row })), inventory: state.inventory.map((row: any) => ({ ...row })), audits: state.audits.map((row: any) => ({ ...row })) });
+    const restore = (saved: any) => { Object.assign(state.event, saved.event); state.sessions = saved.sessions; state.maps = saved.maps; state.seats = saved.seats; state.inventory = saved.inventory; state.audits = saved.audits; };
     const rows = (table: unknown) => table === dbModule.eventos ? [state.event]
       : table === dbModule.eventoSessoes ? state.sessions : table === dbModule.eventoMapas ? state.maps
         : table === dbModule.eventoMapaAssentos ? state.seats : table === dbModule.eventoInventarioAssentos ? state.inventory
@@ -109,6 +112,8 @@ describe("MapasService", () => {
       select: () => ({ from: (table: unknown) => ({ where: () => {
         const query: any = Promise.resolve(rows(table));
         query.for = () => query;
+        query.orderBy = (...args: unknown[]) => { orderByCalls.push(args); return query; };
+        if (table === dbModule.eventoSessoes && overrides.auditAfterSessionLock) state.audits.push(overrides.auditAfterSessionLock);
         return query;
       } }) }),
       update: (table: unknown) => ({ set: (values: any) => ({ where: () => {
@@ -118,6 +123,7 @@ describe("MapasService", () => {
       } }) }),
       delete: (table: unknown) => ({ where: async () => {
         if (table === dbModule.eventoInventarioAssentos) state.inventory = [];
+        if (table === dbModule.eventoMapas && overrides.deleteMapError) throw new Error("FK evento_mapas antiga");
         if (table === dbModule.eventoMapas) state.maps = state.maps.filter((map: any) => map.id !== "map-old");
       } }),
       insert: (table: unknown) => ({ values: (values: any) => {
@@ -125,10 +131,10 @@ describe("MapasService", () => {
         if (table === dbModule.eventoAuditorias) state.audits.push(values);
         return { returning: async () => [{ id: `inserted-${state.audits.length}`, ...values }] };
       } }),
-      transaction: async (callback: (tx: any) => Promise<unknown>) => callback(db),
+      transaction: async (callback: (tx: any) => Promise<unknown>) => { const saved = snapshot(); try { return await callback(db); } catch (error) { restore(saved); throw error; } },
     };
     const storage = { deleteFile: jest.fn().mockResolvedValue(undefined) };
-    return { state, db, maps: new MapasService({ db } as any, storage as any, {} as any), storage };
+    return { state, db, maps: new MapasService({ db } as any, storage as any, {} as any), storage, orderByCalls };
   }
 
   it("detecta sessão herdada pelo inventário e atualiza o mapa padrão", async () => {
@@ -141,6 +147,38 @@ describe("MapasService", () => {
     expect(result.migratedSessionIds).toEqual(["session-inherited"]);
     expect(fixture.state.event.defaultMapId).toBe("map-new");
     expect(fixture.state.inventory).toEqual([expect.objectContaining({ sessionId: "session-inherited", seatId: "new-seat-1" })]);
+  });
+
+  it("migra qualquer sessão cujo inventário ainda usa assento do mapa antigo", async () => {
+    const fixture = migrationFixture({
+      sessions: [{ id: "session-target", eventId: "event-1", mapId: "map-new" }],
+      inventory: [{ id: "inventory-old", sessionId: "session-target", seatId: "old-seat-1", status: "DISPONIVEL" }],
+    });
+    const result = await fixture.maps.migrarSessoesEExcluir("event-1", "map-old", { targetMapId: "map-new" }, actor);
+    expect(result.migratedSessionIds).toEqual(["session-target"]);
+    expect(fixture.state.inventory).toEqual([expect.objectContaining({ sessionId: "session-target", seatId: "new-seat-1" })]);
+  });
+
+  it("ordena as sessões antes de bloquear os mapas", async () => {
+    const fixture = migrationFixture();
+    await fixture.maps.migrarSessoesEExcluir("event-1", "map-old", { targetMapId: "map-new" }, actor);
+    expect(fixture.orderByCalls.length).toBeGreaterThan(0);
+  });
+
+  it("desfaz a migração quando a exclusão do mapa falha", async () => {
+    const fixture = migrationFixture({ deleteMapError: true });
+    await expect(fixture.maps.migrarSessoesEExcluir("event-1", "map-old", { targetMapId: "map-new" }, actor)).rejects.toMatchObject({ response: { code: "MAP_DELETE_BLOCKED" } });
+    expect(fixture.state.event.defaultMapId).toBe("map-old");
+    expect(fixture.state.sessions[0].mapId).toBe("map-old");
+    expect(fixture.state.inventory).toEqual([expect.objectContaining({ seatId: "old-seat-1" })]);
+    expect(fixture.state.maps).toHaveLength(2);
+  });
+
+  it("reconsulta auditoria depois dos locks para um retry concorrente", async () => {
+    const audit = { metadata: { action: "migrar_sessoes_e_excluir", targetMapId: "map-new", migratedSessionIds: ["session-1"], inheritedSessionIds: [], inventoryCreatedCount: 1, storageKeys: [] } };
+    const fixture = migrationFixture({ auditAfterSessionLock: audit });
+    await expect(fixture.maps.migrarSessoesEExcluir("event-1", "map-old", { targetMapId: "map-new" }, actor)).resolves.toEqual(expect.objectContaining({ deletedMap: { deleted: true, code: "DELETED" } }));
+    expect(fixture.state.inventory).toEqual([expect.objectContaining({ seatId: "old-seat-1" })]);
   });
 
   it.each([
