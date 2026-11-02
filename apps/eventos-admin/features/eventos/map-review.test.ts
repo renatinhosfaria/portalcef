@@ -55,4 +55,38 @@ describe("MapReview", () => {
     resolve();
     await waitFor(() => expect(button).toHaveProperty("disabled", false));
   });
+
+  it("oferece migração apenas quando o mapa anterior está em uso e mostra DELETED após sucesso", async () => {
+    const onMigrateAndDelete = vi.fn().mockResolvedValue({
+      migratedSessionIds: ["sessao-1"],
+      inheritedSessionIds: [],
+      inventoryCreatedCount: 12,
+      deletedMap: { deleted: true, code: "DELETED" as const },
+    });
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const { rerender } = render(React.createElement(MapReview, {
+      proposals: [],
+      previousMapArchive: { archived: false, code: "MAP_IN_USE", sessionIds: ["sessao-1"] },
+      onMigrateAndDelete,
+    }));
+    expect(screen.getByRole("button", { name: "Migrar sessões e excluir mapa anterior" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Migrar sessões e excluir mapa anterior" }));
+    await waitFor(() => expect(onMigrateAndDelete).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByText(/mapa anterior excluído/i)).toBeTruthy());
+    expect(screen.getByText(/1 sessão/)).toBeTruthy();
+    rerender(React.createElement(MapReview, {
+      proposals: [],
+      previousMapArchive: { archived: true, code: "ARCHIVED" },
+      onMigrateAndDelete,
+    }));
+    expect(screen.queryByRole("button", { name: "Migrar sessões e excluir mapa anterior" })).toBeNull();
+  });
+
+  it("não exibe a ação de migração sem MAP_IN_USE ou sem callback", () => {
+    const onMigrateAndDelete = vi.fn();
+    const { rerender } = render(React.createElement(MapReview, { proposals: [], previousMapArchive: { archived: true, code: "ARCHIVED" }, onMigrateAndDelete }));
+    expect(screen.queryByRole("button", { name: "Migrar sessões e excluir mapa anterior" })).toBeNull();
+    rerender(React.createElement(MapReview, { proposals: [], previousMapArchive: { archived: false, code: "MAP_IN_USE" } }));
+    expect(screen.queryByRole("button", { name: "Migrar sessões e excluir mapa anterior" })).toBeNull();
+  });
 });

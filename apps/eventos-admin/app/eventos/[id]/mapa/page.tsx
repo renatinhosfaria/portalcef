@@ -4,23 +4,36 @@ import React, { useEffect, useRef, useState } from "react";
 
 // compatibilidade de contrato: x.map?.status
 import { adaptDetection } from "../../../../features/eventos/contracts";
-import { MapReview, type MapProposal, type PreviousMapArchive } from "../../../../features/eventos/map-review";
+import { MapReview, type MapMigrationResult, type MapProposal, type PreviousMapArchive } from "../../../../features/eventos/map-review";
 
 async function respostaApi(response: Response) {
   const body = await response.json().catch(() => ({}));
-  if (!response.ok || body.success === false) throw new Error(body.error?.message ?? "Falha na operação do mapa");
+  if (!response.ok || body.success === false) {
+    const error = new Error(body.error?.message ?? body.error?.code ?? "Falha na operação do mapa");
+    (error as Error & { code?: string }).code = body.error?.code;
+    throw error;
+  }
   return body.data ?? body;
 }
 
-type ReplacementData = { inheritedSessionIds: string[]; inventorySessionIds: string[]; inventoryCreatedCount: number; previousMapArchive: PreviousMapArchive };
+type ReplacementData = { inheritedSessionIds: string[]; inventorySessionIds: string[]; inventoryCreatedCount: number; previousMapId?: string | null; previousMapArchive: PreviousMapArchive };
+type MigrationData = MapMigrationResult & { oldMapId: string; targetMapId: string };
 
 function validarSubstituicao(data: unknown): ReplacementData {
   if (!data || typeof data !== "object") throw new Error("Resposta inválida da substituição");
   const value = data as Partial<ReplacementData>;
   const archive = value.previousMapArchive;
-  const archiveValido = !!archive && typeof archive === "object" && typeof archive.archived === "boolean" && ["ARCHIVED", "MAP_IN_USE", "NO_PREVIOUS_MAP"].includes(archive.code) && (archive.sessionIds === undefined || Array.isArray(archive.sessionIds));
+  const archiveValido = !!archive && typeof archive === "object" && typeof archive.archived === "boolean" && ["ARCHIVED", "MAP_IN_USE", "NO_PREVIOUS_MAP", "DELETED"].includes(archive.code) && (archive.sessionIds === undefined || Array.isArray(archive.sessionIds));
   if (!Array.isArray(value.inheritedSessionIds) || !Array.isArray(value.inventorySessionIds) || typeof value.inventoryCreatedCount !== "number" || !archiveValido) throw new Error("Resposta inválida da substituição");
   return value as ReplacementData;
+}
+
+function validarMigracao(data: unknown): MigrationData {
+  if (!data || typeof data !== "object") throw new Error("Resposta inválida da migração");
+  const value = data as Partial<MigrationData>;
+  const deletedMap = value.deletedMap;
+  if (typeof value.oldMapId !== "string" || typeof value.targetMapId !== "string" || !Array.isArray(value.migratedSessionIds) || !Array.isArray(value.inheritedSessionIds) || typeof value.inventoryCreatedCount !== "number" || !deletedMap || deletedMap.deleted !== true || deletedMap.code !== "DELETED") throw new Error("Resposta inválida da migração");
+  return value as MigrationData;
 }
 
 export default function MapaPage() {
@@ -35,6 +48,7 @@ export default function MapaPage() {
   const [inventoryCreatedCount, setInventoryCreatedCount] = useState<number | undefined>(undefined);
   const [inventorySessionIds, setInventorySessionIds] = useState<string[]>([]);
   const [previousMapArchive, setPreviousMapArchive] = useState<PreviousMapArchive | undefined>(undefined);
+  const [previousMapId, setPreviousMapId] = useState<string | null>(null);
   const [pendingSubstitutionMapId, setPendingSubstitutionMapId] = useState<string | null>(null);
   const [mapaPadraoPendente, setMapaPadraoPendente] = useState(false);
   const [error, setError] = useState("");
@@ -46,6 +60,7 @@ export default function MapaPage() {
     setInventoryCreatedCount(data.inventoryCreatedCount ?? 0);
     setInventorySessionIds(data.inventorySessionIds ?? []);
     setPreviousMapArchive(data.previousMapArchive);
+    setPreviousMapId(data.previousMapId ?? null);
   };
 
   const substituirMapaPadrao = (mapId: string) => {
@@ -103,6 +118,7 @@ export default function MapaPage() {
     setInventoryCreatedCount(undefined);
     setInventorySessionIds([]);
     setPreviousMapArchive(undefined);
+    setPreviousMapId(null);
     setConfirmedMapId(null);
     try {
       const data = await respostaApi(await fetch(`/eventos-admin/api/eventos/admin/${id}/mapas/import`, { method: "POST", body: file }));
@@ -134,5 +150,29 @@ export default function MapaPage() {
     return promise;
   };
 
-  return <section className="space-y-4"><h1>Mapa e revisão</h1>{error && <p role="alert">{error}</p>}<MapReview proposals={items} status={confirmedMapId ? "CONFIRMADO" : status} affectedSessionIds={affectedSessionIds} inventoryCreatedCount={inventoryCreatedCount} inventorySessionIds={inventorySessionIds} previousMapArchive={previousMapArchive} onRetryDefaultMap={mapaPadraoPendente ? retrySubstituicao : undefined} onUpload={carregarUpload} onCorrection={async (payload) => { if (!version) throw new Error("Mapa ausente"); try { await respostaApi(await fetch(`/eventos-admin/api/eventos/admin/${id}/mapas/${version}/deteccoes`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) })); } catch { setError("Falha ao corrigir detecção."); throw new Error("correction"); } }} onConfirm={confirmarMapa} /></section>;
+  const migrarEExcluirMapaAnterior = async (): Promise<MapMigrationResult> => {
+    if (!previousMapId) throw new Error("Mapa anterior ausente");
+    const targetMapId = confirmedMapId ?? version;
+    if (!targetMapId) throw new Error("Mapa confirmado ausente");
+    try {
+      const data = validarMigracao(await respostaApi(await fetch(`/eventos-admin/api/eventos/admin/${id}/mapas/${previousMapId}/migrar-e-excluir`, {
+        method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ targetMapId, sessionIds: previousMapArchive?.sessionIds ?? [] }),
+      })));
+      setAffectedSessionIds(data.inheritedSessionIds ?? []);
+      setInventoryCreatedCount(data.inventoryCreatedCount ?? 0);
+      setInventorySessionIds(data.migratedSessionIds ?? []);
+      setPreviousMapArchive({ archived: true, code: "DELETED", sessionIds: data.migratedSessionIds ?? [] });
+      setPreviousMapId(null);
+      setError("");
+      refresh();
+      return data;
+    } catch (error) {
+      setStatus("CONFIRMADO");
+      setConfirmedMapId(targetMapId);
+      setError(error instanceof Error ? error.message : "Falha ao migrar sessões e excluir mapa anterior.");
+      throw error;
+    }
+  };
+
+  return <section className="space-y-4"><h1>Mapa e revisão</h1>{error && <p role="alert">{error}</p>}<MapReview proposals={items} status={confirmedMapId ? "CONFIRMADO" : status} affectedSessionIds={affectedSessionIds} inventoryCreatedCount={inventoryCreatedCount} inventorySessionIds={inventorySessionIds} previousMapArchive={previousMapArchive} onRetryDefaultMap={mapaPadraoPendente ? retrySubstituicao : undefined} onMigrateAndDelete={previousMapArchive?.code === "MAP_IN_USE" && previousMapId ? migrarEExcluirMapaAnterior : undefined} onUpload={carregarUpload} onCorrection={async (payload) => { if (!version) throw new Error("Mapa ausente"); try { await respostaApi(await fetch(`/eventos-admin/api/eventos/admin/${id}/mapas/${version}/deteccoes`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) })); } catch { setError("Falha ao corrigir detecção."); throw new Error("correction"); } }} onConfirm={confirmarMapa} /></section>;
 }
