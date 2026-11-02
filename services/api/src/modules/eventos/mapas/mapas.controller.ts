@@ -23,4 +23,9 @@ export class MapasController {
     if (!parsed.success) return { success: false, error: { code: "VALIDATION_ERROR", details: parsed.error.flatten() } };
     return { success: true, data: await this.service.substituirMapaPadrao(id, parsed.data.mapId, actor) };
   }
+  @Post("mapas/:versionId/migrar-e-excluir") async migrarEExcluir(@Param("id") id: string, @Param("versionId") versionId: string, @Body() body: unknown, @CurrentUser() actor: any) {
+    const parsed = z.object({ targetMapId: z.string().uuid(), sessionIds: z.array(z.string().uuid()).optional() }).safeParse(body);
+    if (!parsed.success) return { success: false, error: { code: "VALIDATION_ERROR", details: parsed.error.flatten() } };
+    return { success: true, data: await this.service.migrarSessoesEExcluir(id, versionId, parsed.data, actor) };
+  }
 }
