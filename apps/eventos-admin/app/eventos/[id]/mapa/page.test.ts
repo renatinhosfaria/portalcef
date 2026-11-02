@@ -122,6 +122,28 @@ describe("MapaPage substituição segura", () => {
     expect(chamadas.filter(url => url.endsWith("/mapa-padrao"))).toHaveLength(1);
   });
 
+  it("recupera no reload a ação de migrar quando o PATCH encontra MAP_IN_USE", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/eventos/admin/evento-1")) return resposta({ defaultMapId: "mapa-atual" });
+      if (url.endsWith("/mapas/mapa-atual/revisao")) return resposta({ map: { status: "CONFIRMADO" }, detections: [mapa] });
+      if (url.endsWith("/mapa-padrao")) return resposta({
+        previousMapId: "mapa-anterior",
+        inheritedSessionIds: ["sessao-herdada"],
+        inventorySessionIds: ["sessao-herdada"],
+        inventoryCreatedCount: 0,
+        previousMapArchive: { archived: false, code: "MAP_IN_USE" as const, sessionIds: ["sessao-explicita", "sessao-herdada"] },
+      });
+      if (url.endsWith("/mapas/mapa-anterior/migrar-e-excluir")) return resposta({ oldMapId: "mapa-anterior", targetMapId: "mapa-atual", migratedSessionIds: ["sessao-explicita", "sessao-herdada"], inheritedSessionIds: ["sessao-herdada"], inventoryCreatedCount: 4, deletedMap: { deleted: true, code: "DELETED" as const } });
+      throw new Error(`URL inesperada: ${url}`);
+    }));
+    render(React.createElement(MapaPage));
+    const migrate = await screen.findByRole("button", { name: "Migrar sessões e excluir mapa anterior" });
+    fireEvent.click(migrate);
+    await waitFor(() => expect(screen.getByText(/mapa anterior excluído/i)).toBeTruthy());
+  });
+
   it("remove os avisos de inventário da troca anterior após novo upload", async () => {
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
@@ -190,5 +212,91 @@ describe("MapaPage substituição segura", () => {
     } finally {
       process.off("unhandledRejection", aoRejeitar);
     }
+  });
+
+  it("migra as sessões afetadas e exclui o mapa anterior sem reenviar upload", async () => {
+    const chamadas: { url: string; init?: RequestInit }[] = [];
+    const substituicaoEmUso = {
+      inheritedSessionIds: [],
+      inventorySessionIds: [],
+      inventoryCreatedCount: 0,
+      previousMapId: "mapa-anterior",
+      previousMapArchive: { archived: false, code: "MAP_IN_USE" as const, sessionIds: ["sessao-1", "sessao-2"] },
+    };
+    const migracao = {
+      oldMapId: "mapa-anterior",
+      targetMapId: "mapa-confirmado",
+      migratedSessionIds: ["sessao-1", "sessao-2"],
+      inheritedSessionIds: [],
+      inventoryCreatedCount: 8,
+      deletedMap: { deleted: true, code: "DELETED" as const },
+    };
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input); chamadas.push({ url, init });
+      if (url.endsWith("/eventos/admin/evento-1")) return resposta({ defaultMapId: "mapa-confirmado" });
+      if (url.endsWith("/mapas/mapa-confirmado/revisao")) return resposta({ map: { status: "EM_REVISAO" }, detections: [mapa] });
+      if (url.endsWith("/mapas/mapa-confirmado/confirmar")) return resposta({});
+      if (url.endsWith("/mapa-padrao/substituir")) return resposta(substituicaoEmUso);
+      if (url.endsWith("/mapas/mapa-anterior/migrar-e-excluir")) return resposta(migracao);
+      throw new Error(`URL inesperada: ${url}`);
+    }));
+    render(React.createElement(MapaPage));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Confirmar mapa" })).toHaveProperty("disabled", false));
+    fireEvent.change(screen.getByPlaceholderText("Motivo da correção"), { target: { value: "ajuste" } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar mapa" }));
+    const migrate = await screen.findByRole("button", { name: "Migrar sessões e excluir mapa anterior" });
+    fireEvent.click(migrate);
+    await waitFor(() => expect(screen.getByText(/mapa anterior excluído/i)).toBeTruthy());
+    const request = chamadas.find(x => x.url.endsWith("/mapas/mapa-anterior/migrar-e-excluir"));
+    expect(JSON.parse(String(request?.init?.body))).toEqual({ targetMapId: "mapa-confirmado", sessionIds: ["sessao-1", "sessao-2"] });
+    expect(chamadas.some(x => x.url.endsWith("/mapas/import"))).toBe(false);
+    expect(screen.getAllByText(/2 sessão/).length).toBeGreaterThan(0);
+  });
+
+  it("não chama a migração quando a confirmação é cancelada", async () => {
+    let migrationCalls = 0;
+    const substituicaoEmUso = { inheritedSessionIds: [], inventorySessionIds: [], inventoryCreatedCount: 0, previousMapId: "mapa-anterior", previousMapArchive: { archived: false, code: "MAP_IN_USE" as const, sessionIds: ["sessao-1"] } };
+    vi.spyOn(window, "confirm").mockReturnValue(false);
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/eventos/admin/evento-1")) return resposta({ defaultMapId: "mapa-confirmado" });
+      if (url.endsWith("/mapas/mapa-confirmado/revisao")) return resposta({ map: { status: "EM_REVISAO" }, detections: [mapa] });
+      if (url.endsWith("/mapas/mapa-confirmado/confirmar")) return resposta({});
+      if (url.endsWith("/mapa-padrao/substituir")) return resposta(substituicaoEmUso);
+      if (url.endsWith("/migrar-e-excluir")) { migrationCalls += 1; return resposta({}); }
+      throw new Error(`URL inesperada: ${url}`);
+    }));
+    render(React.createElement(MapaPage));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Confirmar mapa" })).toHaveProperty("disabled", false));
+    fireEvent.change(screen.getByPlaceholderText("Motivo da correção"), { target: { value: "ajuste" } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar mapa" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Migrar sessões e excluir mapa anterior" }));
+    await waitFor(() => expect(screen.getByText(/mapa anterior foi preservado/i)).toBeTruthy());
+    expect(migrationCalls).toBe(0);
+  });
+
+  it("preserva CONFIRMADO e MAP_IN_USE quando a migração é bloqueada por dependência", async () => {
+    const substituicaoEmUso = { inheritedSessionIds: [], inventorySessionIds: [], inventoryCreatedCount: 0, previousMapId: "mapa-anterior", previousMapArchive: { archived: false, code: "MAP_IN_USE" as const, sessionIds: ["sessao-1"] } };
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/eventos/admin/evento-1")) return resposta({ defaultMapId: "mapa-confirmado" });
+      if (url.endsWith("/mapas/mapa-confirmado/revisao")) return resposta({ map: { status: "EM_REVISAO" }, detections: [mapa] });
+      if (url.endsWith("/mapas/mapa-confirmado/confirmar")) return resposta({});
+      if (url.endsWith("/mapa-padrao/substituir")) return resposta(substituicaoEmUso);
+      if (url.endsWith("/migrar-e-excluir")) return new Response(JSON.stringify({ success: false, error: { code: "SESSION_HAS_DEPENDENCIES", message: "A sessão possui dependências" } }), { status: 409, headers: { "content-type": "application/json" } });
+      throw new Error(`URL inesperada: ${url}`);
+    }));
+    render(React.createElement(MapaPage));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Confirmar mapa" })).toHaveProperty("disabled", false));
+    fireEvent.change(screen.getByPlaceholderText("Motivo da correção"), { target: { value: "ajuste" } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar mapa" }));
+    const migrate = await screen.findByRole("button", { name: "Migrar sessões e excluir mapa anterior" });
+    fireEvent.click(migrate);
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toMatch(/dependências/i));
+    expect(screen.getByText(/mapa anterior foi preservado/i)).toBeTruthy();
+    expect(screen.getAllByRole("status").some(element => element.textContent === "Mapa confirmado")).toBe(true);
+    expect(screen.getByRole("button", { name: "Migrar sessões e excluir mapa anterior" })).toBeTruthy();
   });
 });

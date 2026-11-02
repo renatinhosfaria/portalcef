@@ -20,4 +20,37 @@ describe("MapasController", () => {
     expect(paths).toBe("eventos/admin/:id");
     expect(route).toBe("mapa-padrao/substituir");
   });
+
+  it("repassa a migração e exclusão com corpo parseado e ator", async () => {
+    const migrarSessoesEExcluir = jest.fn().mockResolvedValue({ deletedMap: { id: "map-old" } });
+    const controller = new MapasController({ migrarSessoesEExcluir } as any);
+    const actor = { userId: "user-1", role: "diretora_geral", schoolId: "school-1" };
+    const input = {
+      targetMapId: "22222222-2222-4222-8222-222222222222",
+      sessionIds: ["33333333-3333-4333-8333-333333333333"],
+    };
+
+    await expect(controller.migrarEExcluir("evento-1", "map-old", input, actor)).resolves.toEqual({
+      success: true,
+      data: { deletedMap: { id: "map-old" } },
+    });
+    expect(migrarSessoesEExcluir).toHaveBeenCalledWith("evento-1", "map-old", input, actor);
+  });
+
+  it("retorna erro de validação sem chamar o serviço para corpo inválido", async () => {
+    const migrarSessoesEExcluir = jest.fn();
+    const controller = new MapasController({ migrarSessoesEExcluir } as any);
+    const actor = { userId: "user-1", role: "diretora_geral", schoolId: "school-1" };
+
+    await expect(controller.migrarEExcluir("evento-1", "map-old", { targetMapId: "invalido", sessionIds: ["tambem-invalido"] }, actor)).resolves.toMatchObject({
+      success: false,
+      error: { code: "VALIDATION_ERROR" },
+    });
+    expect(migrarSessoesEExcluir).not.toHaveBeenCalled();
+  });
+
+  it("expõe a rota de migração e exclusão", () => {
+    const route = Reflect.getMetadata("path", MapasController.prototype.migrarEExcluir) as string;
+    expect(route).toBe("mapas/:versionId/migrar-e-excluir");
+  });
 });
