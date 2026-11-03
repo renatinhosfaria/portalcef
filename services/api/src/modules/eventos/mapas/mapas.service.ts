@@ -8,7 +8,7 @@ import { ErroProposta, aplicarOperacoes, pendenciasPublicacao, type LayoutMapa, 
 import { GeradorMapaPdf } from "./gerador/gerador-mapa-pdf";
 import { propostaParaConfirmacao } from "./gerador/proposta-para-confirmacao";
 
-export interface ConfirmMapInput { seats: Array<{ id?: string; rowLabel: string; seatNumber: string; x: number; y: number; width?: number; height?: number; category?: string | null; accessible?: boolean; sellable?: boolean; metadata?: MetadadosAssento }>; layout?: LayoutMapa; reason?: string; }
+export interface ConfirmMapInput { seats: Array<{ id?: string; rowLabel: string; seatNumber: string; x: number; y: number; width?: number; height?: number; category?: string | null; accessible?: boolean; sellable?: boolean; metadata?: MetadadosAssento }>; layout?: LayoutMapa; revisaoEsperada?: number; reason?: string; }
 export interface MapImportSummary { importId: string; mapId: string; status: string; proposalCount: number; conflictCount: number; }
 export interface MapReplacementResult {
   updated: unknown;
@@ -234,8 +234,13 @@ export class MapasService {
     const [imp] = await this.db.select().from(eventoImportacoesMapa).where(eq(eventoImportacoesMapa.mapId, map.id));
     const proposta = (imp?.proposta as PropostaMapa | null | undefined) ?? null;
     if (!imp || !proposta) throw new BadRequestException({ code: "PROPOSTA_INEXISTENTE", message: "Este mapa não tem proposta para conferir." });
-    if (proposta.revisao !== revisaoBase) throw new BadRequestException({ code: "PROPOSTA_DESATUALIZADA", message: "Esta conferência foi alterada em outra aba. Recarregue para continuar." });
+    this.exigirRevisao(proposta, revisaoBase);
     return { imp, proposta };
+  }
+
+  private exigirRevisao(proposta: PropostaMapa | null | undefined, revisaoBase: number) {
+    if (!proposta) throw new BadRequestException({ code: "PROPOSTA_INEXISTENTE", message: "Este mapa não tem proposta para conferir." });
+    if (proposta.revisao !== revisaoBase) throw new BadRequestException({ code: "PROPOSTA_DESATUALIZADA", message: "Esta conferência foi alterada em outra aba. Recarregue para continuar." });
   }
 
   async editarProposta(eventId: string, versionId: string, input: { revisaoBase: number; operacoes: OperacaoProposta[] }, actor: EventoActor): Promise<PropostaMapa> {
@@ -248,6 +253,10 @@ export class MapasService {
       throw erro;
     }
     await this.transaction(async (db) => {
+      const [mapaAtual] = await this.lockRows(db.select().from(eventoMapas).where(and(eq(eventoMapas.id, versionId), eq(eventoMapas.eventId, eventId))));
+      if (!mapaAtual || mapaAtual.status !== "EM_REVISAO") throw new BadRequestException({ code: "MAP_NOT_IN_REVIEW", message: "Somente mapas em revisão podem ser alterados" });
+      const [importacaoAtual] = await this.lockRows(db.select().from(eventoImportacoesMapa).where(eq(eventoImportacoesMapa.id, imp.id)));
+      this.exigirRevisao(importacaoAtual?.proposta as PropostaMapa | null | undefined, input.revisaoBase);
       await db.update(eventoImportacoesMapa).set({ proposta: nova, updatedAt: new Date() }).where(eq(eventoImportacoesMapa.id, imp.id));
       await this.audit(eventId, actor, versionId, { action: "editar_proposta", revisao: nova.revisao, operacoes: input.operacoes }, db);
     });
@@ -259,7 +268,7 @@ export class MapasService {
     const pendencias = pendenciasPublicacao(proposta);
     if (pendencias.length) throw new BadRequestException({ code: "PROPOSTA_COM_PENDENCIAS", message: "Ainda há pontos para conferir antes de publicar.", details: { pendencias } });
     const { seats, layout } = propostaParaConfirmacao(proposta);
-    return this.confirmar(eventId, versionId, { seats, layout, reason: input.motivo?.trim() || undefined }, actor);
+    return this.confirmar(eventId, versionId, { seats, layout, revisaoEsperada: input.revisaoBase, reason: input.motivo?.trim() || undefined }, actor);
   }
 
   async confirmar(eventId: string, versionId: string, corrections: ConfirmMapInput, actor: EventoActor) {
@@ -273,10 +282,14 @@ export class MapasService {
     const { confirmed, imp, inventory } = await this.transaction(async (db) => {
       const [event] = await this.lockRows(db.select().from(eventos).where(eq(eventos.id, eventId)));
       if (!event) throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Evento não encontrado" });
+      const [mapaTravado] = await this.lockRows(db.select().from(eventoMapas).where(and(eq(eventoMapas.id, map.id), eq(eventoMapas.eventId, eventId))));
+      if (!mapaTravado || mapaTravado.status !== "EM_REVISAO") throw new BadRequestException({ code: "MAP_NOT_IN_REVIEW", message: "Somente mapas em revisão podem ser confirmados" });
+      const [importTravada] = await this.lockRows(db.select().from(eventoImportacoesMapa).where(eq(eventoImportacoesMapa.mapId, map.id)));
+      if (corrections.revisaoEsperada !== undefined) this.exigirRevisao(importTravada?.proposta as PropostaMapa | null | undefined, corrections.revisaoEsperada);
       if (typeof (db as any).delete === "function") await db.delete(eventoMapaAssentos).where(eq(eventoMapaAssentos.mapId, map.id));
       for (const seat of corrections.seats) await db.insert(eventoMapaAssentos).values({ mapId: map.id, rowLabel: seat.rowLabel, seatNumber: seat.seatNumber, x: seat.x, y: seat.y, width: seat.width ?? 1, height: seat.height ?? 1, category: seat.category ?? null, accessible: seat.accessible ?? false, sellable: seat.sellable ?? true, ...(seat.metadata ? { metadata: seat.metadata } : {}) });
       const [next] = await db.update(eventoMapas).set({ status: "CONFIRMADO", ...(corrections.layout ? { layout: corrections.layout } : {}), confirmedAt: new Date(), confirmedBy: actor.userId, updatedAt: new Date() }).where(eq(eventoMapas.id, map.id)).returning();
-      const [importRow] = await db.select().from(eventoImportacoesMapa).where(eq(eventoImportacoesMapa.mapId, map.id));
+      const importRow = importTravada;
       if (importRow) await db.update(eventoImportacoesMapa).set({ status: "CONFIRMADA", reviewedBy: actor.userId, reviewedAt: new Date(), updatedAt: new Date() }).where(eq(eventoImportacoesMapa.id, importRow.id));
       const inventory = event.defaultMapId
         ? await this.sincronizarInventarioMapa(db, eventId, map.id, actor)

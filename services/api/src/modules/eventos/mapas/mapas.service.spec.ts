@@ -475,12 +475,13 @@ describe("MapasService", () => {
           if (selectCall === 1) return [{ id: "event-1", schoolId: "school-1", defaultMapId: "map-1" }];
           if (selectCall === 2) return [{ id: "map-1", eventId: "event-1", status: "EM_REVISAO" }];
           if (selectCall === 3) return [{ id: "event-1", schoolId: "school-1", defaultMapId: "map-1" }];
-          if (selectCall === 4) return [{ id: "import-1" }];
-          if (selectCall === 5) return [{ id: "event-1", schoolId: "school-1", defaultMapId: "map-1" }];
-          if (selectCall === 6) return sessions;
-          if (selectCall === 7) return mapSeats;
-          if (selectCall === 8) return existingInventory.filter((item) => item.sessionId === "session-inherited");
-          if (selectCall === 9) return existingInventory.filter((item) => item.sessionId === "session-specific");
+          if (selectCall === 4) return [{ id: "map-1", eventId: "event-1", status: "EM_REVISAO" }];
+          if (selectCall === 5) return [{ id: "import-1" }];
+          if (selectCall === 6) return [{ id: "event-1", schoolId: "school-1", defaultMapId: "map-1" }];
+          if (selectCall === 7) return sessions;
+          if (selectCall === 8) return mapSeats;
+          if (selectCall === 9) return existingInventory.filter((item) => item.sessionId === "session-inherited");
+          if (selectCall === 10) return existingInventory.filter((item) => item.sessionId === "session-specific");
           return [];
         },
       }),
@@ -700,7 +701,7 @@ describe("MapasService", () => {
       pontos: [], ...sobrescrever,
     });
 
-    function fixture(opcoes: { proposta?: any; statusMapa?: string; semImportacao?: boolean } = {}) {
+    function fixture(opcoes: { proposta?: any; statusMapa?: string; semImportacao?: boolean; outraAbaAposPrimeiraLeitura?: boolean } = {}) {
       const dbModule = jest.requireMock("@essencia/db") as any;
       const state: any = {
         event: { id: "event-1", schoolId: "school-1", defaultMapId: null },
@@ -708,7 +709,15 @@ describe("MapasService", () => {
         imp: opcoes.semImportacao ? null : { id: "imp-1", mapId: "map-1", status: "EM_REVISAO", proposta: opcoes.proposta === undefined ? propostaValida() : opcoes.proposta },
         seats: [] as any[], audits: [] as any[], mapUpdates: [] as any[], impUpdates: [] as any[],
       };
-      const rows = (table: unknown) => table === dbModule.eventos ? [state.event] : table === dbModule.eventoMapas ? [state.map] : table === dbModule.eventoImportacoesMapa ? (state.imp ? [state.imp] : []) : [];
+      let outraAba = opcoes.outraAbaAposPrimeiraLeitura ?? false;
+      const rows = (table: unknown) => {
+        if (table === dbModule.eventoImportacoesMapa && state.imp) {
+          const lida = state.imp;
+          if (outraAba) { outraAba = false; state.imp = { ...lida, proposta: { ...lida.proposta, revisao: lida.proposta.revisao + 1 } }; }
+          return [lida];
+        }
+        return table === dbModule.eventos ? [state.event] : table === dbModule.eventoMapas ? [state.map] : [];
+      };
       const db: any = {
         select: () => ({ from: (table: unknown) => { const q: any = { where: () => q, for: () => q, then: (ok: any, ko: any) => Promise.resolve(rows(table)).then(ok, ko) }; return q; } }),
         insert: (table: unknown) => ({ values: (values: any) => {
@@ -758,6 +767,22 @@ describe("MapasService", () => {
         .rejects.toMatchObject({ response: { code: "PROPOSTA_OPERACAO_INVALIDA", message: expect.stringContaining("nao-existe") } });
       expect(invalida.state.impUpdates).toHaveLength(0);
       expect(invalida.state.audits).toHaveLength(0);
+    });
+
+    it("editarProposta relê dentro da transação: revisão trocada por outra aba não é sobrescrita", async () => {
+      const fx = fixture({ outraAbaAposPrimeiraLeitura: true });
+      await expect(fx.maps.editarProposta("event-1", "map-1", editar(2, [{ tipo: "EDITAR_LUGAR", lugarId: "l1", vender: false }]) as any, actor))
+        .rejects.toMatchObject({ response: { code: "PROPOSTA_DESATUALIZADA" } });
+      expect(fx.state.impUpdates).toHaveLength(0);
+      expect(fx.state.audits).toHaveLength(0);
+    });
+
+    it("publicar confere a revisão dentro da transação: mudança após a pré-checagem não grava assentos", async () => {
+      const fx = fixture({ outraAbaAposPrimeiraLeitura: true });
+      await expect(fx.maps.publicar("event-1", "map-1", { revisaoBase: 2 }, actor)).rejects.toMatchObject({ response: { code: "PROPOSTA_DESATUALIZADA" } });
+      expect(fx.state.seats).toHaveLength(0);
+      expect(fx.state.mapUpdates).toHaveLength(0);
+      expect(fx.state.audits).toHaveLength(0);
     });
 
     it("publicar recusa proposta com pendências e devolve a lista", async () => {
