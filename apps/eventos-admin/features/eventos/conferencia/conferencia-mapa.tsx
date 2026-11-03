@@ -1,11 +1,8 @@
 "use client";
 
 import React, { useMemo, useRef, useState } from "react";
-import { MapaEstiloB, type LugarMapa } from "@essencia/components/eventos/mapa-estilo-b";
+import { MapaEstiloB } from "@essencia/components/eventos/mapa-estilo-b";
 import {
-  acessoExternoEfetivo,
-  categoriaEfetiva,
-  dimensoesLugar,
   pendenciasPublicacao,
   resumoProposta,
   type PontoConferir,
@@ -14,6 +11,7 @@ import {
 import { urlOriginal } from "./api-mapas";
 import { LegendaCores } from "./legenda-cores";
 import { ListaPontos } from "./lista-pontos";
+import { paraLugaresMapa } from "./lugares-mapa";
 import { PainelLugar } from "./painel-lugar";
 import { PlantaPdf } from "./planta-pdf";
 import { ResumoProposta } from "./resumo-proposta";
@@ -57,25 +55,7 @@ export function ConferenciaMapa({ eventoId, mapId, propostaInicial, onPublicar, 
   const reenviandoRef = useRef(false);
   const [erroReenviar, setErroReenviar] = useState<string | null>(null);
 
-  const lugaresMapa = useMemo<LugarMapa[]>(
-    () =>
-      proposta.lugares.map((lugar) => {
-        const categoria = categoriaEfetiva(proposta, lugar);
-        return {
-          id: lugar.id,
-          fileira: lugar.fileira,
-          numero: lugar.numero,
-          x: lugar.x,
-          y: lugar.y,
-          ...dimensoesLugar(lugar, categoria),
-          rotacao: lugar.rotacao,
-          categoria,
-          acessoExterno: acessoExternoEfetivo(proposta, lugar),
-          estado: lugar.vender ? "livre" : "bloqueado",
-        };
-      }),
-    [proposta],
-  );
+  const lugaresMapa = useMemo(() => paraLugaresMapa(proposta), [proposta]);
   const resumo = useMemo(() => resumoProposta(proposta), [proposta]);
   const pendencias = useMemo(() => pendenciasPublicacao(proposta), [proposta]);
   const contagens = useMemo(() => {
