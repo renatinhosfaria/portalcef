@@ -576,37 +576,6 @@ describe("MapasService", () => {
     await expect(maps.arquivar("event-1", "map-1", actor)).rejects.toBeInstanceOf(BadRequestException);
   });
 
-  it("persiste uma correção de detecção com revisor e motivo", async () => {
-    const update = jest.fn(() => ({ set: () => ({ where: async () => undefined }) }));
-    const insert = jest.fn(() => ({ values: () => ({ returning: async () => [{ id: "detection-2" }] }) }));
-    let call = 0;
-    const db: any = { select: () => ({ from: () => ({ where: async () => { call += 1; return call === 1 ? [{ id: "event-1", schoolId: "school-1" }] : call === 2 ? [{ id: "map-1", eventId: "event-1", status: "EM_REVISAO" }] : [{ id: "imp-1" }]; } }) }), update, insert };
-    const maps = new MapasService({ db } as any, undefined, {} as any);
-    (maps as any).revisao = jest.fn().mockResolvedValue({});
-    await maps.atualizarDeteccoes("event-1", "map-1", { reason: "ajuste manual", seats: [{ id: "det-1", rowLabel: "B", seatNumber: "4", x: 20, y: 30 }] }, actor);
-    expect(update).toHaveBeenCalled();
-  });
-
-  it.each(["CONFIRMADO", "ARQUIVADO"])("rejeita correção em mapa %s sem atualizar detecções", async (status) => {
-    const update = jest.fn();
-    let call = 0;
-    const db: any = { select: () => ({ from: () => ({ where: async () => {
-      call += 1;
-      return call === 1 ? [{ id: "event-1", schoolId: "school-1" }] : [{ id: "map-1", eventId: "event-1", status }];
-    } }) }), update };
-    const maps = new MapasService({ db } as any, undefined, {} as any);
-    await expect(maps.atualizarDeteccoes("event-1", "map-1", { reason: "ajuste", seats: [{ id: "det-1", rowLabel: "A", seatNumber: "1", x: 1, y: 1 }] }, actor)).rejects.toMatchObject({ response: { code: "MAP_NOT_IN_REVIEW" } });
-    expect(update).not.toHaveBeenCalled();
-  });
-
-  it("não conclui correção quando auditoria transacional falha", async () => {
-    const update = jest.fn(() => ({ set: () => ({ where: async () => undefined }) }));
-    let call = 0;
-    const db: any = { select: () => ({ from: () => ({ where: async () => { call += 1; return call === 1 ? [{ id: "event-1", schoolId: "school-1" }] : call === 2 ? [{ id: "map-1", eventId: "event-1", status: "EM_REVISAO" }] : [{ id: "imp-1" }]; } }) }), update, transaction: async (fn: any) => fn({ update, insert: () => ({ values: async () => { throw new Error("audit failed"); } }) }) };
-    const maps = new MapasService({ db } as any, undefined, {} as any);
-    await expect(maps.atualizarDeteccoes("event-1", "map-1", { reason: "falha", seats: [{ id: "det-1", rowLabel: "A", seatNumber: "1", x: 1, y: 1 }] }, actor)).rejects.toThrow("audit failed");
-  });
-
   it("impede arquivamento de mapa referenciado pelo evento", async () => {
     const update = jest.fn();
     const db: any = { select: () => ({ from: () => ({ where: async () => [{ id: "event-1", schoolId: "school-1", defaultMapId: "map-1" }] }) }), update };
@@ -717,6 +686,121 @@ describe("MapasService", () => {
       { table: dbModule.eventoSessoes, mode: "update" },
       { table: dbModule.eventoMapas, mode: "update" },
     ]);
+  });
+
+  describe("editar e publicar a proposta", () => {
+    const propostaValida = (sobrescrever: any = {}) => ({
+      versao: 1, revisao: 2, pagina: { numero: 1, largura: 8420, altura: 5950 },
+      lugares: [
+        { id: "l1", fileira: "A", numero: "1", x: 1000, y: 2000, largura: 100, altura: 80, rotacao: 0, blocoId: "b1", cor: "#fff", categoriaManual: null, acessoExternoManual: null, vender: true, origem: "GERADOR" },
+        { id: "l2", fileira: "A", numero: "2", x: 1200, y: 2000, largura: 100, altura: 80, rotacao: 15, blocoId: "b1", cor: "#fff", categoriaManual: "OBESO", acessoExternoManual: true, vender: true, origem: "GERADOR" },
+      ],
+      rotulos: [{ fileira: "A", x: 800, y: 2000 }], elementos: [{ tipo: "PALCO", texto: "Palco", x: 4000, y: 300 }],
+      legenda: [{ cor: "#fff", texto: "Comum", quantidade: 2, categoria: "COMUM", acessoExterno: false, confirmada: true }],
+      pontos: [], ...sobrescrever,
+    });
+
+    function fixture(opcoes: { proposta?: any; statusMapa?: string; semImportacao?: boolean } = {}) {
+      const dbModule = jest.requireMock("@essencia/db") as any;
+      const state: any = {
+        event: { id: "event-1", schoolId: "school-1", defaultMapId: null },
+        map: { id: "map-1", eventId: "event-1", status: opcoes.statusMapa ?? "EM_REVISAO" },
+        imp: opcoes.semImportacao ? null : { id: "imp-1", mapId: "map-1", status: "EM_REVISAO", proposta: opcoes.proposta === undefined ? propostaValida() : opcoes.proposta },
+        seats: [] as any[], audits: [] as any[], mapUpdates: [] as any[], impUpdates: [] as any[],
+      };
+      const rows = (table: unknown) => table === dbModule.eventos ? [state.event] : table === dbModule.eventoMapas ? [state.map] : table === dbModule.eventoImportacoesMapa ? (state.imp ? [state.imp] : []) : [];
+      const db: any = {
+        select: () => ({ from: (table: unknown) => { const q: any = { where: () => q, for: () => q, then: (ok: any, ko: any) => Promise.resolve(rows(table)).then(ok, ko) }; return q; } }),
+        insert: (table: unknown) => ({ values: (values: any) => {
+          if (table === dbModule.eventoMapaAssentos) state.seats.push(values);
+          if (table === dbModule.eventoAuditorias) state.audits.push(values);
+          return { returning: async () => [] };
+        } }),
+        delete: () => ({ where: async () => undefined }),
+        update: (table: unknown) => ({ set: (values: any) => ({ where: () => {
+          if (table === dbModule.eventoMapas) { Object.assign(state.map, values); state.mapUpdates.push(values); }
+          if (table === dbModule.eventoImportacoesMapa) { Object.assign(state.imp, values); state.impUpdates.push(values); }
+          const resultado = table === dbModule.eventoMapas ? [state.map] : [];
+          return { returning: async () => resultado, then: (ok: any, ko: any) => Promise.resolve(resultado).then(ok, ko) };
+        } }) }),
+        transaction: async (fn: any) => fn(db),
+      };
+      const maps = new MapasService({ db } as any, undefined, {} as any);
+      return { maps, state };
+    }
+    const editar = (revisaoBase: number, operacoes: any[]) => ({ revisaoBase, operacoes });
+
+    it("editarProposta aplica as operações, grava a nova revisão e audita", async () => {
+      const fx = fixture();
+      const operacoes = [{ tipo: "EDITAR_LUGAR", lugarId: "l1", vender: false }];
+      const nova = await fx.maps.editarProposta("event-1", "map-1", editar(2, operacoes) as any, actor);
+      expect(nova.revisao).toBe(3);
+      expect(nova.lugares[0]).toMatchObject({ id: "l1", vender: false });
+      expect(fx.state.imp.proposta).toBe(nova);
+      expect(fx.state.audits).toEqual([expect.objectContaining({ resourceId: "map-1", metadata: { action: "editar_proposta", revisao: 3, operacoes } })]);
+    });
+
+    it("editarProposta recusa revisão desatualizada sem gravar (duas abas)", async () => {
+      const fx = fixture({ proposta: propostaValida({ revisao: 5 }) });
+      await expect(fx.maps.editarProposta("event-1", "map-1", editar(4, [{ tipo: "CONFERIR_PONTO", pontoId: "p1" }]) as any, actor))
+        .rejects.toMatchObject({ response: { code: "PROPOSTA_DESATUALIZADA", message: "Esta conferência foi alterada em outra aba. Recarregue para continuar." } });
+      expect(fx.state.impUpdates).toHaveLength(0);
+      expect(fx.state.audits).toHaveLength(0);
+    });
+
+    it("editarProposta recusa mapa fora de revisão e operação inválida", async () => {
+      const confirmado = fixture({ statusMapa: "CONFIRMADO" });
+      await expect(confirmado.maps.editarProposta("event-1", "map-1", editar(2, [{ tipo: "EXCLUIR_LUGAR", lugarId: "l1" }]) as any, actor)).rejects.toMatchObject({ response: { code: "MAP_NOT_IN_REVIEW" } });
+      const semProposta = fixture({ proposta: null });
+      await expect(semProposta.maps.editarProposta("event-1", "map-1", editar(0, [{ tipo: "EXCLUIR_LUGAR", lugarId: "l1" }]) as any, actor)).rejects.toMatchObject({ response: { code: "PROPOSTA_INEXISTENTE" } });
+      const invalida = fixture();
+      await expect(invalida.maps.editarProposta("event-1", "map-1", editar(2, [{ tipo: "EXCLUIR_LUGAR", lugarId: "nao-existe" }]) as any, actor))
+        .rejects.toMatchObject({ response: { code: "PROPOSTA_OPERACAO_INVALIDA", message: expect.stringContaining("nao-existe") } });
+      expect(invalida.state.impUpdates).toHaveLength(0);
+      expect(invalida.state.audits).toHaveLength(0);
+    });
+
+    it("publicar recusa proposta com pendências e devolve a lista", async () => {
+      const fx = fixture({ proposta: propostaValida({ pontos: [{ id: "p1", tipo: "SEM_FILEIRA", mensagem: "Sem fileira", lugarIds: ["l1"], conferido: false }] }) });
+      await expect(fx.maps.publicar("event-1", "map-1", { revisaoBase: 2 }, actor)).rejects.toMatchObject({
+        response: { code: "PROPOSTA_COM_PENDENCIAS", message: "Ainda há pontos para conferir antes de publicar.", details: { pendencias: [expect.objectContaining({ tipo: "PONTO_NAO_CONFERIDO" })] } },
+      });
+      expect(fx.state.seats).toHaveLength(0);
+      expect(fx.state.mapUpdates).toHaveLength(0);
+    });
+
+    it("publicar recusa revisão desatualizada e proposta ausente", async () => {
+      const fx = fixture();
+      await expect(fx.maps.publicar("event-1", "map-1", { revisaoBase: 1 }, actor)).rejects.toMatchObject({ response: { code: "PROPOSTA_DESATUALIZADA" } });
+      const vazio = fixture({ proposta: null });
+      await expect(vazio.maps.publicar("event-1", "map-1", { revisaoBase: 0 }, actor)).rejects.toMatchObject({ response: { code: "PROPOSTA_INEXISTENTE" } });
+      expect(fx.state.seats).toHaveLength(0);
+    });
+
+    it("publicar grava assentos com metadados, layout e CONFIRMADO com o motivo opcional", async () => {
+      const fx = fixture();
+      const resultado = await fx.maps.publicar("event-1", "map-1", { revisaoBase: 2, motivo: "Conferido com a produção" }, actor);
+      expect(fx.state.seats).toEqual([
+        expect.objectContaining({ mapId: "map-1", rowLabel: "A", seatNumber: "1", x: 950, y: 1960, width: 100, height: 80, category: "COMUM", accessible: false, sellable: true, metadata: { rotacao: 0, blocoId: "b1", acessoExterno: false, origem: "GERADOR" } }),
+        expect.objectContaining({ rowLabel: "A", seatNumber: "2", x: 1120, y: 1960, width: 160, category: "OBESO", accessible: true, metadata: { rotacao: 15, blocoId: "b1", acessoExterno: true, origem: "GERADOR" } }),
+      ]);
+      expect(fx.state.mapUpdates[0]).toMatchObject({ status: "CONFIRMADO", layout: { versao: 1, largura: 8420, altura: 5950, rotulos: [{ fileira: "A", x: 800, y: 2000 }], elementos: [expect.objectContaining({ tipo: "PALCO" })] } });
+      expect(fx.state.audits).toEqual([expect.objectContaining({ metadata: expect.objectContaining({ action: "confirmar", reason: "Conferido com a produção", seats: 2 }) })]);
+      expect(resultado.map.status).toBe("CONFIRMADO");
+    });
+
+    it("publicar trata motivo em branco como ausente", async () => {
+      const fx = fixture();
+      await fx.maps.publicar("event-1", "map-1", { revisaoBase: 2, motivo: "   " }, actor);
+      expect(fx.state.audits[0].metadata.reason).toBeNull();
+    });
+
+    it("publicar duas vezes: a segunda recebe MAP_NOT_IN_REVIEW", async () => {
+      const fx = fixture();
+      await fx.maps.publicar("event-1", "map-1", { revisaoBase: 2 }, actor);
+      await expect(fx.maps.publicar("event-1", "map-1", { revisaoBase: 2 }, actor)).rejects.toMatchObject({ response: { code: "MAP_NOT_IN_REVIEW" } });
+      expect(fx.state.seats).toHaveLength(2);
+    });
   });
 
   describe("substituirMapaPadrao", () => {

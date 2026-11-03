@@ -85,4 +85,42 @@ describe("MapasController", () => {
     expect(reply.header).toHaveBeenCalledWith("Content-Length", 10);
     expect(reply.send).toHaveBeenCalledWith(corpo);
   });
+  it("valida o corpo de proposta e publicar com zod", async () => {
+    const editarProposta = jest.fn().mockResolvedValue({ revisao: 4 });
+    const publicar = jest.fn().mockResolvedValue({ map: { id: "m1" } });
+    const controller = new MapasController({ editarProposta, publicar } as any);
+    const actor = { userId: "user-1", role: "diretora_geral", schoolId: "school-1" };
+    const operacoes = [{ tipo: "CONFERIR_PONTO", pontoId: "p1" }];
+
+    await expect(controller.editarProposta("evento-1", "m1", { revisaoBase: 3, operacoes }, actor)).resolves.toEqual({ success: true, data: { revisao: 4 } });
+    expect(editarProposta).toHaveBeenCalledWith("evento-1", "m1", { revisaoBase: 3, operacoes }, actor);
+    for (const corpo of [{ revisaoBase: -1, operacoes }, { revisaoBase: 1.5, operacoes }, { revisaoBase: 1, operacoes: [] }, { revisaoBase: 1, operacoes: [{ tipo: "INVENTADA" }] }, {}]) {
+      await expect(controller.editarProposta("evento-1", "m1", corpo, actor)).resolves.toMatchObject({ success: false, error: { code: "VALIDATION_ERROR" } });
+    }
+    expect(editarProposta).toHaveBeenCalledTimes(1);
+
+    await expect(controller.publicar("evento-1", "m1", { revisaoBase: 0, motivo: "  ok  " }, actor)).resolves.toEqual({ success: true, data: { map: { id: "m1" } } });
+    expect(publicar).toHaveBeenLastCalledWith("evento-1", "m1", { revisaoBase: 0, motivo: "ok" }, actor);
+    await controller.publicar("evento-1", "m1", { revisaoBase: 2, motivo: "   " }, actor);
+    expect(publicar).toHaveBeenLastCalledWith("evento-1", "m1", { revisaoBase: 2, motivo: undefined }, actor);
+    for (const corpo of [{}, { revisaoBase: -1 }, { revisaoBase: 1, motivo: "x".repeat(501) }]) {
+      await expect(controller.publicar("evento-1", "m1", corpo, actor)).resolves.toMatchObject({ success: false, error: { code: "VALIDATION_ERROR" } });
+    }
+    expect(publicar).toHaveBeenCalledTimes(2);
+  });
+
+  it("expõe as rotas de proposta e publicar", () => {
+    expect(Reflect.getMetadata("path", MapasController.prototype.editarProposta)).toBe("mapas/:versionId/proposta");
+    expect(Reflect.getMetadata("path", MapasController.prototype.publicar)).toBe("mapas/:versionId/publicar");
+  });
+
+  it("não expõe mais deteccoes nem confirmar", () => {
+    const caminhos = Object.getOwnPropertyNames(MapasController.prototype)
+      .filter((nome) => nome !== "constructor")
+      .map((nome) => Reflect.getMetadata("path", (MapasController.prototype as any)[nome]) as string | undefined);
+    expect(caminhos).not.toContain("mapas/:versionId/deteccoes");
+    expect(caminhos).not.toContain("mapas/:versionId/confirmar");
+    expect((MapasController.prototype as any).atualizar).toBeUndefined();
+    expect((MapasController.prototype as any).confirmar).toBeUndefined();
+  });
 });

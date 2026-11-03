@@ -6,6 +6,7 @@ import { CurrentUser } from "../../../common/decorators/current-user.decorator";
 import { ExactRoles, Roles } from "../../../common/decorators/roles.decorator";
 import { EVENTOS_ADMIN_ROLES } from "../eventos.constants";
 import { MapasService } from "./mapas.service";
+import { operacoesPropostaSchema } from "@essencia/shared/eventos/mapa-proposta";
 import { z } from "zod";
 
 @Controller("eventos/admin/:id")
@@ -29,8 +30,16 @@ export class MapasController {
     return reply.send(arquivo.body);
   }
   @Get("mapas/:versionId/revisao") revisao(@Param("id") id: string, @Param("versionId") versionId: string, @CurrentUser() actor: any) { return this.service.revisao(id, versionId, actor); }
-  @Patch("mapas/:versionId/deteccoes") atualizar(@Param("id") id: string, @Param("versionId") versionId: string, @Body() body: any, @CurrentUser() actor: any) { return this.service.atualizarDeteccoes(id, versionId, body, actor); }
-  @Post("mapas/:versionId/confirmar") confirmar(@Param("id") id: string, @Param("versionId") versionId: string, @Body() body: any, @CurrentUser() actor: any) { return this.service.confirmar(id, versionId, body, actor); }
+  @Patch("mapas/:versionId/proposta") async editarProposta(@Param("id") id: string, @Param("versionId") versionId: string, @Body() body: unknown, @CurrentUser() actor: any) {
+    const parsed = z.object({ revisaoBase: z.number().int().min(0), operacoes: operacoesPropostaSchema }).safeParse(body);
+    if (!parsed.success) return { success: false, error: { code: "VALIDATION_ERROR", details: parsed.error.flatten() } };
+    return { success: true, data: await this.service.editarProposta(id, versionId, parsed.data, actor) };
+  }
+  @Post("mapas/:versionId/publicar") async publicar(@Param("id") id: string, @Param("versionId") versionId: string, @Body() body: unknown, @CurrentUser() actor: any) {
+    const parsed = z.object({ revisaoBase: z.number().int().min(0), motivo: z.string().trim().max(500).optional() }).safeParse(body);
+    if (!parsed.success) return { success: false, error: { code: "VALIDATION_ERROR", details: parsed.error.flatten() } };
+    return { success: true, data: await this.service.publicar(id, versionId, { revisaoBase: parsed.data.revisaoBase, motivo: parsed.data.motivo || undefined }, actor) };
+  }
   @Post("mapas/:versionId/arquivar") arquivar(@Param("id") id: string, @Param("versionId") versionId: string, @CurrentUser() actor: any) { return this.service.arquivar(id, versionId, actor); }
   @Post("mapa-padrao/substituir") async substituir(@Param("id") id: string, @Body() body: unknown, @CurrentUser() actor: any) {
     const parsed = z.object({ mapId: z.string().uuid() }).safeParse(body);

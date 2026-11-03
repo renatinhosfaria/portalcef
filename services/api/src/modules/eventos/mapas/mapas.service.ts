@@ -4,10 +4,11 @@ import type { MultipartFile } from "@fastify/multipart";
 import type { EventoActor } from "@essencia/shared/types";
 import { DatabaseService } from "../../../common/database/database.service";
 import { StorageService } from "../../../common/storage/storage.service";
-import type { PropostaMapa } from "@essencia/shared/eventos/mapa-proposta";
+import { ErroProposta, aplicarOperacoes, pendenciasPublicacao, type LayoutMapa, type MetadadosAssento, type OperacaoProposta, type PropostaMapa } from "@essencia/shared/eventos/mapa-proposta";
 import { GeradorMapaPdf } from "./gerador/gerador-mapa-pdf";
+import { propostaParaConfirmacao } from "./gerador/proposta-para-confirmacao";
 
-export interface ConfirmMapInput { seats: Array<{ id?: string; rowLabel: string; seatNumber: string; x: number; y: number; width?: number; height?: number; category?: string | null; accessible?: boolean; sellable?: boolean }>; reason?: string; }
+export interface ConfirmMapInput { seats: Array<{ id?: string; rowLabel: string; seatNumber: string; x: number; y: number; width?: number; height?: number; category?: string | null; accessible?: boolean; sellable?: boolean; metadata?: MetadadosAssento }>; layout?: LayoutMapa; reason?: string; }
 export interface MapImportSummary { importId: string; mapId: string; status: string; proposalCount: number; conflictCount: number; }
 export interface MapReplacementResult {
   updated: unknown;
@@ -225,22 +226,40 @@ export class MapasService {
     return { map, import: imports[0] ?? null, proposta: (imports[0]?.proposta as PropostaMapa | null | undefined) ?? null };
   }
 
-  async atualizarDeteccoes(eventId: string, versionId: string, corrections: ConfirmMapInput, actor: EventoActor) {
+  private async carregarPropostaEmRevisao(eventId: string, versionId: string, revisaoBase: number, actor: EventoActor) {
     await this.assertEvent(eventId, actor);
     const [map] = await this.db.select().from(eventoMapas).where(and(eq(eventoMapas.id, versionId), eq(eventoMapas.eventId, eventId)));
     if (!map) throw new NotFoundException({ code: "MAP_NOT_FOUND", message: "Versão não encontrada" });
-    if (map.status !== "EM_REVISAO") throw new BadRequestException({ code: "MAP_NOT_IN_REVIEW", message: "Somente mapas em revisão podem ser corrigidos" });
-    if (!corrections.reason?.trim()) throw new BadRequestException({ code: "REASON_REQUIRED", message: "Informe o motivo da correção" });
+    if (map.status !== "EM_REVISAO") throw new BadRequestException({ code: "MAP_NOT_IN_REVIEW", message: "Somente mapas em revisão podem ser alterados" });
     const [imp] = await this.db.select().from(eventoImportacoesMapa).where(eq(eventoImportacoesMapa.mapId, map.id));
-    if (!imp) throw new BadRequestException({ code: "MAP_IMPORT_NOT_FOUND", message: "Importação não encontrada" });
+    const proposta = (imp?.proposta as PropostaMapa | null | undefined) ?? null;
+    if (!imp || !proposta) throw new BadRequestException({ code: "PROPOSTA_INEXISTENTE", message: "Este mapa não tem proposta para conferir." });
+    if (proposta.revisao !== revisaoBase) throw new BadRequestException({ code: "PROPOSTA_DESATUALIZADA", message: "Esta conferência foi alterada em outra aba. Recarregue para continuar." });
+    return { imp, proposta };
+  }
+
+  async editarProposta(eventId: string, versionId: string, input: { revisaoBase: number; operacoes: OperacaoProposta[] }, actor: EventoActor): Promise<PropostaMapa> {
+    const { imp, proposta } = await this.carregarPropostaEmRevisao(eventId, versionId, input.revisaoBase, actor);
+    let nova: PropostaMapa;
+    try {
+      nova = aplicarOperacoes(proposta, input.operacoes);
+    } catch (erro) {
+      if (erro instanceof ErroProposta) throw new BadRequestException({ code: erro.code, message: erro.message });
+      throw erro;
+    }
     await this.transaction(async (db) => {
-      for (const seat of corrections.seats) {
-        if (seat.id) await db.update(eventoDeteccoesMapa).set({ proposedRowLabel: seat.rowLabel, proposedSeatNumber: seat.seatNumber, proposedX: seat.x, proposedY: seat.y, proposedCategory: seat.category ?? null, reviewedBy: actor.userId, reviewedAt: new Date(), status: "CORRIGIDA", conflictReason: null }).where(and(eq(eventoDeteccoesMapa.id, seat.id), eq(eventoDeteccoesMapa.importId, imp.id)));
-        else await db.insert(eventoDeteccoesMapa).values({ importId: imp.id, detector: "human-review", confidence: 100, proposedRowLabel: seat.rowLabel, proposedSeatNumber: seat.seatNumber, proposedX: seat.x, proposedY: seat.y, proposedCategory: seat.category ?? null, status: "CORRIGIDA", reviewedBy: actor.userId, reviewedAt: new Date() });
-      }
-      await this.audit(eventId, actor, versionId, { action: "corrigir_deteccoes", reason: corrections.reason, count: corrections.seats.length }, db);
+      await db.update(eventoImportacoesMapa).set({ proposta: nova, updatedAt: new Date() }).where(eq(eventoImportacoesMapa.id, imp.id));
+      await this.audit(eventId, actor, versionId, { action: "editar_proposta", revisao: nova.revisao, operacoes: input.operacoes }, db);
     });
-    return this.revisao(eventId, versionId, actor);
+    return nova;
+  }
+
+  async publicar(eventId: string, versionId: string, input: { revisaoBase: number; motivo?: string }, actor: EventoActor) {
+    const { proposta } = await this.carregarPropostaEmRevisao(eventId, versionId, input.revisaoBase, actor);
+    const pendencias = pendenciasPublicacao(proposta);
+    if (pendencias.length) throw new BadRequestException({ code: "PROPOSTA_COM_PENDENCIAS", message: "Ainda há pontos para conferir antes de publicar.", details: { pendencias } });
+    const { seats, layout } = propostaParaConfirmacao(proposta);
+    return this.confirmar(eventId, versionId, { seats, layout, reason: input.motivo?.trim() || undefined }, actor);
   }
 
   async confirmar(eventId: string, versionId: string, corrections: ConfirmMapInput, actor: EventoActor) {
@@ -255,8 +274,8 @@ export class MapasService {
       const [event] = await this.lockRows(db.select().from(eventos).where(eq(eventos.id, eventId)));
       if (!event) throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Evento não encontrado" });
       if (typeof (db as any).delete === "function") await db.delete(eventoMapaAssentos).where(eq(eventoMapaAssentos.mapId, map.id));
-      for (const seat of corrections.seats) await db.insert(eventoMapaAssentos).values({ mapId: map.id, rowLabel: seat.rowLabel, seatNumber: seat.seatNumber, x: seat.x, y: seat.y, width: seat.width ?? 1, height: seat.height ?? 1, category: seat.category ?? null, accessible: seat.accessible ?? false, sellable: seat.sellable ?? true });
-      const [next] = await db.update(eventoMapas).set({ status: "CONFIRMADO", confirmedAt: new Date(), confirmedBy: actor.userId, updatedAt: new Date() }).where(eq(eventoMapas.id, map.id)).returning();
+      for (const seat of corrections.seats) await db.insert(eventoMapaAssentos).values({ mapId: map.id, rowLabel: seat.rowLabel, seatNumber: seat.seatNumber, x: seat.x, y: seat.y, width: seat.width ?? 1, height: seat.height ?? 1, category: seat.category ?? null, accessible: seat.accessible ?? false, sellable: seat.sellable ?? true, ...(seat.metadata ? { metadata: seat.metadata } : {}) });
+      const [next] = await db.update(eventoMapas).set({ status: "CONFIRMADO", ...(corrections.layout ? { layout: corrections.layout } : {}), confirmedAt: new Date(), confirmedBy: actor.userId, updatedAt: new Date() }).where(eq(eventoMapas.id, map.id)).returning();
       const [importRow] = await db.select().from(eventoImportacoesMapa).where(eq(eventoImportacoesMapa.mapId, map.id));
       if (importRow) await db.update(eventoImportacoesMapa).set({ status: "CONFIRMADA", reviewedBy: actor.userId, reviewedAt: new Date(), updatedAt: new Date() }).where(eq(eventoImportacoesMapa.id, importRow.id));
       const inventory = event.defaultMapId
