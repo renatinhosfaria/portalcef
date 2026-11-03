@@ -65,6 +65,23 @@ describe("lerLegenda", () => {
     expect(dentroDaCaixa({ x: 100, y: 100 }, area)).toBe(false);
   });
 
+  it("a linha de continuação equidistante vai para a amostra acima, qualquer que seja a ordem dos tokens", () => {
+    const invertidos = [...amostras].reverse();
+    const { entradas } = lerLegenda(planta([...numeros, ...invertidos], frasesLegenda), cores);
+    expect(entradas.find((e) => e.cor === "#00ffff")).toEqual({
+      cor: "#00ffff",
+      texto: "OPCIONAL PARA CADEIRANTES entrada atraves de acesso externo",
+      categoria: "OPCIONAL_CADEIRANTE",
+      acessoExterno: true,
+    });
+    expect(entradas.find((e) => e.cor === "#ff00ff")).toEqual({
+      cor: "#ff00ff",
+      texto: "ESPECIAIS OBESOS",
+      categoria: "OBESO",
+      acessoExterno: false,
+    });
+  });
+
   it("ignora amostra cuja cor não aparece em nenhum número e letras de fileira sem frase ao lado", () => {
     const letraFileira = token("A", 90, 100, "#ff0000");
     const corDesconhecida = token("X", 707, 300, "#123456", 16.7);

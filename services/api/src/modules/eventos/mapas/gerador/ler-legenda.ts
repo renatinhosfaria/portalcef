@@ -62,9 +62,10 @@ function donaDaFrase(frase: FraseLida, amostras: TokenLido[]): TokenLido | undef
       amostra,
       dx: frase.esquerda - amostra.x,
       dy: Math.abs(frase.y - amostra.y),
+      acima: amostra.y <= frase.y,
     }))
     .filter(({ amostra, dx, dy }) => dx > 0 && dx <= ALCANCE_X * amostra.tamanho && dy <= ALCANCE_Y * amostra.tamanho)
-    .sort((a, b) => a.dy - b.dy || a.dx - b.dx);
+    .sort((a, b) => a.dy - b.dy || Number(b.acima) - Number(a.acima) || a.dx - b.dx);
   return candidatas[0]?.amostra;
 }
 
