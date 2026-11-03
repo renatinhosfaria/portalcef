@@ -337,7 +337,18 @@ export class MapasService {
       }
 
       const sessionIds = new Set(migratedSessionIds);
-      const impactedInventoryIds = inventoryRows.filter((inventory: any) => sessionIds.has(inventory.sessionId)).map((inventory: any) => inventory.id);
+      const allInventoryQuery = db.select().from(eventoInventarioAssentos).where(
+        migratedSessionIds.length
+          ? inArray(eventoInventarioAssentos.sessionId, migratedSessionIds)
+          : eq(eventoInventarioAssentos.sessionId, "__nenhuma__"),
+      );
+      const orderedAllInventoryQuery = typeof (allInventoryQuery as any).orderBy === "function"
+        ? (allInventoryQuery as any).orderBy(asc(eventoInventarioAssentos.id))
+        : allInventoryQuery;
+      const allInventoryRows = await this.lockRows(orderedAllInventoryQuery);
+      const impactedInventoryIds = allInventoryRows
+        .filter((inventory: any) => sessionIds.has(inventory.sessionId))
+        .map((inventory: any) => inventory.id);
       const lockDependencias = async (table: any, predicate: any, idColumn: any) => {
         const query = db.select().from(table).where(predicate);
         const ordered = typeof (query as any).orderBy === "function" ? (query as any).orderBy(asc(idColumn)) : query;

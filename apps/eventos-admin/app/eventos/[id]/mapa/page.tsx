@@ -36,6 +36,13 @@ function validarMigracao(data: unknown): MigrationData {
   return value as MigrationData;
 }
 
+function mensagemFalhaMigracao(error: unknown): string {
+  if (!(error instanceof Error)) return "Falha ao migrar sessões e excluir mapa anterior.";
+  const code = (error as Error & { code?: string }).code;
+  if (!code) return error.message;
+  return error.message.startsWith(code) ? error.message : `${code}: ${error.message}`;
+}
+
 export default function MapaPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
@@ -158,7 +165,7 @@ export default function MapaPage() {
       const data = validarMigracao(await respostaApi(await fetch(`/eventos-admin/api/eventos/admin/${id}/mapas/${previousMapId}/migrar-e-excluir`, {
         method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ targetMapId, sessionIds: previousMapArchive?.sessionIds ?? [] }),
       })));
-      setAffectedSessionIds(data.inheritedSessionIds ?? []);
+      setAffectedSessionIds([]);
       setInventoryCreatedCount(data.inventoryCreatedCount ?? 0);
       setInventorySessionIds(data.migratedSessionIds ?? []);
       setPreviousMapArchive({ archived: true, code: "DELETED", sessionIds: data.migratedSessionIds ?? [] });
@@ -169,7 +176,7 @@ export default function MapaPage() {
     } catch (error) {
       setStatus("CONFIRMADO");
       setConfirmedMapId(targetMapId);
-      setError(error instanceof Error ? error.message : "Falha ao migrar sessões e excluir mapa anterior.");
+      setError(mensagemFalhaMigracao(error));
       throw error;
     }
   };

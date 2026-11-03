@@ -142,6 +142,7 @@ describe("MapaPage substituição segura", () => {
     const migrate = await screen.findByRole("button", { name: "Migrar sessões e excluir mapa anterior" });
     fireEvent.click(migrate);
     await waitFor(() => expect(screen.getByText(/mapa anterior excluído/i)).toBeTruthy());
+    expect(screen.queryByText(/Revise o inventário/)).toBeNull();
   });
 
   it("remove os avisos de inventário da troca anterior após novo upload", async () => {
@@ -294,7 +295,7 @@ describe("MapaPage substituição segura", () => {
     fireEvent.click(screen.getByRole("button", { name: "Confirmar mapa" }));
     const migrate = await screen.findByRole("button", { name: "Migrar sessões e excluir mapa anterior" });
     fireEvent.click(migrate);
-    await waitFor(() => expect(screen.getByRole("alert").textContent).toMatch(/dependências/i));
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toMatch(/SESSION_HAS_DEPENDENCIES/));
     expect(screen.getByText(/mapa anterior foi preservado/i)).toBeTruthy();
     expect(screen.getAllByRole("status").some(element => element.textContent === "Mapa confirmado")).toBe(true);
     expect(screen.getByRole("button", { name: "Migrar sessões e excluir mapa anterior" })).toBeTruthy();

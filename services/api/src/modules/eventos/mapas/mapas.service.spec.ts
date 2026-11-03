@@ -127,6 +127,7 @@ describe("MapasService", () => {
       ...overrides,
     };
     const orderByCalls: unknown[][] = [];
+    let inventorySelects = 0;
     const snapshot = () => ({ event: { ...state.event }, sessions: state.sessions.map((row: any) => ({ ...row })), maps: state.maps.map((row: any) => ({ ...row })), seats: state.seats.map((row: any) => ({ ...row })), inventory: state.inventory.map((row: any) => ({ ...row })), audits: state.audits.map((row: any) => ({ ...row })) });
     const restore = (saved: any) => { Object.assign(state.event, saved.event); state.sessions = saved.sessions; state.maps = saved.maps; state.seats = saved.seats; state.inventory = saved.inventory; state.audits = saved.audits; };
     const rows = (table: unknown) => table === dbModule.eventos ? [state.event]
@@ -139,7 +140,10 @@ describe("MapasService", () => {
                     : table === dbModule.eventoAuditorias ? state.audits : [];
     const db: any = {
       select: () => ({ from: (table: unknown) => ({ where: () => {
-        const query: any = Promise.resolve(rows(table));
+        const selectedRows = table === dbModule.eventoInventarioAssentos && overrides.inventoryInitialOnlyOld
+          ? (inventorySelects++ === 0 ? state.inventory.filter((inventory: any) => inventory.seatId === "old-seat-1") : state.inventory)
+          : rows(table);
+        const query: any = Promise.resolve(selectedRows);
         query.for = () => query;
         query.orderBy = (...args: unknown[]) => { orderByCalls.push(args); return query; };
         if (table === dbModule.eventoSessoes && overrides.auditAfterSessionLock) state.audits.push(overrides.auditAfterSessionLock);
@@ -237,6 +241,30 @@ describe("MapasService", () => {
     const fixture = migrationFixture({ [property]: [dependency] });
     await expect(fixture.maps.migrarSessoesEExcluir("event-1", "map-old", { targetMapId: "map-new" }, actor)).rejects.toMatchObject({ response: { code: "SESSION_HAS_DEPENDENCIES" } });
     expect(fixture.state.inventory).toEqual([expect.objectContaining({ seatId: "old-seat-1" })]);
+  });
+
+  it("bloqueia dependência ligada ao inventário alvo e preserva o estado", async () => {
+    const fixture = migrationFixture({
+      inventory: [
+        { id: "inventory-old", sessionId: "session-1", seatId: "old-seat-1", status: "DISPONIVEL" },
+        { id: "inventory-target", sessionId: "session-1", seatId: "new-seat-1", status: "DISPONIVEL" },
+      ],
+      reservas: [{ id: "reservation-target", inventorySeatId: "inventory-target" }],
+      inventoryInitialOnlyOld: true,
+    });
+    const antes = {
+      event: { ...fixture.state.event },
+      sessions: fixture.state.sessions.map((session: any) => ({ ...session })),
+      maps: fixture.state.maps.map((map: any) => ({ ...map })),
+      inventory: fixture.state.inventory.map((inventory: any) => ({ ...inventory })),
+    };
+
+    await expect(fixture.maps.migrarSessoesEExcluir("event-1", "map-old", { targetMapId: "map-new" }, actor))
+      .rejects.toMatchObject({ response: { code: "SESSION_HAS_DEPENDENCIES" } });
+    expect(fixture.state.event).toEqual(antes.event);
+    expect(fixture.state.sessions).toEqual(antes.sessions);
+    expect(fixture.state.maps).toEqual(antes.maps);
+    expect(fixture.state.inventory).toEqual(antes.inventory);
   });
 
   it("normaliza falha ao remover inventário sem expor o erro do driver", async () => {
