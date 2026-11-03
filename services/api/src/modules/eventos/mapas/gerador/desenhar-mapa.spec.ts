@@ -99,4 +99,45 @@ describe("desenharBlocos", () => {
     ]);
     expect(c.rotacao).toBeCloseTo(-90 + 180, 6);
   });
+
+  describe("bloco de 3 ou mais com menos de 3 na linha", () => {
+    const quatro = (foraDaLinha: string[], ys: number[]): BlocoMontado => ({
+      id: "b6",
+      fileira: "E",
+      numeros: ys.map((y, i) => numero(`q${i + 1}`, i + 1, i * 10, y, 30)),
+      foraDaLinha,
+    });
+
+    it("com 2 na linha, usa a reta do primeiro ao último da linha e projeta os de fora", () => {
+      // q1 (0,0) e q4 (30,30) estão na linha; q2 e q3 estão deslocados.
+      const lugares = desenharBlocos([quatro(["q2", "q3"], [0, 25, 5, 30])]);
+      expect(lugares).toHaveLength(4);
+      for (const [i, l] of lugares.entries()) {
+        expect(l.rotacao).toBeCloseTo(45, 6);
+        if (i === 0 || i === 3) continue;
+        expect(l.y).toBeCloseTo(l.x, 6);
+      }
+      expect(lugares[0]).toMatchObject({ x: 0, y: 0 });
+      expect(lugares[1].x).toBeCloseTo(17.5, 6);
+      expect(lugares[2].x).toBeCloseTo(12.5, 6);
+    });
+
+    it("com 1 na linha, usa a direção do ângulo dele", () => {
+      const lugares = desenharBlocos([quatro(["q1", "q3", "q4"], [100, 7, 50, 90])]);
+      for (const l of lugares) expect(l.rotacao).toBeCloseTo(30, 6);
+      // reta por q2 (10, 7) a 30°
+      expect(lugares[1]).toMatchObject({ numeroId: "q2", x: 10, y: 7 });
+      for (const l of lugares) {
+        expect(l.y - 7).toBeCloseTo((l.x - 10) * Math.tan(Math.PI / 6), 6);
+      }
+    });
+
+    it("com 0 na linha, usa o ângulo do primeiro número do bloco", () => {
+      const lugares = desenharBlocos([quatro(["q1", "q2", "q3", "q4"], [4, 80, 20, 60])]);
+      for (const l of lugares) {
+        expect(l.rotacao).toBeCloseTo(30, 6);
+        expect(l.y - 4).toBeCloseTo(l.x * Math.tan(Math.PI / 6), 6);
+      }
+    });
+  });
 });

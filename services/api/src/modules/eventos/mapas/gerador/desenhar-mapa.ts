@@ -53,13 +53,8 @@ function ajustarParabola(pontos: Array<[number, number]>): { a: number; b: numbe
   return { a, b, c };
 }
 
-/** Reta pelos números dados; sem direção própria (um só número), usa o ângulo do texto. */
+/** Reta pelo primeiro e pelo último dos números dados; todos são projetados nela. */
 function desenharEmReta(numeros: NumeroLido[], naLinha: NumeroLido[]): LugarDesenhado[] {
-  if (naLinha.length < 2) {
-    const angulo = normalizarRotacao(naLinha[0]?.angulo ?? numeros[0].angulo);
-    const origem = naLinha[0] ?? numeros[0];
-    return numeros.map((n) => ({ ...projetarEmReta(origem, angulo, n), numeroId: n.id }));
-  }
   const primeiro = naLinha[0];
   const ultimo = naLinha[naLinha.length - 1];
   const angulo = normalizarRotacao(Math.atan2(ultimo.y - primeiro.y, ultimo.x - primeiro.x) * RAD_PARA_GRAUS);
@@ -87,7 +82,14 @@ function desenharBloco(bloco: BlocoMontado): LugarDesenhado[] {
     const [a, b] = numeros;
     return desenharEmReta([a, b], [a, b]);
   }
-  if (naLinha.length < 3) return desenharEmReta(numeros, naLinha);
+
+  if (naLinha.length === 2) return desenharEmReta(numeros, naLinha);
+  if (naLinha.length < 2) {
+    // 1 na linha: a direção do texto dele; 0 na linha: a do primeiro número do bloco.
+    const origem = naLinha[0] ?? numeros[0];
+    const angulo = normalizarRotacao(origem.angulo);
+    return numeros.map((n) => ({ ...projetarEmReta(origem, angulo, n), numeroId: n.id }));
+  }
 
   const mx = media(naLinha.map((n) => n.x));
   const my = media(naLinha.map((n) => n.y));
