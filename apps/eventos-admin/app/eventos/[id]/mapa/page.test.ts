@@ -344,3 +344,17 @@ describe("MapaPage identidade da proposta", () => {
     expect(chamadasEm("GET", "/mapas/m1/revisao")).toHaveLength(1);
   });
 });
+
+describe("MapaPage fontes", () => {
+  it("aplica as variáveis das fontes no contêiner e os títulos da conferência usam var(--font-display)", async () => {
+    servidor(rotasEmRevisao(propostaLimpa()));
+    const { container } = entrar();
+    const titulo = await screen.findByRole("heading", { name: "Conferência do mapa de lugares" });
+    expect(container.firstElementChild?.className).toContain("fonte-display");
+    expect(container.firstElementChild?.className).toContain("fonte-corpo");
+    expect(titulo.className).toContain("var(--font-display");
+    expect(titulo.closest("div.min-h-screen")?.className).toContain("var(--font-body");
+    for (const h2 of screen.getAllByRole("heading", { level: 2 })) expect(h2.className).toContain("var(--font-display");
+    expect(container.innerHTML).not.toMatch(/font-\[(Outfit|DM_Sans)/);
+  });
+});

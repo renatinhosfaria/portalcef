@@ -156,9 +156,9 @@ export function ConferenciaMapa({ eventoId, mapId, propostaInicial, onPublicar, 
   }
 
   return (
-    <div className="min-h-screen bg-[#fffdf8] font-[DM_Sans,system-ui,sans-serif] text-[#24302c]">
+    <div className="min-h-screen bg-[#fffdf8] font-[family-name:var(--font-body,DM_Sans),system-ui,sans-serif] text-[#24302c]">
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-[#e5e8df] px-5 py-4">
-        <h1 className="font-[Outfit,sans-serif] text-xl font-bold">Conferência do mapa de lugares</h1>
+        <h1 className="font-[family-name:var(--font-display,Outfit),system-ui,sans-serif] text-xl font-bold">Conferência do mapa de lugares</h1>
         <ol className="flex items-center gap-3 text-sm text-[#69736e]">
           {ETAPAS.map((etapa, i) => (
             <li key={etapa} aria-current={etapa === "Conferir" ? "step" : undefined} className={etapa === "Conferir" ? "font-bold text-[#24302c]" : ""}>
@@ -180,7 +180,7 @@ export function ConferenciaMapa({ eventoId, mapId, propostaInicial, onPublicar, 
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
           <div className="space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 className="font-[Outfit,sans-serif] text-sm font-bold">Mapa gerado</h2>
+              <h2 className="font-[family-name:var(--font-display,Outfit),system-ui,sans-serif] text-sm font-bold">Mapa gerado</h2>
               <div className="flex gap-1">
                 {(["LADO_A_LADO", "SOBREPOR"] as const).map((valor) => (
                   <button
@@ -311,7 +311,7 @@ export function ConferenciaMapa({ eventoId, mapId, propostaInicial, onPublicar, 
       {dialogoAberto ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
           <div role="dialog" aria-modal="true" aria-label="Publicar mapa" className="w-full max-w-md space-y-3 rounded-2xl bg-[#fffdf8] p-5">
-            <h2 className="font-[Outfit,sans-serif] text-lg font-bold">Publicar mapa</h2>
+            <h2 className="font-[family-name:var(--font-display,Outfit),system-ui,sans-serif] text-lg font-bold">Publicar mapa</h2>
             <label className="block text-sm text-[#69736e]">
               Motivo das correções (opcional)
               <textarea value={motivo} onChange={(e) => setMotivo(e.target.value)} rows={3} className="mt-1 block w-full rounded-lg border border-[#e5e8df] bg-white p-2 text-sm text-[#24302c]" />

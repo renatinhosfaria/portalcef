@@ -56,7 +56,7 @@ export function PainelLugar({ proposta, selecionados, aplicar }: PainelLugarProp
 
   return (
     <section aria-label="Lugar selecionado" className="space-y-3 rounded-xl border border-[#e5e8df] bg-white p-3">
-      <h2 className="font-[Outfit,sans-serif] text-sm font-bold text-[#24302c]">
+      <h2 className="font-[family-name:var(--font-display,Outfit),system-ui,sans-serif] text-sm font-bold text-[#24302c]">
         {unico ? "Lugar selecionado" : `${selecionados.length} lugares selecionados`}
       </h2>
       {unico ? (

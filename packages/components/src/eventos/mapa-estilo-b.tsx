@@ -59,7 +59,7 @@ const COR_FUNDO = "#fffdf8";
 const COR_TEXTO = "#24302c";
 const COR_DISCRETA = "#9aa29c";
 const COR_DESTAQUE = "#d97706";
-const FONTE = "DM Sans, system-ui, sans-serif";
+const FONTE = "var(--font-body, 'DM Sans'), system-ui, sans-serif";
 
 /** Precedência: selecionado > bloqueado > acesso externo > categoria. */
 function coresDoLugar(lugar: LugarMapa, selecionado: boolean): Cores {

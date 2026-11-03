@@ -14,7 +14,7 @@ export function ListaPontos({ pontos, selecionadoId, onSelecionar, onConferir }:
   const pendentes = pontos.filter((ponto) => !ponto.conferido).length;
   return (
     <section aria-label="Pontos para conferir" className="space-y-2">
-      <h2 className="font-[Outfit,sans-serif] text-sm font-bold text-[#24302c]">
+      <h2 className="font-[family-name:var(--font-display,Outfit),system-ui,sans-serif] text-sm font-bold text-[#24302c]">
         {pendentes === 0 ? "Nenhum ponto para conferir" : `${pendentes} ${pendentes === 1 ? "ponto" : "pontos"} para conferir`}
       </h2>
       <ul className="space-y-2">

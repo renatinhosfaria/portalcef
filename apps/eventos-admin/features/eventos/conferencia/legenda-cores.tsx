@@ -83,7 +83,7 @@ export function LegendaCores({ legenda, contagens, onConfirmar }: LegendaCoresPr
   if (legenda.length === 0) return null;
   return (
     <section aria-label="Legenda de cores" className="space-y-2">
-      <h2 className="font-[Outfit,sans-serif] text-sm font-bold text-[#24302c]">Legenda de cores</h2>
+      <h2 className="font-[family-name:var(--font-display,Outfit),system-ui,sans-serif] text-sm font-bold text-[#24302c]">Legenda de cores</h2>
       <ul className="space-y-2">
         {legenda.map((entrada) => (
           <ItemLegenda key={entrada.cor} entrada={entrada} quantidade={contagens[entrada.cor] ?? 0} onConfirmar={onConfirmar} />

@@ -21,7 +21,7 @@ export function ResumoProposta({ resumo }: { resumo: Resumo }) {
     <ul aria-label="Resumo da proposta" className="flex flex-wrap gap-2">
       {itens.map((item) => (
         <li key={item.rotulo} className="rounded-xl border border-[#e5e8df] bg-white px-3 py-2">
-          <strong className="block font-[Outfit,sans-serif] text-lg text-[#24302c]">{item.valor}</strong>
+          <strong className="block font-[family-name:var(--font-display,Outfit),system-ui,sans-serif] text-lg text-[#24302c]">{item.valor}</strong>
           <span className="text-xs text-[#69736e]">{item.rotulo}</span>
         </li>
       ))}
