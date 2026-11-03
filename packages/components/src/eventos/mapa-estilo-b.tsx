@@ -132,14 +132,23 @@ export function MapaEstiloB({
     };
   }, [largura, altura]);
 
+  // Depende dos valores do foco, e não da identidade do objeto: um `foco` inline
+  // recriado a cada render do pai não pode reiniciar o zoom do usuário.
+  const focoX = foco?.x;
+  const focoY = foco?.y;
+  const focoLargura = foco?.largura;
+  const focoAltura = foco?.altura;
   useEffect(() => {
     const svg = svgRef.current;
     const comportamento = zoomRef.current;
     if (!svg || !comportamento) return;
-    const alvo = foco ? transformParaFoco(foco, largura, altura) : null;
+    const alvo =
+      focoX === undefined || focoY === undefined || focoLargura === undefined || focoAltura === undefined
+        ? null
+        : transformParaFoco({ x: focoX, y: focoY, largura: focoLargura, altura: focoAltura }, largura, altura);
     const transformacao = alvo ? zoomIdentity.translate(alvo.x, alvo.y).scale(alvo.k) : zoomIdentity;
     select(svg).call(comportamento.transform, transformacao);
-  }, [foco, largura, altura]);
+  }, [focoX, focoY, focoLargura, focoAltura, largura, altura]);
 
   const caixaLugares = useMemo(() => {
     if (lugares.length === 0) return { minX: 0, maxX: largura, minY: 0, maxY: altura };

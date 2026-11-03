@@ -143,15 +143,36 @@ describe("MapaEstiloB", () => {
     expect(aoFundo.mock.calls[0]?.[0].y).toBeCloseTo(2975, 3);
   });
 
-  it("renderiza o fundo num foreignObject e aceita mudar o foco sem quebrar", () => {
-    const { container, rerender } = render(
+  it("renderiza o fundo num foreignObject", () => {
+    const { container } = render(
       <MapaEstiloB {...base} lugares={[lugar({ id: "a" })]} fundo={<div data-testid="pdf" />} opacidadeFundo={0.4} />,
     );
     expect(container.querySelector("foreignObject [data-testid='pdf']")).not.toBeNull();
-    rerender(
-      <MapaEstiloB {...base} lugares={[lugar({ id: "a" })]} foco={{ x: 100, y: 100, largura: 500, altura: 400 }} />,
-    );
-    rerender(<MapaEstiloB {...base} lugares={[lugar({ id: "a" })]} foco={null} />);
-    expect(container.querySelectorAll("[data-lugar-id]")).toHaveLength(1);
+  });
+
+  describe("foco", () => {
+    const grupoZoom = (c: HTMLElement) => c.querySelector("svg > g")!.getAttribute("transform");
+    const lugares = [lugar({ id: "a" })];
+
+    it("muda o transform quando o foco muda e volta à identidade com null", () => {
+      const { container, rerender } = render(<MapaEstiloB {...base} lugares={lugares} />);
+      const inicial = grupoZoom(container);
+      rerender(<MapaEstiloB {...base} lugares={lugares} foco={{ x: 100, y: 100, largura: 500, altura: 400 }} />);
+      const comFoco = grupoZoom(container);
+      expect(comFoco).not.toBe(inicial);
+      expect(comFoco).not.toBe("translate(0 0) scale(1)");
+      rerender(<MapaEstiloB {...base} lugares={lugares} foco={null} />);
+      expect(grupoZoom(container)).toBe("translate(0 0) scale(1)");
+    });
+
+    it("não reinicia o zoom do usuário num re-render com foco de valores iguais", () => {
+      const { container, rerender } = render(
+        <MapaEstiloB {...base} lugares={lugares} foco={{ x: 100, y: 100, largura: 500, altura: 400 }} />,
+      );
+      // simula o usuário dando zoom/pan depois do enquadramento
+      container.querySelector("svg > g")!.setAttribute("transform", "translate(-50 -20) scale(3)");
+      rerender(<MapaEstiloB {...base} lugares={lugares} foco={{ x: 100, y: 100, largura: 500, altura: 400 }} />);
+      expect(grupoZoom(container)).toBe("translate(-50 -20) scale(3)");
+    });
   });
 });
