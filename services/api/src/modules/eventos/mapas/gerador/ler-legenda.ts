@@ -22,136 +22,113 @@ export interface ElementoLido {
   y: number;
 }
 
-const ALCANCE_HORIZONTAL_EM_TAMANHOS = 6;
-const ALCANCE_VERTICAL_EM_TAMANHOS = 1.2;
-const MARGEM_DA_AREA_EM_TAMANHOS = 1;
-const PADRAO_NUMERO = /^\d{1,4}$/;
+const ALCANCE_X = 6; // múltiplos do tamanho da amostra
+const ALCANCE_Y = 1.2;
+const MARGEM = 1;
+const ehNumero = (texto: string) => /^\d{1,4}$/.test(texto);
 
-/** Remove acentos e passa para minúsculas. */
-function normalizar(texto: string): string {
-  return texto
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLowerCase();
+function semAcento(texto: string): string {
+  return texto.normalize("NFD").replace(/\p{Diacritic}/gu, "");
 }
 
 export function interpretarTextoLegenda(texto: string): {
   categoria: CategoriaLugar | null;
   acessoExterno: boolean;
 } {
-  const normalizado = normalizar(texto);
-  let categoria: CategoriaLugar | null = null;
-  if (normalizado.includes("cadeirant")) {
-    categoria = normalizado.includes("opcional") ? "OPCIONAL_CADEIRANTE" : "CADEIRANTE";
-  } else if (normalizado.includes("obes")) {
-    categoria = "OBESO";
+  const t = semAcento(texto).toLowerCase();
+  const acessoExterno = t.includes("acesso externo");
+  if (t.includes("cadeirant")) {
+    return { categoria: t.includes("opcional") ? "OPCIONAL_CADEIRANTE" : "CADEIRANTE", acessoExterno };
   }
-  return { categoria, acessoExterno: normalizado.includes("acesso externo") };
+  if (t.includes("obes")) return { categoria: "OBESO", acessoExterno };
+  return { categoria: null, acessoExterno };
 }
 
 export function dentroDaCaixa(ponto: { x: number; y: number }, caixa: Caixa | null): boolean {
-  if (!caixa) return false;
-  return ponto.x >= caixa.x0 && ponto.x <= caixa.x1 && ponto.y >= caixa.y0 && ponto.y <= caixa.y1;
+  return (
+    caixa !== null && ponto.x >= caixa.x0 && ponto.x <= caixa.x1 && ponto.y >= caixa.y0 && ponto.y <= caixa.y1
+  );
 }
 
-/** Cor mais frequente entre os tokens numéricos. */
-function corDominanteDosNumeros(tokens: TokenLido[]): string | null {
-  const contagem = new Map<string, number>();
-  for (const t of tokens) {
-    if (PADRAO_NUMERO.test(t.texto)) contagem.set(t.cor, (contagem.get(t.cor) ?? 0) + 1);
-  }
-  let dominante: string | null = null;
-  let maior = 0;
-  for (const [cor, quantidade] of contagem) {
-    if (quantidade > maior) {
-      dominante = cor;
-      maior = quantidade;
-    }
-  }
-  return dominante;
+function corMaisUsadaEmNumeros(tokens: TokenLido[]): string | undefined {
+  const contagem: Record<string, number> = {};
+  for (const t of tokens) if (ehNumero(t.texto)) contagem[t.cor] = (contagem[t.cor] ?? 0) + 1;
+  return Object.entries(contagem).sort((a, b) => b[1] - a[1])[0]?.[0];
 }
 
-function caixaDaFrase(f: FraseLida): Caixa {
-  const direita = f.x + (f.x - f.esquerda);
-  return { x0: f.esquerda, y0: f.y - f.tamanho / 2, x1: direita, y1: f.y + f.tamanho / 2 };
+function donaDaFrase(frase: FraseLida, amostras: TokenLido[]): TokenLido | undefined {
+  const candidatas = amostras
+    .map((amostra) => ({
+      amostra,
+      dx: frase.esquerda - amostra.x,
+      dy: Math.abs(frase.y - amostra.y),
+    }))
+    .filter(({ amostra, dx, dy }) => dx > 0 && dx <= ALCANCE_X * amostra.tamanho && dy <= ALCANCE_Y * amostra.tamanho)
+    .sort((a, b) => a.dy - b.dy || a.dx - b.dx);
+  return candidatas[0]?.amostra;
 }
 
-function caixaDaAmostra(t: TokenLido): Caixa {
-  return { x0: t.x - t.tamanho / 2, y0: t.y - t.tamanho / 2, x1: t.x + t.tamanho / 2, y1: t.y + t.tamanho / 2 };
-}
-
-function uniao(caixas: Caixa[]): Caixa {
+function caixaDe(itens: Array<{ x0: number; y0: number; x1: number; y1: number }>): Caixa {
   return {
-    x0: Math.min(...caixas.map((c) => c.x0)),
-    y0: Math.min(...caixas.map((c) => c.y0)),
-    x1: Math.max(...caixas.map((c) => c.x1)),
-    y1: Math.max(...caixas.map((c) => c.y1)),
+    x0: Math.min(...itens.map((i) => i.x0)),
+    y0: Math.min(...itens.map((i) => i.y0)),
+    x1: Math.max(...itens.map((i) => i.x1)),
+    y1: Math.max(...itens.map((i) => i.y1)),
   };
-}
-
-/** Amostra mais próxima à esquerda da frase, dentro do alcance relativo ao tamanho dela. */
-function amostraDaFrase(f: FraseLida, amostras: TokenLido[]): TokenLido | null {
-  let melhor: TokenLido | null = null;
-  let melhorDy = Infinity;
-  let melhorDx = Infinity;
-  for (const a of amostras) {
-    const dx = f.esquerda - a.x;
-    const dy = Math.abs(f.y - a.y);
-    if (dx <= 0 || dx > ALCANCE_HORIZONTAL_EM_TAMANHOS * a.tamanho) continue;
-    if (dy > ALCANCE_VERTICAL_EM_TAMANHOS * a.tamanho) continue;
-    if (dy < melhorDy || (dy === melhorDy && dx < melhorDx)) {
-      melhor = a;
-      melhorDy = dy;
-      melhorDx = dx;
-    }
-  }
-  return melhor;
 }
 
 export function lerLegenda(
   planta: PlantaLida,
   coresDosNumeros: ReadonlySet<string>,
 ): { entradas: EntradaLegendaLida[]; area: Caixa | null } {
-  const dominante = corDominanteDosNumeros(planta.tokens);
+  const corDominante = corMaisUsadaEmNumeros(planta.tokens);
   const amostras = planta.tokens.filter(
-    (t) => t.texto.length === 1 && !PADRAO_NUMERO.test(t.texto) && coresDosNumeros.has(t.cor) && t.cor !== dominante,
+    (t) => t.texto.length === 1 && !ehNumero(t.texto) && coresDosNumeros.has(t.cor) && t.cor !== corDominante,
   );
 
-  const frasesPorAmostra = new Map<TokenLido, FraseLida[]>();
-  for (const f of planta.frases) {
-    const amostra = amostraDaFrase(f, amostras);
-    if (!amostra) continue;
-    frasesPorAmostra.set(amostra, [...(frasesPorAmostra.get(amostra) ?? []), f]);
+  const grupos = new Map<TokenLido, FraseLida[]>();
+  for (const frase of planta.frases) {
+    const dona = donaDaFrase(frase, amostras);
+    if (dona) grupos.set(dona, [...(grupos.get(dona) ?? []), frase]);
   }
 
   const entradas: EntradaLegendaLida[] = [];
   const caixas: Caixa[] = [];
-  const ordenadas = [...frasesPorAmostra.keys()].sort((a, b) => a.y - b.y);
-  for (const amostra of ordenadas) {
-    const frases = [...(frasesPorAmostra.get(amostra) ?? [])].sort((a, b) => a.y - b.y);
+  for (const [amostra, frases] of [...grupos].sort((a, b) => a[0].y - b[0].y)) {
+    frases.sort((a, b) => a.y - b.y);
     const texto = frases.map((f) => f.texto).join(" ");
     entradas.push({ cor: amostra.cor, texto, ...interpretarTextoLegenda(texto) });
-    const margem = MARGEM_DA_AREA_EM_TAMANHOS * amostra.tamanho;
-    const caixa = uniao([caixaDaAmostra(amostra), ...frases.map(caixaDaFrase)]);
-    caixas.push({ x0: caixa.x0 - margem, y0: caixa.y0 - margem, x1: caixa.x1 + margem, y1: caixa.y1 + margem });
-  }
 
-  return { entradas, area: caixas.length > 0 ? uniao(caixas) : null };
+    const meio = amostra.tamanho / 2;
+    const folga = MARGEM * amostra.tamanho;
+    const partes = [
+      { x0: amostra.x - meio, y0: amostra.y - meio, x1: amostra.x + meio, y1: amostra.y + meio },
+      ...frases.map((f) => ({
+        x0: f.esquerda,
+        y0: f.y - f.tamanho / 2,
+        x1: 2 * f.x - f.esquerda,
+        y1: f.y + f.tamanho / 2,
+      })),
+    ];
+    const c = caixaDe(partes);
+    caixas.push({ x0: c.x0 - folga, y0: c.y0 - folga, x1: c.x1 + folga, y1: c.y1 + folga });
+  }
+  return { entradas, area: caixas.length ? caixaDe(caixas) : null };
 }
+
+const PALAVRAS_DE_ELEMENTO: Array<[ElementoLido["tipo"], string]> = [
+  ["PALCO", "PALCO"],
+  ["ENTRADA", "ENTRADA"],
+  ["SAIDA", "SAIDA"],
+];
 
 export function lerElementos(planta: PlantaLida, areaLegenda: Caixa | null): ElementoLido[] {
   const elementos: ElementoLido[] = [];
-  for (const f of planta.frases) {
-    if (dentroDaCaixa(f, areaLegenda)) continue;
-    const texto = normalizar(f.texto).toUpperCase();
-    const tipo = texto.includes("PALCO")
-      ? "PALCO"
-      : texto.includes("ENTRADA")
-        ? "ENTRADA"
-        : texto.includes("SAIDA")
-          ? "SAIDA"
-          : null;
-    if (tipo) elementos.push({ tipo, texto: f.texto, x: f.x, y: f.y });
+  for (const frase of planta.frases) {
+    if (dentroDaCaixa(frase, areaLegenda)) continue;
+    const maiusculo = semAcento(frase.texto).toUpperCase();
+    const achado = PALAVRAS_DE_ELEMENTO.find(([, palavra]) => maiusculo.includes(palavra));
+    if (achado) elementos.push({ tipo: achado[0], texto: frase.texto, x: frase.x, y: frase.y });
   }
   return elementos;
 }
