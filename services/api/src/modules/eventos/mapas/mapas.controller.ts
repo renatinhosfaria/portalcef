@@ -1,4 +1,5 @@
-import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Req, UseGuards } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Query, Req, Res, UseGuards } from "@nestjs/common";
+import type { FastifyReply } from "fastify";
 import { AuthGuard } from "../../../common/guards/auth.guard";
 import { RolesGuard } from "../../../common/guards/roles.guard";
 import { CurrentUser } from "../../../common/decorators/current-user.decorator";
@@ -13,7 +14,20 @@ import { z } from "zod";
 @Roles(...EVENTOS_ADMIN_ROLES)
 export class MapasController {
   constructor(private readonly service: MapasService) {}
-  @Post("mapas/import") async importar(@Param("id") id: string, @Req() request: any, @CurrentUser() actor: any) { const file = await request.file(); if (!file) throw new BadRequestException({ code: "FILE_REQUIRED", message: "Arquivo do mapa é obrigatório" }); return this.service.importar(id, file, actor); }
+  @Get("mapas") listar(@Param("id") id: string, @CurrentUser() actor: any) { return this.service.listar(id, actor); }
+  @Post("mapas/import") async importar(@Param("id") id: string, @Query("pagina") pagina: string | undefined, @Req() request: any, @CurrentUser() actor: any) {
+    const parsed = z.coerce.number().int().min(1).optional().safeParse(pagina);
+    if (!parsed.success) return { success: false, error: { code: "VALIDATION_ERROR", details: parsed.error.flatten() } };
+    const file = await request.file();
+    if (!file) throw new BadRequestException({ code: "FILE_REQUIRED", message: "Arquivo do mapa é obrigatório" });
+    return this.service.importar(id, file, actor, parsed.data);
+  }
+  @Get("mapas/:versionId/original") async original(@Param("id") id: string, @Param("versionId") versionId: string, @CurrentUser() actor: any, @Res() reply: FastifyReply) {
+    const arquivo = await this.service.obterOriginal(id, versionId, actor);
+    reply.header("Content-Type", arquivo.contentType);
+    if (arquivo.contentLength) reply.header("Content-Length", arquivo.contentLength);
+    return reply.send(arquivo.body);
+  }
   @Get("mapas/:versionId/revisao") revisao(@Param("id") id: string, @Param("versionId") versionId: string, @CurrentUser() actor: any) { return this.service.revisao(id, versionId, actor); }
   @Patch("mapas/:versionId/deteccoes") atualizar(@Param("id") id: string, @Param("versionId") versionId: string, @Body() body: any, @CurrentUser() actor: any) { return this.service.atualizarDeteccoes(id, versionId, body, actor); }
   @Post("mapas/:versionId/confirmar") confirmar(@Param("id") id: string, @Param("versionId") versionId: string, @Body() body: any, @CurrentUser() actor: any) { return this.service.confirmar(id, versionId, body, actor); }

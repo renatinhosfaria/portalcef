@@ -4,11 +4,11 @@ import type { MultipartFile } from "@fastify/multipart";
 import type { EventoActor } from "@essencia/shared/types";
 import { DatabaseService } from "../../../common/database/database.service";
 import { StorageService } from "../../../common/storage/storage.service";
-import { MapDetector, type MapDetectionResult } from "./map-detector";
-import { sanitizeSvg } from "./map-sanitizer";
+import type { PropostaMapa } from "@essencia/shared/eventos/mapa-proposta";
+import { GeradorMapaPdf } from "./gerador/gerador-mapa-pdf";
 
 export interface ConfirmMapInput { seats: Array<{ id?: string; rowLabel: string; seatNumber: string; x: number; y: number; width?: number; height?: number; category?: string | null; accessible?: boolean; sellable?: boolean }>; reason?: string; }
-export interface MapImportSummary { importId: string; mapId: string; status: string; proposalCount: number; conflictCount: number; detection: MapDetectionResult; }
+export interface MapImportSummary { importId: string; mapId: string; status: string; proposalCount: number; conflictCount: number; }
 export interface MapReplacementResult {
   updated: unknown;
   previousMapId: string | null;
@@ -29,7 +29,7 @@ export interface MapMigrationResult {
 @Injectable()
 export class MapasService {
   private readonly logger = new Logger(MapasService.name);
-  constructor(private readonly database: DatabaseService, @Optional() @Inject(StorageService) private readonly storage: StorageService | undefined, private readonly detector: MapDetector) {}
+  constructor(private readonly database: DatabaseService, @Optional() @Inject(StorageService) private readonly storage: StorageService | undefined, private readonly gerador: GeradorMapaPdf) {}
   private get db(): Database { return this.database.db; }
   private async assertEvent(eventId: string, actor: EventoActor) {
     const [event] = await this.db.select().from(eventos).where(eq(eventos.id, eventId));
@@ -170,44 +170,59 @@ export class MapasService {
     return { inventorySessionIds: targetSessions.map((session: any) => session.id), inventoryCreatedCount };
   }
 
-  async importar(eventId: string, file: MultipartFile, actor: EventoActor): Promise<MapImportSummary> {
-    await this.assertEvent(eventId, actor);
+  async importar(eventId: string, file: MultipartFile, actor: EventoActor, pagina?: number): Promise<MapImportSummary> {
+    const event = await this.assertEvent(eventId, actor);
     if (!this.storage) throw new BadRequestException({ code: "STORAGE_UNAVAILABLE", message: "Armazenamento de mapas indisponível" });
     const buffer = await file.toBuffer();
-    const mimeType = file.mimetype === "image/svg+xml" ? "image/svg+xml" : file.mimetype;
+    if (file.mimetype !== "application/pdf" && buffer.subarray(0, 5).toString("latin1") !== "%PDF-") throw new BadRequestException({ code: "INVALID_MAP_TYPE", message: "Envie a planta em PDF." });
+    const proposta = await this.gerador.gerar(buffer, pagina);
     let original: { key: string } | undefined;
-    let preview: { key: string } | undefined;
     try {
-      original = await this.storage.uploadMapBuffer(buffer, file.filename, mimeType, `eventos/${eventId}/mapas/originais`);
-      const detectionBuffer = mimeType === "image/svg+xml" ? sanitizeSvg(buffer) : buffer;
-      if (mimeType === "image/svg+xml") preview = await this.storage.uploadMapBuffer(detectionBuffer, `preview-${file.filename}`, mimeType, `eventos/${eventId}/mapas/previews`);
-      const detection = await this.detector.detect({ buffer: detectionBuffer, mimeType });
-      const result = await this.transaction(async (db) => {
+      original = await this.storage.uploadMapBuffer(buffer, file.filename, "application/pdf", `eventos/${eventId}/mapas/originais`);
+      return await this.transaction(async (db) => {
         const maps = await db.select().from(eventoMapas).where(eq(eventoMapas.eventId, eventId));
+        const sessoes = await db.select({ mapId: eventoSessoes.mapId }).from(eventoSessoes).where(eq(eventoSessoes.eventId, eventId));
+        const emUso = new Set<string>([...sessoes.map((sessao: any) => sessao.mapId), event.defaultMapId].filter(Boolean));
+        for (const anterior of maps.filter((item: any) => item.status === "EM_REVISAO" && !emUso.has(item.id))) {
+          await db.update(eventoMapas).set({ status: "ARQUIVADO", updatedAt: new Date() }).where(and(eq(eventoMapas.id, anterior.id), eq(eventoMapas.eventId, eventId)));
+        }
         const version = Math.max(0, ...maps.map((item: any) => item.version ?? 0)) + 1;
-        const [map] = await db.insert(eventoMapas).values({ eventId, version, originalFileKey: original!.key, originalFileName: file.filename, originalMimeType: mimeType, previewFileKey: preview?.key ?? null, status: "EM_REVISAO" }).returning();
+        const [map] = await db.insert(eventoMapas).values({ eventId, version, originalFileKey: original!.key, originalFileName: file.filename, originalMimeType: "application/pdf", status: "EM_REVISAO" }).returning();
         if (!map) throw new BadRequestException({ code: "MAP_IMPORT_FAILED", message: "Não foi possível criar a versão do mapa" });
-        const [imp] = await db.insert(eventoImportacoesMapa).values({ eventId, mapId: map.id, fileKey: original!.key, detector: detection.detector, detectorVersion: "1", status: "EM_REVISAO", proposalCount: detection.seats.length, conflictCount: detection.conflicts.length }).returning();
+        const proposalCount = proposta.lugares.length;
+        const conflictCount = proposta.pontos.length;
+        const [imp] = await db.insert(eventoImportacoesMapa).values({ eventId, mapId: map.id, fileKey: original!.key, detector: "pdf-vetorial", detectorVersion: "2", status: "EM_REVISAO", proposta, proposalCount, conflictCount }).returning();
         if (!imp) throw new BadRequestException({ code: "MAP_IMPORT_FAILED", message: "Não foi possível registrar a importação" });
-        for (const seat of detection.seats) await db.insert(eventoDeteccoesMapa).values({ importId: imp.id, detector: detection.detector, confidence: seat.confidence, proposedRowLabel: seat.rowLabel || null, proposedSeatNumber: seat.seatNumber, proposedX: seat.x, proposedY: seat.y, proposedCategory: seat.category ?? null, status: "PENDENTE", conflictReason: seat.conflict ?? null });
-        await this.audit(eventId, actor, map.id, { action: "importar", importId: imp.id, conflicts: detection.conflicts.length }, db);
-        return { importId: imp.id, mapId: map.id, status: "EM_REVISAO", proposalCount: detection.seats.length, conflictCount: detection.conflicts.length, detection };
+        await this.audit(eventId, actor, map.id, { action: "importar", importId: imp.id, conflicts: conflictCount }, db);
+        return { importId: imp.id, mapId: map.id, status: "EM_REVISAO" as const, proposalCount, conflictCount };
       });
-      return result;
     } catch (error) {
       if (original?.key) await this.storage.deleteFileStrict(original.key).catch(() => undefined);
-      if (preview?.key) await this.storage.deleteFileStrict(preview.key).catch(() => undefined);
       throw error;
     }
   }
 
-  async revisao(eventId: string, versionId: string, actor: EventoActor) {
+  async listar(eventId: string, actor: EventoActor) {
+    await this.assertEvent(eventId, actor);
+    const maps = await this.db.select().from(eventoMapas).where(eq(eventoMapas.eventId, eventId)).orderBy(desc(eventoMapas.version));
+    return maps.map((map: any) => ({ id: map.id, version: map.version, status: map.status, originalFileName: map.originalFileName ?? null, createdAt: map.createdAt, confirmedAt: map.confirmedAt ?? null }));
+  }
+
+  async obterOriginal(eventId: string, versionId: string, actor: EventoActor): Promise<{ body: unknown; contentType: string; contentLength?: number }> {
+    await this.assertEvent(eventId, actor);
+    if (!this.storage) throw new BadRequestException({ code: "STORAGE_UNAVAILABLE", message: "Armazenamento de mapas indisponível" });
+    const [map] = await this.db.select().from(eventoMapas).where(and(eq(eventoMapas.id, versionId), eq(eventoMapas.eventId, eventId)));
+    if (!map) throw new NotFoundException({ code: "MAP_NOT_FOUND", message: "Versão não encontrada" });
+    const arquivo = await this.storage.getObject(map.originalFileKey);
+    return { body: arquivo.Body, contentType: map.originalMimeType ?? arquivo.ContentType ?? "application/pdf", contentLength: arquivo.ContentLength };
+  }
+
+  async revisao(eventId: string, versionId: string, actor: EventoActor): Promise<{ map: any; import: any; proposta: PropostaMapa | null }> {
     await this.assertEvent(eventId, actor);
     const [map] = await this.db.select().from(eventoMapas).where(and(eq(eventoMapas.id, versionId), eq(eventoMapas.eventId, eventId)));
     if (!map) throw new NotFoundException({ code: "MAP_NOT_FOUND", message: "Versão não encontrada" });
     const imports = await this.db.select().from(eventoImportacoesMapa).where(eq(eventoImportacoesMapa.mapId, map.id));
-    const detections = imports.length ? await this.db.select().from(eventoDeteccoesMapa).where(eq(eventoDeteccoesMapa.importId, imports[0].id)) : [];
-    return { map, import: imports[0] ?? null, detections };
+    return { map, import: imports[0] ?? null, proposta: (imports[0]?.proposta as PropostaMapa | null | undefined) ?? null };
   }
 
   async atualizarDeteccoes(eventId: string, versionId: string, corrections: ConfirmMapInput, actor: EventoActor) {

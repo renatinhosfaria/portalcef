@@ -53,4 +53,36 @@ describe("MapasController", () => {
     const route = Reflect.getMetadata("path", MapasController.prototype.migrarEExcluir) as string;
     expect(route).toBe("mapas/:versionId/migrar-e-excluir");
   });
+
+  it("importar lê ?pagina como número e recusa página inválida", async () => {
+    const importar = jest.fn().mockResolvedValue({ importId: "imp-1" });
+    const controller = new MapasController({ importar } as any);
+    const actor = { userId: "user-1", role: "diretora_geral", schoolId: "school-1" };
+    const arquivo = { filename: "planta.pdf" };
+    const request: any = { file: jest.fn().mockResolvedValue(arquivo) };
+
+    await controller.importar("evento-1", "2", request, actor);
+    expect(importar).toHaveBeenLastCalledWith("evento-1", arquivo, actor, 2);
+    await controller.importar("evento-1", undefined, request, actor);
+    expect(importar).toHaveBeenLastCalledWith("evento-1", arquivo, actor, undefined);
+    importar.mockClear();
+    for (const invalida of ["0", "-1", "1.5", "abc"]) {
+      await expect(controller.importar("evento-1", invalida, request, actor)).resolves.toMatchObject({ success: false, error: { code: "VALIDATION_ERROR" } });
+    }
+    expect(importar).not.toHaveBeenCalled();
+  });
+
+  it("lista as versões e envia o original com o content-type", async () => {
+    const corpo = { stream: true };
+    const listar = jest.fn().mockResolvedValue([{ id: "m1" }]);
+    const obterOriginal = jest.fn().mockResolvedValue({ body: corpo, contentType: "application/pdf", contentLength: 10 });
+    const controller = new MapasController({ listar, obterOriginal } as any);
+    const actor = { userId: "user-1", role: "diretora_geral", schoolId: "school-1" };
+    await expect(controller.listar("evento-1", actor)).resolves.toEqual([{ id: "m1" }]);
+    const reply: any = { header: jest.fn().mockReturnThis(), send: jest.fn().mockReturnValue("enviado") };
+    await expect(controller.original("evento-1", "m1", actor, reply)).resolves.toBe("enviado");
+    expect(reply.header).toHaveBeenCalledWith("Content-Type", "application/pdf");
+    expect(reply.header).toHaveBeenCalledWith("Content-Length", 10);
+    expect(reply.send).toHaveBeenCalledWith(corpo);
+  });
 });

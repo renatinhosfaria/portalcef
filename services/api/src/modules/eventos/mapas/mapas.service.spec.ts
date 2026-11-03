@@ -298,25 +298,151 @@ describe("MapasService", () => {
     expect(second).toEqual(first);
     expect(fixture.state.inventory).toHaveLength(1);
   });
-  function service() {
-    const db: any = {
-      select: () => ({ from: () => ({ where: async () => [{ id: "event-1", schoolId: "school-1", status: "EM_REVISAO" }] }) }),
-      insert: () => ({ values: () => ({ returning: async () => [{ id: "map-1", eventId: "event-1" }] }) }),
-    };
-    return new MapasService({ db } as any, { uploadMapBuffer: jest.fn().mockResolvedValue({ key: "private/map.svg" }) } as any, { detect: jest.fn().mockResolvedValue({ detector: "svg-text-v1", seats: [{ rowLabel: "A", seatNumber: "1", x: 1, y: 2, width: 20, height: 20, confidence: 90 }], categories: [], confidence: 90, conflicts: [] }) } as any);
-  }
   it("mantém StorageService como token de DI mesmo sendo opcional", () => {
     const selfParamTypes = Reflect.getMetadata("self:paramtypes", MapasService) as Array<{ index: number; param: unknown }>;
     expect(selfParamTypes).toEqual(expect.arrayContaining([{ index: 1, param: StorageService }]));
   });
-  it("exige revisão humana para toda confirmação estruturada", async () => {
-    const maps = service();
-    const result = await maps.importar("event-1", { filename: "map.svg", mimetype: "image/svg+xml", toBuffer: jest.fn().mockResolvedValue(Buffer.from("<svg/>")) } as any, actor);
-    expect(result.status).toBe("EM_REVISAO");
-    expect(result.proposalCount).toBe(1);
-    const upload = (maps as any).storage.uploadMapBuffer as jest.Mock;
-    expect(upload).toHaveBeenNthCalledWith(1, expect.any(Buffer), "map.svg", "image/svg+xml", "eventos/event-1/mapas/originais");
-    expect(upload).toHaveBeenNthCalledWith(2, expect.any(Buffer), "preview-map.svg", "image/svg+xml", "eventos/event-1/mapas/previews");
+  const PDF = Buffer.from("%PDF-1.7 planta");
+  const arquivoPdf = (buffer: Buffer = PDF, mimetype = "application/pdf") => ({ filename: "planta.pdf", mimetype, toBuffer: jest.fn().mockResolvedValue(buffer) }) as any;
+  const propostaFalsa = (lugares = 3, pontos = 1) => ({ versao: 1, revisao: 0, pagina: { numero: 1, largura: 8420, altura: 5950 }, lugares: Array.from({ length: lugares }, (_, i) => ({ id: `l${i}` })), rotulos: [], elementos: [], legenda: [], pontos: Array.from({ length: pontos }, (_, i) => ({ id: `p${i}` })) }) as any;
+
+  function importacaoFixture(overrides: { maps?: any[]; sessions?: any[]; event?: any; gerar?: jest.Mock } = {}) {
+    const dbModule = jest.requireMock("@essencia/db") as any;
+    (dbModule.desc as jest.Mock).mockImplementation(() => "desc");
+    const ordem: string[] = [];
+    const state: any = {
+      event: { id: "event-1", schoolId: "school-1", defaultMapId: null, ...overrides.event },
+      maps: overrides.maps ?? [],
+      sessions: overrides.sessions ?? [],
+      imports: [] as any[],
+      audits: [] as any[],
+      deteccoes: [] as any[],
+      updates: [] as any[],
+    };
+    const rows = (table: unknown) => table === dbModule.eventos ? [state.event] : table === dbModule.eventoMapas ? state.maps : table === dbModule.eventoSessoes ? state.sessions : table === dbModule.eventoImportacoesMapa ? state.imports : [];
+    const select = () => ({ from: (table: unknown) => {
+      const consulta: any = { where: () => consulta, orderBy: (ordenacao: unknown) => { if (ordenacao === "desc") return Promise.resolve([...rows(table)].sort((x: any, y: any) => y.version - x.version)); return Promise.resolve(rows(table)); }, then: (resolve: any, reject: any) => Promise.resolve(rows(table)).then(resolve, reject), for: () => consulta };
+      return consulta;
+    } });
+    const insert = (table: unknown) => ({ values: (values: any) => {
+      const gravar = () => {
+        if (table === dbModule.eventoMapas) { const row = { id: `map-${state.maps.length + 1}`, ...values }; state.maps.push(row); return [row]; }
+        if (table === dbModule.eventoImportacoesMapa) { const row = { id: `imp-${state.imports.length + 1}`, ...values }; state.imports.push(row); return [row]; }
+        if (table === dbModule.eventoDeteccoesMapa) state.deteccoes.push(values);
+        if (table === dbModule.eventoAuditorias) state.audits.push(values);
+        return [];
+      };
+      return { returning: async () => gravar(), then: (resolve: any, reject: any) => Promise.resolve(gravar()).then(resolve, reject) };
+    } });
+    const update = (table: unknown) => ({ set: (values: any) => ({ where: () => {
+      state.updates.push({ table, values });
+      return { returning: async () => [], then: (resolve: any, reject: any) => Promise.resolve([]).then(resolve, reject) };
+    } }) });
+    const db: any = { select, insert, update, delete: () => ({ where: async () => [] }) };
+    const gerar = overrides.gerar ?? jest.fn().mockImplementation(async () => { ordem.push("gerar"); return propostaFalsa(); });
+    const storage = {
+      uploadMapBuffer: jest.fn().mockImplementation(async () => { ordem.push("upload"); return { key: "private/planta.pdf" }; }),
+      deleteFileStrict: jest.fn().mockResolvedValue(undefined),
+      deleteFile: jest.fn().mockResolvedValue(undefined),
+      getObject: jest.fn(),
+    };
+    const maps = new MapasService({ db } as any, storage as any, { gerar } as any);
+    return { maps, state, storage, gerar, ordem, dbModule };
+  }
+
+  it("importa o PDF: gera a proposta antes do upload e grava EM_REVISAO com a proposta", async () => {
+    const fx = importacaoFixture();
+    const result = await fx.maps.importar("event-1", arquivoPdf(), actor);
+    expect(fx.ordem).toEqual(["gerar", "upload"]);
+    expect(fx.gerar).toHaveBeenCalledWith(PDF, undefined);
+    expect(fx.storage.uploadMapBuffer).toHaveBeenCalledWith(PDF, "planta.pdf", "application/pdf", "eventos/event-1/mapas/originais");
+    expect(result).toEqual({ importId: "imp-1", mapId: "map-1", status: "EM_REVISAO", proposalCount: 3, conflictCount: 1 });
+    expect(fx.state.maps[0]).toMatchObject({ version: 1, status: "EM_REVISAO", originalFileKey: "private/planta.pdf", originalMimeType: "application/pdf" });
+    expect(fx.state.imports[0]).toMatchObject({ detector: "pdf-vetorial", detectorVersion: "2", status: "EM_REVISAO", proposalCount: 3, conflictCount: 1, proposta: expect.objectContaining({ versao: 1 }) });
+    expect(fx.state.deteccoes).toHaveLength(0);
+    expect(fx.state.audits[0]).toMatchObject({ metadata: expect.objectContaining({ action: "importar" }) });
+  });
+
+  it("aceita PDF identificado só pelo começo do arquivo", async () => {
+    const fx = importacaoFixture();
+    await expect(fx.maps.importar("event-1", arquivoPdf(PDF, "application/octet-stream"), actor)).resolves.toMatchObject({ status: "EM_REVISAO" });
+  });
+
+  it("recusa arquivo que não é PDF sem enviar ao storage", async () => {
+    const fx = importacaoFixture();
+    await expect(fx.maps.importar("event-1", arquivoPdf(Buffer.from("<svg/>"), "image/svg+xml"), actor)).rejects.toMatchObject({ response: { code: "INVALID_MAP_TYPE", message: "Envie a planta em PDF." } });
+    expect(fx.gerar).not.toHaveBeenCalled();
+    expect(fx.storage.uploadMapBuffer).not.toHaveBeenCalled();
+  });
+
+  it("repassa a página escolhida ao gerador", async () => {
+    const fx = importacaoFixture();
+    await fx.maps.importar("event-1", arquivoPdf(), actor, 2);
+    expect(fx.gerar).toHaveBeenCalledWith(PDF, 2);
+  });
+
+  it("erro do gerador não envia nada ao storage", async () => {
+    const erro = new BadRequestException({ code: "PDF_PAGINA_OBRIGATORIA", message: "Escolha a página", details: { paginas: [1, 2] } });
+    const fx = importacaoFixture({ gerar: jest.fn().mockRejectedValue(erro) });
+    await expect(fx.maps.importar("event-1", arquivoPdf(), actor)).rejects.toBe(erro);
+    expect(fx.storage.uploadMapBuffer).not.toHaveBeenCalled();
+    expect(fx.state.maps).toHaveLength(0);
+  });
+
+  it("apaga o original do storage quando a gravação falha", async () => {
+    const fx = importacaoFixture();
+    jest.spyOn(fx.maps as any, "transaction").mockRejectedValue(new Error("falha de banco"));
+    await expect(fx.maps.importar("event-1", arquivoPdf(), actor)).rejects.toThrow("falha de banco");
+    expect(fx.storage.deleteFileStrict).toHaveBeenCalledWith("private/planta.pdf");
+  });
+
+  it("arquiva a proposta em revisão anterior ao importar outra", async () => {
+    const fx = importacaoFixture({ maps: [
+      { id: "map-a", eventId: "event-1", version: 1, status: "EM_REVISAO" },
+      { id: "map-b", eventId: "event-1", version: 2, status: "EM_REVISAO" },
+      { id: "map-c", eventId: "event-1", version: 3, status: "CONFIRMADO" },
+    ], sessions: [{ id: "s1", eventId: "event-1", mapId: "map-b" }] });
+    const result = await fx.maps.importar("event-1", arquivoPdf(), actor);
+    expect(fx.state.maps.find((m: any) => m.id === result.mapId)).toMatchObject({ version: 4, status: "EM_REVISAO" });
+    const arquivados = fx.state.updates.filter((u: any) => u.table === fx.dbModule.eventoMapas && u.values.status === "ARQUIVADO");
+    expect(arquivados).toHaveLength(1);
+  });
+
+  it("lista as versões do evento da mais nova para a mais antiga e respeita a escola", async () => {
+    const maps = [
+      { id: "m1", eventId: "event-1", version: 1, status: "ARQUIVADO", originalFileName: "a.pdf", createdAt: new Date("2026-01-01"), confirmedAt: null, originalFileKey: "k1" },
+      { id: "m2", eventId: "event-1", version: 2, status: "CONFIRMADO", originalFileName: "b.pdf", createdAt: new Date("2026-02-01"), confirmedAt: new Date("2026-02-02"), originalFileKey: "k2" },
+    ];
+    const fx = importacaoFixture({ maps });
+    const lista = await fx.maps.listar("event-1", actor);
+    expect(lista).toEqual([
+      { id: "m2", version: 2, status: "CONFIRMADO", originalFileName: "b.pdf", createdAt: new Date("2026-02-01"), confirmedAt: new Date("2026-02-02") },
+      { id: "m1", version: 1, status: "ARQUIVADO", originalFileName: "a.pdf", createdAt: new Date("2026-01-01"), confirmedAt: null },
+    ]);
+    const outra = importacaoFixture({ maps, event: { schoolId: "school-2" } });
+    await expect(outra.maps.listar("event-1", actor)).rejects.toMatchObject({ response: { code: "FORBIDDEN" } });
+  });
+
+  it("revisão devolve a proposta da importação", async () => {
+    const proposta = propostaFalsa();
+    const fx = importacaoFixture({ maps: [{ id: "m1", eventId: "event-1", version: 1, status: "EM_REVISAO" }] });
+    fx.state.imports.push({ id: "imp-1", mapId: "m1", proposta });
+    const revisao = await fx.maps.revisao("event-1", "m1", actor);
+    expect(revisao.proposta).toBe(proposta);
+    expect(revisao.import).toMatchObject({ id: "imp-1" });
+    expect(revisao).not.toHaveProperty("detections");
+  });
+
+  it("original devolve o arquivo do storage com o content-type e recusa outra escola", async () => {
+    const maps = [{ id: "m1", eventId: "event-1", version: 1, originalFileKey: "private/planta.pdf", originalMimeType: "application/pdf" }];
+    const fx = importacaoFixture({ maps });
+    const corpo = { pipe: jest.fn() };
+    fx.storage.getObject.mockResolvedValue({ Body: corpo, ContentType: "application/octet-stream", ContentLength: 1234 });
+    await expect(fx.maps.obterOriginal("event-1", "m1", actor)).resolves.toEqual({ body: corpo, contentType: "application/pdf", contentLength: 1234 });
+    expect(fx.storage.getObject).toHaveBeenCalledWith("private/planta.pdf");
+    const outra = importacaoFixture({ maps, event: { schoolId: "school-2" } });
+    await expect(outra.maps.obterOriginal("event-1", "m1", actor)).rejects.toMatchObject({ response: { code: "FORBIDDEN" } });
+    expect(outra.storage.getObject).not.toHaveBeenCalled();
   });
 
   it("rejeita confirmação sem assentos", async () => {
