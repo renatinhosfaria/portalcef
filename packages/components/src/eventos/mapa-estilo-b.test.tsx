@@ -175,4 +175,21 @@ describe("MapaEstiloB", () => {
       expect(grupoZoom(container)).toBe("translate(-50 -20) scale(3)");
     });
   });
+
+  it("aplica a fonte a todos os textos do SVG via style, e não por atributo", () => {
+    const { container } = render(
+      <MapaEstiloB
+        {...base}
+        lugares={[lugar({ id: "a" })]}
+        rotulos={[{ fileira: "R", x: 100, y: 100 }]}
+        elementos={[{ tipo: "PALCO", texto: "PALCO", x: 4000, y: 300 }, { tipo: "ENTRADA", texto: "Entrada", x: 200, y: 5000 }]}
+      />,
+    );
+    const textos = Array.from(container.querySelectorAll("text"));
+    expect(textos).toHaveLength(4);
+    for (const texto of textos) {
+      expect(texto.style.fontFamily).toContain("var(--font-body");
+      expect(texto.hasAttribute("font-family")).toBe(false);
+    }
+  });
 });

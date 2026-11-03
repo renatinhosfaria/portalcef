@@ -245,7 +245,7 @@ export function MapaEstiloB({
                   y={elemento.y}
                   textAnchor="middle"
                   dominantBaseline="central"
-                  fontFamily={FONTE}
+                  style={{ fontFamily: FONTE }}
                   fontSize={fonteElemento * 1.2}
                   fontWeight={700}
                   fill="#7c6d4f"
@@ -262,7 +262,7 @@ export function MapaEstiloB({
               y={elemento.y}
               textAnchor="middle"
               dominantBaseline="central"
-              fontFamily={FONTE}
+              style={{ fontFamily: FONTE }}
               fontSize={fonteElemento}
               fontWeight={600}
               fill={COR_DISCRETA}
@@ -279,7 +279,7 @@ export function MapaEstiloB({
             y={rotulo.y}
             textAnchor="middle"
             dominantBaseline="central"
-            fontFamily={FONTE}
+            style={{ fontFamily: FONTE }}
             fontSize={fonteElemento}
             fontWeight={700}
             fill={COR_DISCRETA}
@@ -337,7 +337,7 @@ export function MapaEstiloB({
                 y={-0.115 * lugar.altura}
                 textAnchor="middle"
                 dominantBaseline="central"
-                fontFamily={FONTE}
+                style={{ fontFamily: FONTE }}
                 fontSize={0.5 * lugar.altura}
                 fontWeight={600}
                 fill={cores.numero}
