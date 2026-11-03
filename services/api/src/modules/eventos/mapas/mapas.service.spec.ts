@@ -1211,4 +1211,119 @@ describe("MapasService", () => {
       expect(audits).toEqual(expect.arrayContaining([expect.objectContaining({ metadata: expect.objectContaining({ action: "substituir_mapa_padrao" }) })]));
     });
   });
+  describe("capacidade da sessão igual aos lugares vendáveis", () => {
+    function bancoQueRespeitaIds(estado: any) {
+      const dbModule = jest.requireMock("@essencia/db") as any;
+      dbModule.inArray.mockImplementation((_coluna: unknown, ids: string[]) => ({ ids }));
+      dbModule.eq.mockImplementation((_coluna: unknown, valor: string) => ({ ids: [valor] }));
+      const linhas = (tabela: unknown) => tabela === dbModule.eventos ? [estado.evento]
+        : tabela === dbModule.eventoSessoes ? estado.sessoes
+          : tabela === dbModule.eventoMapas ? estado.mapas
+            : tabela === dbModule.eventoMapaAssentos ? estado.assentos
+              : tabela === dbModule.eventoInventarioAssentos ? estado.inventario
+                : [];
+      const db: any = {
+        select: () => ({ from: (tabela: unknown) => ({ where: () => {
+          const consulta: any = Promise.resolve(linhas(tabela));
+          consulta.for = () => consulta;
+          consulta.orderBy = () => consulta;
+          return consulta;
+        } }) }),
+        update: (tabela: unknown) => ({ set: (valores: any) => ({ where: (condicao: any) => {
+          const aplicar = () => {
+            if (tabela === dbModule.eventos) Object.assign(estado.evento, valores);
+            if (tabela === dbModule.eventoSessoes) estado.sessoes.filter((sessao: any) => !condicao?.ids || condicao.ids.includes(sessao.id)).forEach((sessao: any) => Object.assign(sessao, valores));
+            if (tabela === dbModule.eventoMapas) Object.assign(estado.mapas[0], valores);
+          };
+          aplicar();
+          return { returning: async () => { aplicar(); return [tabela === dbModule.eventos ? estado.evento : estado.mapas[0]]; } };
+        } }) }),
+        delete: (tabela: unknown) => ({ where: async () => {
+          if (tabela === dbModule.eventoInventarioAssentos) estado.inventario = [];
+          if (tabela === dbModule.eventoMapas) estado.mapas = estado.mapas.filter((mapa: any) => mapa.id !== "map-antigo");
+        } }),
+        insert: (tabela: unknown) => ({ values: (valores: any) => {
+          if (tabela === dbModule.eventoInventarioAssentos) estado.inventario.push({ id: `inv-${estado.inventario.length + 1}`, ...valores });
+          if (tabela === dbModule.eventoAuditorias) estado.auditorias.push(valores);
+          return { returning: async () => [{ id: "novo", ...valores }] };
+        } }),
+        transaction: async (fn: (tx: any) => Promise<unknown>) => fn(db),
+      };
+      return db;
+    }
+
+    afterEach(() => {
+      const dbModule = jest.requireMock("@essencia/db") as any;
+      dbModule.inArray.mockReset();
+      dbModule.eq.mockReset();
+    });
+
+    it("substituir ajusta a capacidade das sessões herdadas aos lugares vendáveis do mapa novo", async () => {
+      const estado: any = {
+        evento: { id: "event-1", schoolId: "school-1", defaultMapId: null },
+        mapas: [{ id: "map-novo", eventId: "event-1", status: "CONFIRMADO", previewFileKey: null }],
+        sessoes: [
+          { id: "sessao-herdada", eventId: "event-1", mapId: null, capacity: 784 },
+          { id: "sessao-outro-mapa", eventId: "event-1", mapId: "map-outro", capacity: 500 },
+        ],
+        assentos: [
+          { id: "a1", mapId: "map-novo", sellable: true },
+          { id: "a2", mapId: "map-novo", sellable: false },
+          { id: "a3", mapId: "map-novo", sellable: true },
+        ],
+        inventario: [],
+        auditorias: [],
+      };
+      const maps = new MapasService({ db: bancoQueRespeitaIds(estado) } as any, undefined, {} as any);
+      (maps as any).sincronizarInventarioMapa = jest.fn().mockResolvedValue({ inventorySessionIds: ["sessao-herdada"], inventoryCreatedCount: 3 });
+
+      await maps.substituirMapaPadrao("event-1", "map-novo", actor);
+
+      expect(estado.sessoes.find((sessao: any) => sessao.id === "sessao-herdada").capacity).toBe(2);
+      expect(estado.sessoes.find((sessao: any) => sessao.id === "sessao-outro-mapa").capacity).toBe(500);
+      expect(estado.auditorias[0].metadata).toEqual(expect.objectContaining({ action: "substituir_mapa_padrao", capacity: 2 }));
+    });
+
+    it("substituir não altera capacidade nem falha quando nenhuma sessão herda o mapa padrão", async () => {
+      const estado: any = {
+        evento: { id: "event-1", schoolId: "school-1", defaultMapId: null },
+        mapas: [{ id: "map-novo", eventId: "event-1", status: "CONFIRMADO", previewFileKey: null }],
+        sessoes: [{ id: "sessao-outro-mapa", eventId: "event-1", mapId: "map-outro", capacity: 500 }],
+        assentos: [{ id: "a1", mapId: "map-novo", sellable: true }],
+        inventario: [],
+        auditorias: [],
+      };
+      const maps = new MapasService({ db: bancoQueRespeitaIds(estado) } as any, undefined, {} as any);
+      (maps as any).sincronizarInventarioMapa = jest.fn().mockResolvedValue({ inventorySessionIds: [], inventoryCreatedCount: 0 });
+
+      await maps.substituirMapaPadrao("event-1", "map-novo", actor);
+
+      expect(estado.sessoes[0].capacity).toBe(500);
+      expect(estado.auditorias[0].metadata.capacity).toBeNull();
+    });
+
+    it("migrar ajusta a capacidade das sessões migradas", async () => {
+      const estado: any = {
+        evento: { id: "event-1", schoolId: "school-1", defaultMapId: "map-antigo" },
+        mapas: [
+          { id: "map-antigo", eventId: "event-1", status: "CONFIRMADO", originalFileKey: null, previewFileKey: null },
+          { id: "map-novo", eventId: "event-1", status: "CONFIRMADO" },
+        ],
+        sessoes: [{ id: "sessao-1", eventId: "event-1", mapId: "map-antigo", capacity: 784 }],
+        assentos: [
+          { id: "n1", mapId: "map-novo", sellable: true },
+          { id: "n2", mapId: "map-novo", sellable: false },
+          { id: "n3", mapId: "map-novo", sellable: true },
+        ],
+        inventario: [{ id: "inv-antigo", sessionId: "sessao-1", seatId: "velho-1", status: "DISPONIVEL" }],
+        auditorias: [],
+      };
+      const maps = new MapasService({ db: bancoQueRespeitaIds(estado) } as any, undefined, {} as any);
+
+      await maps.migrarSessoesEExcluir("event-1", "map-antigo", { targetMapId: "map-novo" }, actor);
+
+      expect(estado.sessoes[0].capacity).toBe(2);
+      expect(estado.auditorias[0].metadata).toEqual(expect.objectContaining({ action: "migrar_sessoes_e_excluir", capacity: 2 }));
+    });
+  });
 });

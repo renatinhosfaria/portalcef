@@ -324,6 +324,14 @@ export class MapasService {
     return result.map;
   }
 
+  /** Iguala a capacidade das sessões ao número de lugares vendáveis do mapa. Devolve o valor aplicado ou null se não havia sessão. */
+  private async ajustarCapacidade(db: Database, sessionIds: string[], mapSeats: Array<{ sellable: boolean | null }>): Promise<number | null> {
+    if (!sessionIds.length) return null;
+    const capacity = mapSeats.filter((seat) => seat.sellable !== false).length;
+    await db.update(eventoSessoes).set({ capacity, updatedAt: new Date() }).where(inArray(eventoSessoes.id, sessionIds));
+    return capacity;
+  }
+
   async migrarSessoesEExcluir(eventId: string, mapId: string, input: { targetMapId: string; sessionIds?: string[] }, actor: EventoActor): Promise<MapMigrationResult> {
     const result = await this.transaction(async (db) => {
       const eventQuery = db.select().from(eventos).where(eq(eventos.id, eventId));
@@ -451,8 +459,9 @@ export class MapasService {
           inventoryCreatedCount += 1;
         }
       }
+      const capacity = await this.ajustarCapacidade(db, migratedSessionIds, targetSeats);
       const storageKeys = [...new Set([oldMap.originalFileKey, oldMap.previewFileKey].filter((key): key is string => typeof key === "string" && key.length > 0))];
-      const metadata = { action: "migrar_sessoes_e_excluir", oldMapId: mapId, targetMapId: input.targetMapId, migratedSessionIds, inheritedSessionIds, inventoryCreatedCount, storageKeys, reason: "migração segura de sessões" };
+      const metadata = { action: "migrar_sessoes_e_excluir", oldMapId: mapId, targetMapId: input.targetMapId, migratedSessionIds, inheritedSessionIds, inventoryCreatedCount, capacity, storageKeys, reason: "migração segura de sessões" };
       await this.audit(eventId, actor, mapId, metadata, db);
       try {
         await db.delete(eventoMapas).where(and(eq(eventoMapas.id, mapId), eq(eventoMapas.eventId, eventId)));
@@ -503,6 +512,7 @@ export class MapasService {
         }
       }
       const inventory = await this.sincronizarInventarioMapa(db, eventId, mapId, actor, inherited.map((session: any) => session.id));
+      const capacity = await this.ajustarCapacidade(db, inherited.map((session: any) => session.id), mapSeats);
       let previousMapArchive: MapReplacementResult["previousMapArchive"] = { archived: false, code: "NO_PREVIOUS_MAP" };
       if (previousMapId) {
         const previousMapQuery = db.select().from(eventoMapas).where(eq(eventoMapas.id, previousMapId));
@@ -528,7 +538,7 @@ export class MapasService {
           if (archived) previousMapArchive = { archived: true, code: "ARCHIVED" };
         }
       }
-      await this.audit(eventId, actor, eventId, { action: "substituir_mapa_padrao", previousMapId, nextMapId: mapId, inheritedSessionIds: inherited.map((session: any) => session.id), inventorySessionIds: inventory.inventorySessionIds, inventoryCreatedCount: inventory.inventoryCreatedCount, previousMapArchive }, db);
+      await this.audit(eventId, actor, eventId, { action: "substituir_mapa_padrao", previousMapId, nextMapId: mapId, inheritedSessionIds: inherited.map((session: any) => session.id), inventorySessionIds: inventory.inventorySessionIds, inventoryCreatedCount: inventory.inventoryCreatedCount, capacity, previousMapArchive }, db);
       return { updated, previousMapId, inheritedSessionIds: inherited.map((session: any) => session.id), inventory, previousMapArchive, previousMapPreviewKey: previousMapId ? (await db.select().from(eventoMapas).where(eq(eventoMapas.id, previousMapId)))[0]?.previewFileKey : null };
     });
     if (result.previousMapArchive.archived && result.previousMapPreviewKey && this.storage) await this.storage.deleteFile(result.previousMapPreviewKey).catch(() => undefined);
