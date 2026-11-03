@@ -299,6 +299,9 @@ importers:
       next:
         specifier: 15.5.25
         version: 15.5.25(@babel/core@7.28.5)(@playwright/test@1.57.0)(@types/node@22.19.3)(react-dom@19.0.4(react@19.0.4))(react@19.0.4)
+      pdfjs-dist:
+        specifier: ^6.4.299
+        version: 6.4.299
       react:
         specifier: 19.0.4
         version: 19.0.4
