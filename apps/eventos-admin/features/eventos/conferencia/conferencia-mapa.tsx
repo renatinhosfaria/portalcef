@@ -40,7 +40,7 @@ const BOTAO_PRIMARIO = "rounded-xl bg-[#a3d154] px-4 py-2 text-sm font-semibold 
 const BOTAO_SECUNDARIO = "rounded-xl border border-[#e5e8df] bg-white px-4 py-2 text-sm text-[#24302c]";
 
 export function ConferenciaMapa({ eventoId, mapId, propostaInicial, onPublicar, onReenviar }: ConferenciaMapaProps) {
-  const { proposta, aplicar, salvando, erro } = useProposta(eventoId, mapId, propostaInicial);
+  const { proposta, aplicar, salvando, recarregando, erro } = useProposta(eventoId, mapId, propostaInicial);
   const [modo, setModo] = useState<Modo>("LADO_A_LADO");
   const [selecionadosIds, setSelecionadosIds] = useState<ReadonlySet<string>>(new Set());
   const [pontoAtivoId, setPontoAtivoId] = useState<string | null>(null);
@@ -53,6 +53,9 @@ export function ConferenciaMapa({ eventoId, mapId, propostaInicial, onPublicar, 
   const publicandoRef = useRef(false);
   const [erroPublicar, setErroPublicar] = useState<string | null>(null);
   const arquivoRef = useRef<HTMLInputElement | null>(null);
+  const [reenviando, setReenviando] = useState(false);
+  const reenviandoRef = useRef(false);
+  const [erroReenviar, setErroReenviar] = useState<string | null>(null);
 
   const lugaresMapa = useMemo<LugarMapa[]>(
     () =>
@@ -150,6 +153,21 @@ export function ConferenciaMapa({ eventoId, mapId, propostaInicial, onPublicar, 
     } finally {
       publicandoRef.current = false;
       setPublicando(false);
+    }
+  }
+
+  async function reenviar(arquivo: File) {
+    if (reenviandoRef.current) return;
+    reenviandoRef.current = true;
+    setReenviando(true);
+    setErroReenviar(null);
+    try {
+      await onReenviar(arquivo);
+    } catch (e) {
+      setErroReenviar(e instanceof Error ? e.message : "Não foi possível enviar a nova planta.");
+    } finally {
+      reenviandoRef.current = false;
+      setReenviando(false);
     }
   }
 
@@ -277,14 +295,14 @@ export function ConferenciaMapa({ eventoId, mapId, propostaInicial, onPublicar, 
                 ))}
               </ul>
             ) : null}
-            <button type="button" disabled={pendencias.length > 0 || salvando} onClick={() => setDialogoAberto(true)} className={BOTAO_PRIMARIO + " w-full"}>
+            <button type="button" disabled={pendencias.length > 0 || salvando || recarregando} onClick={() => setDialogoAberto(true)} className={BOTAO_PRIMARIO + " w-full"}>
               Publicar mapa
             </button>
             <p className="text-center text-xs text-[#69736e]" aria-live="polite">
               {salvando ? "Salvando…" : pendencias.length > 0 ? `Resolva as ${pendencias.length} pendências para liberar` : "Tudo conferido"}
             </p>
 
-            <button type="button" onClick={pedirOutraPlanta} className={BOTAO_SECUNDARIO + " w-full"}>
+            <button type="button" disabled={reenviando} onClick={pedirOutraPlanta} className={BOTAO_SECUNDARIO + " w-full"}>
               Enviar outra planta
             </button>
             <input
@@ -293,12 +311,19 @@ export function ConferenciaMapa({ eventoId, mapId, propostaInicial, onPublicar, 
               accept="application/pdf"
               aria-label="Arquivo da nova planta"
               hidden
+              disabled={reenviando}
               onChange={(e) => {
                 const arquivo = e.target.files?.[0];
                 e.target.value = "";
-                if (arquivo) void onReenviar(arquivo);
+                if (arquivo) void reenviar(arquivo);
               }}
             />
+            {reenviando ? <p className="text-center text-xs text-[#69736e]">Enviando a nova planta…</p> : null}
+            {erroReenviar ? (
+              <p role="alert" className="text-sm text-[#9a3a28]">
+                {erroReenviar}
+              </p>
+            ) : null}
           </aside>
         </div>
       </div>

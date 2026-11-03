@@ -255,4 +255,24 @@ describe("ConferenciaMapa", () => {
     fireEvent.change(screen.getByLabelText("Arquivo da nova planta"), { target: { files: [arquivo] } });
     await waitFor(() => expect(props.onReenviar).toHaveBeenCalledWith(arquivo));
   });
+  it("mostra o erro quando o reenvio falha e trava repetição enquanto envia", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal("confirm", vi.fn(() => true));
+    let falhar: (e: Error) => void = () => {};
+    const onReenviar = vi.fn(() => new Promise<void>((_, rejeitar) => { falhar = rejeitar; }));
+    renderizar(propostaLimpa(), { onReenviar });
+    const entrada = screen.getByLabelText("Arquivo da nova planta") as HTMLInputElement;
+    const arquivo = new File(["%PDF"], "nova.pdf", { type: "application/pdf" });
+
+    fireEvent.change(entrada, { target: { files: [arquivo] } });
+    fireEvent.change(entrada, { target: { files: [arquivo] } });
+    expect(onReenviar).toHaveBeenCalledTimes(1);
+    expect((screen.getByRole("button", { name: "Enviar outra planta" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(entrada.disabled).toBe(true);
+
+    falhar(new Error("PDF inválido"));
+    expect((await screen.findByRole("alert")).textContent).toContain("PDF inválido");
+    expect((screen.getByRole("button", { name: "Enviar outra planta" }) as HTMLButtonElement).disabled).toBe(false);
+    await user.click(screen.getByRole("button", { name: "Enviar outra planta" }));
+  });
 });
