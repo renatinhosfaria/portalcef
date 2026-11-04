@@ -257,6 +257,19 @@ describe("gerarPropostaDePdf", () => {
   });
 });
 
+describe("gerarPropostaDePdf com poucos números", () => {
+  it("recusa a página com um único número, sem gerar lugares de tamanho zero", async () => {
+    const pdf = criarPdfSintetico([{ largura: 400, altura: 300, textos: [{ texto: "5", x: 100, y: 100 }] }]);
+    await expect(gerarPropostaDePdf(pdf)).rejects.toMatchObject({
+      response: {
+        code: "PLANTA_SEM_NUMEROS",
+        message:
+          "Não encontramos os números dos assentos nesta planta. Se ela foi escaneada ou salva como imagem, envie o PDF exportado do programa em que a planta foi desenhada.",
+      },
+    });
+  });
+});
+
 describe("GeradorMapaPdf", () => {
   it("gera a proposta da página escolhida", async () => {
     const pdf = criarPdfSintetico([

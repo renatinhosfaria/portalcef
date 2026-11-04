@@ -36,6 +36,11 @@ describe("lerPlantaPdf", () => {
     expect(Math.round(planta.tokens[0].angulo)).toBe(-30);
   });
 
+  it("lê texto girado no sentido horário (ângulo negativo no PDF)", async () => {
+    const planta = await lerPlantaPdf(umaPagina([{ texto: "7", x: 100, y: 200, angulo: -30 }]));
+    expect(Math.round(planta.tokens[0].angulo)).toBe(30);
+  });
+
   it("guarda frases da legenda e do palco com o texto inteiro", async () => {
     const planta = await lerPlantaPdf(
       umaPagina([
@@ -89,7 +94,7 @@ describe("lerPlantaPdf", () => {
     });
   });
 
-  it("respeita /Rotate 90: números na mesma linha do PDF ficam alinhados na vertical", async () => {
+  it("respeita /Rotate 90: o '1' fica acima do '2', alinhados na vertical, com texto girado 90 graus", async () => {
     const pdf = criarPdfSintetico([
       {
         largura: 400,
@@ -106,6 +111,21 @@ describe("lerPlantaPdf", () => {
     const a = planta.tokens.find((t) => t.texto === "1")!;
     const b = planta.tokens.find((t) => t.texto === "2")!;
     expect(Math.abs(a.x - b.x)).toBeLessThan(1);
-    expect(Math.abs(Math.abs(a.y - b.y) - 20)).toBeLessThan(1);
+    expect(b.y - a.y).toBeGreaterThan(19);
+    expect(b.y - a.y).toBeLessThan(21);
+    expect(Math.abs(a.angulo)).toBeCloseTo(90, 0);
+  });
+
+  it("lê as coordenadas relativas ao canto da página quando o MediaBox tem origem deslocada", async () => {
+    const texto = { texto: "12", x: 100, y: 200 };
+    const normal = await lerPlantaPdf(criarPdfSintetico([{ largura: 400, altura: 300, textos: [texto] }]));
+    const deslocada = await lerPlantaPdf(
+      criarPdfSintetico([{ largura: 400, altura: 300, origem: { x: 50, y: 50 }, textos: [texto] }]),
+    );
+    expect(deslocada.pagina).toMatchObject({ largura: 400, altura: 300 });
+    expect(deslocada.tokens[0].x).toBeCloseTo(normal.tokens[0].x, 1);
+    expect(deslocada.tokens[0].y).toBeCloseTo(normal.tokens[0].y, 1);
+    // Helvetica 10 pt: "12" mede 11,12 pt; o texto gravado em x=150 do PDF aparece em x≈105,56 da página.
+    expect(Math.abs(deslocada.tokens[0].x - (100 + 11.12 / 2))).toBeLessThan(1);
   });
 });

@@ -12,9 +12,16 @@ const importarNativo = new Function("especificador", "return import(especificado
 
 let carregado: Promise<Pdfjs> | undefined;
 
-export function carregarPdfjs(): Promise<Pdfjs> {
-  carregado ??= importarNativo(
-    pathToFileURL(require.resolve("pdfjs-dist/legacy/build/pdf.mjs")).href,
+/** Carrega o pdf.js uma vez. O parâmetro existe para o teste injetar o import; o código usa o padrão. */
+export function carregarPdfjs(
+  importar: (especificador: string) => Promise<Pdfjs> = importarNativo,
+): Promise<Pdfjs> {
+  carregado ??= importar(pathToFileURL(require.resolve("pdfjs-dist/legacy/build/pdf.mjs")).href).catch(
+    (erro: unknown) => {
+      // Uma falha passageira não pode ficar guardada: a próxima chamada tenta de novo.
+      carregado = undefined;
+      throw erro;
+    },
   );
   return carregado;
 }

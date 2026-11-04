@@ -30,6 +30,14 @@ const COR_PADRAO = "#000000";
 // Fração do tamanho da fonte entre a linha de base e o centro visual dos dígitos.
 const FATOR_CENTRO_VERTICAL = 0.35;
 
+/** Erro devolvido quando a planta não tem números de assento suficientes para montar o mapa. */
+export function erroPlantaSemNumeros(): BadRequestException {
+  return erro(
+    "PLANTA_SEM_NUMEROS",
+    "Não encontramos os números dos assentos nesta planta. Se ela foi escaneada ou salva como imagem, envie o PDF exportado do programa em que a planta foi desenhada.",
+  );
+}
+
 function erro(code: string, message: string, details?: unknown): BadRequestException {
   return new BadRequestException({ code, message, details });
 }
@@ -163,10 +171,7 @@ export async function lerPlantaPdf(buffer: Buffer, pagina?: number): Promise<Pla
     }
 
     if (!tokens.some((t) => /^\d{1,4}$/.test(t.texto))) {
-      throw erro(
-        "PLANTA_SEM_NUMEROS",
-        "Não encontramos os números dos assentos nesta planta. Se ela foi escaneada ou salva como imagem, envie o PDF exportado do programa em que a planta foi desenhada.",
-      );
+      throw erroPlantaSemNumeros();
     }
 
     return {

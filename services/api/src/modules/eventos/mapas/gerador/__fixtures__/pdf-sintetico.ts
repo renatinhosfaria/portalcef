@@ -16,6 +16,11 @@ export interface PaginaSintetica {
   largura: number;
   altura: number;
   rotacao?: 0 | 90 | 180 | 270;
+  /**
+   * Canto inferior esquerdo do MediaBox, em pontos. Padrão: (0, 0).
+   * As posições dos textos continuam relativas ao canto da página visível; o gerador soma a origem.
+   */
+  origem?: { x: number; y: number };
   textos: TextoSintetico[];
 }
 
@@ -33,13 +38,14 @@ function conteudoDaPagina(pagina: PaginaSintetica): string {
     const radianos = ((t.angulo ?? 0) * Math.PI) / 180;
     const cos = Math.cos(radianos).toFixed(6);
     const sen = Math.sin(radianos).toFixed(6);
-    const cx = t.x.toFixed(3);
-    const cy = (pagina.altura - t.y).toFixed(3);
+    const menosSen = (-Math.sin(radianos)).toFixed(6);
+    const cx = (t.x + (pagina.origem?.x ?? 0)).toFixed(3);
+    const cy = (pagina.altura - t.y + (pagina.origem?.y ?? 0)).toFixed(3);
     return [
       `${componenteCor(cor, 1)} ${componenteCor(cor, 3)} ${componenteCor(cor, 5)} rg`,
       "BT",
       `/F1 ${t.tamanho ?? 10} Tf`,
-      `${cos} ${sen} -${sen} ${cos} ${cx} ${cy} Tm`,
+      `${cos} ${sen} ${menosSen} ${cos} ${cx} ${cy} Tm`,
       `(${escaparTexto(t.texto)}) Tj`,
       "ET",
     ].join("\n");
@@ -57,9 +63,10 @@ export function criarPdfSintetico(paginas: PaginaSintetica[]): Buffer {
   paginas.forEach((pagina, i) => {
     const idPagina = 4 + i * 2;
     const idConteudo = idPagina + 1;
+    const origem = pagina.origem ?? { x: 0, y: 0 };
     const rotate = pagina.rotacao ? ` /Rotate ${pagina.rotacao}` : "";
     objetos[idPagina] =
-      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pagina.largura} ${pagina.altura}]${rotate} ` +
+      `<< /Type /Page /Parent 2 0 R /MediaBox [${origem.x} ${origem.y} ${origem.x + pagina.largura} ${origem.y + pagina.altura}]${rotate} ` +
       `/Resources << /Font << /F1 3 0 R >> >> /Contents ${idConteudo} 0 R >>`;
     const conteudo = conteudoDaPagina(pagina);
     objetos[idConteudo] = `<< /Length ${Buffer.byteLength(conteudo, "latin1")} >>\nstream\n${conteudo}\nendstream`;

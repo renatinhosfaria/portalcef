@@ -6,7 +6,7 @@ import type {
 } from "@essencia/shared/eventos/mapa-proposta";
 import { desenharBlocos } from "./desenhar-mapa";
 import { dentroDaCaixa, lerElementos, lerLegenda, type EntradaLegendaLida } from "./ler-legenda";
-import { lerPlantaPdf, type TokenLido } from "./ler-planta-pdf";
+import { erroPlantaSemNumeros, lerPlantaPdf, type TokenLido } from "./ler-planta-pdf";
 import { montarMapa, type LetraLida, type NumeroLido } from "./montar-mapa";
 
 // Tamanho da caixa de cada lugar, em múltiplos do passo típico.
@@ -68,6 +68,9 @@ export async function gerarPropostaDePdf(buffer: Buffer, pagina?: number): Promi
   const letras: LetraLida[] = foraDaLegenda
     .filter((t) => ehLetra(t.texto))
     .map((t) => ({ letra: t.texto, x: t.x, y: t.y }));
+
+  // Com menos de dois números não há passo típico: os lugares sairiam com tamanho zero.
+  if (numeros.length < 2) throw erroPlantaSemNumeros();
 
   const { passo, blocos, pontos } = montarMapa(numeros, letras);
   // desenharBlocos devolve um lugar desenhado por número, e todo número dos pontos está num bloco.
