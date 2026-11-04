@@ -1,9 +1,31 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ErroApiMapa, importarPlanta, respostaApi } from "./api-mapas";
+import { ErroApiMapa, editarVersao, excluirVersao, importarPlanta, listarMapas, publicarMapa, respostaApi } from "./api-mapas";
 
 afterEach(() => vi.unstubAllGlobals());
 
 describe("api-mapas", () => {
+  it("lista versões e trava no endpoint de mapas", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ success: true, data: { versoes: [], trava: { tipo: "LIVRE", mensagem: null } } })));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(listarMapas("ev1")).resolves.toEqual({ versoes: [], trava: { tipo: "LIVRE", mensagem: null } });
+    expect(fetchMock).toHaveBeenCalledWith("/eventos-admin/api/eventos/admin/ev1/mapas");
+  });
+
+  it("chama editar, excluir e publicar nas rotas de versões", async () => {
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => new Response(JSON.stringify({ success: true, data: init?.method === "DELETE" ? { excluida: true, sessionIds: [] } : init?.method === "POST" && _url.endsWith("/editar") ? { mapId: "m2" } : { sessionIds: ["s1"], capacidade: 3, arquivadas: [] } })));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(editarVersao("ev1", "m1")).resolves.toEqual({ mapId: "m2" });
+    await expect(excluirVersao("ev1", "m1")).resolves.toEqual({ excluida: true, sessionIds: [] });
+    await expect(publicarMapa("ev1", "m1", 2, "ajuste")).resolves.toEqual({ sessionIds: ["s1"], capacidade: 3, arquivadas: [] });
+    expect(fetchMock.mock.calls.map(([url, init]) => [url, init?.method])).toEqual([
+      ["/eventos-admin/api/eventos/admin/ev1/mapas/m1/editar", "POST"],
+      ["/eventos-admin/api/eventos/admin/ev1/mapas/m1", "DELETE"],
+      ["/eventos-admin/api/eventos/admin/ev1/mapas/m1/publicar", "POST"],
+    ]);
+  });
+
   it("respostaApi lança ErroApiMapa com code e details", async () => {
     const response = new Response(
       JSON.stringify({ success: false, error: { code: "PDF_PAGINA_OBRIGATORIA", message: "Informe a página", details: { paginas: 3 } } }),
