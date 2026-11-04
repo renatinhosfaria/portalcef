@@ -170,7 +170,8 @@ export type TipoPendencia =
   | "PONTO_NAO_CONFERIDO"
   | "COR_NAO_CONFIRMADA"
   | "LUGAR_REPETIDO"
-  | "LUGAR_SEM_FILEIRA";
+  | "LUGAR_SEM_FILEIRA"
+  | "LUGAR_SEM_NUMERO";
 
 export interface Pendencia {
   tipo: TipoPendencia;
@@ -239,8 +240,8 @@ function aplicarOperacao(proposta: PropostaMapa, operacao: OperacaoProposta): vo
   switch (operacao.tipo) {
     case "EDITAR_LUGAR": {
       const lugar = exigirLugar(proposta, operacao.lugarId);
-      if (operacao.fileira !== undefined) lugar.fileira = operacao.fileira;
-      if (operacao.numero !== undefined) lugar.numero = operacao.numero;
+      if (operacao.fileira !== undefined) lugar.fileira = operacao.fileira.trim();
+      if (operacao.numero !== undefined) lugar.numero = operacao.numero.trim();
       if (operacao.categoria !== undefined) lugar.categoriaManual = operacao.categoria;
       if (operacao.acessoExterno !== undefined) lugar.acessoExternoManual = operacao.acessoExterno;
       if (operacao.vender !== undefined) lugar.vender = operacao.vender;
@@ -260,8 +261,8 @@ function aplicarOperacao(proposta: PropostaMapa, operacao: OperacaoProposta): vo
       }
       proposta.lugares.push({
         id: operacao.lugar.id,
-        fileira: operacao.lugar.fileira,
-        numero: operacao.lugar.numero,
+        fileira: operacao.lugar.fileira.trim(),
+        numero: operacao.lugar.numero.trim(),
         x: operacao.lugar.x,
         y: operacao.lugar.y,
         largura: mediana(
@@ -346,10 +347,20 @@ export function pendenciasPublicacao(proposta: PropostaMapa): Pendencia[] {
     });
   }
 
+  for (const lugar of proposta.lugares) {
+    if (lugar.numero.trim() !== "") continue;
+    const fileira = lugar.fileira.trim();
+    pendencias.push({
+      tipo: "LUGAR_SEM_NUMERO",
+      mensagem: fileira === "" ? "Há lugar sem número." : `Há lugar sem número na fileira ${fileira}.`,
+      lugarIds: [lugar.id],
+    });
+  }
+
   const porRotulo = new Map<string, LugarProposto[]>();
   for (const lugar of proposta.lugares) {
-    if (lugar.fileira.trim() === "") continue;
-    const rotulo = `${lugar.fileira}-${lugar.numero}`;
+    if (lugar.fileira.trim() === "" || lugar.numero.trim() === "") continue;
+    const rotulo = `${lugar.fileira.trim()}-${lugar.numero.trim()}`;
     porRotulo.set(rotulo, [...(porRotulo.get(rotulo) ?? []), lugar]);
   }
   for (const [rotulo, lugares] of porRotulo) {
@@ -388,7 +399,7 @@ export function resumoProposta(proposta: PropostaMapa): {
     if (!lugar.vender) naoVender += 1;
   }
   return {
-    fileiras: new Set(proposta.lugares.map((lugar) => lugar.fileira).filter((fileira) => fileira !== "")).size,
+    fileiras: new Set(proposta.lugares.map((lugar) => lugar.fileira.trim()).filter((fileira) => fileira !== "")).size,
     blocos: new Set(proposta.lugares.map((lugar) => lugar.blocoId).filter((bloco) => bloco !== null)).size,
     lugares: proposta.lugares.length,
     porCategoria,

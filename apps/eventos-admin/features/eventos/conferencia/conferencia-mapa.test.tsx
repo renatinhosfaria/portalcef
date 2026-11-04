@@ -199,6 +199,50 @@ describe("ConferenciaMapa", () => {
     ]);
   });
 
+  it("Adicionar fica desabilitado enquanto fileira ou número estiverem vazios ou só com espaços", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal("crypto", { randomUUID: () => "novo-id" });
+    const { container } = renderizar(propostaComPendencias());
+
+    await user.click(screen.getByRole("button", { name: "Sobrepor" }));
+    await user.click(screen.getByRole("button", { name: "Adicionar lugar" }));
+    const svg = container.querySelector("svg")!;
+    svg.getBoundingClientRect = () => ({ left: 0, top: 0, width: 842, height: 595, right: 842, bottom: 595, x: 0, y: 0, toJSON: () => ({}) });
+    fireEvent.click(container.querySelector("[data-fundo-clique]")!, { clientX: 421, clientY: 297.5 });
+
+    const formulario = screen.getByRole("form", { name: "Novo lugar" });
+    const adicionar = within(formulario).getByRole("button", { name: "Adicionar" }) as HTMLButtonElement;
+    expect(adicionar.disabled).toBe(true);
+    await user.type(within(formulario).getByLabelText("Fileira do novo lugar"), "Z");
+    expect(adicionar.disabled).toBe(true);
+    await user.type(within(formulario).getByLabelText("Número do novo lugar"), "   ");
+    expect(adicionar.disabled).toBe(true);
+    await user.type(within(formulario).getByLabelText("Número do novo lugar"), "9");
+    expect(adicionar.disabled).toBe(false);
+    fireEvent.submit(formulario);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(operacoesEnviadas()).toEqual([
+      { tipo: "ADICIONAR_LUGAR", lugar: { id: "novo-id", fileira: "Z", numero: "9", x: 4210, y: 2975 } },
+    ]);
+  });
+
+  it("campo de número apagado não é enviado e volta ao valor anterior", async () => {
+    const user = userEvent.setup();
+    renderizar(propostaComPendencias());
+
+    fireEvent.click(screen.getByRole("button", { name: "A-1, Comum" }));
+    const numero = screen.getByLabelText("Número") as HTMLInputElement;
+    await user.clear(numero);
+    await user.type(numero, "  ");
+    await user.tab();
+    expect(numero.value).toBe("1");
+    const fileira = screen.getByLabelText("Fileira") as HTMLInputElement;
+    await user.clear(fileira);
+    await user.type(fileira, "{Enter}");
+    expect(fileira.value).toBe("A");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("Publicar fica desabilitado com pendências e lista o que falta", () => {
     renderizar(propostaComPendencias());
 

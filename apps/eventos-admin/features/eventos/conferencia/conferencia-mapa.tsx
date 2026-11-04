@@ -108,13 +108,15 @@ export function ConferenciaMapa({ eventoId, mapId, propostaInicial, onPublicar, 
     }
   }
 
+  const novoLugarCompleto = novoLugar !== null && novoLugar.fileira.trim() !== "" && novoLugar.numero.trim() !== "";
+
   function adicionarLugar(e: React.FormEvent) {
     e.preventDefault();
-    if (!novoLugar) return;
+    if (!novoLugar || !novoLugarCompleto) return;
     aplicar([
       {
         tipo: "ADICIONAR_LUGAR",
-        lugar: { id: crypto.randomUUID(), fileira: novoLugar.fileira, numero: novoLugar.numero, x: novoLugar.x, y: novoLugar.y },
+        lugar: { id: crypto.randomUUID(), fileira: novoLugar.fileira.trim(), numero: novoLugar.numero.trim(), x: novoLugar.x, y: novoLugar.y },
       },
     ]);
     setNovoLugar(null);
@@ -244,7 +246,7 @@ export function ConferenciaMapa({ eventoId, mapId, propostaInicial, onPublicar, 
                   Número do novo lugar
                   <input value={novoLugar.numero} onChange={(e) => setNovoLugar({ ...novoLugar, numero: e.target.value })} className="mt-1 block w-24 rounded-lg border border-[#e5e8df] px-2 py-1 text-sm text-[#24302c]" />
                 </label>
-                <button type="submit" className={BOTAO_PRIMARIO}>
+                <button type="submit" disabled={!novoLugarCompleto} className={BOTAO_PRIMARIO}>
                   Adicionar
                 </button>
                 <button type="button" onClick={() => setNovoLugar(null)} className={BOTAO_SECUNDARIO}>

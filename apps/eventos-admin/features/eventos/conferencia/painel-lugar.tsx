@@ -21,7 +21,13 @@ function CampoTexto({ rotulo, valor, onSalvar }: { rotulo: string; valor: string
   const [rascunho, setRascunho] = useState(valor);
   useEffect(() => setRascunho(valor), [valor]);
   const salvar = () => {
-    if (rascunho !== valor) onSalvar(rascunho);
+    const limpo = rascunho.trim();
+    // Campo vazio não pode ser enviado: volta ao valor anterior.
+    if (limpo === "") {
+      setRascunho(valor);
+      return;
+    }
+    if (limpo !== valor) onSalvar(limpo);
   };
   return (
     <label className="block flex-1 text-xs text-[#69736e]">

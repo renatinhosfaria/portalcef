@@ -156,6 +156,41 @@ describe("mapa-proposta", () => {
     expect(pendenciasPublicacao({ ...base, lugares: [] }).map((p) => p.tipo)).toContain("MAPA_VAZIO");
   });
 
+  it("apara espaços de fileira e número ao editar e ao adicionar", () => {
+    const editada = aplicarOperacoes(base, [{ tipo: "EDITAR_LUGAR", lugarId: "l2", fileira: " B ", numero: " 7 " }]);
+    expect(editada.lugares[1]).toMatchObject({ fileira: "B", numero: "7" });
+    const adicionada = aplicarOperacoes(base, [{ tipo: "ADICIONAR_LUGAR", lugar: { id: "novo", fileira: " C ", numero: " 9 ", x: 0, y: 0 } }]);
+    expect(adicionada.lugares.at(-1)).toMatchObject({ fileira: "C", numero: "9" });
+  });
+
+  it("número vazio ou só com espaços vira pendência LUGAR_SEM_NUMERO", () => {
+    const vazio = aplicarOperacoes(base, [
+      { tipo: "EDITAR_LUGAR", lugarId: "l1", numero: "" },
+      { tipo: "EDITAR_LUGAR", lugarId: "l2", numero: "   " },
+      { tipo: "EDITAR_LUGAR", lugarId: "l3", fileira: "", numero: "" },
+    ]);
+    const pendencias = pendenciasPublicacao(vazio).filter((p) => p.tipo === "LUGAR_SEM_NUMERO");
+    expect(pendencias.map((p) => p.mensagem)).toEqual([
+      "Há lugar sem número na fileira A.",
+      "Há lugar sem número na fileira A.",
+      "Há lugar sem número.",
+    ]);
+    expect(pendencias.map((p) => p.lugarIds)).toEqual([["l1"], ["l2"], ["l3"]]);
+  });
+
+  it("fileira com espaço sobrando conta como a mesma fileira no repetido e no resumo", () => {
+    const comEspaco: PropostaMapa = {
+      ...base,
+      lugares: [
+        criarLugar({ id: "l1", numero: "1", cor: "#000000" }),
+        { ...criarLugar({ id: "l2", numero: "1", cor: "#000000" }), fileira: "A " },
+      ],
+    };
+    const repetido = pendenciasPublicacao(comEspaco).find((p) => p.tipo === "LUGAR_REPETIDO");
+    expect(repetido).toMatchObject({ mensagem: "A-1 aparece duas vezes", lugarIds: ["l1", "l2"] });
+    expect(resumoProposta(comEspaco).fileiras).toBe(1);
+  });
+
   it("não há pendências depois de conferir pontos e confirmar todas as cores", () => {
     const pronta = aplicarOperacoes(base, [
       { tipo: "CONFERIR_PONTO", pontoId: "p1" },
