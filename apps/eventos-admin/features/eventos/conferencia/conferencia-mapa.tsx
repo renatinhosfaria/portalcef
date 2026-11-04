@@ -316,7 +316,7 @@ export function ConferenciaMapa({ eventoId, mapId, propostaInicial, onPublicar, 
             <h2 className="font-[family-name:var(--font-display,Outfit),system-ui,sans-serif] text-lg font-bold">Publicar mapa</h2>
             <label className="block text-sm text-[#69736e]">
               Motivo das correções (opcional)
-              <textarea value={motivo} onChange={(e) => setMotivo(e.target.value)} rows={3} className="mt-1 block w-full rounded-lg border border-[#e5e8df] bg-white p-2 text-sm text-[#24302c]" />
+              <textarea value={motivo} onChange={(e) => setMotivo(e.target.value)} rows={3} maxLength={500} className="mt-1 block w-full rounded-lg border border-[#e5e8df] bg-white p-2 text-sm text-[#24302c]" />
             </label>
             {erroPublicar ? <p role="alert" className="text-sm text-[#9a3a28]">{erroPublicar}</p> : null}
             <div className="flex justify-end gap-2">

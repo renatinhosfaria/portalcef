@@ -26,6 +26,7 @@ export class MapasController {
   @Get("mapas/:versionId/original") async original(@Param("id") id: string, @Param("versionId") versionId: string, @CurrentUser() actor: any, @Res() reply: FastifyReply) {
     const arquivo = await this.service.obterOriginal(id, versionId, actor);
     reply.header("Content-Type", arquivo.contentType);
+    reply.header("Content-Disposition", 'inline; filename="planta.pdf"');
     if (arquivo.contentLength) reply.header("Content-Length", arquivo.contentLength);
     return reply.send(arquivo.body);
   }

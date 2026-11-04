@@ -84,6 +84,7 @@ describe("MapasController", () => {
     const reply: any = { header: jest.fn().mockReturnThis(), send: jest.fn().mockReturnValue("enviado") };
     await expect(controller.original("evento-1", "m1", actor, reply)).resolves.toBe("enviado");
     expect(reply.header).toHaveBeenCalledWith("Content-Type", "application/pdf");
+    expect(reply.header).toHaveBeenCalledWith("Content-Disposition", 'inline; filename="planta.pdf"');
     expect(reply.header).toHaveBeenCalledWith("Content-Length", 10);
     expect(reply.send).toHaveBeenCalledWith(corpo);
   });

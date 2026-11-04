@@ -461,6 +461,30 @@ describe("MapasService", () => {
     expect(outra.storage.getObject).not.toHaveBeenCalled();
   });
 
+  it("original só serve PDF: versão antiga em SVG ou PNG responde 404 sem ler o storage", async () => {
+    for (const originalMimeType of ["image/svg+xml", "image/png", null]) {
+      const fx = importacaoFixture({ maps: [{ id: "m1", eventId: "event-1", version: 1, originalFileKey: "private/antiga", originalMimeType }] });
+      await expect(fx.maps.obterOriginal("event-1", "m1", actor)).rejects.toMatchObject({
+        status: 404,
+        response: { code: "MAP_ORIGINAL_NOT_FOUND", message: "Planta original indisponível." },
+      });
+      expect(fx.storage.getObject).not.toHaveBeenCalled();
+    }
+  });
+
+  it("original ausente no storage (NoSuchKey ou 404 do S3) responde MAP_ORIGINAL_NOT_FOUND, sem erro cru", async () => {
+    const maps = [{ id: "m1", eventId: "event-1", version: 1, originalFileKey: "private/planta.pdf", originalMimeType: "application/pdf" }];
+    for (const falha of [Object.assign(new Error("x"), { name: "NoSuchKey" }), Object.assign(new Error("x"), { $metadata: { httpStatusCode: 404 } })]) {
+      const fx = importacaoFixture({ maps });
+      fx.storage.getObject.mockRejectedValue(falha);
+      await expect(fx.maps.obterOriginal("event-1", "m1", actor)).rejects.toMatchObject({ status: 404, response: { code: "MAP_ORIGINAL_NOT_FOUND" } });
+    }
+    const outra = importacaoFixture({ maps });
+    const queda = new Error("rede caiu");
+    outra.storage.getObject.mockRejectedValue(queda);
+    await expect(outra.maps.obterOriginal("event-1", "m1", actor)).rejects.toBe(queda);
+  });
+
   it("rejeita confirmação sem assentos", async () => {
     const db: any = { select: () => ({ from: () => ({ where: async () => [{ id: "event-1", schoolId: "school-1" }] }) }) };
     const maps = new MapasService({ db } as any, undefined, {} as any);

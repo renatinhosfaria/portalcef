@@ -271,6 +271,15 @@ describe("ConferenciaMapa", () => {
     liberar();
   });
 
+  it("o motivo da publicação aceita no máximo 500 caracteres", async () => {
+    const user = userEvent.setup();
+    renderizar(propostaLimpa());
+
+    await user.click(screen.getByRole("button", { name: "Publicar mapa" }));
+    const motivo = within(screen.getByRole("dialog")).getByLabelText("Motivo das correções (opcional)") as HTMLTextAreaElement;
+    expect(motivo.maxLength).toBe(500);
+  });
+
   it("sem motivo, publica com motivo indefinido", async () => {
     const user = userEvent.setup();
     const { props } = renderizar(propostaLimpa());

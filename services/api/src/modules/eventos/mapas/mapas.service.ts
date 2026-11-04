@@ -230,8 +230,18 @@ export class MapasService {
     if (!this.storage) throw new BadRequestException({ code: "STORAGE_UNAVAILABLE", message: "Armazenamento de mapas indisponível" });
     const [map] = await this.db.select().from(eventoMapas).where(and(eq(eventoMapas.id, versionId), eq(eventoMapas.eventId, eventId)));
     if (!map) throw new NotFoundException({ code: "MAP_NOT_FOUND", message: "Versão não encontrada" });
-    const arquivo = await this.storage.getObject(map.originalFileKey);
-    return { body: arquivo.Body, contentType: map.originalMimeType ?? arquivo.ContentType ?? "application/pdf", contentLength: arquivo.ContentLength };
+    // Versões antigas podem ter SVG ou PNG como original; só o PDF é servido ao painel.
+    const indisponivel = () => new NotFoundException({ code: "MAP_ORIGINAL_NOT_FOUND", message: "Planta original indisponível." });
+    if (map.originalMimeType !== "application/pdf" || !map.originalFileKey) throw indisponivel();
+    let arquivo: Awaited<ReturnType<StorageService["getObject"]>>;
+    try {
+      arquivo = await this.storage.getObject(map.originalFileKey);
+    } catch (erro) {
+      const e = erro as { name?: string; $metadata?: { httpStatusCode?: number } };
+      if (e?.name === "NoSuchKey" || e?.$metadata?.httpStatusCode === 404) throw indisponivel();
+      throw erro;
+    }
+    return { body: arquivo.Body, contentType: "application/pdf", contentLength: arquivo.ContentLength };
   }
 
   async revisao(eventId: string, versionId: string, actor: EventoActor): Promise<{ map: any; import: any; proposta: PropostaMapa | null }> {
