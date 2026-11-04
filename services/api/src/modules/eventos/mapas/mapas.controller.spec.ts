@@ -126,6 +126,15 @@ describe("MapasController", () => {
     expect(Reflect.getMetadata("path", MapasController.prototype.editarVersao)).toBe("mapas/:versionId/editar");
   });
 
+  it("DELETE mapas/:versionId responde com a exclusão e as sessões levadas", async () => {
+    const excluirVersao = jest.fn().mockResolvedValue({ excluida: true, sessionIds: ["sessao-1"] });
+    const controller = new MapasController({ excluirVersao } as any);
+    const actor = { userId: "user-1", role: "diretora_geral", schoolId: "school-1" };
+    await expect(controller.excluirVersao("evento-1", "map-old", actor)).resolves.toEqual({ success: true, data: { excluida: true, sessionIds: ["sessao-1"] } });
+    expect(excluirVersao).toHaveBeenCalledWith("evento-1", "map-old", actor);
+    expect(Reflect.getMetadata("path", MapasController.prototype.excluirVersao)).toBe("mapas/:versionId");
+  });
+
   it("não expõe mais deteccoes nem confirmar", () => {
     const caminhos = Object.getOwnPropertyNames(MapasController.prototype)
       .filter((nome) => nome !== "constructor")

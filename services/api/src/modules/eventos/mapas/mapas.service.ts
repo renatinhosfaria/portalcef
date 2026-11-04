@@ -429,6 +429,85 @@ export class MapasService {
     }
   }
 
+  async excluirVersao(eventId: string, versionId: string, actor: EventoActor): Promise<{ excluida: true; sessionIds: string[] }> {
+    const resultado = await this.transaction(async (db) => {
+      const [event] = await this.lockRows(db.select().from(eventos).where(eq(eventos.id, eventId)));
+      if (!event) throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Evento não encontrado" });
+      if (actor.role !== "master" && event.schoolId !== actor.schoolId) throw new BadRequestException({ code: "FORBIDDEN", message: "Acesso negado" });
+      if (!event.defaultMapId || event.defaultMapId === versionId) {
+        throw new BadRequestException({ code: "MAPA_ATUAL", message: "A versão atual não pode ser excluída." });
+      }
+
+      const sessoesQuery = db.select().from(eventoSessoes).where(eq(eventoSessoes.eventId, eventId));
+      const sessoesOrdenadas = typeof (sessoesQuery as any).orderBy === "function" ? (sessoesQuery as any).orderBy(asc(eventoSessoes.id)) : sessoesQuery;
+      const sessoes = await this.lockRows<any>(sessoesOrdenadas);
+
+      const mapasQuery = db.select().from(eventoMapas).where(eq(eventoMapas.eventId, eventId));
+      const mapasOrdenados = typeof (mapasQuery as any).orderBy === "function" ? (mapasQuery as any).orderBy(asc(eventoMapas.id)) : mapasQuery;
+      const mapas = await this.lockRows<any>(mapasOrdenados);
+      const mapaAtual = mapas.find((item: any) => item.id === event.defaultMapId);
+      if (!mapaAtual) throw new BadRequestException({ code: "MAPA_ATUAL", message: "A versão atual não pode ser excluída." });
+      const mapa = mapas.find((item: any) => item.id === versionId);
+      if (!mapa) throw new NotFoundException({ code: "MAP_NOT_FOUND", message: "Versão não encontrada" });
+
+      const importacoesQuery = db.select().from(eventoImportacoesMapa).where(eq(eventoImportacoesMapa.mapId, versionId));
+      const importacoesOrdenadas = typeof (importacoesQuery as any).orderBy === "function" ? (importacoesQuery as any).orderBy(asc(eventoImportacoesMapa.id)) : importacoesQuery;
+      await this.lockRows<any>(importacoesOrdenadas);
+
+      const inventarioQuery = sessoes.length
+        ? db.select().from(eventoInventarioAssentos).where(inArray(eventoInventarioAssentos.sessionId, sessoes.map((sessao: any) => sessao.id)))
+        : db.select().from(eventoInventarioAssentos).where(eq(eventoInventarioAssentos.sessionId, "__nenhuma__"));
+      const inventarioOrdenado = typeof (inventarioQuery as any).orderBy === "function" ? (inventarioQuery as any).orderBy(asc(eventoInventarioAssentos.id)) : inventarioQuery;
+      const inventarioTravado = await this.lockRows<any>(inventarioOrdenado);
+
+      let pedidosTravados: any[] = [];
+      const tipoTrava = await carregarTrava(db, eventId, new Date(), async <T>(query: unknown) => {
+        const linhas = await this.lockRows<T>(query);
+        pedidosTravados = linhas as any[];
+        return linhas;
+      });
+      exigirMapaLivre(tipoTrava);
+
+      const sessionIds = sessoes.filter((sessao: any) => sessao.mapId === versionId).map((sessao: any) => sessao.id).sort();
+      if (sessionIds.length) {
+        await levarSessoesParaVersao(db, {
+          eventId,
+          versaoId: event.defaultMapId,
+          agora: new Date(),
+          sessionIds,
+          lockRows: this.lockRows.bind(this),
+          sessoesTravadas: sessoes.filter((sessao: any) => sessionIds.includes(sessao.id)),
+          mapaTravado: mapaAtual,
+          inventarioTravado: inventarioTravado.filter((linha: any) => sessionIds.includes(linha.sessionId)),
+          pedidosTravados: pedidosTravados.filter((pedido: any) => sessionIds.includes(pedido.sessionId)),
+        });
+      }
+
+      await db.delete(eventoImportacoesMapa).where(eq(eventoImportacoesMapa.mapId, versionId));
+      await db.delete(eventoMapas).where(and(eq(eventoMapas.id, versionId), eq(eventoMapas.eventId, eventId)));
+      await this.audit(eventId, actor, versionId, { action: "excluir_versao", sessionIds }, db);
+      return { sessionIds, storageKeys: [mapa.originalFileKey, mapa.previewFileKey].filter((key): key is string => typeof key === "string" && key.length > 0) };
+    });
+
+    if (this.storage) {
+      const remover = typeof (this.storage as any).deleteFile === "function"
+        ? (this.storage as any).deleteFile.bind(this.storage)
+        : (this.storage as any).deleteFileStrict?.bind(this.storage);
+      if (remover) {
+        for (const key of [...new Set(resultado.storageKeys)]) {
+          try {
+            await remover(key);
+          } catch (error) {
+            const e = error as { name?: string; code?: string; $metadata?: { httpStatusCode?: number } };
+            const ausente = e?.name === "NoSuchKey" || e?.code === "NoSuchKey" || e?.$metadata?.httpStatusCode === 404;
+            if (!ausente) this.logger.error(JSON.stringify({ operation: "excluir_versao", phase: "delete_storage", eventId, versionId, key, error: error instanceof Error ? error.message : String(error) }));
+          }
+        }
+      }
+    }
+    return { excluida: true, sessionIds: resultado.sessionIds };
+  }
+
   private async gravarConfirmacao(
     db: Database,
     map: any,
