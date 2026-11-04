@@ -362,7 +362,9 @@ export class MapasService {
         const origem = mapas.find((mapa: any) => mapa.id === versionId);
         if (!origem) throw new NotFoundException({ code: "MAP_NOT_FOUND", message: "Versão não encontrada" });
 
-        const [importacao] = await this.lockRows<any>(db.select().from(eventoImportacoesMapa).where(eq(eventoImportacoesMapa.mapId, versionId)));
+        const importacoesQuery = db.select().from(eventoImportacoesMapa).where(eq(eventoImportacoesMapa.mapId, versionId));
+        const importacoesOrdenadas = typeof (importacoesQuery as any).orderBy === "function" ? (importacoesQuery as any).orderBy(asc(eventoImportacoesMapa.id)) : importacoesQuery;
+        const [importacao] = await this.lockRows<any>(importacoesOrdenadas);
         const inventarioQuery = sessoes.length
           ? db.select().from(eventoInventarioAssentos).where(inArray(eventoInventarioAssentos.sessionId, sessoes.map((sessao: any) => sessao.id)))
           : db.select().from(eventoInventarioAssentos).where(eq(eventoInventarioAssentos.sessionId, "__nenhuma__"));

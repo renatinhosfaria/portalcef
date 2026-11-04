@@ -1,6 +1,14 @@
 import { BadRequestException, Logger } from "@nestjs/common";
 import "reflect-metadata";
-jest.mock("@essencia/db", () => ({ eventos: {}, eventoMapas: {}, eventoSessoes: {}, eventoImportacoesMapa: {}, eventoDeteccoesMapa: {}, eventoMapaAssentos: {}, eventoInventarioAssentos: {}, eventoPedidos: {}, eventoItensPedido: {}, eventoReservas: {}, eventoIngressos: {}, eventoCheckins: {}, eventoOperacoesAdministrativas: {}, eventoTransferencias: {}, eventoAuditorias: {}, eq: jest.fn(), and: jest.fn(), or: jest.fn(), inArray: jest.fn(), asc: jest.fn(), desc: jest.fn() }));
+jest.mock("@essencia/db", () => {
+  const tabela = (nome: string) => Object.fromEntries(["id", "eventId", "mapId", "sessionId", "orderId", "inventorySeatId", "status", "createdAt", "version"].map((campo) => [campo, `${nome}.${campo}`]));
+  const eq = (coluna: unknown, valor: unknown) => ({ tipo: "eq", coluna, valor });
+  const and = (...condicoes: unknown[]) => ({ tipo: "and", condicoes });
+  const inArray = (coluna: unknown, valores: unknown[]) => ({ tipo: "inArray", coluna, valores });
+  return {
+    eventos: tabela("eventos"), eventoMapas: tabela("eventoMapas"), eventoSessoes: tabela("eventoSessoes"), eventoImportacoesMapa: tabela("eventoImportacoesMapa"), eventoDeteccoesMapa: tabela("eventoDeteccoesMapa"), eventoMapaAssentos: tabela("eventoMapaAssentos"), eventoInventarioAssentos: tabela("eventoInventarioAssentos"), eventoPedidos: tabela("eventoPedidos"), eventoItensPedido: tabela("eventoItensPedido"), eventoReservas: tabela("eventoReservas"), eventoIngressos: tabela("eventoIngressos"), eventoCheckins: tabela("eventoCheckins"), eventoOperacoesAdministrativas: tabela("eventoOperacoesAdministrativas"), eventoTransferencias: tabela("eventoTransferencias"), eventoAuditorias: tabela("eventoAuditorias"), eq: jest.fn(eq), and: jest.fn(and), or: jest.fn(and), inArray: jest.fn(inArray), asc: jest.fn((coluna: unknown) => ({ tipo: "asc", coluna })), desc: jest.fn((coluna: unknown) => ({ tipo: "desc", coluna })),
+  };
+});
 import { MAX_PLANTA_PDF_BYTES, MapasService } from "./mapas.service";
 import { StorageService } from "../../../common/storage/storage.service";
 
@@ -1051,6 +1059,8 @@ describe("MapasService", () => {
       const dbModule = jest.requireMock("@essencia/db") as any;
       const state: any = {
         event: { id: "event-1", schoolId: "school-1", defaultMapId: "map-old" },
+        sessions: [{ id: "session-2", eventId: "event-1" }, { id: "session-1", eventId: "event-1" }],
+        inventory: [{ id: "inventory-2", sessionId: "session-2" }, { id: "inventory-1", sessionId: "session-1" }],
         maps: [
           { id: "map-old", eventId: "event-1", version: 3, status: "CONFIRMADO", originalFileKey: "eventos/event-1/mapas/originais/original.pdf", originalFileName: "original.pdf", originalMimeType: "application/pdf" },
           { id: "map-review", eventId: "event-1", version: 4, status: "EM_REVISAO", originalFileKey: "review.pdf", originalFileName: "review.pdf", originalMimeType: "application/pdf" },
@@ -1059,25 +1069,54 @@ describe("MapasService", () => {
         pedidos: [], ingressos: [], checkins: [], operacoes: [],
         audits: [], uploads: [], deletes: [],
         falharNaInsercao: false,
+        lockEvents: [],
+        orderByCalls: [],
+        nextMapNumber: 0,
+        uploadNumber: 0,
         ...overrides,
       };
       const rows = (table: unknown) => table === dbModule.eventos ? [state.event]
-        : table === dbModule.eventoMapas ? state.maps
-          : table === dbModule.eventoImportacoesMapa ? state.imports
-            : table === dbModule.eventoPedidos ? state.pedidos
-              : table === dbModule.eventoIngressos ? state.ingressos
-                : table === dbModule.eventoCheckins ? state.checkins
-                  : table === dbModule.eventoOperacoesAdministrativas ? state.operacoes
-                    : table === dbModule.eventoAuditorias ? state.audits : [];
+        : table === dbModule.eventoSessoes ? state.sessions
+          : table === dbModule.eventoMapas ? state.maps
+            : table === dbModule.eventoImportacoesMapa ? state.imports
+              : table === dbModule.eventoInventarioAssentos ? state.inventory
+                : table === dbModule.eventoPedidos ? state.pedidos
+                  : table === dbModule.eventoIngressos ? state.ingressos
+                    : table === dbModule.eventoCheckins ? state.checkins
+                      : table === dbModule.eventoOperacoesAdministrativas ? state.operacoes
+                        : table === dbModule.eventoAuditorias ? state.audits : [];
+      const valorColuna = (linha: any, coluna: unknown) => typeof coluna === "string" && coluna.includes(".") ? linha[coluna.slice(coluna.indexOf(".") + 1)] : undefined;
+      const corresponde = (linha: any, condicao: any): boolean => !condicao
+        || condicao.tipo === "eq" && valorColuna(linha, condicao.coluna) === condicao.valor
+        || condicao.tipo === "inArray" && condicao.valores.includes(valorColuna(linha, condicao.coluna))
+        || condicao.tipo === "and" && condicao.condicoes.every((item: any) => corresponde(linha, item));
       const db: any = {
-        select: () => ({ from: (table: unknown) => { const q: any = Promise.resolve(rows(table)); q.where = () => q; q.orderBy = () => q; q.for = () => q; return q; } }),
-        insert: (table: unknown) => ({ values: (values: any) => { if (state.falharNaInsercao && table === dbModule.eventoMapas) throw new Error("falha no banco"); if (table === dbModule.eventoMapas) state.maps.push({ id: "map-new", ...values }); if (table === dbModule.eventoImportacoesMapa) state.imports.push({ id: "imp-new", ...values }); if (table === dbModule.eventoAuditorias) state.audits.push(values); return { returning: async () => [{ id: table === dbModule.eventoMapas ? "map-new" : table === dbModule.eventoImportacoesMapa ? "imp-new" : "audit-1", ...values }] }; } }),
-        update: (table: unknown) => ({ set: (values: any) => ({ where: () => { if (table === dbModule.eventoMapas) state.maps.forEach((map: any) => { if (map.id !== "map-new" || values.status !== "EM_REVISAO") Object.assign(map, values); }); if (table === dbModule.eventoImportacoesMapa) state.imports.forEach((imp: any) => Object.assign(imp, values)); return { returning: async () => [{ ...state.maps[0], ...values }] }; } }) }),
+        select: () => ({ from: (table: unknown) => {
+          let selecionadas = rows(table).slice();
+          const q: any = { then: (resolve: any, reject: any) => Promise.resolve(selecionadas).then(resolve, reject) };
+          q.where = (condicao: any) => { selecionadas = selecionadas.filter((linha: any) => corresponde(linha, condicao)); return q; };
+          q.orderBy = (...ordens: any[]) => { state.orderByCalls.push({ table, ordens }); selecionadas.sort((a: any, b: any) => String(a.id).localeCompare(String(b.id))); return q; };
+          q.for = (modo: string) => { state.lockEvents.push({ table, modo, ids: selecionadas.map((linha: any) => linha.id) }); return q; };
+          return q;
+        } }),
+        insert: (table: unknown) => ({ values: (values: any) => {
+          if (state.falharNaInsercao && table === dbModule.eventoMapas) throw new Error("falha no banco");
+          const id = table === dbModule.eventoMapas ? state.nextMapNumber++ === 0 ? "map-new" : `map-new-${state.nextMapNumber}` : table === dbModule.eventoImportacoesMapa ? `imp-new-${state.imports.length}` : "audit-1";
+          if (table === dbModule.eventoMapas) state.maps.push({ id, ...values });
+          if (table === dbModule.eventoImportacoesMapa) state.imports.push({ id, ...values });
+          if (table === dbModule.eventoAuditorias) state.audits.push(values);
+          return { returning: async () => [{ id, ...values }] };
+        } }),
+        update: (table: unknown) => ({ set: (values: any) => ({ where: (condicao: any) => {
+          const alvo = rows(table).filter((linha: any) => corresponde(linha, condicao));
+          alvo.forEach((linha: any) => Object.assign(linha, values));
+          return { returning: async () => alvo.map((linha: any) => ({ ...linha })) };
+        } }) }),
         transaction: async (fn: any) => fn(db),
       };
       const storage: any = {
         getObject: jest.fn().mockResolvedValue({ Body: { transformToByteArray: async () => new Uint8Array([37, 80, 68, 70, 45]) } }),
-        uploadMapBuffer: jest.fn().mockImplementation(async (buffer: Buffer, filename: string, mime: string, prefix: string) => { state.uploads.push({ buffer, filename, mime, prefix }); return { key: `${prefix}/copied.pdf` }; }),
+        uploadMapBuffer: jest.fn().mockImplementation(async (buffer: Buffer, filename: string, mime: string, prefix: string) => { state.uploadNumber += 1; state.uploads.push({ buffer, filename, mime, prefix }); return { key: `${prefix}/${state.uploadNumber === 1 ? "copied.pdf" : `copied-${state.uploadNumber}.pdf`}` }; }),
         deleteFileStrict: jest.fn().mockResolvedValue(undefined),
       };
       const maps = new MapasService({ db } as any, storage, {} as any);
@@ -1092,6 +1131,23 @@ describe("MapasService", () => {
       expect(fx.state.maps.find((map: any) => map.id === "map-review").status).toBe("ARQUIVADO");
       expect(fx.state.imports).toEqual(expect.arrayContaining([expect.objectContaining({ mapId: "map-new", detector: "edicao", detectorVersion: "2", proposta: expect.objectContaining({ revisao: 0, pontos: proposta.pontos }) })]));
       expect(fx.state.audits).toEqual(expect.arrayContaining([expect.objectContaining({ metadata: { action: "editar_versao", origemMapId: "map-old" } })]));
+    });
+
+    it("editarVersao aceita uma versão ARQUIVADO que ainda tem proposta", async () => {
+      const fx = edicaoFixture({
+        maps: [{ id: "map-old", eventId: "event-1", version: 3, status: "ARQUIVADO", originalFileKey: "eventos/event-1/mapas/originais/original.pdf", originalFileName: "original.pdf", originalMimeType: "application/pdf" }],
+      });
+      await expect(fx.maps.editarVersao("event-1", "map-old", actor)).resolves.toEqual({ mapId: "map-new" });
+      expect(fx.state.maps).toEqual(expect.arrayContaining([expect.objectContaining({ id: "map-new", status: "EM_REVISAO" })]));
+    });
+
+    it("duas edições consecutivas deixam somente a última versão em conferência", async () => {
+      const fx = edicaoFixture();
+      await fx.maps.editarVersao("event-1", "map-old", actor);
+      await fx.maps.editarVersao("event-1", "map-old", actor);
+      expect(fx.state.maps.filter((map: any) => map.status === "EM_REVISAO")).toEqual([expect.objectContaining({ id: "map-new-2" })]);
+      expect(fx.state.maps.find((map: any) => map.id === "map-new").status).toBe("ARQUIVADO");
+      expect(fx.state.maps.find((map: any) => map.id === "map-old").status).toBe("CONFIRMADO");
     });
 
     it("editarVersao copia o PDF original para uma chave nova", async () => {
@@ -1114,6 +1170,43 @@ describe("MapasService", () => {
       await expect(fx.maps.editarVersao("event-1", "map-old", actor)).rejects.toMatchObject({ response: { code: "VENDA_CONFIRMADA" } });
       expect(fx.storage.getObject).not.toHaveBeenCalled();
       expect(fx.storage.uploadMapBuffer).not.toHaveBeenCalled();
+    });
+
+    it("editarVersao recusa COMPRA_EM_ANDAMENTO antes de acessar o PDF", async () => {
+      const fx = edicaoFixture({ pedidos: [{ id: "pedido-1", eventId: "event-1", status: "AGUARDANDO_PAGAMENTO", expiresAt: new Date(Date.now() + 60_000) }] });
+      await expect(fx.maps.editarVersao("event-1", "map-old", actor)).rejects.toMatchObject({ response: { code: "COMPRA_EM_ANDAMENTO" } });
+      expect(fx.storage.getObject).not.toHaveBeenCalled();
+      expect(fx.storage.uploadMapBuffer).not.toHaveBeenCalled();
+    });
+
+    it("editarVersao recusa OPERACAO_ATIVA antes de acessar o PDF", async () => {
+      const fx = edicaoFixture({ operacoes: [{ id: "operacao-1", eventId: "event-1", status: "ATIVA" }] });
+      await expect(fx.maps.editarVersao("event-1", "map-old", actor)).rejects.toMatchObject({ response: { code: "OPERACAO_ATIVA" } });
+      expect(fx.storage.getObject).not.toHaveBeenCalled();
+      expect(fx.storage.uploadMapBuffer).not.toHaveBeenCalled();
+    });
+
+    it("editarVersao adquire locks na ordem global e ordena cada conjunto por id", async () => {
+      const fx = edicaoFixture({ pedidos: [{ id: "pedido-2", eventId: "event-1", status: "CANCELADO", expiresAt: null }, { id: "pedido-1", eventId: "event-1", status: "CANCELADO", expiresAt: null }] });
+      const dbModule = jest.requireMock("@essencia/db") as any;
+      await fx.maps.editarVersao("event-1", "map-old", actor);
+      expect(fx.state.lockEvents.map((evento: any) => evento.table)).toEqual([
+        dbModule.eventos,
+        dbModule.eventoSessoes,
+        dbModule.eventoMapas,
+        dbModule.eventoImportacoesMapa,
+        dbModule.eventoInventarioAssentos,
+        dbModule.eventoPedidos,
+      ]);
+      expect(fx.state.lockEvents.every((evento: any) => evento.modo === "update")).toBe(true);
+      expect(fx.state.orderByCalls.map((chamada: any) => [chamada.table, chamada.ordens[0].coluna])).toEqual([
+        [dbModule.eventoSessoes, dbModule.eventoSessoes.id],
+        [dbModule.eventoMapas, dbModule.eventoMapas.id],
+        [dbModule.eventoImportacoesMapa, dbModule.eventoImportacoesMapa.id],
+        [dbModule.eventoInventarioAssentos, dbModule.eventoInventarioAssentos.id],
+        [dbModule.eventoPedidos, dbModule.eventoPedidos.id],
+      ]);
+      expect(fx.state.lockEvents.find((evento: any) => evento.table === dbModule.eventoPedidos).ids).toEqual(["pedido-1", "pedido-2"]);
     });
 
     it("falha no banco apaga a cópia do PDF", async () => {
