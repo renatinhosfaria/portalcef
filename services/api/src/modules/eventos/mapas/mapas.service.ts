@@ -193,38 +193,54 @@ export class MapasService {
   }
 
   async importar(eventId: string, file: MultipartFile, actor: EventoActor, pagina?: number): Promise<MapImportSummary> {
-    const event = await this.assertEvent(eventId, actor);
     if (!this.storage) throw new BadRequestException({ code: "STORAGE_UNAVAILABLE", message: "Armazenamento de mapas indisponível" });
-    const tipoTrava = await carregarTrava(this.db, eventId, new Date());
-    exigirMapaLivre(tipoTrava);
-    const plantaGrande = new BadRequestException({ code: "MAP_TOO_LARGE", message: "A planta passa de 10 MB. Envie o PDF exportado do programa de desenho, sem imagens." });
-    let buffer: Buffer;
-    try {
-      buffer = await file.toBuffer();
-    } catch (erro) {
-      // O multipart corta a leitura no teto e sinaliza com este código.
-      if ((erro as { code?: string })?.code === "FST_REQ_FILE_TOO_LARGE") throw plantaGrande;
-      throw erro;
-    }
-    if (buffer.length > MAX_PLANTA_PDF_BYTES) throw plantaGrande;
-    if (file.mimetype !== "application/pdf" && buffer.subarray(0, 5).toString("latin1") !== "%PDF-") throw new BadRequestException({ code: "INVALID_MAP_TYPE", message: "Envie a planta em PDF." });
-    const proposta = await this.gerador.gerar(buffer, pagina);
     let original: { key: string } | undefined;
     try {
-      original = await this.storage.uploadMapBuffer(buffer, file.filename, "application/pdf", `eventos/${eventId}/mapas/originais`);
       return await this.transaction(async (db) => {
-        const maps = await db.select().from(eventoMapas).where(eq(eventoMapas.eventId, eventId));
-        const sessoes = await db.select({ mapId: eventoSessoes.mapId }).from(eventoSessoes).where(eq(eventoSessoes.eventId, eventId));
+        const [event] = await this.lockRows<any>(db.select().from(eventos).where(eq(eventos.id, eventId)));
+        if (!event) throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Evento não encontrado" });
+        if (actor.role !== "master" && event.schoolId !== actor.schoolId) throw new BadRequestException({ code: "FORBIDDEN", message: "Acesso negado" });
+
+        const sessoesQuery = db.select().from(eventoSessoes).where(eq(eventoSessoes.eventId, eventId));
+        const sessoesOrdenadas = typeof (sessoesQuery as any).orderBy === "function" ? (sessoesQuery as any).orderBy(asc(eventoSessoes.id)) : sessoesQuery;
+        const sessoes = await this.lockRows<any>(sessoesOrdenadas);
+        const mapasQuery = db.select().from(eventoMapas).where(eq(eventoMapas.eventId, eventId));
+        const mapasOrdenados = typeof (mapasQuery as any).orderBy === "function" ? (mapasQuery as any).orderBy(asc(eventoMapas.id)) : mapasQuery;
+        const mapas = await this.lockRows<any>(mapasOrdenados);
+        const importacoesQuery = db.select().from(eventoImportacoesMapa).where(eq(eventoImportacoesMapa.eventId, eventId));
+        const importacoesOrdenadas = typeof (importacoesQuery as any).orderBy === "function" ? (importacoesQuery as any).orderBy(asc(eventoImportacoesMapa.id)) : importacoesQuery;
+        await this.lockRows<any>(importacoesOrdenadas);
+        const inventoryQuery = sessoes.length
+          ? db.select().from(eventoInventarioAssentos).where(inArray(eventoInventarioAssentos.sessionId, sessoes.map((sessao: any) => sessao.id)))
+          : db.select().from(eventoInventarioAssentos).where(eq(eventoInventarioAssentos.sessionId, "__nenhuma__"));
+        const inventoryOrdenado = typeof (inventoryQuery as any).orderBy === "function" ? (inventoryQuery as any).orderBy(asc(eventoInventarioAssentos.id)) : inventoryQuery;
+        await this.lockRows<any>(inventoryOrdenado);
+        const tipoTrava = await carregarTrava(db, eventId, new Date(), this.lockRows.bind(this));
+        exigirMapaLivre(tipoTrava);
+
+        const plantaGrande = new BadRequestException({ code: "MAP_TOO_LARGE", message: "A planta passa de 10 MB. Envie o PDF exportado do programa de desenho, sem imagens." });
+        let buffer: Buffer;
+        try {
+          buffer = await file.toBuffer();
+        } catch (erro) {
+          // O multipart corta a leitura no teto e sinaliza com este código.
+          if ((erro as { code?: string })?.code === "FST_REQ_FILE_TOO_LARGE") throw plantaGrande;
+          throw erro;
+        }
+        if (buffer.length > MAX_PLANTA_PDF_BYTES) throw plantaGrande;
+        if (file.mimetype !== "application/pdf" && buffer.subarray(0, 5).toString("latin1") !== "%PDF-") throw new BadRequestException({ code: "INVALID_MAP_TYPE", message: "Envie a planta em PDF." });
+        const proposta = await this.gerador.gerar(buffer, pagina);
+        original = await this.storage!.uploadMapBuffer(buffer, file.filename, "application/pdf", `eventos/${eventId}/mapas/originais`);
         const emUso = new Set<string>([...sessoes.map((sessao: any) => sessao.mapId), event.defaultMapId].filter(Boolean));
-        for (const anterior of maps.filter((item: any) => item.status === "EM_REVISAO" && !emUso.has(item.id))) {
+        for (const anterior of mapas.filter((item: any) => item.status === "EM_REVISAO" && !emUso.has(item.id))) {
           await db.update(eventoMapas).set({ status: "ARQUIVADO", updatedAt: new Date() }).where(and(eq(eventoMapas.id, anterior.id), eq(eventoMapas.eventId, eventId)));
         }
-        const version = Math.max(0, ...maps.map((item: any) => item.version ?? 0)) + 1;
-        const [map] = await db.insert(eventoMapas).values({ eventId, version, originalFileKey: original!.key, originalFileName: file.filename, originalMimeType: "application/pdf", status: "EM_REVISAO" }).returning();
+        const version = Math.max(0, ...mapas.map((item: any) => item.version ?? 0)) + 1;
+        const [map] = await db.insert(eventoMapas).values({ eventId, version, originalFileKey: original.key, originalFileName: file.filename, originalMimeType: "application/pdf", status: "EM_REVISAO" }).returning();
         if (!map) throw new BadRequestException({ code: "MAP_IMPORT_FAILED", message: "Não foi possível criar a versão do mapa" });
         const proposalCount = proposta.lugares.length;
         const conflictCount = proposta.pontos.length;
-        const [imp] = await db.insert(eventoImportacoesMapa).values({ eventId, mapId: map.id, fileKey: original!.key, detector: "pdf-vetorial", detectorVersion: "2", status: "EM_REVISAO", proposta, proposalCount, conflictCount }).returning();
+        const [imp] = await db.insert(eventoImportacoesMapa).values({ eventId, mapId: map.id, fileKey: original.key, detector: "pdf-vetorial", detectorVersion: "2", status: "EM_REVISAO", proposta, proposalCount, conflictCount }).returning();
         if (!imp) throw new BadRequestException({ code: "MAP_IMPORT_FAILED", message: "Não foi possível registrar a importação" });
         await this.audit(eventId, actor, map.id, { action: "importar", importId: imp.id, conflicts: conflictCount }, db);
         return { importId: imp.id, mapId: map.id, status: "EM_REVISAO" as const, proposalCount, conflictCount };

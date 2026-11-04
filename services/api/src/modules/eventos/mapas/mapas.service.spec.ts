@@ -331,10 +331,31 @@ describe("MapasService", () => {
       audits: [] as any[],
       deteccoes: [] as any[],
       updates: [] as any[],
+      lockEvents: [] as unknown[],
     };
     const rows = (table: unknown) => table === dbModule.eventos ? [state.event] : table === dbModule.eventoMapas ? state.maps : table === dbModule.eventoSessoes ? state.sessions : table === dbModule.eventoImportacoesMapa ? state.imports : table === dbModule.eventoMapaAssentos ? state.seats : table === dbModule.eventoPedidos ? state.pedidos : table === dbModule.eventoIngressos ? state.ingressos : table === dbModule.eventoCheckins ? state.checkins : table === dbModule.eventoOperacoesAdministrativas ? state.operacoes : [];
+    const corresponde = (linha: any, condicao: any): boolean => {
+      if (!condicao) return true;
+      if (condicao.tipo === "and") return condicao.condicoes.every((item: any) => corresponde(linha, item));
+      const campo = String(String(condicao.coluna ?? "").split(".").pop() ?? "");
+      if (condicao.tipo === "inArray") return condicao.valores.includes(linha[campo]);
+      if (condicao.tipo === "eq") return linha[campo] === condicao.valor;
+      return true;
+    };
     const select = () => ({ from: (table: unknown) => {
-      const consulta: any = { where: () => consulta, orderBy: (ordenacao: unknown) => { if (ordenacao === "desc") return Promise.resolve([...rows(table)].sort((x: any, y: any) => y.version - x.version)); return Promise.resolve(rows(table)); }, then: (resolve: any, reject: any) => Promise.resolve(rows(table)).then(resolve, reject), for: () => consulta };
+      let selectedRows: any[] | undefined;
+      const consulta: any = {
+        where: (condicao: unknown) => {
+          selectedRows = rows(table).filter((linha: any) => corresponde(linha, condicao));
+          return consulta;
+        },
+        orderBy: (ordenacao: unknown) => {
+          selectedRows = ordenacao === "desc" ? [...(selectedRows ?? rows(table))].sort((x: any, y: any) => y.version - x.version) : (selectedRows ?? rows(table));
+          return consulta;
+        },
+        then: (resolve: any, reject: any) => Promise.resolve(selectedRows ?? rows(table)).then(resolve, reject),
+        for: () => { state.lockEvents.push(table); return consulta; },
+      };
       return consulta;
     } });
     const insert = (table: unknown) => ({ values: (values: any) => {
@@ -360,7 +381,7 @@ describe("MapasService", () => {
       getObject: jest.fn(),
     };
     const maps = new MapasService({ db } as any, storage as any, { gerar } as any);
-    return { maps, state, storage, gerar, ordem, dbModule };
+    return { maps, state, storage, gerar, ordem, db, dbModule };
   }
 
   it("importa o PDF: gera a proposta antes do upload e grava EM_REVISAO com a proposta", async () => {
@@ -420,7 +441,10 @@ describe("MapasService", () => {
 
   it("apaga o original do storage quando a gravação falha", async () => {
     const fx = importacaoFixture();
-    jest.spyOn(fx.maps as any, "transaction").mockRejectedValue(new Error("falha de banco"));
+    jest.spyOn(fx.maps as any, "transaction").mockImplementation(async (callback: any) => {
+      await callback(fx.db);
+      throw new Error("falha de banco");
+    });
     await expect(fx.maps.importar("event-1", arquivoPdf(), actor)).rejects.toThrow("falha de banco");
     expect(fx.storage.deleteFileStrict).toHaveBeenCalledWith("private/planta.pdf");
   });
@@ -503,6 +527,35 @@ describe("MapasService", () => {
     await expect(fx.maps.importar("event-1", arquivoPdf(), actor)).rejects.toMatchObject({ response: { code: "VENDA_CONFIRMADA" } });
     expect(fx.gerar).not.toHaveBeenCalled();
     expect(fx.storage.uploadMapBuffer).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["COMPRA_EM_ANDAMENTO", { status: "AGUARDANDO_PAGAMENTO", expiresAt: new Date(Date.now() + 60_000) }],
+    ["OPERACAO_ATIVA", undefined],
+  ])("importar recusa com %s antes de ler ou enviar a planta", async (codigo, pedido) => {
+    const fx = importacaoFixture({
+      pedidos: pedido ? [{ id: "pedido-1", eventId: "event-1", status: pedido.status, expiresAt: pedido.expiresAt }] : [],
+      operacoes: pedido ? [] : [{ id: "operacao-1", eventId: "event-1", status: "ATIVA" }],
+    });
+    const arquivo = arquivoPdf();
+
+    await expect(fx.maps.importar("event-1", arquivo, actor)).rejects.toMatchObject({ response: { code: codigo } });
+    expect(arquivo.toBuffer).not.toHaveBeenCalled();
+    expect(fx.gerar).not.toHaveBeenCalled();
+    expect(fx.storage.uploadMapBuffer).not.toHaveBeenCalled();
+  });
+
+  it("importar adquire os locks na ordem global antes de ler a planta", async () => {
+    const fx = importacaoFixture();
+    await fx.maps.importar("event-1", arquivoPdf(), actor);
+    expect(fx.state.lockEvents.slice(0, 6)).toEqual([
+      fx.dbModule.eventos,
+      fx.dbModule.eventoSessoes,
+      fx.dbModule.eventoMapas,
+      fx.dbModule.eventoImportacoesMapa,
+      fx.dbModule.eventoInventarioAssentos,
+      fx.dbModule.eventoPedidos,
+    ]);
   });
 
   it("revisão devolve a proposta da importação", async () => {
