@@ -779,6 +779,7 @@ Esperado: tudo verde, incluindo o teste de aceite do ballet.
   4. conferir que o `health-check.sh` passou e que `curl https://www.portalcef.com.br/api/health` mostra `database` e `redis` conectados.
 
 - [ ] **Passo 5: Trocar o mapa do ballet.** O Renato faz isso no painel, com acompanhamento.
+  0. **Antes de publicar**, conferir no painel (tela de inventário da sessão do ballet e lista de pedidos) se a sessão tem algum lugar RESERVADO ou VENDIDO, ou algum pedido. Conferir também se a sessão usa o mapa padrão (mapa herdado) ou tem mapa próprio. Publicar substitui o mapa padrão na hora, e o fluxo de substituição preserva lugares reservados e vendidos do mapa antigo. Por isso, se houver qualquer reserva ativa ou venda, NÃO publicar: levar o caso ao Renato, conforme a spec. Só seguir se a sessão estiver sem reservas, sem vendas e sem pedidos, ou se houver apenas pedidos de teste expirados e o Renato tiver autorizado o caminho da sessão nova.
   1. Em `/eventos-admin/eventos/<id do ballet>/mapa`, enviar `Mapa plateia Novo.pdf`. A conferência deve mostrar 786 lugares, 19 fileiras e 1 ponto (fileira R).
   2. Conferir a legenda (as 5 cores) e o ponto da fileira R, e publicar.
   3. Se a substituição devolver `MAP_IN_USE`, usar "Migrar sessões e excluir mapa anterior".
