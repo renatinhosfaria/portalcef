@@ -261,6 +261,7 @@ export const eventoMapas = pgTable(
     status: text("status", { enum: eventoMapaStatusEnum })
       .notNull()
       .default("ENVIADO"),
+    layout: jsonb("layout"),
     confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
     confirmedBy: uuid("confirmed_by").references(() => users.id, {
       onDelete: "set null",
@@ -869,6 +870,7 @@ export const eventoImportacoesMapa = pgTable(
       .default("ENVIADA"),
     proposalCount: integer("proposal_count").notNull().default(0),
     conflictCount: integer("conflict_count").notNull().default(0),
+    proposta: jsonb("proposta"),
     reviewedBy: uuid("reviewed_by").references(() => users.id, {
       onDelete: "set null",
     }),

@@ -19,6 +19,7 @@
     "exceljs": "^4.4.0",
     "lucide-react": "^0.469.0",
     "next": "15.5.25",
+    "pdfjs-dist": "^6.4.299",
     "react": "19.0.4",
     "react-dom": "19.0.4"
   },

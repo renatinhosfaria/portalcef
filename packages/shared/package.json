@@ -70,6 +70,12 @@
       "import": "./src/formatar-data.ts",
       "require": "./dist/formatar-data.js",
       "default": "./dist/formatar-data.js"
+    },
+    "./eventos/mapa-proposta": {
+      "types": "./dist/eventos/mapa-proposta.d.ts",
+      "import": "./src/eventos/mapa-proposta.ts",
+      "require": "./dist/eventos/mapa-proposta.js",
+      "default": "./dist/eventos/mapa-proposta.js"
     }
   },
   "scripts": {

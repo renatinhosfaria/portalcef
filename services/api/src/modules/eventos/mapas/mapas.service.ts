@@ -4,11 +4,19 @@ import type { MultipartFile } from "@fastify/multipart";
 import type { EventoActor } from "@essencia/shared/types";
 import { DatabaseService } from "../../../common/database/database.service";
 import { StorageService } from "../../../common/storage/storage.service";
-import { MapDetector, type MapDetectionResult } from "./map-detector";
-import { sanitizeSvg } from "./map-sanitizer";
+import { ErroProposta, aplicarOperacoes, pendenciasPublicacao, type LayoutMapa, type MetadadosAssento, type OperacaoProposta, type PropostaMapa } from "@essencia/shared/eventos/mapa-proposta";
+import { GeradorMapaPdf } from "./gerador/gerador-mapa-pdf";
+import { propostaParaConfirmacao } from "./gerador/proposta-para-confirmacao";
 
-export interface ConfirmMapInput { seats: Array<{ id?: string; rowLabel: string; seatNumber: string; x: number; y: number; width?: number; height?: number; category?: string | null; accessible?: boolean; sellable?: boolean }>; reason?: string; }
-export interface MapImportSummary { importId: string; mapId: string; status: string; proposalCount: number; conflictCount: number; detection: MapDetectionResult; }
+/**
+ * Teto de tamanho da planta em PDF. O pdf.js lê o arquivo inteiro na memória da API e roda no mesmo
+ * processo das demais requisições, então um PDF enorme pode travar tudo. Plantas vetoriais exportadas
+ * do programa de desenho ficam muito abaixo disso.
+ */
+export const MAX_PLANTA_PDF_BYTES = 10 * 1024 * 1024;
+
+export interface ConfirmMapInput { seats: Array<{ id?: string; rowLabel: string; seatNumber: string; x: number; y: number; width?: number; height?: number; category?: string | null; accessible?: boolean; sellable?: boolean; metadata?: MetadadosAssento }>; layout?: LayoutMapa; revisaoEsperada?: number; reason?: string; }
+export interface MapImportSummary { importId: string; mapId: string; status: string; proposalCount: number; conflictCount: number; }
 export interface MapReplacementResult {
   updated: unknown;
   previousMapId: string | null;
@@ -29,7 +37,7 @@ export interface MapMigrationResult {
 @Injectable()
 export class MapasService {
   private readonly logger = new Logger(MapasService.name);
-  constructor(private readonly database: DatabaseService, @Optional() @Inject(StorageService) private readonly storage: StorageService | undefined, private readonly detector: MapDetector) {}
+  constructor(private readonly database: DatabaseService, @Optional() @Inject(StorageService) private readonly storage: StorageService | undefined, private readonly gerador: GeradorMapaPdf) {}
   private get db(): Database { return this.database.db; }
   private async assertEvent(eventId: string, actor: EventoActor) {
     const [event] = await this.db.select().from(eventos).where(eq(eventos.id, eventId));
@@ -170,62 +178,123 @@ export class MapasService {
     return { inventorySessionIds: targetSessions.map((session: any) => session.id), inventoryCreatedCount };
   }
 
-  async importar(eventId: string, file: MultipartFile, actor: EventoActor): Promise<MapImportSummary> {
-    await this.assertEvent(eventId, actor);
+  async importar(eventId: string, file: MultipartFile, actor: EventoActor, pagina?: number): Promise<MapImportSummary> {
+    const event = await this.assertEvent(eventId, actor);
     if (!this.storage) throw new BadRequestException({ code: "STORAGE_UNAVAILABLE", message: "Armazenamento de mapas indisponível" });
-    const buffer = await file.toBuffer();
-    const mimeType = file.mimetype === "image/svg+xml" ? "image/svg+xml" : file.mimetype;
-    let original: { key: string } | undefined;
-    let preview: { key: string } | undefined;
+    const plantaGrande = new BadRequestException({ code: "MAP_TOO_LARGE", message: "A planta passa de 10 MB. Envie o PDF exportado do programa de desenho, sem imagens." });
+    let buffer: Buffer;
     try {
-      original = await this.storage.uploadMapBuffer(buffer, file.filename, mimeType, `eventos/${eventId}/mapas/originais`);
-      const detectionBuffer = mimeType === "image/svg+xml" ? sanitizeSvg(buffer) : buffer;
-      if (mimeType === "image/svg+xml") preview = await this.storage.uploadMapBuffer(detectionBuffer, `preview-${file.filename}`, mimeType, `eventos/${eventId}/mapas/previews`);
-      const detection = await this.detector.detect({ buffer: detectionBuffer, mimeType });
-      const result = await this.transaction(async (db) => {
+      buffer = await file.toBuffer();
+    } catch (erro) {
+      // O multipart corta a leitura no teto e sinaliza com este código.
+      if ((erro as { code?: string })?.code === "FST_REQ_FILE_TOO_LARGE") throw plantaGrande;
+      throw erro;
+    }
+    if (buffer.length > MAX_PLANTA_PDF_BYTES) throw plantaGrande;
+    if (file.mimetype !== "application/pdf" && buffer.subarray(0, 5).toString("latin1") !== "%PDF-") throw new BadRequestException({ code: "INVALID_MAP_TYPE", message: "Envie a planta em PDF." });
+    const proposta = await this.gerador.gerar(buffer, pagina);
+    let original: { key: string } | undefined;
+    try {
+      original = await this.storage.uploadMapBuffer(buffer, file.filename, "application/pdf", `eventos/${eventId}/mapas/originais`);
+      return await this.transaction(async (db) => {
         const maps = await db.select().from(eventoMapas).where(eq(eventoMapas.eventId, eventId));
+        const sessoes = await db.select({ mapId: eventoSessoes.mapId }).from(eventoSessoes).where(eq(eventoSessoes.eventId, eventId));
+        const emUso = new Set<string>([...sessoes.map((sessao: any) => sessao.mapId), event.defaultMapId].filter(Boolean));
+        for (const anterior of maps.filter((item: any) => item.status === "EM_REVISAO" && !emUso.has(item.id))) {
+          await db.update(eventoMapas).set({ status: "ARQUIVADO", updatedAt: new Date() }).where(and(eq(eventoMapas.id, anterior.id), eq(eventoMapas.eventId, eventId)));
+        }
         const version = Math.max(0, ...maps.map((item: any) => item.version ?? 0)) + 1;
-        const [map] = await db.insert(eventoMapas).values({ eventId, version, originalFileKey: original!.key, originalFileName: file.filename, originalMimeType: mimeType, previewFileKey: preview?.key ?? null, status: "EM_REVISAO" }).returning();
+        const [map] = await db.insert(eventoMapas).values({ eventId, version, originalFileKey: original!.key, originalFileName: file.filename, originalMimeType: "application/pdf", status: "EM_REVISAO" }).returning();
         if (!map) throw new BadRequestException({ code: "MAP_IMPORT_FAILED", message: "Não foi possível criar a versão do mapa" });
-        const [imp] = await db.insert(eventoImportacoesMapa).values({ eventId, mapId: map.id, fileKey: original!.key, detector: detection.detector, detectorVersion: "1", status: "EM_REVISAO", proposalCount: detection.seats.length, conflictCount: detection.conflicts.length }).returning();
+        const proposalCount = proposta.lugares.length;
+        const conflictCount = proposta.pontos.length;
+        const [imp] = await db.insert(eventoImportacoesMapa).values({ eventId, mapId: map.id, fileKey: original!.key, detector: "pdf-vetorial", detectorVersion: "2", status: "EM_REVISAO", proposta, proposalCount, conflictCount }).returning();
         if (!imp) throw new BadRequestException({ code: "MAP_IMPORT_FAILED", message: "Não foi possível registrar a importação" });
-        for (const seat of detection.seats) await db.insert(eventoDeteccoesMapa).values({ importId: imp.id, detector: detection.detector, confidence: seat.confidence, proposedRowLabel: seat.rowLabel || null, proposedSeatNumber: seat.seatNumber, proposedX: seat.x, proposedY: seat.y, proposedCategory: seat.category ?? null, status: "PENDENTE", conflictReason: seat.conflict ?? null });
-        await this.audit(eventId, actor, map.id, { action: "importar", importId: imp.id, conflicts: detection.conflicts.length }, db);
-        return { importId: imp.id, mapId: map.id, status: "EM_REVISAO", proposalCount: detection.seats.length, conflictCount: detection.conflicts.length, detection };
+        await this.audit(eventId, actor, map.id, { action: "importar", importId: imp.id, conflicts: conflictCount }, db);
+        return { importId: imp.id, mapId: map.id, status: "EM_REVISAO" as const, proposalCount, conflictCount };
       });
-      return result;
     } catch (error) {
       if (original?.key) await this.storage.deleteFileStrict(original.key).catch(() => undefined);
-      if (preview?.key) await this.storage.deleteFileStrict(preview.key).catch(() => undefined);
       throw error;
     }
   }
 
-  async revisao(eventId: string, versionId: string, actor: EventoActor) {
+  async listar(eventId: string, actor: EventoActor) {
+    await this.assertEvent(eventId, actor);
+    const maps = await this.db.select().from(eventoMapas).where(eq(eventoMapas.eventId, eventId)).orderBy(desc(eventoMapas.version));
+    return maps.map((map: any) => ({ id: map.id, version: map.version, status: map.status, originalFileName: map.originalFileName ?? null, createdAt: map.createdAt, confirmedAt: map.confirmedAt ?? null }));
+  }
+
+  async obterOriginal(eventId: string, versionId: string, actor: EventoActor): Promise<{ body: unknown; contentType: string; contentLength?: number }> {
+    await this.assertEvent(eventId, actor);
+    if (!this.storage) throw new BadRequestException({ code: "STORAGE_UNAVAILABLE", message: "Armazenamento de mapas indisponível" });
+    const [map] = await this.db.select().from(eventoMapas).where(and(eq(eventoMapas.id, versionId), eq(eventoMapas.eventId, eventId)));
+    if (!map) throw new NotFoundException({ code: "MAP_NOT_FOUND", message: "Versão não encontrada" });
+    // Versões antigas podem ter SVG ou PNG como original; só o PDF é servido ao painel.
+    const indisponivel = () => new NotFoundException({ code: "MAP_ORIGINAL_NOT_FOUND", message: "Planta original indisponível." });
+    if (map.originalMimeType !== "application/pdf" || !map.originalFileKey) throw indisponivel();
+    let arquivo: Awaited<ReturnType<StorageService["getObject"]>>;
+    try {
+      arquivo = await this.storage.getObject(map.originalFileKey);
+    } catch (erro) {
+      const e = erro as { name?: string; $metadata?: { httpStatusCode?: number } };
+      if (e?.name === "NoSuchKey" || e?.$metadata?.httpStatusCode === 404) throw indisponivel();
+      throw erro;
+    }
+    return { body: arquivo.Body, contentType: "application/pdf", contentLength: arquivo.ContentLength };
+  }
+
+  async revisao(eventId: string, versionId: string, actor: EventoActor): Promise<{ map: any; import: any; proposta: PropostaMapa | null }> {
     await this.assertEvent(eventId, actor);
     const [map] = await this.db.select().from(eventoMapas).where(and(eq(eventoMapas.id, versionId), eq(eventoMapas.eventId, eventId)));
     if (!map) throw new NotFoundException({ code: "MAP_NOT_FOUND", message: "Versão não encontrada" });
     const imports = await this.db.select().from(eventoImportacoesMapa).where(eq(eventoImportacoesMapa.mapId, map.id));
-    const detections = imports.length ? await this.db.select().from(eventoDeteccoesMapa).where(eq(eventoDeteccoesMapa.importId, imports[0].id)) : [];
-    return { map, import: imports[0] ?? null, detections };
+    return { map, import: imports[0] ?? null, proposta: (imports[0]?.proposta as PropostaMapa | null | undefined) ?? null };
   }
 
-  async atualizarDeteccoes(eventId: string, versionId: string, corrections: ConfirmMapInput, actor: EventoActor) {
+  private async carregarPropostaEmRevisao(eventId: string, versionId: string, revisaoBase: number, actor: EventoActor) {
     await this.assertEvent(eventId, actor);
     const [map] = await this.db.select().from(eventoMapas).where(and(eq(eventoMapas.id, versionId), eq(eventoMapas.eventId, eventId)));
     if (!map) throw new NotFoundException({ code: "MAP_NOT_FOUND", message: "Versão não encontrada" });
-    if (map.status !== "EM_REVISAO") throw new BadRequestException({ code: "MAP_NOT_IN_REVIEW", message: "Somente mapas em revisão podem ser corrigidos" });
-    if (!corrections.reason?.trim()) throw new BadRequestException({ code: "REASON_REQUIRED", message: "Informe o motivo da correção" });
+    if (map.status !== "EM_REVISAO") throw new BadRequestException({ code: "MAP_NOT_IN_REVIEW", message: "Somente mapas em revisão podem ser alterados" });
     const [imp] = await this.db.select().from(eventoImportacoesMapa).where(eq(eventoImportacoesMapa.mapId, map.id));
-    if (!imp) throw new BadRequestException({ code: "MAP_IMPORT_NOT_FOUND", message: "Importação não encontrada" });
+    const proposta = (imp?.proposta as PropostaMapa | null | undefined) ?? null;
+    if (!imp || !proposta) throw new BadRequestException({ code: "PROPOSTA_INEXISTENTE", message: "Este mapa não tem proposta para conferir." });
+    this.exigirRevisao(proposta, revisaoBase);
+    return { imp, proposta };
+  }
+
+  private exigirRevisao(proposta: PropostaMapa | null | undefined, revisaoBase: number) {
+    if (!proposta) throw new BadRequestException({ code: "PROPOSTA_INEXISTENTE", message: "Este mapa não tem proposta para conferir." });
+    if (proposta.revisao !== revisaoBase) throw new BadRequestException({ code: "PROPOSTA_DESATUALIZADA", message: "Esta conferência foi alterada em outra aba. Recarregue para continuar." });
+  }
+
+  async editarProposta(eventId: string, versionId: string, input: { revisaoBase: number; operacoes: OperacaoProposta[] }, actor: EventoActor): Promise<PropostaMapa> {
+    const { imp, proposta } = await this.carregarPropostaEmRevisao(eventId, versionId, input.revisaoBase, actor);
+    let nova: PropostaMapa;
+    try {
+      nova = aplicarOperacoes(proposta, input.operacoes);
+    } catch (erro) {
+      if (erro instanceof ErroProposta) throw new BadRequestException({ code: erro.code, message: erro.message });
+      throw erro;
+    }
     await this.transaction(async (db) => {
-      for (const seat of corrections.seats) {
-        if (seat.id) await db.update(eventoDeteccoesMapa).set({ proposedRowLabel: seat.rowLabel, proposedSeatNumber: seat.seatNumber, proposedX: seat.x, proposedY: seat.y, proposedCategory: seat.category ?? null, reviewedBy: actor.userId, reviewedAt: new Date(), status: "CORRIGIDA", conflictReason: null }).where(and(eq(eventoDeteccoesMapa.id, seat.id), eq(eventoDeteccoesMapa.importId, imp.id)));
-        else await db.insert(eventoDeteccoesMapa).values({ importId: imp.id, detector: "human-review", confidence: 100, proposedRowLabel: seat.rowLabel, proposedSeatNumber: seat.seatNumber, proposedX: seat.x, proposedY: seat.y, proposedCategory: seat.category ?? null, status: "CORRIGIDA", reviewedBy: actor.userId, reviewedAt: new Date() });
-      }
-      await this.audit(eventId, actor, versionId, { action: "corrigir_deteccoes", reason: corrections.reason, count: corrections.seats.length }, db);
+      const [mapaAtual] = await this.lockRows(db.select().from(eventoMapas).where(and(eq(eventoMapas.id, versionId), eq(eventoMapas.eventId, eventId))));
+      if (!mapaAtual || mapaAtual.status !== "EM_REVISAO") throw new BadRequestException({ code: "MAP_NOT_IN_REVIEW", message: "Somente mapas em revisão podem ser alterados" });
+      const [importacaoAtual] = await this.lockRows(db.select().from(eventoImportacoesMapa).where(eq(eventoImportacoesMapa.id, imp.id)));
+      this.exigirRevisao(importacaoAtual?.proposta as PropostaMapa | null | undefined, input.revisaoBase);
+      await db.update(eventoImportacoesMapa).set({ proposta: nova, updatedAt: new Date() }).where(eq(eventoImportacoesMapa.id, imp.id));
+      await this.audit(eventId, actor, versionId, { action: "editar_proposta", revisao: nova.revisao, operacoes: input.operacoes }, db);
     });
-    return this.revisao(eventId, versionId, actor);
+    return nova;
+  }
+
+  async publicar(eventId: string, versionId: string, input: { revisaoBase: number; motivo?: string }, actor: EventoActor) {
+    const { proposta } = await this.carregarPropostaEmRevisao(eventId, versionId, input.revisaoBase, actor);
+    const pendencias = pendenciasPublicacao(proposta);
+    if (pendencias.length) throw new BadRequestException({ code: "PROPOSTA_COM_PENDENCIAS", message: "Ainda há pontos para conferir antes de publicar.", details: { pendencias } });
+    const { seats, layout } = propostaParaConfirmacao(proposta);
+    return this.confirmar(eventId, versionId, { seats, layout, revisaoEsperada: input.revisaoBase, reason: input.motivo?.trim() || undefined }, actor);
   }
 
   async confirmar(eventId: string, versionId: string, corrections: ConfirmMapInput, actor: EventoActor) {
@@ -239,10 +308,14 @@ export class MapasService {
     const { confirmed, imp, inventory } = await this.transaction(async (db) => {
       const [event] = await this.lockRows(db.select().from(eventos).where(eq(eventos.id, eventId)));
       if (!event) throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Evento não encontrado" });
+      const [mapaTravado] = await this.lockRows(db.select().from(eventoMapas).where(and(eq(eventoMapas.id, map.id), eq(eventoMapas.eventId, eventId))));
+      if (!mapaTravado || mapaTravado.status !== "EM_REVISAO") throw new BadRequestException({ code: "MAP_NOT_IN_REVIEW", message: "Somente mapas em revisão podem ser confirmados" });
+      const [importTravada] = await this.lockRows(db.select().from(eventoImportacoesMapa).where(eq(eventoImportacoesMapa.mapId, map.id)));
+      if (corrections.revisaoEsperada !== undefined) this.exigirRevisao(importTravada?.proposta as PropostaMapa | null | undefined, corrections.revisaoEsperada);
       if (typeof (db as any).delete === "function") await db.delete(eventoMapaAssentos).where(eq(eventoMapaAssentos.mapId, map.id));
-      for (const seat of corrections.seats) await db.insert(eventoMapaAssentos).values({ mapId: map.id, rowLabel: seat.rowLabel, seatNumber: seat.seatNumber, x: seat.x, y: seat.y, width: seat.width ?? 1, height: seat.height ?? 1, category: seat.category ?? null, accessible: seat.accessible ?? false, sellable: seat.sellable ?? true });
-      const [next] = await db.update(eventoMapas).set({ status: "CONFIRMADO", confirmedAt: new Date(), confirmedBy: actor.userId, updatedAt: new Date() }).where(eq(eventoMapas.id, map.id)).returning();
-      const [importRow] = await db.select().from(eventoImportacoesMapa).where(eq(eventoImportacoesMapa.mapId, map.id));
+      for (const seat of corrections.seats) await db.insert(eventoMapaAssentos).values({ mapId: map.id, rowLabel: seat.rowLabel, seatNumber: seat.seatNumber, x: seat.x, y: seat.y, width: seat.width ?? 1, height: seat.height ?? 1, category: seat.category ?? null, accessible: seat.accessible ?? false, sellable: seat.sellable ?? true, ...(seat.metadata ? { metadata: seat.metadata } : {}) });
+      const [next] = await db.update(eventoMapas).set({ status: "CONFIRMADO", ...(corrections.layout ? { layout: corrections.layout } : {}), confirmedAt: new Date(), confirmedBy: actor.userId, updatedAt: new Date() }).where(eq(eventoMapas.id, map.id)).returning();
+      const importRow = importTravada;
       if (importRow) await db.update(eventoImportacoesMapa).set({ status: "CONFIRMADA", reviewedBy: actor.userId, reviewedAt: new Date(), updatedAt: new Date() }).where(eq(eventoImportacoesMapa.id, importRow.id));
       const inventory = event.defaultMapId
         ? await this.sincronizarInventarioMapa(db, eventId, map.id, actor)
@@ -275,6 +348,14 @@ export class MapasService {
     if (!result) throw new NotFoundException({ code: "MAP_NOT_FOUND", message: "Versão não encontrada" });
     if (result.previewFileKey && this.storage) await this.storage.deleteFile(result.previewFileKey).catch(() => undefined);
     return result.map;
+  }
+
+  /** Iguala a capacidade das sessões ao número de lugares vendáveis do mapa. Devolve o valor aplicado ou null se não havia sessão. */
+  private async ajustarCapacidade(db: Database, sessionIds: string[], mapSeats: Array<{ sellable: boolean | null }>): Promise<number | null> {
+    if (!sessionIds.length) return null;
+    const capacity = mapSeats.filter((seat) => seat.sellable !== false).length;
+    await db.update(eventoSessoes).set({ capacity, updatedAt: new Date() }).where(inArray(eventoSessoes.id, sessionIds));
+    return capacity;
   }
 
   async migrarSessoesEExcluir(eventId: string, mapId: string, input: { targetMapId: string; sessionIds?: string[] }, actor: EventoActor): Promise<MapMigrationResult> {
@@ -404,8 +485,9 @@ export class MapasService {
           inventoryCreatedCount += 1;
         }
       }
+      const capacity = await this.ajustarCapacidade(db, migratedSessionIds, targetSeats);
       const storageKeys = [...new Set([oldMap.originalFileKey, oldMap.previewFileKey].filter((key): key is string => typeof key === "string" && key.length > 0))];
-      const metadata = { action: "migrar_sessoes_e_excluir", oldMapId: mapId, targetMapId: input.targetMapId, migratedSessionIds, inheritedSessionIds, inventoryCreatedCount, storageKeys, reason: "migração segura de sessões" };
+      const metadata = { action: "migrar_sessoes_e_excluir", oldMapId: mapId, targetMapId: input.targetMapId, migratedSessionIds, inheritedSessionIds, inventoryCreatedCount, capacity, storageKeys, reason: "migração segura de sessões" };
       await this.audit(eventId, actor, mapId, metadata, db);
       try {
         await db.delete(eventoMapas).where(and(eq(eventoMapas.id, mapId), eq(eventoMapas.eventId, eventId)));
@@ -456,6 +538,7 @@ export class MapasService {
         }
       }
       const inventory = await this.sincronizarInventarioMapa(db, eventId, mapId, actor, inherited.map((session: any) => session.id));
+      const capacity = await this.ajustarCapacidade(db, inherited.map((session: any) => session.id), mapSeats);
       let previousMapArchive: MapReplacementResult["previousMapArchive"] = { archived: false, code: "NO_PREVIOUS_MAP" };
       if (previousMapId) {
         const previousMapQuery = db.select().from(eventoMapas).where(eq(eventoMapas.id, previousMapId));
@@ -481,7 +564,7 @@ export class MapasService {
           if (archived) previousMapArchive = { archived: true, code: "ARCHIVED" };
         }
       }
-      await this.audit(eventId, actor, eventId, { action: "substituir_mapa_padrao", previousMapId, nextMapId: mapId, inheritedSessionIds: inherited.map((session: any) => session.id), inventorySessionIds: inventory.inventorySessionIds, inventoryCreatedCount: inventory.inventoryCreatedCount, previousMapArchive }, db);
+      await this.audit(eventId, actor, eventId, { action: "substituir_mapa_padrao", previousMapId, nextMapId: mapId, inheritedSessionIds: inherited.map((session: any) => session.id), inventorySessionIds: inventory.inventorySessionIds, inventoryCreatedCount: inventory.inventoryCreatedCount, capacity, previousMapArchive }, db);
       return { updated, previousMapId, inheritedSessionIds: inherited.map((session: any) => session.id), inventory, previousMapArchive, previousMapPreviewKey: previousMapId ? (await db.select().from(eventoMapas).where(eq(eventoMapas.id, previousMapId)))[0]?.previewFileKey : null };
     });
     if (result.previousMapArchive.archived && result.previousMapPreviewKey && this.storage) await this.storage.deleteFile(result.previousMapPreviewKey).catch(() => undefined);
