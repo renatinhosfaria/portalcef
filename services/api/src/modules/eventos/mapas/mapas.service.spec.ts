@@ -378,6 +378,61 @@ describe("MapasService", () => {
     expect(result.map).toBeDefined();
   });
 
+  it("sincroniza sessões herdadas e explícitas com idempotência, estados e auditoria", async () => {
+    const dbModule = jest.requireMock("@essencia/db") as typeof import("@essencia/db");
+    const state = {
+      event: { id: "event-1", defaultMapId: "map-1" },
+      sessions: [
+        { id: "session-inherited", eventId: "event-1", mapId: null },
+        { id: "session-specific", eventId: "event-1", mapId: "map-1" },
+        { id: "session-other-map", eventId: "event-1", mapId: "map-2" },
+      ],
+      seats: [
+        { id: "seat-available", mapId: "map-1", sellable: true },
+        { id: "seat-blocked", mapId: "map-1", sellable: false },
+      ],
+      inventory: [
+        { id: "inventory-inherited", sessionId: "session-inherited", seatId: "seat-available", status: "RESERVADO" },
+        { id: "inventory-specific", sessionId: "session-specific", seatId: "seat-blocked", status: "BLOQUEADO", blockedReason: "motivo-existente" },
+      ],
+      audits: [] as any[],
+    };
+    const corresponde = (linha: any, condicao: any): boolean => {
+      if (!condicao) return true;
+      const campo = String(String(condicao.coluna ?? "").split(".").pop() ?? "");
+      return condicao.tipo === "eq" ? linha[campo] === condicao.valor : true;
+    };
+    const db: any = {
+      select: () => ({ from: (table: unknown) => ({ where: (condicao: unknown) => Promise.resolve(
+        table === dbModule.eventos ? [state.event]
+          : table === dbModule.eventoSessoes ? state.sessions
+            : table === dbModule.eventoMapaAssentos ? state.seats
+              : table === dbModule.eventoInventarioAssentos ? state.inventory.filter((linha) => corresponde(linha, condicao))
+                : [],
+      ) }) }),
+      insert: (table: unknown) => ({ values: (values: any) => {
+        if (table === dbModule.eventoInventarioAssentos) state.inventory.push({ id: `inventory-${state.inventory.length + 1}`, ...values });
+        if (table === dbModule.eventoAuditorias) state.audits.push(values);
+        return Promise.resolve();
+      } }),
+    };
+    const maps = new MapasService({ db } as any, undefined, {} as any);
+
+    await maps.sincronizarInventarioMapa(db, "event-1", "map-1", actor);
+
+    expect(state.inventory).toEqual(expect.arrayContaining([
+      expect.objectContaining({ sessionId: "session-inherited", seatId: "seat-available", status: "RESERVADO" }),
+      expect.objectContaining({ sessionId: "session-inherited", seatId: "seat-blocked", status: "BLOQUEADO", blockedReason: "MAPA_ASSENTO_NAO_VENDAVEL" }),
+      expect.objectContaining({ sessionId: "session-specific", seatId: "seat-blocked", status: "BLOQUEADO", blockedReason: "motivo-existente" }),
+      expect.objectContaining({ sessionId: "session-specific", seatId: "seat-available", status: "DISPONIVEL", blockedReason: null }),
+    ]));
+    expect(state.inventory).toHaveLength(4);
+    expect(state.inventory.some((linha) => linha.sessionId === "session-other-map")).toBe(false);
+    expect(state.audits).toEqual([expect.objectContaining({
+      metadata: { action: "gerar_inventario", inventorySessionIds: ["session-inherited", "session-specific"], inventoryCreatedCount: 2 },
+    })]);
+  });
+
   describe("editar e publicar a proposta", () => {
     const propostaValida = (sobrescrever: any = {}) => ({
       versao: 1, revisao: 2, pagina: { numero: 1, largura: 8420, altura: 5950 },
