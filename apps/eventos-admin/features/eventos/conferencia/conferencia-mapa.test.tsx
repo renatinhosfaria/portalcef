@@ -172,6 +172,17 @@ describe("ConferenciaMapa", () => {
     expect(screen.queryByText("3 lugares selecionados")).toBeNull();
   });
 
+  it("usa a fileira do primeiro clique quando a seleção soma B e A", async () => {
+    const user = userEvent.setup();
+    renderizar(propostaComPendencias());
+
+    fireEvent.click(screen.getByRole("button", { name: "B-1, Sem categoria" }));
+    fireEvent.click(screen.getByRole("button", { name: "A-1, Comum" }), { shiftKey: true });
+    await user.click(screen.getByRole("button", { name: "Selecionar fileira inteira" }));
+
+    expect((screen.getByLabelText("Fileira") as HTMLInputElement).value).toBe("B");
+  });
+
   it("confirmar a cor envia CONFIRMAR_LEGENDA e a contagem vem dos lugares atuais", async () => {
     const user = userEvent.setup();
     renderizar(propostaComPendencias());
@@ -285,7 +296,34 @@ describe("ConferenciaMapa", () => {
     proposta.pontos = [{ ...proposta.pontos[0]!, conferido: false }];
     renderizar(proposta);
 
-    expect(screen.getByText("Resolva a 1 pendência para liberar")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Resolva a 1 pendência para liberar/ })).toBeTruthy();
+  });
+
+  it("clicar na pendência de legenda leva ao item da legenda", async () => {
+    const user = userEvent.setup();
+    const rolar = vi.fn();
+    vi.stubGlobal("scrollTo", rolar);
+    HTMLElement.prototype.scrollIntoView = rolar;
+    renderizar(propostaComPendencias());
+
+    const pendencias = screen.getByRole("list", { name: "Pendências para publicar" });
+    await user.click(within(pendencias).getByRole("button", { name: "Abrir pendência 2" }));
+
+    expect(rolar).toHaveBeenCalled();
+    expect(document.activeElement).toBe(screen.getByLabelText("Categoria da cor #c2"));
+  });
+
+  it("clicar na pendência de lugar seleciona o lugar correspondente", async () => {
+    const user = userEvent.setup();
+    const proposta = propostaLimpa();
+    proposta.pontos = proposta.pontos.map((ponto) => ({ ...ponto, conferido: true }));
+    proposta.lugares = proposta.lugares.map((lugar) => (lugar.id === "l1" ? { ...lugar, numero: "" } : lugar));
+    renderizar(proposta);
+
+    await user.click(within(screen.getByRole("list", { name: "Pendências para publicar" })).getByRole("button", { name: "Abrir pendência 1" }));
+
+    expect(screen.getByText("Lugar selecionado")).toBeTruthy();
+    expect((screen.getByLabelText("Número") as HTMLInputElement).value).toBe("");
   });
 
   it("Publicar liberado envia o motivo opcional, uma única vez", async () => {

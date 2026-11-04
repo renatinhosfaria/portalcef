@@ -71,7 +71,9 @@ export function ConferenciaMapa({ eventoId, mapId, propostaInicial, trava, onPub
   );
   // Lugares excluídos saem da seleção sem precisar de efeito.
   const selecionados = useMemo(
-    () => proposta.lugares.filter((lugar) => selecionadosIds.has(lugar.id)),
+    () => Array.from(selecionadosIds)
+      .map((id) => proposta.lugares.find((lugar) => lugar.id === id))
+      .filter((lugar): lugar is (typeof proposta.lugares)[number] => lugar !== undefined),
     [proposta.lugares, selecionadosIds],
   );
   const selecionadosSet = useMemo(() => new Set(selecionados.map((l) => l.id)), [selecionados]);
@@ -318,13 +320,15 @@ export function ConferenciaMapa({ eventoId, mapId, propostaInicial, trava, onPub
             <button type="button" disabled={bloqueadoPorTrava || pendencias.length > 0 || salvando || recarregando} onClick={() => setDialogoAberto(true)} className={BOTAO_PRIMARIO + " w-full"}>
               Publicar mapa
             </button>
-            <p className="text-center text-xs text-[#69736e]" aria-live="polite">
-              {salvando
-                ? "Salvando…"
-                : pendencias.length > 0
-                  ? `Resolva a${pendencias.length === 1 ? " 1 pendência" : `s ${pendencias.length} pendências`} para liberar`
-                  : "Tudo conferido"}
-            </p>
+            {salvando ? (
+              <p className="text-center text-xs text-[#69736e]" aria-live="polite">Salvando…</p>
+            ) : pendencias.length > 0 ? (
+              <button type="button" disabled aria-live="polite" className="w-full border-0 bg-transparent text-center text-xs text-[#69736e]">
+                {`Resolva a${pendencias.length === 1 ? " 1 pendência" : `s ${pendencias.length} pendências`} para liberar`}
+              </button>
+            ) : (
+              <p className="text-center text-xs text-[#69736e]" aria-live="polite">Tudo conferido</p>
+            )}
 
             <button type="button" disabled={bloqueadoPorTrava || reenviando} onClick={pedirOutraPlanta} className={BOTAO_SECUNDARIO + " w-full"}>
               Enviar outra planta

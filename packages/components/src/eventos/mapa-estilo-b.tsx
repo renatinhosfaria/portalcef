@@ -195,15 +195,23 @@ export function MapaEstiloB({
   const larguraPalcoBase = larguraCaixaLugares * 0.6;
   const larguraMinimaPalco = 4 * alturaMediaLugares;
   const dimensoesPalco = (elemento: ElementoPlanta): { largura: number; altura: number } => {
-    const alturaInicial = larguraPalcoBase * 0.14;
-    const yMinimo = elemento.y - 1.5 * alturaInicial;
-    const yMaximo = elemento.y + alturaInicial / 2;
-    const distancias = lugares
-      .filter((lugar) => lugar.y >= yMinimo && lugar.y <= yMaximo)
-      .map((lugar) => Math.abs(lugar.x - elemento.x) - lugar.largura / 2);
-    const menorDistancia = distancias.length > 0 ? Math.min(...distancias) : Number.POSITIVE_INFINITY;
-    const limitePelosLugares = Number.isFinite(menorDistancia) ? 2 * menorDistancia - alturaMediaLugares : larguraPalcoBase;
-    const largura = Math.max(larguraMinimaPalco, Math.min(larguraPalcoBase, limitePelosLugares));
+    // Começa no limite mínimo e só reduz abaixo dele quando a distância até um
+    // lugar próximo não deixa espaço suficiente. Assim o palco não cobre o
+    // centro de um lugar apenas por aplicar `Math.max` ao limite mínimo.
+    let largura = Math.max(larguraPalcoBase, larguraMinimaPalco);
+    for (let tentativa = 0; tentativa < 4; tentativa += 1) {
+      const altura = largura * 0.14;
+      const yMinimo = elemento.y - 1.5 * altura;
+      const yBase = elemento.y + altura / 2;
+      const distancias = lugares
+        .filter((lugar) => lugar.y >= yMinimo && lugar.y <= yBase)
+        .map((lugar) => Math.abs(lugar.x - elemento.x) - lugar.largura / 2);
+      const menorDistancia = distancias.length > 0 ? Math.min(...distancias) : Number.POSITIVE_INFINITY;
+      if (!Number.isFinite(menorDistancia)) break;
+      const larguraSegura = Math.min(larguraPalcoBase, Math.max(0, 2 * menorDistancia - alturaMediaLugares));
+      if (larguraSegura >= largura) break;
+      largura = larguraSegura;
+    }
     return { largura, altura: largura * 0.14 };
   };
   const fonteElemento = Math.max(60, Math.round(altura * 0.018));
