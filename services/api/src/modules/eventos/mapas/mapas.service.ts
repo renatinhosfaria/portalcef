@@ -292,28 +292,47 @@ export class MapasService {
   }
 
   async publicar(eventId: string, versionId: string, input: { revisaoBase: number; motivo?: string }, actor: EventoActor) {
-    const { proposta } = await this.carregarPropostaEmRevisao(eventId, versionId, input.revisaoBase, actor);
-    const pendencias = pendenciasPublicacao(proposta);
-    if (pendencias.length) throw new BadRequestException({ code: "PROPOSTA_COM_PENDENCIAS", message: "Ainda há pontos para conferir antes de publicar.", details: { pendencias } });
-    const { seats, layout } = propostaParaConfirmacao(proposta);
     const motivo = input.motivo?.trim() || undefined;
     return this.transaction(async (db) => {
       const [event] = await this.lockRows(db.select().from(eventos).where(eq(eventos.id, eventId)));
       if (!event) throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Evento não encontrado" });
       if (actor.role !== "master" && event.schoolId !== actor.schoolId) throw new BadRequestException({ code: "FORBIDDEN", message: "Acesso negado" });
-      exigirMapaLivre(await carregarTrava(db, eventId, new Date(), this.lockRows.bind(this)));
 
-      const [map] = await this.lockRows(db.select().from(eventoMapas).where(and(eq(eventoMapas.id, versionId), eq(eventoMapas.eventId, eventId))));
+      const sessoesQuery = db.select().from(eventoSessoes).where(eq(eventoSessoes.eventId, eventId));
+      const sessoesOrdenadas = typeof (sessoesQuery as any).orderBy === "function" ? (sessoesQuery as any).orderBy(asc(eventoSessoes.id)) : sessoesQuery;
+      const sessoes = await this.lockRows<any>(sessoesOrdenadas);
+      const mapasQuery = db.select().from(eventoMapas).where(eq(eventoMapas.eventId, eventId));
+      const mapasOrdenados = typeof (mapasQuery as any).orderBy === "function" ? (mapasQuery as any).orderBy(asc(eventoMapas.id)) : mapasQuery;
+      const mapas = await this.lockRows<any>(mapasOrdenados);
+      const map = mapas.find((item: any) => item.id === versionId);
       if (!map) throw new NotFoundException({ code: "MAP_NOT_FOUND", message: "Versão não encontrada" });
       if (map.status !== "EM_REVISAO") throw new BadRequestException({ code: "MAP_NOT_IN_REVIEW", message: "Somente mapas em revisão podem ser confirmados" });
       const [importacao] = await this.lockRows(db.select().from(eventoImportacoesMapa).where(eq(eventoImportacoesMapa.mapId, versionId)));
-      this.exigirRevisao(importacao?.proposta as PropostaMapa | null | undefined, input.revisaoBase);
+      const proposta = importacao?.proposta as PropostaMapa | null | undefined;
+      this.exigirRevisao(proposta, input.revisaoBase);
+      const propostaValidada = proposta as PropostaMapa;
+      const pendencias = pendenciasPublicacao(propostaValidada);
+      if (pendencias.length) throw new BadRequestException({ code: "PROPOSTA_COM_PENDENCIAS", message: "Ainda há pontos para conferir antes de publicar.", details: { pendencias } });
+      const { seats, layout } = propostaParaConfirmacao(propostaValidada);
+
+      const inventoryQuery = sessoes.length
+        ? db.select().from(eventoInventarioAssentos).where(inArray(eventoInventarioAssentos.sessionId, sessoes.map((sessao: any) => sessao.id)))
+        : db.select().from(eventoInventarioAssentos).where(eq(eventoInventarioAssentos.sessionId, "__nenhuma__"));
+      const inventoryOrdenado = typeof (inventoryQuery as any).orderBy === "function" ? (inventoryQuery as any).orderBy(asc(eventoInventarioAssentos.id)) : inventoryQuery;
+      const inventarioTravado = await this.lockRows<any>(inventoryOrdenado);
+      let pedidosTravados: any[] = [];
+      const lockTrava = async <T>(query: unknown): Promise<T[]> => {
+        const rows = await this.lockRows<T>(query);
+        pedidosTravados = rows as any[];
+        return rows;
+      };
+      const tipoTrava = await carregarTrava(db, eventId, new Date(), lockTrava);
+      exigirMapaLivre(tipoTrava);
 
       const gravada = await this.gravarConfirmacao(db, map, { seats, layout, reason: motivo, actor, importRow: importacao });
       await db.update(eventos).set({ defaultMapId: versionId, updatedAt: new Date() }).where(eq(eventos.id, eventId));
-      const levado = await levarSessoesParaVersao(db, { eventId, versaoId: versionId, agora: new Date(), lockRows: this.lockRows.bind(this) });
+      const levado = await levarSessoesParaVersao(db, { eventId, versaoId: versionId, agora: new Date(), lockRows: this.lockRows.bind(this), sessoesTravadas: sessoes, mapaTravado: map, inventarioTravado, pedidosTravados });
 
-      const mapas = await this.lockRows(db.select().from(eventoMapas).where(eq(eventoMapas.eventId, eventId)));
       const arquivadas: string[] = [];
       for (const anterior of mapas.filter((item: any) => item.id !== versionId && item.status === "CONFIRMADO")) {
         await db.update(eventoMapas).set({ status: "ARQUIVADO", updatedAt: new Date() }).where(and(eq(eventoMapas.id, anterior.id), eq(eventoMapas.eventId, eventId)));
@@ -323,33 +342,6 @@ export class MapasService {
       await this.audit(eventId, actor, versionId, { action: "publicar", versaoId: versionId, sessionIds: levado.sessionIds, capacidade: levado.capacidade, arquivadas, motivo: motivo ?? null }, db);
       return { map: gravada.map, sessionIds: levado.sessionIds, capacidade: levado.capacidade, arquivadas };
     });
-  }
-
-  async confirmar(eventId: string, versionId: string, corrections: ConfirmMapInput, actor: EventoActor) {
-    await this.assertEvent(eventId, actor);
-    const [map] = await this.db.select().from(eventoMapas).where(and(eq(eventoMapas.id, versionId), eq(eventoMapas.eventId, eventId)));
-    if (!map) throw new NotFoundException({ code: "MAP_NOT_FOUND", message: "Versão não encontrada" });
-    if (map.status !== "EM_REVISAO") throw new BadRequestException({ code: "MAP_NOT_IN_REVIEW", message: "Somente mapas em revisão podem ser confirmados" });
-    if (!corrections.seats.length) throw new BadRequestException({ code: "MAP_EMPTY", message: "O mapa precisa de pelo menos um assento" });
-    const unique = new Set(corrections.seats.map((seat) => `${seat.rowLabel}:${seat.seatNumber}`));
-    if (unique.size !== corrections.seats.length) throw new BadRequestException({ code: "MAP_DUPLICATE_SEAT", message: "Existem assentos duplicados" });
-    const { confirmed, imp, inventory } = await this.transaction(async (db) => {
-      const [event] = await this.lockRows(db.select().from(eventos).where(eq(eventos.id, eventId)));
-      if (!event) throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Evento não encontrado" });
-      const [mapaTravado] = await this.lockRows(db.select().from(eventoMapas).where(and(eq(eventoMapas.id, map.id), eq(eventoMapas.eventId, eventId))));
-      if (!mapaTravado || mapaTravado.status !== "EM_REVISAO") throw new BadRequestException({ code: "MAP_NOT_IN_REVIEW", message: "Somente mapas em revisão podem ser confirmados" });
-      const [importTravada] = await this.lockRows(db.select().from(eventoImportacoesMapa).where(eq(eventoImportacoesMapa.mapId, map.id)));
-      if (corrections.revisaoEsperada !== undefined) this.exigirRevisao(importTravada?.proposta as PropostaMapa | null | undefined, corrections.revisaoEsperada);
-      const gravada = await this.gravarConfirmacao(db, mapaTravado, { seats: corrections.seats, layout: corrections.layout, reason: corrections.reason, actor, importRow: importTravada });
-      const next = gravada.map;
-      const importRow = gravada.importRow;
-      const inventory = event.defaultMapId
-        ? await this.sincronizarInventarioMapa(db, eventId, map.id, actor)
-        : { inventorySessionIds: [], inventoryCreatedCount: 0 };
-      await this.audit(eventId, actor, map.id, { action: "confirmar", reason: corrections.reason ?? null, seats: corrections.seats.length }, db);
-      return { confirmed: next, imp: importRow, inventory };
-    });
-    return { map: confirmed ?? map, seats: corrections.seats, ...inventory };
   }
 
   private async gravarConfirmacao(

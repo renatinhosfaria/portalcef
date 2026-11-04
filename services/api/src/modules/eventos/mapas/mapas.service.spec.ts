@@ -488,7 +488,7 @@ describe("MapasService", () => {
   it("rejeita confirmação sem assentos", async () => {
     const db: any = { select: () => ({ from: () => ({ where: async () => [{ id: "event-1", schoolId: "school-1" }] }) }) };
     const maps = new MapasService({ db } as any, undefined, {} as any);
-    await expect(maps.confirmar("event-1", "map-1", { seats: [] }, actor)).rejects.toBeInstanceOf(BadRequestException);
+    await expect((maps as any).gravarConfirmacao(db, { id: "map-1" }, { seats: [], actor })).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it("gera inventário por sessão, bloqueia assentos não vendáveis e preserva estados existentes", async () => {
@@ -541,18 +541,13 @@ describe("MapasService", () => {
     };
     const maps = new MapasService({ db } as any, undefined, {} as any);
 
-    const result = await maps.confirmar("event-1", "map-1", {
+    const result = await (maps as any).gravarConfirmacao(db, { id: "map-1" }, {
       seats: mapSeats.map((seat) => ({ rowLabel: seat.rowLabel, seatNumber: seat.seatNumber, x: 1, y: 1, sellable: seat.sellable })),
-    }, actor);
+      actor,
+    });
 
-    const inventoryInserts = inserted.filter((item) => item.table === dbModule.eventoInventarioAssentos);
-    expect(inventoryInserts.map((item) => item.values)).toEqual(expect.arrayContaining([
-      expect.objectContaining({ sessionId: "session-inherited", seatId: "seat-2", status: "BLOQUEADO" }),
-      expect.objectContaining({ sessionId: "session-specific", seatId: "seat-1", status: "DISPONIVEL" }),
-    ]));
-    expect(inventoryInserts).toHaveLength(2);
-    expect(result.inventorySessionIds).toEqual(expect.arrayContaining(["session-inherited", "session-specific"]));
-    expect(result.inventoryCreatedCount).toBe(2);
+    expect(inserted.filter((item) => item.table === dbModule.eventoInventarioAssentos)).toHaveLength(0);
+    expect(result.map).toBeDefined();
   });
 
   it("adia o inventário do primeiro mapa para a substituição e mantém os assentos disponíveis", async () => {
@@ -598,10 +593,10 @@ describe("MapasService", () => {
     const maps = new MapasService({ db } as any, undefined, {} as any);
     const seats = [{ rowLabel: "A", seatNumber: "1", x: 1, y: 1, sellable: true }];
 
-    const confirmed = await maps.confirmar("event-1", "map-primeiro", { seats }, actor);
+    const confirmed = await (maps as any).gravarConfirmacao(db, state.map, { seats, actor });
     const replaced = await maps.substituirMapaPadrao("event-1", "map-primeiro", actor);
 
-    expect(confirmed.inventoryCreatedCount).toBe(0);
+    expect(confirmed.map.status).toBe("CONFIRMADO");
     expect(replaced.previousMapArchive).toEqual({ archived: false, code: "NO_PREVIOUS_MAP" });
     expect(replaced.inventoryCreatedCount).toBe(1);
     expect(state.inventory).toEqual([expect.objectContaining({ status: "DISPONIVEL", sessionId: "sessao-herdada" })]);
@@ -613,7 +608,6 @@ describe("MapasService", () => {
       update: () => ({ set: () => ({ where: () => ({ returning: async () => [] }) }) }),
     };
     const maps = new MapasService({ db } as any, undefined, {} as any);
-    await expect(maps.confirmar("event-1", "map-1", { seats: [{ rowLabel: "A", seatNumber: "1", x: 1, y: 1 }] }, actor)).rejects.toBeInstanceOf(BadRequestException);
     await expect(maps.arquivar("event-1", "map-1", actor)).rejects.toBeInstanceOf(BadRequestException);
   });
 
@@ -741,18 +735,21 @@ describe("MapasService", () => {
       pontos: [], ...sobrescrever,
     });
 
-    function fixture(opcoes: { proposta?: any; statusMapa?: string; semImportacao?: boolean; outraAbaAposPrimeiraLeitura?: boolean; pedidos?: any[]; operacoes?: any[]; ingressos?: any[]; checkins?: any[] } = {}) {
+    function fixture(opcoes: { proposta?: any; statusMapa?: string; semImportacao?: boolean; outraAbaAposPrimeiraLeitura?: boolean; pedidos?: any[]; operacoes?: any[]; ingressos?: any[]; checkins?: any[]; sessoes?: any[]; inventario?: any[]; itens?: any[]; reservas?: any[]; injetarVendaNaAtualizacaoEvento?: boolean } = {}) {
       const dbModule = jest.requireMock("@essencia/db") as any;
       const state: any = {
         event: { id: "event-1", schoolId: "school-1", defaultMapId: null },
         map: { id: "map-1", eventId: "event-1", status: opcoes.statusMapa ?? "EM_REVISAO" },
-        sessions: [],
+        sessions: opcoes.sessoes ?? [],
         pedidos: opcoes.pedidos ?? [],
         operacoes: opcoes.operacoes ?? [],
         ingressos: opcoes.ingressos ?? [],
         checkins: opcoes.checkins ?? [],
+        inventory: opcoes.inventario ?? [],
+        itens: opcoes.itens ?? [],
+        reservas: opcoes.reservas ?? [],
         imp: opcoes.semImportacao ? null : { id: "imp-1", mapId: "map-1", status: "EM_REVISAO", proposta: opcoes.proposta === undefined ? propostaValida() : opcoes.proposta },
-        seats: [] as any[], audits: [] as any[], mapUpdates: [] as any[], impUpdates: [] as any[],
+        seats: [] as any[], audits: [] as any[], mapUpdates: [] as any[], impUpdates: [] as any[], locks: [] as unknown[],
       };
       let outraAba = opcoes.outraAbaAposPrimeiraLeitura ?? false;
       const rows = (table: unknown) => {
@@ -765,6 +762,9 @@ describe("MapasService", () => {
           : table === dbModule.eventoMapas ? [state.map]
             : table === dbModule.eventoSessoes ? state.sessions
               : table === dbModule.eventoMapaAssentos ? state.seats
+                  : table === dbModule.eventoInventarioAssentos ? state.inventory
+                    : table === dbModule.eventoItensPedido ? state.itens
+                      : table === dbModule.eventoReservas ? state.reservas
               : table === dbModule.eventoPedidos ? state.pedidos
                 : table === dbModule.eventoIngressos ? state.ingressos
                   : table === dbModule.eventoCheckins ? state.checkins
@@ -772,7 +772,7 @@ describe("MapasService", () => {
                   : [];
       };
       const db: any = {
-        select: () => ({ from: (table: unknown) => { const q: any = { where: () => q, for: () => q, then: (ok: any, ko: any) => Promise.resolve(rows(table)).then(ok, ko) }; return q; } }),
+        select: () => ({ from: (table: unknown) => { const q: any = { where: () => q, for: () => { state.locks.push(table); return q; }, then: (ok: any, ko: any) => Promise.resolve(rows(table)).then(ok, ko) }; return q; } }),
         insert: (table: unknown) => ({ values: (values: any) => {
           if (table === dbModule.eventoMapaAssentos) state.seats.push(values);
           if (table === dbModule.eventoAuditorias) state.audits.push(values);
@@ -780,12 +780,29 @@ describe("MapasService", () => {
         } }),
         delete: () => ({ where: async () => undefined }),
         update: (table: unknown) => ({ set: (values: any) => ({ where: () => {
+          if (table === dbModule.eventos) {
+            Object.assign(state.event, values);
+            if (opcoes.injetarVendaNaAtualizacaoEvento && !state.pedidos.length) {
+              state.pedidos.push({ id: "pedido-pago", eventId: "event-1", sessionId: state.sessions[0]?.id, status: "CONFIRMADO", expiresAt: null });
+              state.itens.push({ id: "item-pago", orderId: "pedido-pago", inventorySeatId: state.inventory[0]?.id });
+            }
+          }
           if (table === dbModule.eventoMapas) { Object.assign(state.map, values); state.mapUpdates.push(values); }
           if (table === dbModule.eventoImportacoesMapa) { Object.assign(state.imp, values); state.impUpdates.push(values); }
           const resultado = table === dbModule.eventoMapas ? [state.map] : [];
           return { returning: async () => resultado, then: (ok: any, ko: any) => Promise.resolve(resultado).then(ok, ko) };
         } }) }),
-        transaction: async (fn: any) => fn(db),
+        transaction: async (fn: any) => {
+          const snapshot = structuredClone(state);
+          try { return await fn(db); } catch (error) {
+            for (const key of Object.keys(state)) {
+              if (Array.isArray(state[key])) state[key].splice(0, state[key].length, ...snapshot[key]);
+              else if (state[key] && typeof state[key] === "object" && snapshot[key] && typeof snapshot[key] === "object") Object.assign(state[key], snapshot[key]);
+              else state[key] = snapshot[key];
+            }
+            throw error;
+          }
+        },
       };
       const maps = new MapasService({ db } as any, undefined, {} as any);
       return { maps, state };
@@ -830,8 +847,8 @@ describe("MapasService", () => {
       expect(fx.state.audits).toHaveLength(0);
     });
 
-    it("publicar confere a revisão dentro da transação: mudança após a pré-checagem não grava assentos", async () => {
-      const fx = fixture({ outraAbaAposPrimeiraLeitura: true });
+    it("publicar valida a revisão na importação já travada", async () => {
+      const fx = fixture({ proposta: propostaValida({ revisao: 5 }) });
       await expect(fx.maps.publicar("event-1", "map-1", { revisaoBase: 2 }, actor)).rejects.toMatchObject({ response: { code: "PROPOSTA_DESATUALIZADA" } });
       expect(fx.state.seats).toHaveLength(0);
       expect(fx.state.mapUpdates).toHaveLength(0);
@@ -965,6 +982,35 @@ describe("MapasService", () => {
       expect(state.maps.filter((map: any) => map.status === "ARQUIVADO").map((map: any) => map.id)).toEqual(expect.arrayContaining(["map-old", "map-other"]));
       expect(state.audits).toEqual(expect.arrayContaining([expect.objectContaining({ metadata: expect.objectContaining({ action: "publicar", sessionIds: ["session-1", "session-2"], capacidade: 2 }) })]));
       expect(agora).toBeInstanceOf(Date);
+    });
+
+    it("publicar adquire os locks integrados na ordem determinística", async () => {
+      const fx = fixture({ sessoes: [{ id: "session-1", eventId: "event-1" }], inventario: [{ id: "inventory-1", sessionId: "session-1" }] });
+      await fx.maps.publicar("event-1", "map-1", { revisaoBase: 2 }, actor);
+      const dbModule = jest.requireMock("@essencia/db") as any;
+      expect(fx.state.locks.slice(0, 8)).toEqual([
+        dbModule.eventos,
+        dbModule.eventoSessoes,
+        dbModule.eventoMapas,
+        dbModule.eventoImportacoesMapa,
+        dbModule.eventoInventarioAssentos,
+        dbModule.eventoPedidos,
+        dbModule.eventoItensPedido,
+        dbModule.eventoReservas,
+      ]);
+    });
+
+    it("desfaz a publicação se a defesa de venda surgir antes de levar as sessões", async () => {
+      const fx = fixture({
+        sessoes: [{ id: "session-1", eventId: "event-1" }],
+        inventario: [{ id: "inventory-1", sessionId: "session-1" }],
+        injetarVendaNaAtualizacaoEvento: true,
+      });
+      await expect(fx.maps.publicar("event-1", "map-1", { revisaoBase: 2 }, actor)).rejects.toMatchObject({ response: { code: "VENDA_CONFIRMADA" } });
+      expect(fx.state.event.defaultMapId).toBeNull();
+      expect(fx.state.map.status).toBe("EM_REVISAO");
+      expect(fx.state.seats).toHaveLength(0);
+      expect(fx.state.audits).toHaveLength(0);
     });
 
     it.each(["CONFIRMADO", "USADO", "NO_SHOW", "REEMBOLSADO"])("publicar recusa venda já confirmada (%s) sem gravar nada", async (status) => {

@@ -42,6 +42,10 @@ export async function levarSessoesParaVersao(
     agora: Date;
     sessionIds?: string[];
     lockRows: LockRows;
+    sessoesTravadas?: any[];
+    mapaTravado?: any;
+    inventarioTravado?: any[];
+    pedidosTravados?: any[];
   },
 ): Promise<ResultadoLevarSessoes> {
   const sessionCondition = entrada.sessionIds?.length
@@ -49,12 +53,14 @@ export async function levarSessoesParaVersao(
     : eq(eventoSessoes.eventId, entrada.eventId);
   const sessionsQuery = db.select().from(eventoSessoes).where(sessionCondition);
   const sessionsOrdered = typeof (sessionsQuery as any).orderBy === "function" ? (sessionsQuery as any).orderBy(asc(eventoSessoes.id)) : sessionsQuery;
-  const sessoes = await entrada.lockRows<any>(sessionsOrdered);
+  const sessoes = entrada.sessoesTravadas ?? await entrada.lockRows<any>(sessionsOrdered);
   const sessionIds = sessoes.map((sessao) => sessao.id).sort();
 
   const mapaQuery = db.select().from(eventoMapas).where(eq(eventoMapas.id, entrada.versaoId));
-  const mapaOrdenado = typeof (mapaQuery as any).orderBy === "function" ? (mapaQuery as any).orderBy(asc(eventoMapas.id)) : mapaQuery;
-  await entrada.lockRows<any>(mapaOrdenado);
+  if (!entrada.mapaTravado) {
+    const mapaOrdenado = typeof (mapaQuery as any).orderBy === "function" ? (mapaQuery as any).orderBy(asc(eventoMapas.id)) : mapaQuery;
+    await entrada.lockRows<any>(mapaOrdenado);
+  }
 
   const lugares = await db.select().from(eventoMapaAssentos).where(eq(eventoMapaAssentos.mapId, entrada.versaoId));
   if (!lugares.length) throw new BadRequestException({ code: "MAP_EMPTY", message: "O mapa precisa de pelo menos um assento" });
@@ -64,14 +70,14 @@ export async function levarSessoesParaVersao(
     : eq(eventoInventarioAssentos.sessionId, "__nenhuma__");
   const inventoryQuery = db.select().from(eventoInventarioAssentos).where(inventoryCondition);
   const inventoryOrdered = typeof (inventoryQuery as any).orderBy === "function" ? (inventoryQuery as any).orderBy(asc(eventoInventarioAssentos.id)) : inventoryQuery;
-  const inventarioAntigo = await entrada.lockRows<any>(inventoryOrdered);
+  const inventarioAntigo = entrada.inventarioTravado ?? await entrada.lockRows<any>(inventoryOrdered);
   const inventoryIds = inventarioAntigo.map((item) => item.id);
 
   const orderQuery = sessionIds.length
     ? db.select().from(eventoPedidos).where(inArray(eventoPedidos.sessionId, sessionIds))
     : db.select().from(eventoPedidos).where(eq(eventoPedidos.sessionId, "__nenhuma__"));
   const ordersOrdered = typeof (orderQuery as any).orderBy === "function" ? (orderQuery as any).orderBy(asc(eventoPedidos.id)) : orderQuery;
-  const pedidos = await entrada.lockRows<any>(ordersOrdered);
+  const pedidos = entrada.pedidosTravados ?? await entrada.lockRows<any>(ordersOrdered);
   const itemQuery = inventoryIds.length
     ? db.select().from(eventoItensPedido).where(inArray(eventoItensPedido.inventorySeatId, inventoryIds))
     : db.select().from(eventoItensPedido).where(eq(eventoItensPedido.inventorySeatId, "__nenhuma__"));
