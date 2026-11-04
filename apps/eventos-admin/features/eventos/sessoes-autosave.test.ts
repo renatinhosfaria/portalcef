@@ -15,9 +15,7 @@ function sessao(partial: Partial<SessaoValue> = {}): SessaoValue {
     salesStartsAt: "2026-10-01T10:00",
     salesEndsAt: "2026-10-31T10:00",
     inheritLocation: true,
-    inheritMap: true,
     locationId: null,
-    mapId: null,
     ...partial,
   };
 }

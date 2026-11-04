@@ -11,11 +11,10 @@ export function construirPayloadInformacoes(value: InformacoesValue) {
   return { title: value.title, slug: value.slug, summary: value.summary?.trim() || null, description: value.description, imageUrl: value.imageUrl?.trim() || null, category: value.category?.trim() || null, contactEmail: value.contactEmail, contactPhone: value.contactPhone?.trim() || null, cancellationPolicy: value.cancellationPolicy };
 }
 
-export type SessaoValue = { id?: string; clientId?: string; startsAt: string; endsAt: string; capacity: number; salesStartsAt: string; salesEndsAt: string; inheritLocation: boolean; inheritMap: boolean; locationId?: string | null; mapId?: string | null };
+export type SessaoValue = { id?: string; clientId?: string; startsAt: string; endsAt: string; capacity: number; salesStartsAt: string; salesEndsAt: string; inheritLocation: boolean; locationId?: string | null };
 export function construirPayloadSessao(value: SessaoValue | SessionDraftState) {
   const inheritLocation = "locationMode" in value ? value.locationMode === "default" : value.inheritLocation;
-  const inheritMap = "mapMode" in value ? value.mapMode === "default" : value.inheritMap;
-  return { startsAt: value.startsAt, endsAt: value.endsAt, capacity: Number(value.capacity), salesStartsAt: value.salesStartsAt || null, salesEndsAt: value.salesEndsAt || null, locationId: inheritLocation ? null : (value.locationId || null), mapId: inheritMap ? null : (value.mapId || null) };
+  return { startsAt: value.startsAt, endsAt: value.endsAt, capacity: Number(value.capacity), salesStartsAt: value.salesStartsAt || null, salesEndsAt: value.salesEndsAt || null, locationId: inheritLocation ? null : (value.locationId || null) };
 }
 
 export function mesclarSessaoSalva(local: SessaoValue, saved: { id?: string }) { return { ...local, ...(saved.id ? { id: saved.id } : {}) }; }

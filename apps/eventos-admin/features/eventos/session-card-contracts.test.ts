@@ -10,9 +10,7 @@ const baseDraft: SessionDraftState = {
   salesStartsAt: "2026-10-01T10:00",
   salesEndsAt: "2026-11-01T09:00",
   locationMode: "default",
-  mapMode: "default",
   locationId: null,
-  mapId: null,
 };
 
 describe("contrato do cartão de sessão", () => {
@@ -25,9 +23,7 @@ describe("contrato do cartão de sessão", () => {
       salesStartsAt: "2026-11-01T11:00",
       salesEndsAt: "2026-11-01T10:00",
       locationMode: "custom",
-      mapMode: "custom",
       locationId: null,
-      mapId: null,
     });
 
     expect(result.ok).toBe(false);
@@ -36,7 +32,6 @@ describe("contrato do cartão de sessão", () => {
       endsAt: expect.any(String),
       capacity: expect.any(String),
       location: expect.any(String),
-      map: expect.any(String),
     }));
   });
 
@@ -67,8 +62,9 @@ describe("contrato do cartão de sessão", () => {
     expect(validarSessao({ ...baseDraft, capacity: 0 }).errors.capacity).toBeTruthy();
   });
 
-  it("converte os modos visuais em IDs do payload", () => {
-    expect(construirPayloadSessao({ ...baseDraft, locationMode: "default", mapMode: "default", locationId: "local-1", mapId: "mapa-1" })).toEqual(expect.objectContaining({ locationId: null, mapId: null }));
-    expect(construirPayloadSessao({ ...baseDraft, locationMode: "custom", mapMode: "custom", locationId: "local-1", mapId: "mapa-1" })).toEqual(expect.objectContaining({ locationId: "local-1", mapId: "mapa-1" }));
+  it("não envia mapa no payload da sessão", () => {
+    expect(construirPayloadSessao({ ...baseDraft, locationMode: "default", locationId: "local-1" })).toEqual(expect.objectContaining({ locationId: null }));
+    expect(construirPayloadSessao({ ...baseDraft, locationMode: "custom", locationId: "local-1" })).toEqual(expect.objectContaining({ locationId: "local-1" }));
+    expect(construirPayloadSessao({ ...baseDraft, locationMode: "custom", locationId: "local-1" })).not.toHaveProperty("mapId");
   });
 });

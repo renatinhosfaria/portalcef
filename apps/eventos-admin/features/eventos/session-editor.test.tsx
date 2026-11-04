@@ -13,11 +13,6 @@ const options: SessionOptions = {
     { id: "local-padrao", name: "Auditório Principal", address: "Rua das Flores, 10", room: "Sala 1" },
     { id: "local-quadra", name: "Quadra Coberta", address: "Rua das Flores, 12", room: null },
   ],
-  defaultMap: { id: "mapa-padrao", version: 3, status: "CONFIRMADO", originalFileName: "auditório-v3.csv" },
-  maps: [
-    { id: "mapa-padrao", version: 3, status: "CONFIRMADO", originalFileName: "auditório-v3.csv" },
-    { id: "mapa-alternativo", version: 2, status: "CONFIRMADO", originalFileName: "quadra-v2.csv" },
-  ],
 };
 
 const pronta: SessionValue = {
@@ -28,23 +23,19 @@ const pronta: SessionValue = {
   salesStartsAt: "2026-10-01T10:00",
   salesEndsAt: "2026-11-01T09:00",
   inheritLocation: true,
-  inheritMap: true,
   locationId: null,
-  mapId: null,
 };
 
 describe("SessionEditor", () => {
   it("renderiza cartões guiados com opções legíveis e blocos de preenchimento", () => {
-    const html = renderToStaticMarkup(<SessionEditor initialValue={[{ ...pronta, inheritLocation: false, inheritMap: false, locationId: "local-quadra", mapId: "mapa-alternativo" }]} options={options} />);
+    const html = renderToStaticMarkup(<SessionEditor initialValue={[{ ...pronta, inheritLocation: false, locationId: "local-quadra" }]} options={options} />);
 
     expect(html).toContain("Sessão 1");
     expect(html).toContain("Quando acontece");
     expect(html).toContain("Capacidade e vendas");
     expect(html).toContain("Local");
-    expect(html).toContain("Mapa de assentos");
+    expect(html).not.toContain("Mapa de assentos");
     expect(html).toContain("Quadra Coberta");
-    expect(html).toContain("Mapa v2");
-    expect(html).toContain("quadra-v2.csv");
     expect(html).toContain("Pronta");
   });
 
@@ -53,8 +44,6 @@ describe("SessionEditor", () => {
 
     expect(html).toContain("Usar local padrão");
     expect(html).toContain("Auditório Principal");
-    expect(html).toContain("Usar mapa padrão");
-    expect(html).toContain("auditório-v3.csv");
     expect(html).toContain('value="default"');
     expect(html).toContain('checked=""');
     expect(html).not.toContain('aria-label="Local da exceção"');
@@ -84,12 +73,10 @@ describe("SessionEditor", () => {
   });
 
   it("expande seletores avançados somente ao escolher uma exceção", () => {
-    const html = renderToStaticMarkup(<SessionEditor initialValue={[{ ...pronta, inheritLocation: false, inheritMap: false, locationId: "local-quadra", mapId: "mapa-alternativo" }]} options={options} />);
+    const html = renderToStaticMarkup(<SessionEditor initialValue={[{ ...pronta, inheritLocation: false, locationId: "local-quadra" }]} options={options} />);
 
     expect(html).toContain('aria-label="Local da exceção"');
-    expect(html).toContain('aria-label="Mapa da exceção"');
     expect(html).toContain("Escolha um local específico");
-    expect(html).toContain("Escolha um mapa específico");
   });
 
   it("exibe a pendência específica quando a sessão está incompleta", () => {
@@ -101,14 +88,12 @@ describe("SessionEditor", () => {
   });
 
   it("mantém IDs e modos visuais no valor emitido ao autosave", () => {
-    const draft = sessionValueToDraft({ ...pronta, inheritLocation: false, inheritMap: false, locationId: "local-quadra", mapId: "mapa-alternativo" });
+    const draft = sessionValueToDraft({ ...pronta, inheritLocation: false, locationId: "local-quadra" });
 
     expect(sessionDraftToValue(draft)).toMatchObject({
       id: "sessao-1",
       inheritLocation: false,
-      inheritMap: false,
       locationId: "local-quadra",
-      mapId: "mapa-alternativo",
     });
   });
 

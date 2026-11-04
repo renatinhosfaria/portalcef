@@ -34,9 +34,7 @@ const sessaoComExcecao = {
   salesStartsAt: "2026-10-01T10:00:00.000Z",
   salesEndsAt: "2026-11-01T09:00:00.000Z",
   inheritLocation: false,
-  inheritMap: false,
   locationId: localExcecao.id,
-  mapId: "mapa-padrao",
 };
 
 function envelope(data: unknown) {
@@ -47,9 +45,7 @@ function opcoes(defaultLocation: typeof localPrincipal | null = null) {
   return {
     defaultLocation,
     locations: [localPrincipal, localExcecao],
-    defaultMap: { id: "mapa-padrao", version: 1, status: "CONFIRMADO", originalFileName: "mapa.csv" },
-    maps: [{ id: "mapa-padrao", version: 1, status: "CONFIRMADO", originalFileName: "mapa.csv" }],
-  };
+      };
 }
 
 function locais(defaultLocationId: string | null = null) {
@@ -98,6 +94,11 @@ describe("integração comportamental de locais e sessões", () => {
 });
 
 describe("etapa de sessões", () => {
+  it("mantém a sessão pronta quando o evento ainda não tem mapa", () => {
+    const options = { defaultLocation: localPrincipal, locations: [localPrincipal] };
+    expect(sessaoProntaParaSalvar(sessionValueToDraft({ ...sessaoComExcecao, inheritLocation: true, locationId: null }), options)).toBe(true);
+  });
+
   it("carrega locais e integra o gerenciador acima dos cartões", () => {
     expect(source).toContain("EventLocationManager");
     expect(source).toContain("buscarDadosWorkspace");
@@ -118,8 +119,8 @@ describe("etapa de sessões", () => {
     expect(source).toContain("buscarDadosWorkspace");
     expect(source).toContain("SessionOptions");
     expect(source).toContain("optionsLoading");
-    expect(source).toContain("Carregando opções de local e mapa");
-    expect(source).toContain("Erro ao carregar opções de local e mapa");
+    expect(source).toContain("Carregando opções de local");
+    expect(source).toContain("Erro ao carregar opções de local");
     expect(source).toContain("options={options ?? EMPTY_OPTIONS}");
   });
 
