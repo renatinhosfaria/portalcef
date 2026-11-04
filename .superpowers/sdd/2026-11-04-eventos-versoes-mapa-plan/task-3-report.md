@@ -18,4 +18,11 @@
 - A função pressupõe que a transação chamadora já tenha aplicado a trava do evento e `exigirMapaLivre`, conforme o contrato da tarefa.
 - A suíte completa exibe avisos de lint e logs de erros esperados em testes existentes, sem falhas.
 
+## Correção round 1
+
+- Incluída a trava determinística da versão em `eventoMapas`, entre a trava das sessões e a trava do inventário, respeitando a ordem global de locks.
+- Adicionado teste que registra as chamadas de `lockRows` e verifica a sequência sessões → mapas → inventário.
+- RED da correção confirmado removendo temporariamente a trava: o teste falhou na ordem esperada.
+- GREEN: `pnpm --filter @essencia/api test -- src/modules/eventos/mapas/levar-sessoes.spec.ts` — 7 testes passaram.
+
 Atualizado em: 2026-11-04

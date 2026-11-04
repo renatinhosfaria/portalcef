@@ -2,6 +2,7 @@ import {
   eventoInventarioAssentos,
   eventoItensPedido,
   eventoMapaAssentos,
+  eventoMapas,
   eventoPedidos,
   eventoReservas,
   eventoSessoes,
@@ -12,6 +13,7 @@ import { levarSessoesParaVersao } from "./levar-sessoes";
 type Estado = {
   sessoes: any[];
   assentos: any[];
+  mapas: any[];
   inventario: any[];
   pedidos: any[];
   itens: any[];
@@ -20,7 +22,7 @@ type Estado = {
 
 function bancoEmMemoria(estado: Estado) {
   const dbModule = jest.requireMock("@essencia/db") as any;
-  const linhas = (tabela: unknown) => tabela === eventoSessoes ? estado.sessoes : tabela === eventoMapaAssentos ? estado.assentos : tabela === eventoInventarioAssentos ? estado.inventario : tabela === eventoPedidos ? estado.pedidos : tabela === eventoItensPedido ? estado.itens : tabela === eventoReservas ? estado.reservas : [];
+  const linhas = (tabela: unknown) => tabela === eventoSessoes ? estado.sessoes : tabela === eventoMapas ? estado.mapas : tabela === eventoMapaAssentos ? estado.assentos : tabela === eventoInventarioAssentos ? estado.inventario : tabela === eventoPedidos ? estado.pedidos : tabela === eventoItensPedido ? estado.itens : tabela === eventoReservas ? estado.reservas : [];
   const combinar = (condicao: any, linha: any): boolean => {
     if (!condicao) return true;
     if (condicao.name === "and") return condicao.args.every((item: any) => combinar(item, linha));
@@ -53,15 +55,28 @@ function bancoEmMemoria(estado: Estado) {
       return [{ ...valores }];
     } }),
   };
-  const lockRows = async <T>(query: any) => (await query) as T[];
-  return { db, lockRows };
+  const ordem: unknown[] = [];
+  const lockRows = async <T>(query: any) => {
+    ordem.push(query.__tabela);
+    return (await query) as T[];
+  };
+  return { db, lockRows, ordem };
 }
 
 const agora = new Date("2026-11-04T12:00:00Z");
 
 describe("levar sessões para uma versão", () => {
+  it("trava sessões, mapa e inventário nessa ordem", async () => {
+    const estado: Estado = { sessoes: [{ id: "s1", eventId: "e1" }], mapas: [{ id: "v1" }], assentos: [{ id: "a1", mapId: "v1", sellable: true }], inventario: [], pedidos: [], itens: [], reservas: [] };
+    const banco = bancoEmMemoria(estado);
+    await levarSessoesParaVersao(banco.db, { eventId: "e1", versaoId: "v1", agora, lockRows: banco.lockRows });
+    expect(banco.ordem[0]).toBe(eventoSessoes);
+    expect(banco.ordem[1]).toBe(eventoMapas);
+    expect(banco.ordem[2]).toBe(eventoInventarioAssentos);
+  });
+
   it("leva todas as sessões, refaz o inventário e ajusta a capacidade", async () => {
-    const estado: Estado = { sessoes: [{ id: "s1", eventId: "e1", mapId: "antigo", capacity: 9 }, { id: "s2", eventId: "e1", mapId: "antigo", capacity: 9 }], assentos: [{ id: "a1", mapId: "v1", sellable: true }, { id: "a2", mapId: "v1", sellable: false }, { id: "a3", mapId: "v1", sellable: true }], inventario: [{ id: "i1", sessionId: "s1", seatId: "velho", status: "DISPONIVEL" }], pedidos: [], itens: [], reservas: [] };
+    const estado: Estado = { sessoes: [{ id: "s1", eventId: "e1", mapId: "antigo", capacity: 9 }, { id: "s2", eventId: "e1", mapId: "antigo", capacity: 9 }], mapas: [{ id: "v1" }], assentos: [{ id: "a1", mapId: "v1", sellable: true }, { id: "a2", mapId: "v1", sellable: false }, { id: "a3", mapId: "v1", sellable: true }], inventario: [{ id: "i1", sessionId: "s1", seatId: "velho", status: "DISPONIVEL" }], pedidos: [], itens: [], reservas: [] };
     const banco = bancoEmMemoria(estado);
     const resultado = await levarSessoesParaVersao(banco.db, { eventId: "e1", versaoId: "v1", agora, lockRows: banco.lockRows });
     expect(resultado).toEqual({ sessionIds: ["s1", "s2"], inventarioCriado: 6, capacidade: 2, pedidosDesligados: [] });
@@ -71,7 +86,7 @@ describe("levar sessões para uma versão", () => {
   });
 
   it("desliga tentativa encerrada e marca o pedido aberto vencido como EXPIRADO", async () => {
-    const estado: Estado = { sessoes: [{ id: "s1", eventId: "e1" }], assentos: [{ id: "a1", mapId: "v1", sellable: true }], inventario: [{ id: "i1", sessionId: "s1", seatId: "a1", status: "RESERVADO" }], pedidos: [{ id: "p1", sessionId: "s1", status: "AGUARDANDO_PAGAMENTO", expiresAt: new Date("2026-11-04T11:00:00Z") }], itens: [{ id: "item1", orderId: "p1", inventorySeatId: "i1" }], reservas: [{ id: "res1", orderId: "p1", inventorySeatId: "i1" }] };
+    const estado: Estado = { sessoes: [{ id: "s1", eventId: "e1" }], mapas: [{ id: "v1" }], assentos: [{ id: "a1", mapId: "v1", sellable: true }], inventario: [{ id: "i1", sessionId: "s1", seatId: "a1", status: "RESERVADO" }], pedidos: [{ id: "p1", sessionId: "s1", status: "AGUARDANDO_PAGAMENTO", expiresAt: new Date("2026-11-04T11:00:00Z") }], itens: [{ id: "item1", orderId: "p1", inventorySeatId: "i1" }], reservas: [{ id: "res1", orderId: "p1", inventorySeatId: "i1" }] };
     const banco = bancoEmMemoria(estado);
     const resultado = await levarSessoesParaVersao(banco.db, { eventId: "e1", versaoId: "v1", agora, lockRows: banco.lockRows });
     expect(resultado.pedidosDesligados).toEqual(["p1"]);
@@ -81,7 +96,7 @@ describe("levar sessões para uma versão", () => {
   });
 
   it("mantém o registro do pedido CANCELADO e só apaga itens e reservas", async () => {
-    const estado: Estado = { sessoes: [{ id: "s1", eventId: "e1" }], assentos: [{ id: "a1", mapId: "v1", sellable: true }], inventario: [{ id: "i1", sessionId: "s1", seatId: "a1" }], pedidos: [{ id: "p1", sessionId: "s1", status: "CANCELADO", expiresAt: null }], itens: [{ id: "item1", orderId: "p1", inventorySeatId: "i1" }], reservas: [{ id: "res1", orderId: "p1", inventorySeatId: "i1" }] };
+    const estado: Estado = { sessoes: [{ id: "s1", eventId: "e1" }], mapas: [{ id: "v1" }], assentos: [{ id: "a1", mapId: "v1", sellable: true }], inventario: [{ id: "i1", sessionId: "s1", seatId: "a1" }], pedidos: [{ id: "p1", sessionId: "s1", status: "CANCELADO", expiresAt: null }], itens: [{ id: "item1", orderId: "p1", inventorySeatId: "i1" }], reservas: [{ id: "res1", orderId: "p1", inventorySeatId: "i1" }] };
     const banco = bancoEmMemoria(estado);
     await levarSessoesParaVersao(banco.db, { eventId: "e1", versaoId: "v1", agora, lockRows: banco.lockRows });
     expect(estado.pedidos[0].status).toBe("CANCELADO");
@@ -90,13 +105,13 @@ describe("levar sessões para uma versão", () => {
   });
 
   it("recusa com VENDA_CONFIRMADA se um item pertence a pedido pago", async () => {
-    const estado: Estado = { sessoes: [{ id: "s1", eventId: "e1" }], assentos: [{ id: "a1", mapId: "v1", sellable: true }], inventario: [{ id: "i1", sessionId: "s1", seatId: "a1" }], pedidos: [{ id: "p1", sessionId: "s1", status: "CONFIRMADO", expiresAt: null }], itens: [{ id: "item1", orderId: "p1", inventorySeatId: "i1" }], reservas: [] };
+    const estado: Estado = { sessoes: [{ id: "s1", eventId: "e1" }], mapas: [{ id: "v1" }], assentos: [{ id: "a1", mapId: "v1", sellable: true }], inventario: [{ id: "i1", sessionId: "s1", seatId: "a1" }], pedidos: [{ id: "p1", sessionId: "s1", status: "CONFIRMADO", expiresAt: null }], itens: [{ id: "item1", orderId: "p1", inventorySeatId: "i1" }], reservas: [] };
     const banco = bancoEmMemoria(estado);
     await expect(levarSessoesParaVersao(banco.db, { eventId: "e1", versaoId: "v1", agora, lockRows: banco.lockRows })).rejects.toMatchObject({ response: { code: "VENDA_CONFIRMADA" } });
   });
 
   it("leva só as sessões pedidas quando sessionIds é informado", async () => {
-    const estado: Estado = { sessoes: [{ id: "s1", eventId: "e1", mapId: "a" }, { id: "s2", eventId: "e1", mapId: "a" }], assentos: [{ id: "a1", mapId: "v1", sellable: true }], inventario: [], pedidos: [], itens: [], reservas: [] };
+    const estado: Estado = { sessoes: [{ id: "s1", eventId: "e1", mapId: "a" }, { id: "s2", eventId: "e1", mapId: "a" }], mapas: [{ id: "v1" }], assentos: [{ id: "a1", mapId: "v1", sellable: true }], inventario: [], pedidos: [], itens: [], reservas: [] };
     const banco = bancoEmMemoria(estado);
     const resultado = await levarSessoesParaVersao(banco.db, { eventId: "e1", versaoId: "v1", agora, sessionIds: ["s2"], lockRows: banco.lockRows });
     expect(resultado.sessionIds).toEqual(["s2"]);
@@ -104,7 +119,7 @@ describe("levar sessões para uma versão", () => {
   });
 
   it("evento sem sessão devolve capacidade null", async () => {
-    const estado: Estado = { sessoes: [], assentos: [{ id: "a1", mapId: "v1", sellable: true }], inventario: [], pedidos: [], itens: [], reservas: [] };
+    const estado: Estado = { sessoes: [], mapas: [{ id: "v1" }], assentos: [{ id: "a1", mapId: "v1", sellable: true }], inventario: [], pedidos: [], itens: [], reservas: [] };
     const banco = bancoEmMemoria(estado);
     await expect(levarSessoesParaVersao(banco.db, { eventId: "e1", versaoId: "v1", agora, lockRows: banco.lockRows })).resolves.toMatchObject({ sessionIds: [], inventarioCriado: 0, capacidade: null });
   });

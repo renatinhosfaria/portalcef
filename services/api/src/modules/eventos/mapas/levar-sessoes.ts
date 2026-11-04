@@ -6,6 +6,7 @@ import {
   eventoInventarioAssentos,
   eventoItensPedido,
   eventoMapaAssentos,
+  eventoMapas,
   eventoPedidos,
   eventoReservas,
   eventoSessoes,
@@ -50,6 +51,10 @@ export async function levarSessoesParaVersao(
   const sessionsOrdered = typeof (sessionsQuery as any).orderBy === "function" ? (sessionsQuery as any).orderBy(asc(eventoSessoes.id)) : sessionsQuery;
   const sessoes = await entrada.lockRows<any>(sessionsOrdered);
   const sessionIds = sessoes.map((sessao) => sessao.id).sort();
+
+  const mapaQuery = db.select().from(eventoMapas).where(eq(eventoMapas.id, entrada.versaoId));
+  const mapaOrdenado = typeof (mapaQuery as any).orderBy === "function" ? (mapaQuery as any).orderBy(asc(eventoMapas.id)) : mapaQuery;
+  await entrada.lockRows<any>(mapaOrdenado);
 
   const lugares = await db.select().from(eventoMapaAssentos).where(eq(eventoMapaAssentos.mapId, entrada.versaoId));
   if (!lugares.length) throw new BadRequestException({ code: "MAP_EMPTY", message: "O mapa precisa de pelo menos um assento" });
