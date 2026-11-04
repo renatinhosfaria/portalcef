@@ -8,6 +8,13 @@ import { ErroProposta, aplicarOperacoes, pendenciasPublicacao, type LayoutMapa, 
 import { GeradorMapaPdf } from "./gerador/gerador-mapa-pdf";
 import { propostaParaConfirmacao } from "./gerador/proposta-para-confirmacao";
 
+/**
+ * Teto de tamanho da planta em PDF. O pdf.js lê o arquivo inteiro na memória da API e roda no mesmo
+ * processo das demais requisições, então um PDF enorme pode travar tudo. Plantas vetoriais exportadas
+ * do programa de desenho ficam muito abaixo disso.
+ */
+export const MAX_PLANTA_PDF_BYTES = 10 * 1024 * 1024;
+
 export interface ConfirmMapInput { seats: Array<{ id?: string; rowLabel: string; seatNumber: string; x: number; y: number; width?: number; height?: number; category?: string | null; accessible?: boolean; sellable?: boolean; metadata?: MetadadosAssento }>; layout?: LayoutMapa; revisaoEsperada?: number; reason?: string; }
 export interface MapImportSummary { importId: string; mapId: string; status: string; proposalCount: number; conflictCount: number; }
 export interface MapReplacementResult {
@@ -174,7 +181,16 @@ export class MapasService {
   async importar(eventId: string, file: MultipartFile, actor: EventoActor, pagina?: number): Promise<MapImportSummary> {
     const event = await this.assertEvent(eventId, actor);
     if (!this.storage) throw new BadRequestException({ code: "STORAGE_UNAVAILABLE", message: "Armazenamento de mapas indisponível" });
-    const buffer = await file.toBuffer();
+    const plantaGrande = new BadRequestException({ code: "MAP_TOO_LARGE", message: "A planta passa de 10 MB. Envie o PDF exportado do programa de desenho, sem imagens." });
+    let buffer: Buffer;
+    try {
+      buffer = await file.toBuffer();
+    } catch (erro) {
+      // O multipart corta a leitura no teto e sinaliza com este código.
+      if ((erro as { code?: string })?.code === "FST_REQ_FILE_TOO_LARGE") throw plantaGrande;
+      throw erro;
+    }
+    if (buffer.length > MAX_PLANTA_PDF_BYTES) throw plantaGrande;
     if (file.mimetype !== "application/pdf" && buffer.subarray(0, 5).toString("latin1") !== "%PDF-") throw new BadRequestException({ code: "INVALID_MAP_TYPE", message: "Envie a planta em PDF." });
     const proposta = await this.gerador.gerar(buffer, pagina);
     let original: { key: string } | undefined;

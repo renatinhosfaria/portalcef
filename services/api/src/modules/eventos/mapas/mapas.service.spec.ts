@@ -1,7 +1,7 @@
 import { BadRequestException, Logger } from "@nestjs/common";
 import "reflect-metadata";
 jest.mock("@essencia/db", () => ({ eventos: {}, eventoMapas: {}, eventoSessoes: {}, eventoImportacoesMapa: {}, eventoDeteccoesMapa: {}, eventoMapaAssentos: {}, eventoInventarioAssentos: {}, eventoPedidos: {}, eventoItensPedido: {}, eventoReservas: {}, eventoIngressos: {}, eventoCheckins: {}, eventoOperacoesAdministrativas: {}, eventoTransferencias: {}, eventoAuditorias: {}, eq: jest.fn(), and: jest.fn(), or: jest.fn(), inArray: jest.fn(), asc: jest.fn(), desc: jest.fn() }));
-import { MapasService } from "./mapas.service";
+import { MAX_PLANTA_PDF_BYTES, MapasService } from "./mapas.service";
 import { StorageService } from "../../../common/storage/storage.service";
 
 describe("MapasService", () => {
@@ -361,6 +361,22 @@ describe("MapasService", () => {
     expect(fx.state.imports[0]).toMatchObject({ detector: "pdf-vetorial", detectorVersion: "2", status: "EM_REVISAO", proposalCount: 3, conflictCount: 1, proposta: expect.objectContaining({ versao: 1 }) });
     expect(fx.state.deteccoes).toHaveLength(0);
     expect(fx.state.audits[0]).toMatchObject({ metadata: expect.objectContaining({ action: "importar" }) });
+  });
+
+  it("PDF acima do limite é recusado sem chamar o gerador nem o storage", async () => {
+    const fx = importacaoFixture();
+    const grande = Buffer.concat([Buffer.from("%PDF-1.7 "), Buffer.alloc(MAX_PLANTA_PDF_BYTES)]);
+    await expect(fx.maps.importar("event-1", arquivoPdf(grande), actor)).rejects.toMatchObject({ response: { code: "MAP_TOO_LARGE", message: "A planta passa de 10 MB. Envie o PDF exportado do programa de desenho, sem imagens." } });
+    expect(fx.gerar).not.toHaveBeenCalled();
+    expect(fx.storage.uploadMapBuffer).not.toHaveBeenCalled();
+  });
+
+  it("traduz o corte do multipart (FST_REQ_FILE_TOO_LARGE) em MAP_TOO_LARGE", async () => {
+    const fx = importacaoFixture();
+    const arquivo = arquivoPdf();
+    arquivo.toBuffer.mockRejectedValue(Object.assign(new Error("request file too large"), { code: "FST_REQ_FILE_TOO_LARGE" }));
+    await expect(fx.maps.importar("event-1", arquivo, actor)).rejects.toMatchObject({ response: { code: "MAP_TOO_LARGE" } });
+    expect(fx.gerar).not.toHaveBeenCalled();
   });
 
   it("aceita PDF identificado só pelo começo do arquivo", async () => {

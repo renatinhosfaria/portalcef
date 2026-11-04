@@ -1,5 +1,6 @@
 import "reflect-metadata";
 import { MapasController } from "./mapas.controller";
+import { MAX_PLANTA_PDF_BYTES } from "./mapas.service";
 
 describe("MapasController", () => {
   it("valida UUID e delega a substituição do mapa padrão", async () => {
@@ -62,6 +63,7 @@ describe("MapasController", () => {
     const request: any = { file: jest.fn().mockResolvedValue(arquivo) };
 
     await controller.importar("evento-1", "2", request, actor);
+    expect(request.file).toHaveBeenCalledWith({ limits: { fileSize: MAX_PLANTA_PDF_BYTES } });
     expect(importar).toHaveBeenLastCalledWith("evento-1", arquivo, actor, 2);
     await controller.importar("evento-1", undefined, request, actor);
     expect(importar).toHaveBeenLastCalledWith("evento-1", arquivo, actor, undefined);

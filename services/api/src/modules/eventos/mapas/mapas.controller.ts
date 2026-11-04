@@ -5,7 +5,7 @@ import { RolesGuard } from "../../../common/guards/roles.guard";
 import { CurrentUser } from "../../../common/decorators/current-user.decorator";
 import { ExactRoles, Roles } from "../../../common/decorators/roles.decorator";
 import { EVENTOS_ADMIN_ROLES } from "../eventos.constants";
-import { MapasService } from "./mapas.service";
+import { MAX_PLANTA_PDF_BYTES, MapasService } from "./mapas.service";
 import { operacoesPropostaSchema } from "@essencia/shared/eventos/mapa-proposta";
 import { z } from "zod";
 
@@ -19,7 +19,7 @@ export class MapasController {
   @Post("mapas/import") async importar(@Param("id") id: string, @Query("pagina") pagina: string | undefined, @Req() request: any, @CurrentUser() actor: any) {
     const parsed = z.coerce.number().int().min(1).optional().safeParse(pagina);
     if (!parsed.success) return { success: false, error: { code: "VALIDATION_ERROR", details: parsed.error.flatten() } };
-    const file = await request.file();
+    const file = await request.file({ limits: { fileSize: MAX_PLANTA_PDF_BYTES } });
     if (!file) throw new BadRequestException({ code: "FILE_REQUIRED", message: "Arquivo do mapa é obrigatório" });
     return this.service.importar(id, file, actor, parsed.data);
   }
