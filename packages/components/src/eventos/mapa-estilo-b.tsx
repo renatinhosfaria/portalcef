@@ -194,7 +194,7 @@ export function MapaEstiloB({
   const alturaMediaLugares = lugares.length > 0 ? lugares.reduce((total, lugar) => total + lugar.altura, 0) / lugares.length : 100;
   const larguraPalcoBase = larguraCaixaLugares * 0.6;
   const larguraMinimaPalco = 4 * alturaMediaLugares;
-  const dimensoesPalco = (elemento: ElementoPlanta): { largura: number; altura: number } => {
+  const dimensoesPalco = (elemento: ElementoPlanta): { largura: number; altura: number; centroX: number } => {
     // Começa no limite mínimo e só reduz abaixo dele quando a distância até um
     // lugar próximo não deixa espaço suficiente. Assim o palco não cobre o
     // centro de um lugar apenas por aplicar `Math.max` ao limite mínimo.
@@ -208,11 +208,40 @@ export function MapaEstiloB({
         .map((lugar) => Math.abs(lugar.x - elemento.x) - lugar.largura / 2);
       const menorDistancia = distancias.length > 0 ? Math.min(...distancias) : Number.POSITIVE_INFINITY;
       if (!Number.isFinite(menorDistancia)) break;
-      const larguraSegura = Math.min(larguraPalcoBase, Math.max(0, 2 * menorDistancia - alturaMediaLugares));
+      const larguraSegura = Math.min(
+        Math.max(larguraPalcoBase, larguraMinimaPalco),
+        Math.max(larguraMinimaPalco, 2 * menorDistancia - alturaMediaLugares),
+      );
       if (larguraSegura >= largura) break;
       largura = larguraSegura;
     }
-    return { largura, altura: largura * 0.14 };
+    const altura = largura * 0.14;
+    const yMinimo = elemento.y - 1.5 * altura;
+    const yBase = elemento.y + altura / 2;
+    const lugaresNaFaixa = lugares.filter((lugar) => lugar.y >= yMinimo && lugar.y <= yBase);
+    const metadePalco = largura / 2;
+    const folga = Math.max(1, alturaMediaLugares * 0.01);
+    const intervalos = lugaresNaFaixa
+      .map((lugar) => ({
+        inicio: lugar.x - lugar.largura / 2 - metadePalco - folga,
+        fim: lugar.x + lugar.largura / 2 + metadePalco + folga,
+      }))
+      .sort((a, b) => a.inicio - b.inicio);
+    const unidos: Array<{ inicio: number; fim: number }> = [];
+    for (const intervalo of intervalos) {
+      const anterior = unidos[unidos.length - 1];
+      if (anterior && intervalo.inicio <= anterior.fim) {
+        anterior.fim = Math.max(anterior.fim, intervalo.fim);
+      } else {
+        unidos.push({ ...intervalo });
+      }
+    }
+    const candidatos = [
+      elemento.x,
+      ...unidos.flatMap((intervalo) => [intervalo.inicio - folga, intervalo.fim + folga]),
+    ].filter((candidato) => unidos.every((intervalo) => candidato < intervalo.inicio || candidato > intervalo.fim));
+    const centroX = candidatos.sort((a, b) => Math.abs(a - elemento.x) - Math.abs(b - elemento.x))[0] ?? elemento.x;
+    return { largura, altura, centroX };
   };
   const fonteElemento = Math.max(60, Math.round(altura * 0.018));
 
@@ -250,15 +279,15 @@ export function MapaEstiloB({
         />
         {elementos.map((elemento, indice) => {
           if (elemento.tipo === "PALCO") {
-            const { largura: larguraPalco, altura: alturaPalco } = dimensoesPalco(elemento);
-            const x0 = elemento.x - larguraPalco / 2;
-            const x1 = elemento.x + larguraPalco / 2;
+            const { largura: larguraPalco, altura: alturaPalco, centroX } = dimensoesPalco(elemento);
+            const x0 = centroX - larguraPalco / 2;
+            const x1 = centroX + larguraPalco / 2;
             const yBase = elemento.y + alturaPalco / 2;
             return (
               <g key={`el-${indice}`} pointerEvents="none">
                 <path
                   data-palco
-                  d={`M ${arredondar(x0)} ${arredondar(yBase)} Q ${arredondar(elemento.x)} ${arredondar(elemento.y - alturaPalco * 1.5)} ${arredondar(x1)} ${arredondar(yBase)} Z`}
+                  d={`M ${arredondar(x0)} ${arredondar(yBase)} Q ${arredondar(centroX)} ${arredondar(elemento.y - alturaPalco * 1.5)} ${arredondar(x1)} ${arredondar(yBase)} Z`}
                   fill="#f1ead9"
                   stroke="#e2d6bb"
                   strokeWidth={Math.max(4, altura * 0.002)}

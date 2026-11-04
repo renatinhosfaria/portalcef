@@ -20,7 +20,8 @@ function retangulo(container: HTMLElement, id: string): Element {
 function centroDentroDoPalco(path: string, x: number, y: number): boolean {
   const valores = path.match(/-?\d+(?:\.\d+)?/g)?.map(Number) ?? [];
   const [x0, yBase, xControle, yControle, x1] = valores;
-  if ([x0, yBase, xControle, yControle, x1].some((valor) => valor === undefined) || y < yControle! || y > yBase! || yBase === yControle) return false;
+  if ([x0, yBase, xControle, yControle, x1].some((valor) => valor === undefined) || y < yControle! || y > yBase!) return false;
+  if (yBase === yControle) return x === x0 && y === yBase;
   const proporcao = (yBase! - y) / (yBase! - yControle!);
   const raiz = Math.sqrt(Math.max(0, 1 - proporcao));
   const tEsquerda = (1 - raiz) / 2;
@@ -182,8 +183,9 @@ describe("MapaEstiloB", () => {
     );
     const pertoPath = perto.container.querySelector("path[data-palco]")!.getAttribute("d")!;
     const pertoValores = pertoPath.match(/-?\d+(?:\.\d+)?/g)?.map(Number) ?? [];
-    expect(pertoValores[0]).toBe(2000);
-    expect(pertoValores[4]).toBe(2000);
+    expect(pertoValores[0]).toBe(1578);
+    expect(pertoValores[4]).toBe(1898);
+    expect(pertoValores[4]! - pertoValores[0]!).toBe(4 * 80);
     expect(centroDentroDoPalco(pertoPath, 1950, 500)).toBe(false);
     expect(centroDentroDoPalco(pertoPath, 2050, 500)).toBe(false);
 
@@ -198,6 +200,22 @@ describe("MapaEstiloB", () => {
     const folgaValores = folgaPath.match(/-?\d+(?:\.\d+)?/g)?.map(Number) ?? [];
     expect(folgaValores[0]).toBe(1370);
     expect(folgaValores[4]).toBe(2630);
+  });
+
+  it("desloca o palco quando um centro de lugar coincide com o centro do palco", () => {
+    const { container } = render(
+      <MapaEstiloB
+        {...base}
+        lugares={[lugar({ id: "coincidente", x: 2000, y: 500 })]}
+        elementos={[{ tipo: "PALCO", texto: "PALCO", x: 2000, y: 500 }]}
+      />,
+    );
+    const path = container.querySelector("path[data-palco]")!.getAttribute("d")!;
+    const valores = path.match(/-?\d+(?:\.\d+)?/g)?.map(Number) ?? [];
+    const x0 = valores[0] ?? Number.NaN;
+    const x1 = valores[4] ?? Number.NaN;
+    expect(x1 - x0).toBeGreaterThanOrEqual(4 * 80);
+    expect(centroDentroDoPalco(path, 2000, 500)).toBe(false);
   });
 
   it("repassa o clique no fundo em coordenadas do mapa", () => {
