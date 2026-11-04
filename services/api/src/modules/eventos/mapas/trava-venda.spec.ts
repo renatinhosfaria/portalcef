@@ -50,7 +50,7 @@ describe("trava de venda", () => {
   });
 
   it("carregarTrava lê os dados do evento e permite travar a leitura de pedidos", async () => {
-    const pedidos = [{ status: "INICIADO", expiresAt: depois }];
+    const pedidos = [{ id: "pedido-1", sessionId: "sessao-1", status: "INICIADO", expiresAt: depois }];
     const tabelas = new Map<unknown, unknown[]>([
       [eventoSessoes, [{ id: "sessao-1" }]],
       [eventoPedidos, pedidos],
@@ -60,12 +60,18 @@ describe("trava de venda", () => {
     ]);
     const db: any = {
       select: () => ({
-        from: (table: unknown) => ({ where: async () => tabelas.get(table) ?? [] }),
+        from: (table: unknown) => ({ where: (condicao: unknown) => {
+          const query: any = Promise.resolve(tabelas.get(table) ?? []);
+          query.orderBy = jest.fn(() => query);
+          return query;
+        } }),
       }),
     };
     const lockRows = jest.fn(async <T>(_query: unknown) => pedidos as T[]);
     const tipo = await carregarTrava(db, "evento-1", agora, lockRows as any);
     expect(tipo).toBe("COMPRA_EM_ANDAMENTO");
     expect(lockRows).toHaveBeenCalledTimes(1);
+    await expect(lockRows.mock.calls[0][0]).resolves.toEqual(pedidos);
+    expect((lockRows.mock.calls[0][0] as any).orderBy).toHaveBeenCalledTimes(1);
   });
 });

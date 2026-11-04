@@ -1,6 +1,7 @@
 import { BadRequestException } from "@nestjs/common";
 import {
   and,
+  asc,
   eq,
   inArray,
   eventoCheckins,
@@ -83,16 +84,16 @@ export async function carregarTrava(
     .where(eq(eventoSessoes.eventId, eventId))) as Array<{ id: string }>;
   const sessionIds = sessoes.map(({ id }) => id);
 
-  const pedidosQuery = db
-    .select({ status: eventoPedidos.status, expiresAt: eventoPedidos.expiresAt })
+  const pedidosBaseQuery = db
+    .select()
     .from(eventoPedidos)
     .where(eq(eventoPedidos.eventId, eventId));
+  const pedidosQuery = typeof (pedidosBaseQuery as any).orderBy === "function"
+    ? (pedidosBaseQuery as any).orderBy(asc(eventoPedidos.id))
+    : pedidosBaseQuery;
   const pedidos = lockRows
-    ? await lockRows<{ status: string; expiresAt: Date | null }>(pedidosQuery)
-    : ((await pedidosQuery) as Array<{
-        status: string;
-        expiresAt: Date | null;
-      }>);
+    ? await lockRows<any>(pedidosQuery)
+    : ((await pedidosQuery) as Array<{ status: string; expiresAt: Date | null }>);
 
   const ingressos = sessionIds.length
     ? await db
