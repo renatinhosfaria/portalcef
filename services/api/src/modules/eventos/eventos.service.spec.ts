@@ -12,6 +12,32 @@ const event = (extra: Record<string, unknown> = {}) => ({
 });
 
 describe('EventosService contratos de workspace', () => {
+  it('criarSessao grava o mapa do evento na sessão', async () => {
+    const inserted: any[] = [];
+    const db = fakeDb({ selects: [[event({ defaultMapId: 'mapa-1' })]], insert: async (values: any) => { inserted.push(values); return [{ id: 's1', ...values }]; } });
+
+    await service(db).criarSessao('e1', {
+      startsAt: new Date('2026-11-01T10:00:00Z'),
+      endsAt: new Date('2026-11-01T11:00:00Z'),
+      capacity: 10,
+    }, actor);
+
+    expect(inserted[0]).toMatchObject({ mapId: 'mapa-1' });
+  });
+
+  it('criarSessao em evento sem mapa grava mapId null', async () => {
+    const inserted: any[] = [];
+    const db = fakeDb({ selects: [[event({ defaultMapId: null })]], insert: async (values: any) => { inserted.push(values); return [{ id: 's1', ...values }]; } });
+
+    await service(db).criarSessao('e1', {
+      startsAt: new Date('2026-11-01T10:00:00Z'),
+      endsAt: new Date('2026-11-01T11:00:00Z'),
+      capacity: 10,
+    }, actor);
+
+    expect(inserted[0]).toMatchObject({ mapId: null });
+  });
+
   it('registra MapasService como token de DI mesmo sendo opcional', () => {
     const selfParamTypes = Reflect.getMetadata('self:paramtypes', EventosService) as Array<{ index: number; param: unknown }>;
     expect(selfParamTypes).toEqual(expect.arrayContaining([{ index: 3, param: MapasService }]));
@@ -339,7 +365,6 @@ describe('EventosService contratos de workspace', () => {
       endsAt: new Date('2026-11-01T11:00:00Z'),
       capacity: 10,
       locationId: 'local-externo',
-      mapId: null,
     }, actor)).rejects.toMatchObject({ response: { code: 'SESSION_LOCATION_INVALID' } });
   });
 
@@ -355,20 +380,7 @@ describe('EventosService contratos de workspace', () => {
       startsAt: new Date('2026-11-01T10:00:00Z'),
       endsAt: new Date('2026-11-01T11:00:00Z'),
       capacity: 10,
-      mapId: null,
     }, actor)).rejects.toMatchObject({ response: { code: 'SESSION_LOCATION_INVALID' } });
-  });
-
-  it('rejeita atualização de sessão com mapa não confirmado de outro evento', async () => {
-    const db = fakeDb({
-      selects: [
-        [event()],
-        [{ id: 's1', eventId: 'e1' }],
-        [{ id: 'mapa-externo', eventId: 'outro-evento', status: 'EM_REVISAO' }],
-      ],
-    });
-
-    await expect(service(db).atualizarSessao('e1', 's1', { mapId: 'mapa-externo' }, actor)).rejects.toMatchObject({ response: { code: 'SESSION_MAP_INVALID' } });
   });
 
   it('trava o evento antes da sessão ao atualizar a referência do mapa', async () => {

@@ -14,13 +14,13 @@ export const criarEventoSchema = z.object({
   title: z.string().min(1).max(240), summary: z.string().max(500).optional(), description: z.string().min(1),
   imageUrl: z.string().url().optional().nullable(), category: z.string().max(120).optional(),
   plannedPublicationAt: date.optional().nullable(), publishImmediately: z.boolean().default(false),
-  defaultLocationId: z.string().uuid().optional().nullable(), defaultMapId: z.string().uuid().optional().nullable(),
+  defaultLocationId: z.string().uuid().optional().nullable(),
   cancellationPolicy: z.string().min(1), contactEmail: z.string().email(), contactPhone: z.string().max(30).optional().nullable(),
   ticketTypes: z.array(z.object({ name: z.string().min(1).max(160), description: z.string().optional().nullable(), priceCents: z.number().int().nonnegative(), eligibility: z.string().optional().nullable(), maxPerOrder: z.number().int().positive().optional().nullable(), salesLot: z.string().max(100).optional().nullable(), rules: z.record(z.string(), z.unknown()).optional().nullable() })).default([]),
   policies: z.array(z.object({ type: z.enum(["PRIVACIDADE","COMPRA","CANCELAMENTO_REEMBOLSO","ACESSIBILIDADE","CONTATO"]), content: z.string().min(1), version: z.number().int().positive().optional() })).default([]),
-  sessions: z.array(z.object({ startsAt: date, endsAt: date, capacity: z.number().int().positive(), locationId: z.string().uuid().optional().nullable(), mapId: z.string().uuid().optional().nullable(), salesStartsAt: date.optional().nullable(), salesEndsAt: date.optional().nullable(), status: eventoSessaoStatusSchema.optional() })).default([]),
+  sessions: z.array(z.object({ startsAt: date, endsAt: date, capacity: z.number().int().positive(), locationId: z.string().uuid().optional().nullable(), salesStartsAt: date.optional().nullable(), salesEndsAt: date.optional().nullable(), status: eventoSessaoStatusSchema.optional() })).default([]),
 });
-export const atualizarEventoSchema = criarEventoSchema.partial().omit({schoolId: true, publishImmediately: true}).extend({ publishImmediately: z.boolean().optional(), updatedAt: date.optional(), expectedUpdatedAt: date.optional() }).strict();
+export const atualizarEventoSchema = criarEventoSchema.partial().omit({schoolId: true, publishImmediately: true}).extend({ publishImmediately: z.boolean().optional(), updatedAt: date.optional(), expectedUpdatedAt: date.optional() });
 export const criarRascunhoSchema = z.object({ title: z.string().trim().min(1).max(240) }).strict();
 export const atualizarRascunhoSchema = atualizarEventoSchema;
 export const atualizarMapaPadraoSchema = z.object({ mapId: z.string().uuid() }).strict();
@@ -33,7 +33,7 @@ export const localEventoSchema = z.object({
 }).strict();
 export const atualizarLocalEventoSchema = localEventoSchema.partial().extend({ expectedUpdatedAt: date.optional() }).strict();
 export const atualizarLocalPadraoEventoSchema = z.object({ defaultLocationId: z.string().uuid().nullable(), expectedUpdatedAt: date.optional() }).strict();
-export const criarSessaoSchema = z.object({ startsAt: date, endsAt: date, capacity: z.number().int().positive(), locationId: z.string().uuid().optional().nullable(), mapId: z.string().uuid().optional().nullable(), salesStartsAt: date.optional().nullable(), salesEndsAt: date.optional().nullable(), status: eventoSessaoStatusSchema.optional() }).strict();
+export const criarSessaoSchema = z.object({ startsAt: date, endsAt: date, capacity: z.number().int().positive(), locationId: z.string().uuid().optional().nullable(), salesStartsAt: date.optional().nullable(), salesEndsAt: date.optional().nullable(), status: eventoSessaoStatusSchema.optional() }).strict();
 export const politicaSchema = z.object({ type: z.enum(["PRIVACIDADE","COMPRA","CANCELAMENTO_REEMBOLSO","ACESSIBILIDADE","CONTATO"]), content: z.string().min(1), version: z.number().int().positive().optional() });
 export const eventoListQuerySchema = z.object({ status: eventoStatusSchema.optional(), search: z.string().max(120).optional() });
 export const criarEventoInputSchema = criarEventoSchema;
