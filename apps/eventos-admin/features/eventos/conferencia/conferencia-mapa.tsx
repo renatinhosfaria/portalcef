@@ -8,7 +8,7 @@ import {
   type PontoConferir,
   type PropostaMapa,
 } from "@essencia/shared/eventos/mapa-proposta";
-import { urlOriginal } from "./api-mapas";
+import { urlOriginal, type TravaMapa } from "./api-mapas";
 import { LegendaCores } from "./legenda-cores";
 import { ListaPontos } from "./lista-pontos";
 import { paraLugaresMapa } from "./lugares-mapa";
@@ -21,6 +21,7 @@ export interface ConferenciaMapaProps {
   eventoId: string;
   mapId: string;
   propostaInicial: PropostaMapa;
+  trava?: TravaMapa;
   onPublicar: (revisaoBase: number, motivo?: string) => Promise<void>;
   onReenviar: (arquivo: File) => Promise<void>;
 }
@@ -37,7 +38,7 @@ const ETAPAS = ["Enviar planta", "Conferir", "Publicar"];
 const BOTAO_PRIMARIO = "rounded-xl bg-[#a3d154] px-4 py-2 text-sm font-semibold text-[#24302c] disabled:opacity-50";
 const BOTAO_SECUNDARIO = "rounded-xl border border-[#e5e8df] bg-white px-4 py-2 text-sm text-[#24302c]";
 
-export function ConferenciaMapa({ eventoId, mapId, propostaInicial, onPublicar, onReenviar }: ConferenciaMapaProps) {
+export function ConferenciaMapa({ eventoId, mapId, propostaInicial, trava, onPublicar, onReenviar }: ConferenciaMapaProps) {
   const { proposta, aplicar, salvando, recarregando, erro } = useProposta(eventoId, mapId, propostaInicial);
   const [modo, setModo] = useState<Modo>("LADO_A_LADO");
   const [selecionadosIds, setSelecionadosIds] = useState<ReadonlySet<string>>(new Set());
@@ -54,6 +55,7 @@ export function ConferenciaMapa({ eventoId, mapId, propostaInicial, onPublicar, 
   const [reenviando, setReenviando] = useState(false);
   const reenviandoRef = useRef(false);
   const [erroReenviar, setErroReenviar] = useState<string | null>(null);
+  const bloqueadoPorTrava = trava?.tipo !== undefined && trava.tipo !== "LIVRE";
 
   const lugaresMapa = useMemo(() => paraLugaresMapa(proposta), [proposta]);
   const resumo = useMemo(() => resumoProposta(proposta), [proposta]);
@@ -173,6 +175,9 @@ export function ConferenciaMapa({ eventoId, mapId, propostaInicial, onPublicar, 
 
       <div className="space-y-4 px-5 py-4">
         <ResumoProposta resumo={resumo} />
+        {bloqueadoPorTrava && trava?.mensagem ? (
+          <p role="alert" className="rounded-xl border border-[#f0d9a8] bg-[#fff8e8] px-3 py-2 text-sm">{trava.mensagem}</p>
+        ) : null}
         {erro ? (
           <p role="alert" className="rounded-xl border border-[#f0d9a8] bg-[#fff8e8] px-3 py-2 text-sm">
             {erro}
@@ -277,14 +282,14 @@ export function ConferenciaMapa({ eventoId, mapId, propostaInicial, onPublicar, 
                 ))}
               </ul>
             ) : null}
-            <button type="button" disabled={pendencias.length > 0 || salvando || recarregando} onClick={() => setDialogoAberto(true)} className={BOTAO_PRIMARIO + " w-full"}>
+            <button type="button" disabled={bloqueadoPorTrava || pendencias.length > 0 || salvando || recarregando} onClick={() => setDialogoAberto(true)} className={BOTAO_PRIMARIO + " w-full"}>
               Publicar mapa
             </button>
             <p className="text-center text-xs text-[#69736e]" aria-live="polite">
               {salvando ? "Salvando…" : pendencias.length > 0 ? `Resolva as ${pendencias.length} pendências para liberar` : "Tudo conferido"}
             </p>
 
-            <button type="button" disabled={reenviando} onClick={pedirOutraPlanta} className={BOTAO_SECUNDARIO + " w-full"}>
+            <button type="button" disabled={bloqueadoPorTrava || reenviando} onClick={pedirOutraPlanta} className={BOTAO_SECUNDARIO + " w-full"}>
               Enviar outra planta
             </button>
             <input
@@ -293,7 +298,7 @@ export function ConferenciaMapa({ eventoId, mapId, propostaInicial, onPublicar, 
               accept="application/pdf"
               aria-label="Arquivo da nova planta"
               hidden
-              disabled={reenviando}
+              disabled={bloqueadoPorTrava || reenviando}
               onChange={(e) => {
                 const arquivo = e.target.files?.[0];
                 e.target.value = "";
