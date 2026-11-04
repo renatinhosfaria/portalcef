@@ -24,3 +24,9 @@
 
 - Nenhuma migration foi criada.
 - O lint reporta avisos já existentes no monorepo, sem erros.
+
+## Fix da revisão (round 1)
+
+- Corrigido o mock de `lockRows` no teste para retornar explicitamente o array de pedidos (`pedidos as T[]`), em vez do query builder recebido.
+- Comando: `pnpm --filter @essencia/api test -- src/modules/eventos/mapas/trava-venda.spec.ts`
+- Saída: 1 suíte e 12 testes passando.

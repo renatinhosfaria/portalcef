@@ -63,7 +63,7 @@ describe("trava de venda", () => {
         from: (table: unknown) => ({ where: async () => tabelas.get(table) ?? [] }),
       }),
     };
-    const lockRows = jest.fn(async <T>(query: unknown) => query as T[]);
+    const lockRows = jest.fn(async <T>(_query: unknown) => pedidos as T[]);
     const tipo = await carregarTrava(db, "evento-1", agora, lockRows as any);
     expect(tipo).toBe("COMPRA_EM_ANDAMENTO");
     expect(lockRows).toHaveBeenCalledTimes(1);
