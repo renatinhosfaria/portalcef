@@ -1037,6 +1037,92 @@ describe("MapasService", () => {
     });
   });
 
+  describe("editar uma versão publicada", () => {
+    const proposta = {
+      versao: 1,
+      revisao: 7,
+      pagina: { numero: 1, largura: 8420, altura: 5950 },
+      lugares: [{ id: "l1", fileira: "A", numero: "1", x: 100, y: 200, largura: 100, altura: 80, rotacao: 0, blocoId: "b1", cor: "#fff", categoriaManual: null, acessoExternoManual: null, vender: true, origem: "GERADOR" }],
+      rotulos: [], elementos: [], legenda: [{ cor: "#fff", texto: "Comum", quantidade: 1, categoria: "COMUM", acessoExterno: false, confirmada: true }],
+      pontos: [{ id: "p1", tipo: "SEM_FILEIRA", mensagem: "Conferido", lugarIds: ["l1"], conferido: true }],
+    };
+
+    function edicaoFixture(overrides: any = {}) {
+      const dbModule = jest.requireMock("@essencia/db") as any;
+      const state: any = {
+        event: { id: "event-1", schoolId: "school-1", defaultMapId: "map-old" },
+        maps: [
+          { id: "map-old", eventId: "event-1", version: 3, status: "CONFIRMADO", originalFileKey: "eventos/event-1/mapas/originais/original.pdf", originalFileName: "original.pdf", originalMimeType: "application/pdf" },
+          { id: "map-review", eventId: "event-1", version: 4, status: "EM_REVISAO", originalFileKey: "review.pdf", originalFileName: "review.pdf", originalMimeType: "application/pdf" },
+        ],
+        imports: [{ id: "imp-old", eventId: "event-1", mapId: "map-old", fileKey: "eventos/event-1/mapas/originais/original.pdf", detector: "pdf-vetorial", detectorVersion: "2", status: "CONFIRMADA", proposta, reviewedBy: "reviewer-1", reviewedAt: new Date("2026-11-03T00:00:00Z") }],
+        pedidos: [], ingressos: [], checkins: [], operacoes: [],
+        audits: [], uploads: [], deletes: [],
+        falharNaInsercao: false,
+        ...overrides,
+      };
+      const rows = (table: unknown) => table === dbModule.eventos ? [state.event]
+        : table === dbModule.eventoMapas ? state.maps
+          : table === dbModule.eventoImportacoesMapa ? state.imports
+            : table === dbModule.eventoPedidos ? state.pedidos
+              : table === dbModule.eventoIngressos ? state.ingressos
+                : table === dbModule.eventoCheckins ? state.checkins
+                  : table === dbModule.eventoOperacoesAdministrativas ? state.operacoes
+                    : table === dbModule.eventoAuditorias ? state.audits : [];
+      const db: any = {
+        select: () => ({ from: (table: unknown) => { const q: any = Promise.resolve(rows(table)); q.where = () => q; q.orderBy = () => q; q.for = () => q; return q; } }),
+        insert: (table: unknown) => ({ values: (values: any) => { if (state.falharNaInsercao && table === dbModule.eventoMapas) throw new Error("falha no banco"); if (table === dbModule.eventoMapas) state.maps.push({ id: "map-new", ...values }); if (table === dbModule.eventoImportacoesMapa) state.imports.push({ id: "imp-new", ...values }); if (table === dbModule.eventoAuditorias) state.audits.push(values); return { returning: async () => [{ id: table === dbModule.eventoMapas ? "map-new" : table === dbModule.eventoImportacoesMapa ? "imp-new" : "audit-1", ...values }] }; } }),
+        update: (table: unknown) => ({ set: (values: any) => ({ where: () => { if (table === dbModule.eventoMapas) state.maps.forEach((map: any) => { if (map.id !== "map-new" || values.status !== "EM_REVISAO") Object.assign(map, values); }); if (table === dbModule.eventoImportacoesMapa) state.imports.forEach((imp: any) => Object.assign(imp, values)); return { returning: async () => [{ ...state.maps[0], ...values }] }; } }) }),
+        transaction: async (fn: any) => fn(db),
+      };
+      const storage: any = {
+        getObject: jest.fn().mockResolvedValue({ Body: { transformToByteArray: async () => new Uint8Array([37, 80, 68, 70, 45]) } }),
+        uploadMapBuffer: jest.fn().mockImplementation(async (buffer: Buffer, filename: string, mime: string, prefix: string) => { state.uploads.push({ buffer, filename, mime, prefix }); return { key: `${prefix}/copied.pdf` }; }),
+        deleteFileStrict: jest.fn().mockResolvedValue(undefined),
+      };
+      const maps = new MapasService({ db } as any, storage, {} as any);
+      return { maps, state, storage };
+    }
+
+    it("editarVersao cria versão em conferência mantendo a proposta e conferências", async () => {
+      const fx = edicaoFixture();
+      const result = await fx.maps.editarVersao("event-1", "map-old", actor);
+      expect(result).toEqual({ mapId: "map-new" });
+      expect(fx.state.maps).toEqual(expect.arrayContaining([expect.objectContaining({ id: "map-new", version: 5, status: "EM_REVISAO", originalFileKey: "eventos/event-1/mapas/originais/copied.pdf" })]));
+      expect(fx.state.maps.find((map: any) => map.id === "map-review").status).toBe("ARQUIVADO");
+      expect(fx.state.imports).toEqual(expect.arrayContaining([expect.objectContaining({ mapId: "map-new", detector: "edicao", detectorVersion: "2", proposta: expect.objectContaining({ revisao: 0, pontos: proposta.pontos }) })]));
+      expect(fx.state.audits).toEqual(expect.arrayContaining([expect.objectContaining({ metadata: { action: "editar_versao", origemMapId: "map-old" } })]));
+    });
+
+    it("editarVersao copia o PDF original para uma chave nova", async () => {
+      const fx = edicaoFixture();
+      await fx.maps.editarVersao("event-1", "map-old", actor);
+      expect(fx.storage.getObject).toHaveBeenCalledWith("eventos/event-1/mapas/originais/original.pdf");
+      expect(fx.storage.uploadMapBuffer).toHaveBeenCalledWith(Buffer.from([37, 80, 68, 70, 45]), "original.pdf", "application/pdf", "eventos/event-1/mapas/originais");
+    });
+
+    it.each([
+      ["map-review", "EM_REVISAO"],
+      ["map-old", "CONFIRMADO"],
+    ])("editarVersao recusa quando não há proposta ou a versão está inválida (%s)", async (mapId, status) => {
+      const fx = edicaoFixture({ maps: [{ id: mapId, eventId: "event-1", version: 3, status, originalFileKey: "arquivo.pdf", originalFileName: "arquivo.pdf", originalMimeType: "application/pdf" }], imports: status === "EM_REVISAO" ? [] : [{ id: "imp-old", eventId: "event-1", mapId, proposta: null }] });
+      await expect(fx.maps.editarVersao("event-1", mapId, actor)).rejects.toMatchObject({ response: { code: "EDICAO_INDISPONIVEL" } });
+    });
+
+    it("editarVersao recusa com venda confirmada sem copiar o arquivo", async () => {
+      const fx = edicaoFixture({ pedidos: [{ id: "pedido-1", eventId: "event-1", status: "CONFIRMADO", expiresAt: null }] });
+      await expect(fx.maps.editarVersao("event-1", "map-old", actor)).rejects.toMatchObject({ response: { code: "VENDA_CONFIRMADA" } });
+      expect(fx.storage.getObject).not.toHaveBeenCalled();
+      expect(fx.storage.uploadMapBuffer).not.toHaveBeenCalled();
+    });
+
+    it("falha no banco apaga a cópia do PDF", async () => {
+      const fx = edicaoFixture({ falharNaInsercao: true });
+      await expect(fx.maps.editarVersao("event-1", "map-old", actor)).rejects.toThrow();
+      expect(fx.storage.deleteFileStrict).toHaveBeenCalledWith("eventos/event-1/mapas/originais/copied.pdf");
+    });
+  });
+
   describe("substituirMapaPadrao", () => {
     const novoMapa = { id: "map-novo", eventId: "event-1", status: "CONFIRMADO", previewFileKey: null };
     const assento = { id: "seat-1", mapId: "map-novo", sellable: true };

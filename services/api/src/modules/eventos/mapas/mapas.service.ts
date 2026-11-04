@@ -344,6 +344,89 @@ export class MapasService {
     });
   }
 
+  async editarVersao(eventId: string, versionId: string, actor: EventoActor): Promise<{ mapId: string }> {
+    let copiaKey: string | undefined;
+    try {
+      const mapId = await this.transaction(async (db) => {
+        const [event] = await this.lockRows(db.select().from(eventos).where(eq(eventos.id, eventId)));
+        if (!event) throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Evento não encontrado" });
+        if (actor.role !== "master" && event.schoolId !== actor.schoolId) throw new BadRequestException({ code: "FORBIDDEN", message: "Acesso negado" });
+
+        const sessoesQuery = db.select().from(eventoSessoes).where(eq(eventoSessoes.eventId, eventId));
+        const sessoesOrdenadas = typeof (sessoesQuery as any).orderBy === "function" ? (sessoesQuery as any).orderBy(asc(eventoSessoes.id)) : sessoesQuery;
+        const sessoes = await this.lockRows<any>(sessoesOrdenadas);
+
+        const mapasQuery = db.select().from(eventoMapas).where(eq(eventoMapas.eventId, eventId));
+        const mapasOrdenados = typeof (mapasQuery as any).orderBy === "function" ? (mapasQuery as any).orderBy(asc(eventoMapas.id)) : mapasQuery;
+        const mapas = await this.lockRows<any>(mapasOrdenados);
+        const origem = mapas.find((mapa: any) => mapa.id === versionId);
+        if (!origem) throw new NotFoundException({ code: "MAP_NOT_FOUND", message: "Versão não encontrada" });
+
+        const [importacao] = await this.lockRows<any>(db.select().from(eventoImportacoesMapa).where(eq(eventoImportacoesMapa.mapId, versionId)));
+        const inventarioQuery = sessoes.length
+          ? db.select().from(eventoInventarioAssentos).where(inArray(eventoInventarioAssentos.sessionId, sessoes.map((sessao: any) => sessao.id)))
+          : db.select().from(eventoInventarioAssentos).where(eq(eventoInventarioAssentos.sessionId, "__nenhuma__"));
+        const inventarioOrdenado = typeof (inventarioQuery as any).orderBy === "function" ? (inventarioQuery as any).orderBy(asc(eventoInventarioAssentos.id)) : inventarioQuery;
+        await this.lockRows<any>(inventarioOrdenado);
+
+        const tipoTrava = await carregarTrava(db, eventId, new Date(), this.lockRows.bind(this));
+        exigirMapaLivre(tipoTrava);
+        if (!this.storage) throw new BadRequestException({ code: "STORAGE_UNAVAILABLE", message: "Armazenamento de mapas indisponível" });
+
+        if (!["CONFIRMADO", "ARQUIVADO"].includes(origem.status) || !importacao?.proposta) {
+          throw new BadRequestException({ code: "EDICAO_INDISPONIVEL", message: "Esta versão não pode ser editada. Envie a planta em PDF." });
+        }
+        if (!origem.originalFileKey || origem.originalMimeType !== "application/pdf") {
+          throw new BadRequestException({ code: "EDICAO_INDISPONIVEL", message: "Esta versão não pode ser editada. Envie a planta em PDF." });
+        }
+
+        const arquivo = await this.storage!.getObject(origem.originalFileKey);
+        const corpo = arquivo?.Body as { transformToByteArray?: () => Promise<Uint8Array> } | undefined;
+        if (!corpo?.transformToByteArray) throw new BadRequestException({ code: "EDICAO_INDISPONIVEL", message: "Esta versão não pode ser editada. Envie a planta em PDF." });
+        const buffer = Buffer.from(await corpo.transformToByteArray());
+        const copia = await this.storage!.uploadMapBuffer(buffer, origem.originalFileName ?? "planta.pdf", "application/pdf", `eventos/${eventId}/mapas/originais`);
+        copiaKey = copia.key;
+
+        for (const mapa of mapas.filter((item: any) => item.id !== versionId && item.status === "EM_REVISAO")) {
+          await db.update(eventoMapas).set({ status: "ARQUIVADO", updatedAt: new Date() }).where(and(eq(eventoMapas.id, mapa.id), eq(eventoMapas.eventId, eventId)));
+        }
+
+        const versao = Math.max(0, ...mapas.map((mapa: any) => mapa.version ?? 0)) + 1;
+        const [novoMapa] = await db.insert(eventoMapas).values({
+          eventId,
+          version: versao,
+          originalFileKey: copia.key,
+          originalFileName: origem.originalFileName ?? "planta.pdf",
+          originalMimeType: "application/pdf",
+          status: "EM_REVISAO",
+        }).returning();
+        if (!novoMapa) throw new BadRequestException({ code: "MAP_EDIT_FAILED", message: "Não foi possível criar a versão do mapa" });
+
+        const proposta = JSON.parse(JSON.stringify(importacao.proposta)) as PropostaMapa;
+        proposta.revisao = 0;
+        const [novaImportacao] = await db.insert(eventoImportacoesMapa).values({
+          eventId,
+          mapId: novoMapa.id,
+          fileKey: copia.key,
+          detector: "edicao",
+          detectorVersion: "2",
+          status: "EM_REVISAO",
+          proposalCount: proposta.lugares.length,
+          conflictCount: proposta.pontos.length,
+          proposta,
+        }).returning();
+        if (!novaImportacao) throw new BadRequestException({ code: "MAP_EDIT_FAILED", message: "Não foi possível registrar a importação da versão" });
+
+        await this.audit(eventId, actor, novoMapa.id, { action: "editar_versao", origemMapId: versionId }, db);
+        return novoMapa.id as string;
+      });
+      return { mapId };
+    } catch (error) {
+      if (copiaKey && this.storage) await this.storage.deleteFileStrict(copiaKey).catch(() => undefined);
+      throw error;
+    }
+  }
+
   private async gravarConfirmacao(
     db: Database,
     map: any,

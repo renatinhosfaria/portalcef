@@ -117,6 +117,15 @@ describe("MapasController", () => {
     expect(Reflect.getMetadata("path", MapasController.prototype.publicar)).toBe("mapas/:versionId/publicar");
   });
 
+  it("POST mapas/:versionId/editar responde com o novo id do mapa", async () => {
+    const editarVersao = jest.fn().mockResolvedValue({ mapId: "map-new" });
+    const controller = new MapasController({ editarVersao } as any);
+    const actor = { userId: "user-1", role: "diretora_geral", schoolId: "school-1" };
+    await expect(controller.editarVersao("evento-1", "map-old", actor)).resolves.toEqual({ success: true, data: { mapId: "map-new" } });
+    expect(editarVersao).toHaveBeenCalledWith("evento-1", "map-old", actor);
+    expect(Reflect.getMetadata("path", MapasController.prototype.editarVersao)).toBe("mapas/:versionId/editar");
+  });
+
   it("não expõe mais deteccoes nem confirmar", () => {
     const caminhos = Object.getOwnPropertyNames(MapasController.prototype)
       .filter((nome) => nome !== "constructor")
