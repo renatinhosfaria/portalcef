@@ -23,7 +23,6 @@ export const criarEventoSchema = z.object({
 export const atualizarEventoSchema = criarEventoSchema.partial().omit({schoolId: true, publishImmediately: true}).extend({ publishImmediately: z.boolean().optional(), updatedAt: date.optional(), expectedUpdatedAt: date.optional() });
 export const criarRascunhoSchema = z.object({ title: z.string().trim().min(1).max(240) }).strict();
 export const atualizarRascunhoSchema = atualizarEventoSchema;
-export const atualizarMapaPadraoSchema = z.object({ mapId: z.string().uuid() }).strict();
 export const localEventoSchema = z.object({
   name: z.string().trim().min(1).max(200),
   address: z.string().trim().min(1),
@@ -41,7 +40,6 @@ export type CriarEventoInput = z.infer<typeof criarEventoSchema>;
 export type AtualizarEventoInput = z.infer<typeof atualizarEventoSchema>;
 export type CriarRascunhoInput = z.infer<typeof criarRascunhoSchema>;
 export type AtualizarRascunhoInput = z.infer<typeof atualizarRascunhoSchema>;
-export type AtualizarMapaPadraoInput = z.infer<typeof atualizarMapaPadraoSchema>;
 export type LocalEventoInput = z.infer<typeof localEventoSchema>;
 export type AtualizarLocalEventoInput = z.infer<typeof atualizarLocalEventoSchema>;
 export type AtualizarLocalPadraoEventoInput = z.infer<typeof atualizarLocalPadraoEventoSchema>;

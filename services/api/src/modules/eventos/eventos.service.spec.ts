@@ -203,38 +203,6 @@ describe('EventosService contratos de workspace', () => {
     await expect(service(db).atualizarEvento('e1', { slug: 'publicado' }, actor)).rejects.toMatchObject({ response: { code: 'EVENT_SLUG_IMMUTABLE' } });
   });
 
-  it('rejeita mapa pertencente a outro evento', async () => {
-    const mapas = { substituirMapaPadrao: jest.fn().mockRejectedValue(new BadRequestException({ code: 'MAP_EVENT_MISMATCH' })) };
-    await expect(service(fakeDb(), undefined, mapas).atualizarMapaPadrao('e1', 'mapa-externo', actor)).rejects.toMatchObject({ response: { code: 'MAP_EVENT_MISMATCH' } });
-  });
-
-  it('rejeita mapa em revisão pelo PATCH legado', async () => {
-    const mapas = { substituirMapaPadrao: jest.fn().mockRejectedValue(new BadRequestException({ code: 'MAP_NOT_CONFIRMED' })) };
-    await expect(service(fakeDb(), undefined, mapas).atualizarMapaPadrao('e1', 'mapa-em-revisao', actor)).rejects.toMatchObject({ response: { code: 'MAP_NOT_CONFIRMED' } });
-  });
-
-  it('propaga mapa padrão somente para sessões herdadas e invalida seus inventários', async () => {
-    const mapas = { substituirMapaPadrao: jest.fn().mockResolvedValue({ updated: event({ defaultMapId: 'map-novo' }), inheritedSessionIds: ['sessao-herdada'], inventorySessionIds: ['sessao-herdada'], inventoryCreatedCount: 2 }) };
-    const result = await service(fakeDb(), undefined, mapas).atualizarMapaPadrao('e1', 'map-novo', actor);
-    expect(result.inheritedSessionIds).toEqual(['sessao-herdada']);
-    expect(mapas.substituirMapaPadrao).toHaveBeenCalledWith('e1', 'map-novo', actor);
-  });
-
-  it('devolve previousMapId e previousMapArchive no PATCH para permitir retomada após reload', async () => {
-    const mapas = { substituirMapaPadrao: jest.fn().mockResolvedValue({
-      updated: event({ defaultMapId: 'mapa-novo' }),
-      previousMapId: 'mapa-anterior',
-      inheritedSessionIds: ['sessao-herdada'],
-      inventorySessionIds: ['sessao-herdada'],
-      inventoryCreatedCount: 2,
-      previousMapArchive: { archived: false, code: 'MAP_IN_USE', sessionIds: ['sessao-explicita', 'sessao-herdada'] },
-    }) };
-    await expect(service(fakeDb(), undefined, mapas).atualizarMapaPadrao('e1', 'mapa-novo', actor)).resolves.toEqual(expect.objectContaining({
-      previousMapId: 'mapa-anterior',
-      previousMapArchive: { archived: false, code: 'MAP_IN_USE', sessionIds: ['sessao-explicita', 'sessao-herdada'] },
-    }));
-  });
-
   it('envia a imagem do evento, atualiza a URL e remove a imagem anterior', async () => {
     const db = fakeDb({ selects: [[event({ imageUrl: 'https://www.portalcef.com.br/storage/essencia-uploads/eventos/e1/imagem/antiga.jpg' })]], update: async () => [event({ imageUrl: 'https://www.portalcef.com.br/storage/essencia-uploads/eventos/e1/imagem/nova.jpg' })] });
     const storage = { uploadBuffer: jest.fn().mockResolvedValue({ url: 'https://www.portalcef.com.br/storage/essencia-uploads/eventos/e1/imagem/nova.jpg' }), deletePublicUrl: jest.fn() };

@@ -146,12 +146,6 @@ export class EventosService {
     return { imageUrl: updated.imageUrl, updatedAt: updated.updatedAt };
   }
 
-  async atualizarMapaPadrao(eventId: string, mapId: string, actor: EventoActor) {
-    if (!this.mapas) throw new BadRequestException({ code: "MAP_SERVICE_UNAVAILABLE", message: "Serviço de mapas indisponível" });
-    const result = await this.mapas.substituirMapaPadrao(eventId, mapId, actor);
-    return { ...this.resumo(result.updated as typeof eventos.$inferSelect), previousMapId: result.previousMapId, previousMapArchive: result.previousMapArchive, inheritedSessionIds: result.inheritedSessionIds, inventorySessionIds: result.inventorySessionIds, inventoryCreatedCount: result.inventoryCreatedCount, inventoryRequiresReview: result.inheritedSessionIds.length > 0 };
-  }
-
   async listarAdmin(query: EventoListQuery = {}, actor?: EventoActor) {
     if (!actor) throw new BadRequestException({ code: "FORBIDDEN", message: "Usuário administrativo obrigatório" });
     const filters = query.status ? [eq(eventos.status, query.status)] : [];
