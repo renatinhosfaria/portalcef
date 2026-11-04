@@ -1,4 +1,5 @@
 import "reflect-metadata";
+import { RequestMethod } from "@nestjs/common";
 import { MapasController } from "./mapas.controller";
 import { MAX_PLANTA_PDF_BYTES } from "./mapas.service";
 
@@ -133,6 +134,7 @@ describe("MapasController", () => {
     await expect(controller.excluirVersao("evento-1", "map-old", actor)).resolves.toEqual({ success: true, data: { excluida: true, sessionIds: ["sessao-1"] } });
     expect(excluirVersao).toHaveBeenCalledWith("evento-1", "map-old", actor);
     expect(Reflect.getMetadata("path", MapasController.prototype.excluirVersao)).toBe("mapas/:versionId");
+    expect(Reflect.getMetadata("method", MapasController.prototype.excluirVersao)).toBe(RequestMethod.DELETE);
   });
 
   it("não expõe mais deteccoes nem confirmar", () => {

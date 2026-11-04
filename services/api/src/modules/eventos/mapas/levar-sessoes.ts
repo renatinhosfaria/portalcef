@@ -7,6 +7,7 @@ import {
   eventoItensPedido,
   eventoMapaAssentos,
   eventoMapas,
+  eventoOperacoesAdministrativas,
   eventoPedidos,
   eventoReservas,
   eventoSessoes,
@@ -86,6 +87,14 @@ export async function levarSessoesParaVersao(
     ? db.select().from(eventoReservas).where(inArray(eventoReservas.inventorySeatId, inventoryIds))
     : db.select().from(eventoReservas).where(eq(eventoReservas.inventorySeatId, "__nenhuma__"));
   const reservas = await entrada.lockRows<any>(typeof (reservationQuery as any).orderBy === "function" ? (reservationQuery as any).orderBy(asc(eventoReservas.id)) : reservationQuery);
+  const operationQuery = sessionIds.length
+    ? db.select().from(eventoOperacoesAdministrativas).where(inArray(eventoOperacoesAdministrativas.sessionId, sessionIds))
+    : db.select().from(eventoOperacoesAdministrativas).where(eq(eventoOperacoesAdministrativas.sessionId, "__nenhuma__"));
+  const operationsOrdered = typeof (operationQuery as any).orderBy === "function" ? (operationQuery as any).orderBy(asc(eventoOperacoesAdministrativas.id)) : operationQuery;
+  const operacoes = await entrada.lockRows<any>(operationsOrdered);
+  if (operacoes.some((operacao) => operacao.status === "ATIVA")) {
+    throw new BadRequestException({ code: "OPERACAO_ATIVA", message: "Há uma operação administrativa ativa (bloqueio, cortesia ou reserva) neste evento. Cancele-a antes de mudar o mapa." });
+  }
 
   const pedidosPorId = new Map(pedidos.map((pedido) => [pedido.id, pedido]));
   if (itens.some((item) => pagos.has(pedidosPorId.get(item.orderId)?.status))) {
@@ -102,12 +111,34 @@ export async function levarSessoesParaVersao(
   const reservaIds = reservas.filter((reserva) => pedidosEncerrados.has(reserva.orderId)).map((reserva) => reserva.id);
   if (itemIds.length) await db.delete(eventoItensPedido).where(inArray(eventoItensPedido.id, itemIds));
   if (reservaIds.length) await db.delete(eventoReservas).where(inArray(eventoReservas.id, reservaIds));
-  if (sessionIds.length) await db.delete(eventoInventarioAssentos).where(inArray(eventoInventarioAssentos.sessionId, sessionIds));
+  const operacoesEncerradas = operacoes.filter((operacao) => operacao.status === "CANCELADA" || operacao.status === "EXPIRADA");
+  const inventarioPreservado = new Map<string, { sessionId: string; seatId: string }>();
+  if (operacoesEncerradas.length) {
+    const assentoIds = [...new Set(inventarioAntigo.map((item) => item.seatId))];
+    const assentosAntigos = assentoIds.length
+      ? await db.select().from(eventoMapaAssentos).where(inArray(eventoMapaAssentos.id, assentoIds))
+      : [];
+    const assentoPorId = new Map(assentosAntigos.map((assento: any) => [assento.id, assento]));
+    const lugarPorChave = new Map(lugares.map((lugar: any) => [`${lugar.rowLabel}:${lugar.seatNumber}`, lugar]));
+    for (const operacao of operacoesEncerradas) {
+      const inventario = inventarioAntigo.find((item) => item.id === operacao.inventorySeatId);
+      if (!inventario || inventarioPreservado.has(inventario.id)) continue;
+      const assentoAntigo = assentoPorId.get(inventario.seatId) as any;
+      const chave = assentoAntigo ? `${assentoAntigo.rowLabel}:${assentoAntigo.seatNumber}` : "";
+      const lugar = lugarPorChave.get(chave) ?? lugares[inventarioPreservado.size % lugares.length];
+      inventarioPreservado.set(inventario.id, { sessionId: inventario.sessionId, seatId: lugar.id });
+      await db.update(eventoInventarioAssentos).set({ seatId: lugar.id, status: lugar.sellable === false ? "BLOQUEADO" : "DISPONIVEL", blockedReason: lugar.sellable === false ? "MAPA_ASSENTO_NAO_VENDAVEL" : null, updatedAt: entrada.agora }).where(eq(eventoInventarioAssentos.id, inventario.id));
+    }
+  }
+  const idsParaApagar = inventarioAntigo.filter((item) => !inventarioPreservado.has(item.id)).map((item) => item.id);
+  if (idsParaApagar.length) await db.delete(eventoInventarioAssentos).where(inArray(eventoInventarioAssentos.id, idsParaApagar));
 
   const capacidade = sessionIds.length ? lugares.filter((lugar: any) => lugar.sellable !== false).length : null;
   let inventarioCriado = 0;
   for (const sessao of sessoes) {
     for (const lugar of lugares) {
+      const preservado = [...inventarioPreservado.values()].some((item) => item.sessionId === sessao.id && item.seatId === lugar.id);
+      if (preservado) continue;
       await db.insert(eventoInventarioAssentos).values({
         sessionId: sessao.id,
         seatId: lugar.id,

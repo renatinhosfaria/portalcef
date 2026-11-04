@@ -3,6 +3,7 @@ import {
   eventoItensPedido,
   eventoMapaAssentos,
   eventoMapas,
+  eventoOperacoesAdministrativas,
   eventoPedidos,
   eventoReservas,
   eventoSessoes,
@@ -18,11 +19,12 @@ type Estado = {
   pedidos: any[];
   itens: any[];
   reservas: any[];
+  operacoes?: any[];
 };
 
 function bancoEmMemoria(estado: Estado) {
   const dbModule = jest.requireMock("@essencia/db") as any;
-  const linhas = (tabela: unknown) => tabela === eventoSessoes ? estado.sessoes : tabela === eventoMapas ? estado.mapas : tabela === eventoMapaAssentos ? estado.assentos : tabela === eventoInventarioAssentos ? estado.inventario : tabela === eventoPedidos ? estado.pedidos : tabela === eventoItensPedido ? estado.itens : tabela === eventoReservas ? estado.reservas : [];
+  const linhas = (tabela: unknown) => tabela === eventoSessoes ? estado.sessoes : tabela === eventoMapas ? estado.mapas : tabela === eventoMapaAssentos ? estado.assentos : tabela === eventoInventarioAssentos ? estado.inventario : tabela === eventoPedidos ? estado.pedidos : tabela === eventoItensPedido ? estado.itens : tabela === eventoReservas ? estado.reservas : tabela === eventoOperacoesAdministrativas ? estado.operacoes ?? [] : [];
   const combinar = (condicao: any, linha: any): boolean => {
     if (!condicao) return true;
     if (condicao.name === "and") return condicao.args.every((item: any) => combinar(item, linha));
@@ -116,6 +118,22 @@ describe("levar sessões para uma versão", () => {
     const resultado = await levarSessoesParaVersao(banco.db, { eventId: "e1", versaoId: "v1", agora, sessionIds: ["s2"], lockRows: banco.lockRows });
     expect(resultado.sessionIds).toEqual(["s2"]);
     expect(estado.sessoes.find((sessao) => sessao.id === "s1").mapId).toBe("a");
+  });
+
+  it("preserva operação CANCELADA ao trocar o inventário", async () => {
+    const estado: Estado = { sessoes: [{ id: "s1", eventId: "e1" }], mapas: [{ id: "v1" }], assentos: [{ id: "a1", mapId: "v1", rowLabel: "A", seatNumber: "1", sellable: true }], inventario: [{ id: "i1", sessionId: "s1", seatId: "a-antigo", status: "BLOQUEADO" }], pedidos: [], itens: [], reservas: [], operacoes: [{ id: "op1", sessionId: "s1", inventorySeatId: "i1", status: "CANCELADA" }] };
+    const banco = bancoEmMemoria(estado);
+    await levarSessoesParaVersao(banco.db, { eventId: "e1", versaoId: "v1", agora, lockRows: banco.lockRows });
+    expect(estado.operacoes![0]).toEqual(expect.objectContaining({ id: "op1", status: "CANCELADA" }));
+    expect(estado.operacoes![0].inventorySeatId).toBe("i1");
+    expect(estado.inventario).toEqual([expect.objectContaining({ id: "i1", seatId: "a1", status: "DISPONIVEL" })]);
+  });
+
+  it("recusa operação ATIVA antes de apagar o inventário", async () => {
+    const estado: Estado = { sessoes: [{ id: "s1", eventId: "e1" }], mapas: [{ id: "v1" }], assentos: [{ id: "a1", mapId: "v1", sellable: true }], inventario: [{ id: "i1", sessionId: "s1", seatId: "a-antigo", status: "BLOQUEADO" }], pedidos: [], itens: [], reservas: [], operacoes: [{ id: "op1", sessionId: "s1", inventorySeatId: "i1", status: "ATIVA" }] };
+    const banco = bancoEmMemoria(estado);
+    await expect(levarSessoesParaVersao(banco.db, { eventId: "e1", versaoId: "v1", agora, lockRows: banco.lockRows })).rejects.toMatchObject({ response: { code: "OPERACAO_ATIVA" } });
+    expect(estado.inventario).toEqual([{ id: "i1", sessionId: "s1", seatId: "a-antigo", status: "BLOQUEADO" }]);
   });
 
   it("evento sem sessão devolve capacidade null", async () => {

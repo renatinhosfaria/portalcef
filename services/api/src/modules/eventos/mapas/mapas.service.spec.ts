@@ -1230,6 +1230,7 @@ describe("MapasService", () => {
         inventory: [{ id: "inventory-delete", sessionId: "session-1", seatId: "seat-old", status: "DISPONIVEL" }],
         imports: [{ id: "import-delete", eventId: "event-1", mapId: "map-delete" }],
         pedidos: [], itens: [], reservas: [], ingressos: [], checkins: [], operacoes: [], audits: [],
+        lockEvents: [], orderByCalls: [],
         ...overrides,
       };
       const rows = (table: unknown) => table === dbModule.eventos ? [state.event]
@@ -1255,8 +1256,8 @@ describe("MapasService", () => {
           let selecionadas = rows(table).slice();
           const q: any = { then: (resolve: any, reject: any) => Promise.resolve(selecionadas).then(resolve, reject) };
           q.where = (condicao: any) => { selecionadas = selecionadas.filter((linha: any) => corresponde(linha, condicao)); return q; };
-          q.orderBy = () => { selecionadas.sort((a: any, b: any) => String(a.id).localeCompare(String(b.id))); return q; };
-          q.for = () => q;
+          q.orderBy = (...ordens: any[]) => { state.orderByCalls.push({ table, ordens }); selecionadas.sort((a: any, b: any) => String(a.id).localeCompare(String(b.id))); return q; };
+          q.for = (modo: string) => { state.lockEvents.push({ table, modo, ids: selecionadas.map((linha: any) => linha.id) }); return q; };
           return q;
         } }),
         update: (table: unknown) => ({ set: (values: any) => ({ where: (condicao: any) => {
@@ -1297,12 +1298,55 @@ describe("MapasService", () => {
       await expect(fx.maps.excluirVersao("event-1", "map-delete", actor)).resolves.toEqual({ excluida: true, sessionIds: ["session-1"] });
       expect(fx.state.sessions[0]).toEqual(expect.objectContaining({ mapId: "map-current", capacity: 1 }));
       expect(fx.state.inventory).toEqual([expect.objectContaining({ sessionId: "session-1", seatId: "seat-current", status: "DISPONIVEL" })]);
+      expect(fx.state.audits).toEqual(expect.arrayContaining([expect.objectContaining({ metadata: { action: "excluir_versao", sessionIds: ["session-1"] } })]));
+      const dbModule = jest.requireMock("@essencia/db") as any;
+      expect(fx.state.lockEvents.map((evento: any) => evento.table)).toEqual([
+        dbModule.eventos,
+        dbModule.eventoSessoes,
+        dbModule.eventoMapas,
+        dbModule.eventoImportacoesMapa,
+        dbModule.eventoInventarioAssentos,
+        dbModule.eventoPedidos,
+        dbModule.eventoItensPedido,
+        dbModule.eventoReservas,
+        dbModule.eventoOperacoesAdministrativas,
+      ]);
+    });
+
+    it("preserva operação encerrada ao recriar o inventário da sessão", async () => {
+      const fx = exclusaoFixture({ operacoes: [{ id: "operacao-1", sessionId: "session-1", inventorySeatId: "inventory-delete", status: "CANCELADA" }] });
+      await expect(fx.maps.excluirVersao("event-1", "map-delete", actor)).resolves.toEqual({ excluida: true, sessionIds: ["session-1"] });
+      expect(fx.state.operacoes).toEqual([expect.objectContaining({ id: "operacao-1", status: "CANCELADA", inventorySeatId: "inventory-delete" })]);
+      expect(fx.state.inventory).toEqual([expect.objectContaining({ id: "inventory-delete", seatId: "seat-current" })]);
+    });
+
+    it("recusa operação ativa antes de alterar o inventário", async () => {
+      const fx = exclusaoFixture({ operacoes: [{ id: "operacao-1", sessionId: "session-1", inventorySeatId: "inventory-delete", status: "ATIVA" }] });
+      await expect(fx.maps.excluirVersao("event-1", "map-delete", actor)).rejects.toMatchObject({ response: { code: "OPERACAO_ATIVA" } });
+      expect(fx.state.maps).toHaveLength(2);
+      expect(fx.state.inventory).toEqual([expect.objectContaining({ id: "inventory-delete", seatId: "seat-old" })]);
     });
 
     it("recusa a versão atual com MAPA_ATUAL", async () => {
       const fx = exclusaoFixture();
       await expect(fx.maps.excluirVersao("event-1", "map-current", actor)).rejects.toMatchObject({ response: { code: "MAPA_ATUAL", message: "A versão atual não pode ser excluída." } });
       expect(fx.state.maps).toHaveLength(2);
+    });
+
+    it("recusa MAPA_ATUAL antes da trava mesmo com compra em andamento", async () => {
+      const fx = exclusaoFixture({ pedidos: [{ id: "pedido-1", eventId: "event-1", status: "AGUARDANDO_PAGAMENTO", expiresAt: new Date(Date.now() + 60_000) }] });
+      await expect(fx.maps.excluirVersao("event-1", "map-current", actor)).rejects.toMatchObject({ response: { code: "MAPA_ATUAL" } });
+      expect(fx.state.maps).toHaveLength(2);
+      expect(fx.state.lockEvents).toHaveLength(1);
+      expect(fx.state.lockEvents[0].table).toBe((jest.requireMock("@essencia/db") as any).eventos);
+    });
+
+    it("recusa MAPA_ATUAL quando o evento não tem versão atual", async () => {
+      const fx = exclusaoFixture({ event: { id: "event-1", schoolId: "school-1", defaultMapId: null }, pedidos: [{ id: "pedido-1", eventId: "event-1", status: "AGUARDANDO_PAGAMENTO", expiresAt: new Date(Date.now() + 60_000) }] });
+      await expect(fx.maps.excluirVersao("event-1", "map-delete", actor)).rejects.toMatchObject({ response: { code: "MAPA_ATUAL" } });
+      expect(fx.state.maps).toHaveLength(2);
+      expect(fx.state.lockEvents).toHaveLength(1);
+      expect(fx.state.lockEvents[0].table).toBe((jest.requireMock("@essencia/db") as any).eventos);
     });
 
     it("recusa compra em andamento sem apagar nada", async () => {
