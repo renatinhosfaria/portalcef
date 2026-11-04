@@ -91,11 +91,17 @@ describe("ConferenciaMapa", () => {
     expect(screen.getByText("não vender").previousElementSibling?.textContent).toBe("0");
   });
 
+  it("mostra a ação de conferir para todo ponto ainda não conferido sem seleção prévia", () => {
+    renderizar(propostaComPendencias());
+
+    expect(screen.getByRole("button", { name: "Marcar como conferido" })).toBeTruthy();
+  });
+
   it("clicar num ponto seleciona os lugares e marcar como conferido envia CONFERIR_PONTO", async () => {
     const user = userEvent.setup();
     renderizar(propostaComPendencias());
 
-    await user.click(screen.getByRole("button", { name: /Fileira A pulou um número/ }));
+    await user.click(within(screen.getByRole("region", { name: "Pontos para conferir" })).getByRole("button", { name: /Fileira A pulou um número/ }));
     expect(screen.getByText("2 lugares selecionados")).toBeTruthy();
 
     await user.click(screen.getByRole("button", { name: "Marcar como conferido" }));
@@ -153,6 +159,17 @@ describe("ConferenciaMapa", () => {
       { tipo: "EDITAR_LUGAR", lugarId: "l1", categoria: "OBESO" },
       { tipo: "EDITAR_LUGAR", lugarId: "l2", categoria: "OBESO" },
     ]);
+  });
+
+  it("Selecionar fileira inteira seleciona todos os lugares da fileira do primeiro selecionado", async () => {
+    const user = userEvent.setup();
+    renderizar(propostaComPendencias());
+
+    fireEvent.click(screen.getByRole("button", { name: "A-1, Comum" }));
+    await user.click(screen.getByRole("button", { name: "Selecionar fileira inteira" }));
+
+    expect(screen.getByText("2 lugares selecionados")).toBeTruthy();
+    expect(screen.queryByText("3 lugares selecionados")).toBeNull();
   });
 
   it("confirmar a cor envia CONFIRMAR_LEGENDA e a contagem vem dos lugares atuais", async () => {
@@ -250,6 +267,25 @@ describe("ConferenciaMapa", () => {
     const pendencias = screen.getByRole("list", { name: "Pendências para publicar" });
     expect(within(pendencias).getByText("Fileira A pulou um número")).toBeTruthy();
     expect(within(pendencias).getByText("Confirme o significado da cor #c2")).toBeTruthy();
+  });
+
+  it("clicar na pendência de ponto seleciona o ponto e mostra a ação de conferência", async () => {
+    const user = userEvent.setup();
+    renderizar(propostaComPendencias());
+
+    const pendencias = screen.getByRole("list", { name: "Pendências para publicar" });
+    await user.click(within(pendencias).getByRole("button", { name: "Abrir pendência 1" }));
+
+    expect(screen.getByText("2 lugares selecionados")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Marcar como conferido" })).toBeTruthy();
+  });
+
+  it("concorda o texto quando há uma única pendência", () => {
+    const proposta = propostaLimpa();
+    proposta.pontos = [{ ...proposta.pontos[0]!, conferido: false }];
+    renderizar(proposta);
+
+    expect(screen.getByText("Resolva a 1 pendência para liberar")).toBeTruthy();
   });
 
   it("Publicar liberado envia o motivo opcional, uma única vez", async () => {

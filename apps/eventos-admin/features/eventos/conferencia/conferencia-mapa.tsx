@@ -102,6 +102,35 @@ export function ConferenciaMapa({ eventoId, mapId, propostaInicial, trava, onPub
     setFoco({ x: minX, y: minY, largura: maxX - minX, altura: maxY - minY });
   }
 
+  function selecionarFileira(fileira: string) {
+    setPontoAtivoId(null);
+    setSelecionadosIds(new Set(proposta.lugares.filter((lugar) => lugar.fileira === fileira).map((lugar) => lugar.id)));
+  }
+
+  function selecionarPendencia(tipo: (typeof pendencias)[number]) {
+    if (tipo.tipo === "PONTO_NAO_CONFERIDO") {
+      const ponto = proposta.pontos.find(
+        (item) => !item.conferido && item.mensagem === tipo.mensagem && item.lugarIds.length === tipo.lugarIds.length && item.lugarIds.every((id) => tipo.lugarIds.includes(id)),
+      );
+      if (ponto) selecionarPonto(ponto);
+      return;
+    }
+
+    if (tipo.tipo === "COR_NAO_CONFIRMADA") {
+      const lugar = proposta.lugares.find((item) => tipo.lugarIds.includes(item.id));
+      const entrada = lugar ? proposta.legenda.find((item) => item.cor === lugar.cor) : undefined;
+      const item = entrada
+        ? Array.from(document.querySelectorAll<HTMLElement>("[aria-label^='Cor ']")).find((elemento) => elemento.getAttribute("aria-label") === `Cor ${entrada.cor}`)
+        : undefined;
+      item?.scrollIntoView?.({ behavior: "smooth", block: "center" });
+      item?.querySelector<HTMLElement>("select")?.focus();
+      return;
+    }
+
+    setPontoAtivoId(null);
+    setSelecionadosIds(new Set(tipo.lugarIds));
+  }
+
   function mudarModo(novo: Modo) {
     setModo(novo);
     if (novo !== "SOBREPOR") {
@@ -268,7 +297,7 @@ export function ConferenciaMapa({ eventoId, mapId, propostaInicial, trava, onPub
               onSelecionar={selecionarPonto}
               onConferir={(ponto) => aplicar([{ tipo: "CONFERIR_PONTO", pontoId: ponto.id }])}
             />
-            <PainelLugar proposta={proposta} selecionados={selecionados} aplicar={aplicar} />
+            <PainelLugar proposta={proposta} selecionados={selecionados} aplicar={aplicar} onSelecionarFileira={selecionarFileira} />
             <LegendaCores
               legenda={proposta.legenda}
               contagens={contagens}
@@ -278,7 +307,11 @@ export function ConferenciaMapa({ eventoId, mapId, propostaInicial, trava, onPub
             {pendencias.length > 0 ? (
               <ul aria-label="Pendências para publicar" className="list-disc space-y-1 pl-5 text-xs text-[#69736e]">
                 {pendencias.map((p, i) => (
-                  <li key={`${p.tipo}-${i}`}>{p.mensagem}</li>
+                  <li key={`${p.tipo}-${i}`}>
+                    <button type="button" aria-label={`Abrir pendência ${i + 1}`} onClick={() => selecionarPendencia(p)} className="text-left underline decoration-dotted underline-offset-2">
+                      {p.mensagem}
+                    </button>
+                  </li>
                 ))}
               </ul>
             ) : null}
@@ -286,7 +319,11 @@ export function ConferenciaMapa({ eventoId, mapId, propostaInicial, trava, onPub
               Publicar mapa
             </button>
             <p className="text-center text-xs text-[#69736e]" aria-live="polite">
-              {salvando ? "Salvando…" : pendencias.length > 0 ? `Resolva as ${pendencias.length} pendências para liberar` : "Tudo conferido"}
+              {salvando
+                ? "Salvando…"
+                : pendencias.length > 0
+                  ? `Resolva a${pendencias.length === 1 ? " 1 pendência" : `s ${pendencias.length} pendências`} para liberar`
+                  : "Tudo conferido"}
             </p>
 
             <button type="button" disabled={bloqueadoPorTrava || reenviando} onClick={pedirOutraPlanta} className={BOTAO_SECUNDARIO + " w-full"}>

@@ -132,6 +132,31 @@ describe("MapaEstiloB", () => {
     expect(container.querySelector("svg > rect")!.getAttribute("fill")).toBe("#fffdf8");
   });
 
+  it("não deixa o palco cobrir o centro de nenhum lugar na faixa do palco", () => {
+    const { container } = render(
+      <MapaEstiloB
+        {...base}
+        lugares={[
+          lugar({ id: "esquerda", x: 1800, y: 600 }),
+          lugar({ id: "direita", x: 2200, y: 600 }),
+        ]}
+        elementos={[{ tipo: "PALCO", texto: "PALCO", x: 2000, y: 500 }]}
+      />,
+    );
+
+    const palco = container.querySelector("path[data-palco]")!;
+    const comando = palco.getAttribute("d")!;
+    const valores = comando.match(/-?\d+(?:\.\d+)?/g)?.map(Number) ?? [];
+    const x0 = valores[0] ?? Number.NaN;
+    const yBase = valores[1] ?? Number.NaN;
+    const yControle = valores[3] ?? Number.NaN;
+    const x1 = valores[4] ?? Number.NaN;
+    expect(x0).toBe(1840);
+    expect(x1).toBe(2160);
+    expect(yControle).toBeLessThan(yBase);
+    expect(container.querySelector("[data-lugar-id='esquerda']")!.getAttribute("transform")).toContain("translate(1800 600)");
+  });
+
   it("repassa o clique no fundo em coordenadas do mapa", () => {
     const aoFundo = vi.fn();
     const { container } = render(<MapaEstiloB {...base} lugares={[]} onFundoClick={aoFundo} />);

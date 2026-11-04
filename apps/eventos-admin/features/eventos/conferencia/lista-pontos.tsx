@@ -29,7 +29,7 @@ export function ListaPontos({ pontos, selecionadoId, onSelecionar, onConferir }:
               {ponto.conferido ? "✓ " : ""}
               {ponto.mensagem}
             </button>
-            {selecionadoId === ponto.id && !ponto.conferido ? (
+            {!ponto.conferido ? (
               <button
                 type="button"
                 onClick={() => onConferir(ponto)}

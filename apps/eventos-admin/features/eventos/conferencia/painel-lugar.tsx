@@ -15,6 +15,7 @@ interface PainelLugarProps {
   proposta: PropostaMapa;
   selecionados: LugarProposto[];
   aplicar: (operacoes: OperacaoProposta[]) => void;
+  onSelecionarFileira: (fileira: string) => void;
 }
 
 function CampoTexto({ rotulo, valor, onSalvar }: { rotulo: string; valor: string; onSalvar: (novo: string) => void }) {
@@ -45,7 +46,7 @@ function CampoTexto({ rotulo, valor, onSalvar }: { rotulo: string; valor: string
   );
 }
 
-export function PainelLugar({ proposta, selecionados, aplicar }: PainelLugarProps) {
+export function PainelLugar({ proposta, selecionados, aplicar, onSelecionarFileira }: PainelLugarProps) {
   if (selecionados.length === 0) {
     return <p className="text-sm text-[#69736e]">Clique num lugar do mapa para editar. Shift+clique soma à seleção.</p>;
   }
@@ -65,6 +66,13 @@ export function PainelLugar({ proposta, selecionados, aplicar }: PainelLugarProp
       <h2 className="font-[family-name:var(--font-display,Outfit),system-ui,sans-serif] text-sm font-bold text-[#24302c]">
         {unico ? "Lugar selecionado" : `${selecionados.length} lugares selecionados`}
       </h2>
+      <button
+        type="button"
+        onClick={() => onSelecionarFileira(selecionados[0]?.fileira ?? "")}
+        className="rounded-lg border border-[#e5e8df] bg-white px-3 py-1 text-xs font-semibold text-[#24302c]"
+      >
+        Selecionar fileira inteira
+      </button>
       {unico ? (
         <div className="flex gap-2">
           <CampoTexto rotulo="Fileira" valor={unico.fileira} onSalvar={(fileira) => aplicar([{ tipo: "EDITAR_LUGAR", lugarId: unico.id, fileira }])} />

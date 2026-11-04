@@ -190,8 +190,22 @@ export function MapaEstiloB({
     );
   }
 
-  const larguraPalco = (caixaLugares.maxX - caixaLugares.minX) * 0.6;
-  const alturaPalco = larguraPalco * 0.14;
+  const larguraCaixaLugares = caixaLugares.maxX - caixaLugares.minX;
+  const alturaMediaLugares = lugares.length > 0 ? lugares.reduce((total, lugar) => total + lugar.altura, 0) / lugares.length : 100;
+  const larguraPalcoBase = larguraCaixaLugares * 0.6;
+  const larguraMinimaPalco = 4 * alturaMediaLugares;
+  const dimensoesPalco = (elemento: ElementoPlanta): { largura: number; altura: number } => {
+    const alturaInicial = larguraPalcoBase * 0.14;
+    const yMinimo = elemento.y - 1.5 * alturaInicial;
+    const yMaximo = elemento.y + alturaInicial / 2;
+    const distancias = lugares
+      .filter((lugar) => lugar.y >= yMinimo && lugar.y <= yMaximo)
+      .map((lugar) => Math.abs(lugar.x - elemento.x) - lugar.largura / 2);
+    const menorDistancia = distancias.length > 0 ? Math.min(...distancias) : Number.POSITIVE_INFINITY;
+    const limitePelosLugares = Number.isFinite(menorDistancia) ? 2 * menorDistancia - alturaMediaLugares : larguraPalcoBase;
+    const largura = Math.max(larguraMinimaPalco, Math.min(larguraPalcoBase, limitePelosLugares));
+    return { largura, altura: largura * 0.14 };
+  };
   const fonteElemento = Math.max(60, Math.round(altura * 0.018));
 
   return (
@@ -228,6 +242,7 @@ export function MapaEstiloB({
         />
         {elementos.map((elemento, indice) => {
           if (elemento.tipo === "PALCO") {
+            const { largura: larguraPalco, altura: alturaPalco } = dimensoesPalco(elemento);
             const x0 = elemento.x - larguraPalco / 2;
             const x1 = elemento.x + larguraPalco / 2;
             const yBase = elemento.y + alturaPalco / 2;
