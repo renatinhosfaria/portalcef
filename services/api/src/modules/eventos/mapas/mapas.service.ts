@@ -7,7 +7,7 @@ import { StorageService } from "../../../common/storage/storage.service";
 import { ErroProposta, aplicarOperacoes, pendenciasPublicacao, type LayoutMapa, type MetadadosAssento, type OperacaoProposta, type PropostaMapa } from "@essencia/shared/eventos/mapa-proposta";
 import { GeradorMapaPdf } from "./gerador/gerador-mapa-pdf";
 import { propostaParaConfirmacao } from "./gerador/proposta-para-confirmacao";
-import { carregarTrava, exigirMapaLivre } from "./trava-venda";
+import { carregarTrava, exigirMapaLivre, MENSAGEM_TRAVA, type TipoTrava } from "./trava-venda";
 import { levarSessoesParaVersao } from "./levar-sessoes";
 
 /**
@@ -19,6 +19,18 @@ export const MAX_PLANTA_PDF_BYTES = 10 * 1024 * 1024;
 
 export interface ConfirmMapInput { seats: Array<{ id?: string; rowLabel: string; seatNumber: string; x: number; y: number; width?: number; height?: number; category?: string | null; accessible?: boolean; sellable?: boolean; metadata?: MetadadosAssento }>; layout?: LayoutMapa; revisaoEsperada?: number; reason?: string; }
 export interface MapImportSummary { importId: string; mapId: string; status: string; proposalCount: number; conflictCount: number; }
+export interface VersaoMapaResumo {
+  id: string;
+  version: number;
+  status: "EM_REVISAO" | "CONFIRMADO" | "ARQUIVADO";
+  originalFileName: string | null;
+  createdAt: Date;
+  confirmedAt: Date | null;
+  atual: boolean;
+  lugares: number;
+  sessoes: Array<{ id: string; startsAt: Date }>;
+  editavel: boolean;
+}
 export interface MapReplacementResult {
   updated: unknown;
   previousMapId: string | null;
@@ -183,6 +195,8 @@ export class MapasService {
   async importar(eventId: string, file: MultipartFile, actor: EventoActor, pagina?: number): Promise<MapImportSummary> {
     const event = await this.assertEvent(eventId, actor);
     if (!this.storage) throw new BadRequestException({ code: "STORAGE_UNAVAILABLE", message: "Armazenamento de mapas indisponível" });
+    const tipoTrava = await carregarTrava(this.db, eventId, new Date());
+    exigirMapaLivre(tipoTrava);
     const plantaGrande = new BadRequestException({ code: "MAP_TOO_LARGE", message: "A planta passa de 10 MB. Envie o PDF exportado do programa de desenho, sem imagens." });
     let buffer: Buffer;
     try {
@@ -221,10 +235,43 @@ export class MapasService {
     }
   }
 
-  async listar(eventId: string, actor: EventoActor) {
-    await this.assertEvent(eventId, actor);
+  async listar(eventId: string, actor: EventoActor): Promise<{ versoes: VersaoMapaResumo[]; trava: { tipo: TipoTrava; mensagem: string | null } }> {
+    const event = await this.assertEvent(eventId, actor);
     const maps = await this.db.select().from(eventoMapas).where(eq(eventoMapas.eventId, eventId)).orderBy(desc(eventoMapas.version));
-    return maps.map((map: any) => ({ id: map.id, version: map.version, status: map.status, originalFileName: map.originalFileName ?? null, createdAt: map.createdAt, confirmedAt: map.confirmedAt ?? null }));
+    const sessoes = await this.db.select().from(eventoSessoes).where(eq(eventoSessoes.eventId, eventId));
+    const importacoes = await this.db.select().from(eventoImportacoesMapa).where(eq(eventoImportacoesMapa.eventId, eventId));
+    const mapIds = maps.map((map: any) => map.id);
+    const assentos = mapIds.length
+      ? await this.db.select().from(eventoMapaAssentos).where(inArray(eventoMapaAssentos.mapId, mapIds))
+      : [];
+    const propostaPorMapa = new Map(importacoes.map((importacao: any) => [importacao.mapId, importacao.proposta]));
+    const sessoesPorMapa = new Map<string, Array<{ id: string; startsAt: Date }>>();
+    for (const sessao of sessoes as any[]) {
+      if (!sessao.mapId) continue;
+      const daVersao = sessoesPorMapa.get(sessao.mapId) ?? [];
+      daVersao.push({ id: sessao.id, startsAt: sessao.startsAt });
+      sessoesPorMapa.set(sessao.mapId, daVersao);
+    }
+    const versoes = (maps as any[]).map((map): VersaoMapaResumo => {
+      const proposta = propostaPorMapa.get(map.id) as { lugares?: unknown[] } | null | undefined;
+      const lugares = map.status === "EM_REVISAO"
+        ? (Array.isArray(proposta?.lugares) ? proposta.lugares.length : 0)
+        : assentos.filter((assento: any) => assento.mapId === map.id).length;
+      return {
+        id: map.id,
+        version: map.version,
+        status: map.status,
+        originalFileName: map.originalFileName ?? null,
+        createdAt: map.createdAt,
+        confirmedAt: map.confirmedAt ?? null,
+        atual: map.id === event.defaultMapId,
+        lugares,
+        sessoes: sessoesPorMapa.get(map.id) ?? [],
+        editavel: ["CONFIRMADO", "ARQUIVADO"].includes(map.status) && Boolean(proposta),
+      };
+    });
+    const tipo = await carregarTrava(this.db, eventId, new Date());
+    return { versoes, trava: { tipo, mensagem: tipo === "LIVRE" ? null : MENSAGEM_TRAVA[tipo] } };
   }
 
   async obterOriginal(eventId: string, versionId: string, actor: EventoActor): Promise<{ body: unknown; contentType: string; contentLength?: number }> {

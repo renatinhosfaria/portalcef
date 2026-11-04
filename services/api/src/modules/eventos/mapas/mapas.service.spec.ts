@@ -314,7 +314,7 @@ describe("MapasService", () => {
   const arquivoPdf = (buffer: Buffer = PDF, mimetype = "application/pdf") => ({ filename: "planta.pdf", mimetype, toBuffer: jest.fn().mockResolvedValue(buffer) }) as any;
   const propostaFalsa = (lugares = 3, pontos = 1) => ({ versao: 1, revisao: 0, pagina: { numero: 1, largura: 8420, altura: 5950 }, lugares: Array.from({ length: lugares }, (_, i) => ({ id: `l${i}` })), rotulos: [], elementos: [], legenda: [], pontos: Array.from({ length: pontos }, (_, i) => ({ id: `p${i}` })) }) as any;
 
-  function importacaoFixture(overrides: { maps?: any[]; sessions?: any[]; event?: any; gerar?: jest.Mock } = {}) {
+  function importacaoFixture(overrides: { maps?: any[]; sessions?: any[]; event?: any; gerar?: jest.Mock; imports?: any[]; seats?: any[]; pedidos?: any[]; ingressos?: any[]; checkins?: any[]; operacoes?: any[] } = {}) {
     const dbModule = jest.requireMock("@essencia/db") as any;
     (dbModule.desc as jest.Mock).mockImplementation(() => "desc");
     const ordem: string[] = [];
@@ -322,12 +322,17 @@ describe("MapasService", () => {
       event: { id: "event-1", schoolId: "school-1", defaultMapId: null, ...overrides.event },
       maps: overrides.maps ?? [],
       sessions: overrides.sessions ?? [],
-      imports: [] as any[],
+      imports: overrides.imports ?? [] as any[],
+      seats: overrides.seats ?? [] as any[],
+      pedidos: overrides.pedidos ?? [] as any[],
+      ingressos: overrides.ingressos ?? [] as any[],
+      checkins: overrides.checkins ?? [] as any[],
+      operacoes: overrides.operacoes ?? [] as any[],
       audits: [] as any[],
       deteccoes: [] as any[],
       updates: [] as any[],
     };
-    const rows = (table: unknown) => table === dbModule.eventos ? [state.event] : table === dbModule.eventoMapas ? state.maps : table === dbModule.eventoSessoes ? state.sessions : table === dbModule.eventoImportacoesMapa ? state.imports : [];
+    const rows = (table: unknown) => table === dbModule.eventos ? [state.event] : table === dbModule.eventoMapas ? state.maps : table === dbModule.eventoSessoes ? state.sessions : table === dbModule.eventoImportacoesMapa ? state.imports : table === dbModule.eventoMapaAssentos ? state.seats : table === dbModule.eventoPedidos ? state.pedidos : table === dbModule.eventoIngressos ? state.ingressos : table === dbModule.eventoCheckins ? state.checkins : table === dbModule.eventoOperacoesAdministrativas ? state.operacoes : [];
     const select = () => ({ from: (table: unknown) => {
       const consulta: any = { where: () => consulta, orderBy: (ordenacao: unknown) => { if (ordenacao === "desc") return Promise.resolve([...rows(table)].sort((x: any, y: any) => y.version - x.version)); return Promise.resolve(rows(table)); }, then: (resolve: any, reject: any) => Promise.resolve(rows(table)).then(resolve, reject), for: () => consulta };
       return consulta;
@@ -439,12 +444,65 @@ describe("MapasService", () => {
     ];
     const fx = importacaoFixture({ maps });
     const lista = await fx.maps.listar("event-1", actor);
-    expect(lista).toEqual([
-      { id: "m2", version: 2, status: "CONFIRMADO", originalFileName: "b.pdf", createdAt: new Date("2026-02-01"), confirmedAt: new Date("2026-02-02") },
-      { id: "m1", version: 1, status: "ARQUIVADO", originalFileName: "a.pdf", createdAt: new Date("2026-01-01"), confirmedAt: null },
-    ]);
+    expect(lista).toEqual({
+      versoes: [
+        { id: "m2", version: 2, status: "CONFIRMADO", originalFileName: "b.pdf", createdAt: new Date("2026-02-01"), confirmedAt: new Date("2026-02-02"), atual: false, lugares: 0, sessoes: [], editavel: false },
+        { id: "m1", version: 1, status: "ARQUIVADO", originalFileName: "a.pdf", createdAt: new Date("2026-01-01"), confirmedAt: null, atual: false, lugares: 0, sessoes: [], editavel: false },
+      ],
+      trava: { tipo: "LIVRE", mensagem: null },
+    });
     const outra = importacaoFixture({ maps, event: { schoolId: "school-2" } });
     await expect(outra.maps.listar("event-1", actor)).rejects.toMatchObject({ response: { code: "FORBIDDEN" } });
+  });
+
+  it("lista versões com atual, lugares, sessões, editavel e trava LIVRE", async () => {
+    const startsAt = new Date("2026-12-07T20:00:00Z");
+    const maps = [
+      { id: "m1", eventId: "event-1", version: 1, status: "ARQUIVADO", originalFileName: "antigo.pdf", createdAt: new Date("2026-01-01"), confirmedAt: new Date("2026-01-02") },
+      { id: "m2", eventId: "event-1", version: 2, status: "CONFIRMADO", originalFileName: "atual.pdf", createdAt: new Date("2026-02-01"), confirmedAt: new Date("2026-02-02") },
+      { id: "m3", eventId: "event-1", version: 3, status: "EM_REVISAO", originalFileName: "rascunho.pdf", createdAt: new Date("2026-03-01"), confirmedAt: null },
+    ];
+    const fx = importacaoFixture({
+      event: { defaultMapId: "m2" },
+      maps,
+      imports: [
+        { id: "imp-2", eventId: "event-1", mapId: "m2", proposta: propostaFalsa(3) },
+        { id: "imp-3", eventId: "event-1", mapId: "m3", proposta: propostaFalsa(4) },
+      ],
+      seats: [
+        { id: "seat-1", mapId: "m1" },
+        { id: "seat-2", mapId: "m2" },
+        { id: "seat-3", mapId: "m2" },
+        { id: "seat-4", mapId: "m2" },
+      ],
+      sessions: [
+        { id: "s1", eventId: "event-1", mapId: "m2", startsAt },
+        { id: "s2", eventId: "event-1", mapId: "m1", startsAt: new Date("2026-12-08T20:00:00Z") },
+      ],
+    });
+
+    await expect(fx.maps.listar("event-1", actor)).resolves.toEqual({
+      versoes: [
+        expect.objectContaining({ id: "m3", version: 3, status: "EM_REVISAO", lugares: 4, sessoes: [], editavel: false, atual: false }),
+        expect.objectContaining({ id: "m2", version: 2, status: "CONFIRMADO", lugares: 3, sessoes: [{ id: "s1", startsAt }], editavel: true, atual: true }),
+        expect.objectContaining({ id: "m1", version: 1, status: "ARQUIVADO", lugares: 1, sessoes: [{ id: "s2", startsAt: new Date("2026-12-08T20:00:00Z") }], editavel: false, atual: false }),
+      ],
+      trava: { tipo: "LIVRE", mensagem: null },
+    });
+  });
+
+  it("lista devolve a trava com a mensagem quando há venda confirmada", async () => {
+    const fx = importacaoFixture({ pedidos: [{ id: "pedido-1", eventId: "event-1", status: "CONFIRMADO", expiresAt: null }] });
+    await expect(fx.maps.listar("event-1", actor)).resolves.toMatchObject({
+      trava: { tipo: "VENDA_CONFIRMADA", mensagem: "Bloqueado: já há lugares vendidos com pagamento confirmado neste evento." },
+    });
+  });
+
+  it("importar recusa com VENDA_CONFIRMADA sem chamar o gerador nem o storage", async () => {
+    const fx = importacaoFixture({ pedidos: [{ id: "pedido-1", eventId: "event-1", status: "CONFIRMADO", expiresAt: null }] });
+    await expect(fx.maps.importar("event-1", arquivoPdf(), actor)).rejects.toMatchObject({ response: { code: "VENDA_CONFIRMADA" } });
+    expect(fx.gerar).not.toHaveBeenCalled();
+    expect(fx.storage.uploadMapBuffer).not.toHaveBeenCalled();
   });
 
   it("revisão devolve a proposta da importação", async () => {
