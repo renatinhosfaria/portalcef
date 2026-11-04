@@ -136,6 +136,32 @@ describe("levar sessões para uma versão", () => {
     expect(estado.inventario).toEqual([{ id: "i1", sessionId: "s1", seatId: "a-antigo", status: "BLOQUEADO" }]);
   });
 
+  it("não duplica assento ao misturar fallback e correspondência de operações encerradas", async () => {
+    const estado: Estado = {
+      sessoes: [{ id: "s1", eventId: "e1" }],
+      mapas: [{ id: "v1" }],
+      assentos: [
+        { id: "a1", mapId: "v1", rowLabel: "A", seatNumber: "1", sellable: true },
+        { id: "b1", mapId: "v1", rowLabel: "B", seatNumber: "1", sellable: true },
+        { id: "old-a", mapId: "old", rowLabel: "A", seatNumber: "1", sellable: true },
+        { id: "old-x", mapId: "old", rowLabel: "X", seatNumber: "9", sellable: true },
+      ],
+      inventario: [
+        { id: "i1", sessionId: "s1", seatId: "old-x", status: "BLOQUEADO" },
+        { id: "i2", sessionId: "s1", seatId: "old-a", status: "BLOQUEADO" },
+      ],
+      pedidos: [], itens: [], reservas: [],
+      operacoes: [
+        { id: "op1", sessionId: "s1", inventorySeatId: "i1", status: "CANCELADA" },
+        { id: "op2", sessionId: "s1", inventorySeatId: "i2", status: "EXPIRADA" },
+      ],
+    };
+    const banco = bancoEmMemoria(estado);
+    await levarSessoesParaVersao(banco.db, { eventId: "e1", versaoId: "v1", agora, lockRows: banco.lockRows });
+    const assentosDaSessao = estado.inventario.filter((item) => item.sessionId === "s1").map((item) => item.seatId);
+    expect(new Set(assentosDaSessao).size).toBe(assentosDaSessao.length);
+  });
+
   it("evento sem sessão devolve capacidade null", async () => {
     const estado: Estado = { sessoes: [], mapas: [{ id: "v1" }], assentos: [{ id: "a1", mapId: "v1", sellable: true }], inventario: [], pedidos: [], itens: [], reservas: [] };
     const banco = bancoEmMemoria(estado);

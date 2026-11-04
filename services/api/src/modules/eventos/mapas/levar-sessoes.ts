@@ -113,6 +113,7 @@ export async function levarSessoesParaVersao(
   if (reservaIds.length) await db.delete(eventoReservas).where(inArray(eventoReservas.id, reservaIds));
   const operacoesEncerradas = operacoes.filter((operacao) => operacao.status === "CANCELADA" || operacao.status === "EXPIRADA");
   const inventarioPreservado = new Map<string, { sessionId: string; seatId: string }>();
+  const lugaresUsadosPorSessao = new Map<string, Set<string>>();
   if (operacoesEncerradas.length) {
     const assentoIds = [...new Set(inventarioAntigo.map((item) => item.seatId))];
     const assentosAntigos = assentoIds.length
@@ -125,7 +126,18 @@ export async function levarSessoesParaVersao(
       if (!inventario || inventarioPreservado.has(inventario.id)) continue;
       const assentoAntigo = assentoPorId.get(inventario.seatId) as any;
       const chave = assentoAntigo ? `${assentoAntigo.rowLabel}:${assentoAntigo.seatNumber}` : "";
-      const lugar = lugarPorChave.get(chave) ?? lugares[inventarioPreservado.size % lugares.length];
+      const usados = lugaresUsadosPorSessao.get(inventario.sessionId) ?? new Set<string>();
+      const correspondente = lugarPorChave.get(chave) as any;
+      const lugar = (correspondente && !usados.has(correspondente.id) ? correspondente : undefined)
+        ?? lugares.find((candidato: any) => !usados.has(candidato.id));
+      if (!lugar) {
+        const existente = [...inventarioPreservado.entries()].find(([, preservado]) => preservado.sessionId === inventario.sessionId);
+        if (!existente) throw new BadRequestException({ code: "MAP_EMPTY", message: "O mapa precisa de pelo menos um assento" });
+        await db.update(eventoOperacoesAdministrativas).set({ inventorySeatId: existente[0], updatedAt: entrada.agora }).where(eq(eventoOperacoesAdministrativas.id, operacao.id));
+        continue;
+      }
+      usados.add(lugar.id);
+      lugaresUsadosPorSessao.set(inventario.sessionId, usados);
       inventarioPreservado.set(inventario.id, { sessionId: inventario.sessionId, seatId: lugar.id });
       await db.update(eventoInventarioAssentos).set({ seatId: lugar.id, status: lugar.sellable === false ? "BLOQUEADO" : "DISPONIVEL", blockedReason: lugar.sellable === false ? "MAPA_ASSENTO_NAO_VENDAVEL" : null, updatedAt: entrada.agora }).where(eq(eventoInventarioAssentos.id, inventario.id));
     }
