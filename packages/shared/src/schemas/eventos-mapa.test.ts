@@ -1,4 +1,4 @@
-import { criarSessaoSchema, atualizarEventoSchema } from './eventos';
+import { criarEventoSchema, criarSessaoSchema, atualizarEventoSchema } from './eventos';
 
 describe('schemas de sessão e mapa do evento', () => {
   const sessaoValida = {
@@ -9,6 +9,20 @@ describe('schemas de sessão e mapa do evento', () => {
 
   it('criarSessaoSchema recusa mapId', () => {
     expect(criarSessaoSchema.safeParse({ ...sessaoValida, mapId: '00000000-0000-0000-0000-000000000001' }).success).toBe(false);
+  });
+
+  it('criarEventoSchema recusa mapId dentro de sessions', () => {
+    const resultado = criarEventoSchema.safeParse({
+      schoolId: '00000000-0000-0000-0000-000000000001',
+      slug: 'evento',
+      title: 'Evento',
+      description: 'Descrição',
+      cancellationPolicy: 'Política',
+      contactEmail: 'contato@example.com',
+      sessions: [{ ...sessaoValida, mapId: '00000000-0000-0000-0000-000000000002' }],
+    });
+
+    expect(resultado.success).toBe(false);
   });
 
   it('atualizarEventoSchema ignora defaultMapId', () => {

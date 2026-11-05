@@ -23,7 +23,7 @@ describe("MapasService", () => {
   const arquivoPdf = (buffer: Buffer = PDF, mimetype = "application/pdf") => ({ filename: "planta.pdf", mimetype, toBuffer: jest.fn().mockResolvedValue(buffer) }) as any;
   const propostaFalsa = (lugares = 3, pontos = 1) => ({ versao: 1, revisao: 0, pagina: { numero: 1, largura: 8420, altura: 5950 }, lugares: Array.from({ length: lugares }, (_, i) => ({ id: `l${i}` })), rotulos: [], elementos: [], legenda: [], pontos: Array.from({ length: pontos }, (_, i) => ({ id: `p${i}` })) }) as any;
 
-  function importacaoFixture(overrides: { maps?: any[]; sessions?: any[]; event?: any; gerar?: jest.Mock; imports?: any[]; seats?: any[]; pedidos?: any[]; ingressos?: any[]; checkins?: any[]; operacoes?: any[] } = {}) {
+  function importacaoFixture(overrides: { maps?: any[]; sessions?: any[]; event?: any; gerar?: jest.Mock; imports?: any[]; seats?: any[]; inventory?: any[]; pedidos?: any[]; ingressos?: any[]; checkins?: any[]; operacoes?: any[] } = {}) {
     const dbModule = jest.requireMock("@essencia/db") as any;
     (dbModule.desc as jest.Mock).mockImplementation(() => "desc");
     const ordem: string[] = [];
@@ -33,6 +33,7 @@ describe("MapasService", () => {
       sessions: overrides.sessions ?? [],
       imports: overrides.imports ?? [] as any[],
       seats: overrides.seats ?? [] as any[],
+      inventory: overrides.inventory ?? [] as any[],
       pedidos: overrides.pedidos ?? [] as any[],
       ingressos: overrides.ingressos ?? [] as any[],
       checkins: overrides.checkins ?? [] as any[],
@@ -42,7 +43,7 @@ describe("MapasService", () => {
       updates: [] as any[],
       lockEvents: [] as unknown[],
     };
-    const rows = (table: unknown) => table === dbModule.eventos ? [state.event] : table === dbModule.eventoMapas ? state.maps : table === dbModule.eventoSessoes ? state.sessions : table === dbModule.eventoImportacoesMapa ? state.imports : table === dbModule.eventoMapaAssentos ? state.seats : table === dbModule.eventoPedidos ? state.pedidos : table === dbModule.eventoIngressos ? state.ingressos : table === dbModule.eventoCheckins ? state.checkins : table === dbModule.eventoOperacoesAdministrativas ? state.operacoes : [];
+    const rows = (table: unknown) => table === dbModule.eventos ? [state.event] : table === dbModule.eventoMapas ? state.maps : table === dbModule.eventoSessoes ? state.sessions : table === dbModule.eventoImportacoesMapa ? state.imports : table === dbModule.eventoMapaAssentos ? state.seats : table === dbModule.eventoInventarioAssentos ? state.inventory : table === dbModule.eventoPedidos ? state.pedidos : table === dbModule.eventoIngressos ? state.ingressos : table === dbModule.eventoCheckins ? state.checkins : table === dbModule.eventoOperacoesAdministrativas ? state.operacoes : [];
     const corresponde = (linha: any, condicao: any): boolean => {
       if (!condicao) return true;
       if (condicao.tipo === "and") return condicao.condicoes.every((item: any) => corresponde(linha, item));
@@ -222,6 +223,23 @@ describe("MapasService", () => {
       ],
       trava: { tipo: "LIVRE", mensagem: null },
     });
+  });
+
+  it("lista sessão legada sem mapId na versão indicada pelo inventário antigo", async () => {
+    const startsAt = new Date("2026-12-07T20:00:00Z");
+    const fx = importacaoFixture({
+      event: { defaultMapId: "m2" },
+      maps: [
+        { id: "m1", eventId: "event-1", version: 1, status: "ARQUIVADO", createdAt: new Date("2026-01-01"), confirmedAt: null },
+        { id: "m2", eventId: "event-1", version: 2, status: "CONFIRMADO", createdAt: new Date("2026-02-01"), confirmedAt: new Date("2026-02-02") },
+      ],
+      sessions: [{ id: "s1", eventId: "event-1", mapId: null, startsAt }],
+      seats: [{ id: "seat-old", mapId: "m1" }],
+      inventory: [{ id: "inventory-old", sessionId: "s1", seatId: "seat-old" }],
+    });
+
+    const versoes = (await fx.maps.listar("event-1", actor)).versoes;
+    expect(versoes.find((versao) => versao.id === "m1")?.sessoes).toEqual([{ id: "s1", startsAt }]);
   });
 
   it("lista devolve a trava com a mensagem quando há venda confirmada", async () => {
@@ -433,6 +451,51 @@ describe("MapasService", () => {
     })]);
   });
 
+  it("não reinsere assentos antigos se a sessão mudar de mapa durante a sincronização", async () => {
+    const dbModule = jest.requireMock("@essencia/db") as typeof import("@essencia/db");
+    const state: any = {
+      event: { id: "event-1", defaultMapId: "map-new" },
+      session: { id: "session-1", eventId: "event-1", mapId: "map-old" },
+      seats: [{ id: "seat-old", mapId: "map-old", sellable: true }],
+      inventory: [],
+      audits: [],
+    };
+    let existingRead = false;
+    const db: any = {
+      select: () => ({ from: (table: unknown) => ({ where: (condition: any) => {
+        const query: any = {
+          then: (resolve: any, reject: any) => {
+            let rows: any[] = [];
+            if (table === dbModule.eventos) rows = [state.event];
+            if (table === dbModule.eventoSessoes) rows = [state.session];
+            if (table === dbModule.eventoMapaAssentos) rows = state.seats;
+            if (table === dbModule.eventoInventarioAssentos) {
+              rows = state.inventory.filter((item: any) => item.sessionId === "session-1");
+              if (!existingRead) {
+                existingRead = true;
+                state.session.mapId = "map-new";
+                state.event.defaultMapId = "map-new";
+              }
+            }
+            return Promise.resolve(rows).then(resolve, reject);
+          },
+          for: () => query,
+        };
+        return query;
+      } }) }),
+      insert: (table: unknown) => ({ values: (values: any) => {
+        if (table === dbModule.eventoInventarioAssentos) state.inventory.push(values);
+        if (table === dbModule.eventoAuditorias) state.audits.push(values);
+        return Promise.resolve();
+      } }),
+    };
+    const maps = new MapasService({ db } as any, undefined, {} as any);
+
+    await maps.sincronizarInventarioMapa(db, "event-1", "map-old", actor);
+
+    expect(state.inventory).toEqual([]);
+  });
+
   describe("editar e publicar a proposta", () => {
     const propostaValida = (sobrescrever: any = {}) => ({
       versao: 1, revisao: 2, pagina: { numero: 1, largura: 8420, altura: 5950 },
@@ -527,6 +590,17 @@ describe("MapasService", () => {
       expect(nova.lugares[0]).toMatchObject({ id: "l1", vender: false });
       expect(fx.state.imp.proposta).toBe(nova);
       expect(fx.state.audits).toEqual([expect.objectContaining({ resourceId: "map-1", metadata: { action: "editar_proposta", revisao: 3, operacoes } })]);
+    });
+
+    it.each([
+      ["VENDA_CONFIRMADA", { pedidos: [{ id: "pedido-1", eventId: "event-1", status: "CONFIRMADO", expiresAt: null }] }],
+      ["COMPRA_EM_ANDAMENTO", { pedidos: [{ id: "pedido-1", eventId: "event-1", status: "AGUARDANDO_PAGAMENTO", expiresAt: new Date(Date.now() + 60_000) }] }],
+      ["OPERACAO_ATIVA", { operacoes: [{ id: "operacao-1", eventId: "event-1", status: "ATIVA" }] }],
+    ])("editarProposta recusa quando a trava é %s", async (codigo, opcoes) => {
+      const fx = fixture(opcoes as any);
+      await expect(fx.maps.editarProposta("event-1", "map-1", editar(2, [{ tipo: "CONFERIR_PONTO", pontoId: "p1" }]) as any, actor))
+        .rejects.toMatchObject({ response: { code: codigo } });
+      expect(fx.state.impUpdates).toHaveLength(0);
     });
 
     it("editarProposta recusa revisão desatualizada sem gravar (duas abas)", async () => {
@@ -1013,6 +1087,21 @@ describe("MapasService", () => {
         dbModule.eventoReservas,
         dbModule.eventoOperacoesAdministrativas,
       ]);
+    });
+
+    it("leva sessão legada sem mapId quando o inventário aponta para assento da versão excluída", async () => {
+      const fx = exclusaoFixture({
+        sessions: [{ id: "session-1", eventId: "event-1", mapId: null, capacity: 1 }],
+        seats: [
+          { id: "seat-current", mapId: "map-current", sellable: true, rowLabel: "A", seatNumber: "1" },
+          { id: "seat-old", mapId: "map-delete", sellable: true, rowLabel: "A", seatNumber: "1" },
+        ],
+        inventory: [{ id: "inventory-delete", sessionId: "session-1", seatId: "seat-old", status: "DISPONIVEL" }],
+      });
+
+      await expect(fx.maps.excluirVersao("event-1", "map-delete", actor)).resolves.toEqual({ excluida: true, sessionIds: ["session-1"] });
+      expect(fx.state.sessions[0]).toEqual(expect.objectContaining({ mapId: "map-current" }));
+      expect(fx.state.inventory).toEqual([expect.objectContaining({ sessionId: "session-1", seatId: "seat-current" })]);
     });
 
     it("preserva operação encerrada ao recriar o inventário da sessão", async () => {

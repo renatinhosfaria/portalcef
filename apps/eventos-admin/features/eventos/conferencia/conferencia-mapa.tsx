@@ -145,7 +145,7 @@ export function ConferenciaMapa({ eventoId, mapId, propostaInicial, trava, onPub
 
   function adicionarLugar(e: React.FormEvent) {
     e.preventDefault();
-    if (!novoLugar || !novoLugarCompleto) return;
+    if (bloqueadoPorTrava || !novoLugar || !novoLugarCompleto) return;
     aplicar([
       {
         tipo: "ADICIONAR_LUGAR",
@@ -232,7 +232,7 @@ export function ConferenciaMapa({ eventoId, mapId, propostaInicial, trava, onPub
                   </button>
                 ))}
                 {sobrepor ? (
-                  <button type="button" aria-pressed={armado} onClick={() => setArmado(true)} className={BOTAO_SECUNDARIO + " !py-1 text-xs"}>
+                  <button type="button" aria-pressed={armado} disabled={bloqueadoPorTrava} onClick={() => setArmado(true)} className={BOTAO_SECUNDARIO + " !py-1 text-xs"}>
                     Adicionar lugar
                   </button>
                 ) : null}
@@ -261,7 +261,7 @@ export function ConferenciaMapa({ eventoId, mapId, propostaInicial, trava, onPub
                   opacidadeFundo={0.35}
                   onLugarClick={aoClicarNoLugar}
                   onFundoClick={
-                    armado
+                    armado && !bloqueadoPorTrava
                       ? (ponto) => {
                           setNovoLugar({ x: Math.round(ponto.x), y: Math.round(ponto.y), fileira: "", numero: "" });
                           setArmado(false);
@@ -298,12 +298,14 @@ export function ConferenciaMapa({ eventoId, mapId, propostaInicial, trava, onPub
               selecionadoId={pontoAtivoId}
               onSelecionar={selecionarPonto}
               onConferir={(ponto) => aplicar([{ tipo: "CONFERIR_PONTO", pontoId: ponto.id }])}
+              disabled={bloqueadoPorTrava}
             />
-            <PainelLugar proposta={proposta} selecionados={selecionados} aplicar={aplicar} onSelecionarFileira={selecionarFileira} />
+            <PainelLugar proposta={proposta} selecionados={selecionados} aplicar={aplicar} onSelecionarFileira={selecionarFileira} disabled={bloqueadoPorTrava} />
             <LegendaCores
               legenda={proposta.legenda}
               contagens={contagens}
               onConfirmar={(cor, categoria, acessoExterno) => aplicar([{ tipo: "CONFIRMAR_LEGENDA", cor, categoria, acessoExterno }])}
+              disabled={bloqueadoPorTrava}
             />
 
             {pendencias.length > 0 ? (

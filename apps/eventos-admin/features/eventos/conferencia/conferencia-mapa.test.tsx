@@ -280,6 +280,19 @@ describe("ConferenciaMapa", () => {
     expect(within(pendencias).getByText("Confirme o significado da cor #c2")).toBeTruthy();
   });
 
+  it.each(["VENDA_CONFIRMADA", "COMPRA_EM_ANDAMENTO", "OPERACAO_ATIVA"])("desabilita todas as ações de edição com trava %s", async (tipo) => {
+    renderizar(propostaComPendencias(), { trava: { tipo: tipo as any, mensagem: "Mapa travado" } });
+
+    expect((screen.getByRole("button", { name: "Enviar outra planta" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "Publicar mapa" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "A-1, Comum" }));
+    expect((screen.getByRole("button", { name: "Selecionar fileira inteira" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByLabelText("Não vender") as HTMLInputElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "Excluir lugar" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "Marcar como conferido" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("clicar na pendência de ponto seleciona o ponto e mostra a ação de conferência", async () => {
     const user = userEvent.setup();
     renderizar(propostaComPendencias());

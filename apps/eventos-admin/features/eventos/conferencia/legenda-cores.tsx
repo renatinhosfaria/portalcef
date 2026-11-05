@@ -13,16 +13,19 @@ interface LegendaCoresProps {
   /** Quantidade atual de lugares de cada cor (não a da geração). */
   contagens: Record<string, number>;
   onConfirmar: (cor: string, categoria: CategoriaLugar, acessoExterno: boolean) => void;
+  disabled?: boolean;
 }
 
 function ItemLegenda({
   entrada,
   quantidade,
   onConfirmar,
+  disabled = false,
 }: {
   entrada: EntradaLegenda;
   quantidade: number;
   onConfirmar: LegendaCoresProps["onConfirmar"];
+  disabled?: boolean;
 }) {
   const [categoria, setCategoria] = useState<CategoriaLugar | "">(entrada.categoria ?? "");
   const [acessoExterno, setAcessoExterno] = useState(entrada.acessoExterno);
@@ -46,6 +49,7 @@ function ItemLegenda({
         <select
           aria-label={`Categoria da cor ${entrada.cor}`}
           value={categoria}
+          disabled={disabled}
           onChange={(e) => setCategoria(e.target.value as CategoriaLugar | "")}
           className="rounded-lg border border-[#e5e8df] bg-white px-2 py-1 text-xs"
         >
@@ -59,6 +63,7 @@ function ItemLegenda({
         <label className="flex items-center gap-1 text-xs text-[#69736e]">
           <input
             type="checkbox"
+            disabled={disabled}
             aria-label={`Acesso externo da cor ${entrada.cor}`}
             checked={acessoExterno}
             onChange={(e) => setAcessoExterno(e.target.checked)}
@@ -67,7 +72,7 @@ function ItemLegenda({
         </label>
         <button
           type="button"
-          disabled={categoria === ""}
+          disabled={disabled || categoria === ""}
           onClick={() => categoria !== "" && onConfirmar(entrada.cor, categoria, acessoExterno)}
           className="rounded-lg bg-[#a3d154] px-3 py-1 text-xs font-semibold text-[#24302c] disabled:opacity-50"
         >
@@ -79,14 +84,14 @@ function ItemLegenda({
   );
 }
 
-export function LegendaCores({ legenda, contagens, onConfirmar }: LegendaCoresProps) {
+export function LegendaCores({ legenda, contagens, onConfirmar, disabled = false }: LegendaCoresProps) {
   if (legenda.length === 0) return null;
   return (
     <section aria-label="Legenda de cores" className="space-y-2">
       <h2 className="font-[family-name:var(--font-display,Outfit),system-ui,sans-serif] text-sm font-bold text-[#24302c]">Legenda de cores</h2>
       <ul className="space-y-2">
         {legenda.map((entrada) => (
-          <ItemLegenda key={entrada.cor} entrada={entrada} quantidade={contagens[entrada.cor] ?? 0} onConfirmar={onConfirmar} />
+          <ItemLegenda key={entrada.cor} entrada={entrada} quantidade={contagens[entrada.cor] ?? 0} onConfirmar={onConfirmar} disabled={disabled} />
         ))}
       </ul>
     </section>

@@ -18,7 +18,7 @@ export const criarEventoSchema = z.object({
   cancellationPolicy: z.string().min(1), contactEmail: z.string().email(), contactPhone: z.string().max(30).optional().nullable(),
   ticketTypes: z.array(z.object({ name: z.string().min(1).max(160), description: z.string().optional().nullable(), priceCents: z.number().int().nonnegative(), eligibility: z.string().optional().nullable(), maxPerOrder: z.number().int().positive().optional().nullable(), salesLot: z.string().max(100).optional().nullable(), rules: z.record(z.string(), z.unknown()).optional().nullable() })).default([]),
   policies: z.array(z.object({ type: z.enum(["PRIVACIDADE","COMPRA","CANCELAMENTO_REEMBOLSO","ACESSIBILIDADE","CONTATO"]), content: z.string().min(1), version: z.number().int().positive().optional() })).default([]),
-  sessions: z.array(z.object({ startsAt: date, endsAt: date, capacity: z.number().int().positive(), locationId: z.string().uuid().optional().nullable(), salesStartsAt: date.optional().nullable(), salesEndsAt: date.optional().nullable(), status: eventoSessaoStatusSchema.optional() })).default([]),
+  sessions: z.array(z.object({ startsAt: date, endsAt: date, capacity: z.number().int().positive(), locationId: z.string().uuid().optional().nullable(), salesStartsAt: date.optional().nullable(), salesEndsAt: date.optional().nullable(), status: eventoSessaoStatusSchema.optional() }).strict()).default([]),
 });
 export const atualizarEventoSchema = criarEventoSchema.partial().omit({schoolId: true, publishImmediately: true}).extend({ publishImmediately: z.boolean().optional(), updatedAt: date.optional(), expectedUpdatedAt: date.optional() });
 export const criarRascunhoSchema = z.object({ title: z.string().trim().min(1).max(240) }).strict();

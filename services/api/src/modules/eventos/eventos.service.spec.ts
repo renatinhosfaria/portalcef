@@ -12,6 +12,19 @@ const event = (extra: Record<string, unknown> = {}) => ({
 });
 
 describe('EventosService contratos de workspace', () => {
+  it.each(['mapa-v2', null])('publicar recusa sessão legada com mapId %s mesmo se as regras já tiverem passado', async (mapId) => {
+    const db = fakeDb({
+      selects: [
+        [event({ defaultMapId: 'mapa-v4', status: 'RASCUNHO' })],
+        [{ id: 'sessao-1', eventId: 'e1', mapId }],
+      ],
+      update: async () => [event({ defaultMapId: 'mapa-v4', status: 'PUBLICADO' })],
+    });
+
+    await expect(service(db).publicar('e1', actor)).rejects.toMatchObject({ response: { code: 'SESSION_MAP_MISMATCH' } });
+    expect(db.updated).toBe(false);
+  });
+
   it('criarSessao grava o mapa do evento na sessão', async () => {
     const inserted: any[] = [];
     const db = fakeDb({ selects: [[event({ defaultMapId: 'mapa-1' })]], insert: async (values: any) => { inserted.push(values); return [{ id: 's1', ...values }]; } });

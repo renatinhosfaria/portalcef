@@ -55,40 +55,56 @@ export class MapasService {
   }
 
   async sincronizarInventarioMapa(db: Database, eventId: string, mapId: string, actor: EventoActor, sessionIds?: string[]) {
-    const [event] = await db.select().from(eventos).where(eq(eventos.id, eventId));
-    const sessions = await db.select().from(eventoSessoes).where(eq(eventoSessoes.eventId, eventId));
-    const seats = await db.select().from(eventoMapaAssentos).where(eq(eventoMapaAssentos.mapId, mapId));
-    const targetSessions = sessionIds
-      ? sessions.filter((session: any) => sessionIds.includes(session.id))
-      : sessions.filter((session: any) => session.mapId === mapId || (!session.mapId && (!event?.defaultMapId || event.defaultMapId === mapId)));
-    let inventoryCreatedCount = 0;
+    const executar = async (tx: Database) => {
+      const [event] = await this.lockRows<any>(tx.select().from(eventos).where(eq(eventos.id, eventId)));
+      const sessionsQuery = tx.select().from(eventoSessoes).where(eq(eventoSessoes.eventId, eventId));
+      const sessions = await this.lockRows<any>(typeof (sessionsQuery as any).orderBy === "function" ? (sessionsQuery as any).orderBy(asc(eventoSessoes.id)) : sessionsQuery);
+      const seats = await tx.select().from(eventoMapaAssentos).where(eq(eventoMapaAssentos.mapId, mapId));
+      const targetSessions = sessionIds
+        ? sessions.filter((session: any) => sessionIds.includes(session.id))
+        : sessions.filter((session: any) => session.mapId === mapId || (!session.mapId && event?.defaultMapId === mapId));
+      let inventoryCreatedCount = 0;
+      const inventorySessionIds: string[] = [];
 
-    for (const session of targetSessions) {
-      const existing = await db.select().from(eventoInventarioAssentos).where(eq(eventoInventarioAssentos.sessionId, session.id));
-      const existingSeatIds = new Set(existing.map((item: any) => item.seatId));
-      for (const seat of seats) {
-        if (existingSeatIds.has(seat.id)) continue;
-        const insertQuery = db.insert(eventoInventarioAssentos).values({
-          sessionId: session.id,
-          seatId: seat.id,
-          status: seat.sellable === false ? "BLOQUEADO" : "DISPONIVEL",
-          blockedReason: seat.sellable === false ? "MAPA_ASSENTO_NAO_VENDAVEL" : null,
-        });
-        let inserted = true;
-        if (typeof (insertQuery as any).onConflictDoNothing === "function") {
-          const conflictQuery = (insertQuery as any).onConflictDoNothing({ target: [eventoInventarioAssentos.sessionId, eventoInventarioAssentos.seatId] });
-          inserted = typeof conflictQuery.returning === "function"
-            ? (await conflictQuery.returning({ id: eventoInventarioAssentos.id })).length > 0
-            : true;
-        } else {
-          await insertQuery;
+      for (const session of targetSessions) {
+        const atualQuery = tx.select().from(eventoSessoes).where(and(eq(eventoSessoes.id, session.id), eq(eventoSessoes.eventId, eventId)));
+        const atuais = await this.lockRows<any>(atualQuery);
+        const atual = atuais.find((linha: any) => linha.id === session.id);
+        if (!atual || (atual.mapId !== mapId && !(atual.mapId === null && event?.defaultMapId === mapId))) continue;
+        const existing = await tx.select().from(eventoInventarioAssentos).where(eq(eventoInventarioAssentos.sessionId, atual.id));
+        const existingSeatIds = new Set(existing.map((item: any) => item.seatId));
+        inventorySessionIds.push(atual.id);
+        const confirmadas = await this.lockRows<any>(tx.select().from(eventoSessoes).where(and(eq(eventoSessoes.id, atual.id), eq(eventoSessoes.eventId, eventId))));
+        const confirmada = confirmadas.find((linha: any) => linha.id === atual.id);
+        if (!confirmada || (confirmada.mapId !== mapId && !(confirmada.mapId === null && event?.defaultMapId === mapId))) {
+          inventorySessionIds.pop();
+          continue;
         }
-        if (inserted) inventoryCreatedCount += 1;
+        for (const seat of seats) {
+          if (existingSeatIds.has(seat.id)) continue;
+          const insertQuery = tx.insert(eventoInventarioAssentos).values({
+            sessionId: atual.id,
+            seatId: seat.id,
+            status: seat.sellable === false ? "BLOQUEADO" : "DISPONIVEL",
+            blockedReason: seat.sellable === false ? "MAPA_ASSENTO_NAO_VENDAVEL" : null,
+          });
+          let inserted = true;
+          if (typeof (insertQuery as any).onConflictDoNothing === "function") {
+            const conflictQuery = (insertQuery as any).onConflictDoNothing({ target: [eventoInventarioAssentos.sessionId, eventoInventarioAssentos.seatId] });
+            inserted = typeof conflictQuery.returning === "function"
+              ? (await conflictQuery.returning({ id: eventoInventarioAssentos.id })).length > 0
+              : true;
+          } else {
+            await insertQuery;
+          }
+          if (inserted) inventoryCreatedCount += 1;
+        }
       }
-    }
 
-    await this.audit(eventId, actor, mapId, { action: "gerar_inventario", inventorySessionIds: targetSessions.map((session: any) => session.id), inventoryCreatedCount }, db);
-    return { inventorySessionIds: targetSessions.map((session: any) => session.id), inventoryCreatedCount };
+      await this.audit(eventId, actor, mapId, { action: "gerar_inventario", inventorySessionIds, inventoryCreatedCount }, tx);
+      return { inventorySessionIds, inventoryCreatedCount };
+    };
+    return typeof (db as any).transaction === "function" ? (db as any).transaction(executar) : executar(db);
   }
 
   async importar(eventId: string, file: MultipartFile, actor: EventoActor, pagina?: number): Promise<MapImportSummary> {
@@ -159,13 +175,25 @@ export class MapasService {
     const assentos = mapIds.length
       ? await this.db.select().from(eventoMapaAssentos).where(inArray(eventoMapaAssentos.mapId, mapIds))
       : [];
+    const inventario = sessoes.length
+      ? await this.db.select().from(eventoInventarioAssentos).where(inArray(eventoInventarioAssentos.sessionId, sessoes.map((sessao: any) => sessao.id)))
+      : [];
+    const mapaPorAssento = new Map<string, string>(assentos.map((assento: any) => [assento.id, assento.mapId] as [string, string]));
     const propostaPorMapa = new Map(importacoes.map((importacao: any) => [importacao.mapId, importacao.proposta]));
     const sessoesPorMapa = new Map<string, Array<{ id: string; startsAt: Date }>>();
     for (const sessao of sessoes as any[]) {
-      if (!sessao.mapId) continue;
-      const daVersao = sessoesPorMapa.get(sessao.mapId) ?? [];
-      daVersao.push({ id: sessao.id, startsAt: sessao.startsAt });
-      sessoesPorMapa.set(sessao.mapId, daVersao);
+      const mapasDaSessao = new Set<string>();
+      if (sessao.mapId) mapasDaSessao.add(sessao.mapId);
+      for (const linha of inventario as any[]) {
+        if (linha.sessionId !== sessao.id) continue;
+        const mapaId = mapaPorAssento.get(linha.seatId);
+        if (mapaId) mapasDaSessao.add(mapaId);
+      }
+      for (const mapaId of mapasDaSessao) {
+        const daVersao = sessoesPorMapa.get(mapaId) ?? [];
+        daVersao.push({ id: sessao.id, startsAt: sessao.startsAt });
+        sessoesPorMapa.set(mapaId, daVersao);
+      }
     }
     const versoes = (maps as any[]).map((map): VersaoMapaResumo => {
       const proposta = propostaPorMapa.get(map.id) as { lugares?: unknown[] } | null | undefined;
@@ -234,19 +262,31 @@ export class MapasService {
   }
 
   async editarProposta(eventId: string, versionId: string, input: { revisaoBase: number; operacoes: OperacaoProposta[] }, actor: EventoActor): Promise<PropostaMapa> {
-    const { imp, proposta } = await this.carregarPropostaEmRevisao(eventId, versionId, input.revisaoBase, actor);
-    let nova: PropostaMapa;
-    try {
-      nova = aplicarOperacoes(proposta, input.operacoes);
-    } catch (erro) {
-      if (erro instanceof ErroProposta) throw new BadRequestException({ code: erro.code, message: erro.message });
-      throw erro;
-    }
+    const { imp } = await this.carregarPropostaEmRevisao(eventId, versionId, input.revisaoBase, actor);
+    let nova!: PropostaMapa;
     await this.transaction(async (db) => {
+      const [eventoAtual] = await this.lockRows<any>(db.select().from(eventos).where(eq(eventos.id, eventId)));
+      if (!eventoAtual) throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Evento não encontrado" });
+      const sessoesQuery = db.select().from(eventoSessoes).where(eq(eventoSessoes.eventId, eventId));
+      const sessoesOrdenadas = typeof (sessoesQuery as any).orderBy === "function" ? (sessoesQuery as any).orderBy(asc(eventoSessoes.id)) : sessoesQuery;
+      const sessoes = await this.lockRows<any>(sessoesOrdenadas);
       const [mapaAtual] = await this.lockRows(db.select().from(eventoMapas).where(and(eq(eventoMapas.id, versionId), eq(eventoMapas.eventId, eventId))));
       if (!mapaAtual || mapaAtual.status !== "EM_REVISAO") throw new BadRequestException({ code: "MAP_NOT_IN_REVIEW", message: "Somente mapas em revisão podem ser alterados" });
       const [importacaoAtual] = await this.lockRows(db.select().from(eventoImportacoesMapa).where(eq(eventoImportacoesMapa.id, imp.id)));
       this.exigirRevisao(importacaoAtual?.proposta as PropostaMapa | null | undefined, input.revisaoBase);
+      const inventoryQuery = sessoes.length
+        ? db.select().from(eventoInventarioAssentos).where(inArray(eventoInventarioAssentos.sessionId, sessoes.map((sessao: any) => sessao.id)))
+        : db.select().from(eventoInventarioAssentos).where(eq(eventoInventarioAssentos.sessionId, "__nenhuma__"));
+      const inventoryOrdered = typeof (inventoryQuery as any).orderBy === "function" ? (inventoryQuery as any).orderBy(asc(eventoInventarioAssentos.id)) : inventoryQuery;
+      await this.lockRows<any>(inventoryOrdered);
+      const tipoTrava = await carregarTrava(db, eventId, new Date(), this.lockRows.bind(this));
+      exigirMapaLivre(tipoTrava);
+      try {
+        nova = aplicarOperacoes(importacaoAtual?.proposta as PropostaMapa, input.operacoes);
+      } catch (erro) {
+        if (erro instanceof ErroProposta) throw new BadRequestException({ code: erro.code, message: erro.message });
+        throw erro;
+      }
       await db.update(eventoImportacoesMapa).set({ proposta: nova, updatedAt: new Date() }).where(eq(eventoImportacoesMapa.id, imp.id));
       await this.audit(eventId, actor, versionId, { action: "editar_proposta", revisao: nova.revisao, operacoes: input.operacoes }, db);
     });
@@ -421,6 +461,8 @@ export class MapasService {
         : db.select().from(eventoInventarioAssentos).where(eq(eventoInventarioAssentos.sessionId, "__nenhuma__"));
       const inventarioOrdenado = typeof (inventarioQuery as any).orderBy === "function" ? (inventarioQuery as any).orderBy(asc(eventoInventarioAssentos.id)) : inventarioQuery;
       const inventarioTravado = await this.lockRows<any>(inventarioOrdenado);
+      const assentosExcluidos = await db.select().from(eventoMapaAssentos).where(eq(eventoMapaAssentos.mapId, versionId));
+      const assentoIdsExcluidos = new Set(assentosExcluidos.map((assento: any) => assento.id));
 
       let pedidosTravados: any[] = [];
       const tipoTrava = await carregarTrava(db, eventId, new Date(), async <T>(query: unknown) => {
@@ -430,7 +472,10 @@ export class MapasService {
       });
       exigirMapaLivre(tipoTrava);
 
-      const sessionIds = sessoes.filter((sessao: any) => sessao.mapId === versionId).map((sessao: any) => sessao.id).sort();
+      const sessionIds = sessoes
+        .filter((sessao: any) => sessao.mapId === versionId || inventarioTravado.some((linha: any) => linha.sessionId === sessao.id && assentoIdsExcluidos.has(linha.seatId)))
+        .map((sessao: any) => sessao.id)
+        .sort();
       if (sessionIds.length) {
         await levarSessoesParaVersao(db, {
           eventId,

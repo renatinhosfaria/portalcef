@@ -277,7 +277,7 @@ export class EventosService {
     if (!parentEvent || parentEvent.status !== "PUBLICADO") throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Evento não encontrado" });
     const [map] = await this.db.select().from(eventoMapas).where(eq(eventoMapas.id, session.mapId));
     if (!map || map.status !== "CONFIRMADO") throw new NotFoundException({ code: "MAP_NOT_CONFIRMED", message: "Mapa não disponível" });
-    const rows = await this.db.select({ seat: eventoMapaAssentos, inventory: eventoInventarioAssentos }).from(eventoInventarioAssentos).innerJoin(eventoMapaAssentos, eq(eventoMapaAssentos.id, eventoInventarioAssentos.seatId)).where(eq(eventoInventarioAssentos.sessionId, sessionId));
+    const rows = await this.db.select({ seat: eventoMapaAssentos, inventory: eventoInventarioAssentos }).from(eventoInventarioAssentos).innerJoin(eventoMapaAssentos, eq(eventoMapaAssentos.id, eventoInventarioAssentos.seatId)).where(and(eq(eventoInventarioAssentos.sessionId, sessionId), eq(eventoMapaAssentos.mapId, session.mapId)));
     return { sessionId, mapId: session.mapId, seats: rows.map(({ seat, inventory }: any) => ({ id: seat.id, sessionId, rowLabel: seat.rowLabel, seatNumber: seat.seatNumber, x: seat.x, y: seat.y, width: seat.width, height: seat.height, category: seat.category, accessible: seat.accessible, state: inventory.status === "VENDIDO" ? "sold" : inventory.status === "RESERVADO" ? "reserved" : inventory.status === "BLOQUEADO" ? "blocked" : "available" })) };
   }
 
@@ -286,6 +286,10 @@ export class EventosService {
     if (!existing) throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Evento não encontrado" });
     if (actor) this.assertSchoolScope(actor, existing.schoolId);
     await this.rules.validarPublicacao(id);
+    const sessoes = await this.db.select().from(eventoSessoes).where(eq(eventoSessoes.eventId, id));
+    if (sessoes.some((sessao: any) => sessao.mapId !== existing.defaultMapId)) {
+      throw new BadRequestException({ code: "SESSION_MAP_MISMATCH", message: "A sessão precisa usar exatamente o mapa do evento" });
+    }
     const [event] = await this.db.update(eventos).set({ status: "PUBLICADO", publishedAt: new Date(), updatedAt: new Date() }).where(eq(eventos.id, id)).returning();
     if (!event) throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Evento não encontrado" });
     await this.db.update(eventoSessoes).set({ status: "PUBLICADA", updatedAt: new Date() }).where(and(eq(eventoSessoes.eventId, id), eq(eventoSessoes.status, "RASCUNHO")));
