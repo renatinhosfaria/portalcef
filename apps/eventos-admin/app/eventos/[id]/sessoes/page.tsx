@@ -30,8 +30,6 @@ import { carregarDadosWorkspace as buscarDadosWorkspace } from "@/features/event
 const EMPTY_OPTIONS: SessionOptions = {
   defaultLocation: null,
   locations: [],
-  defaultMap: null,
-  maps: [],
 };
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -55,9 +53,7 @@ function normalizarSessao(value: unknown): SessionValue {
     salesStartsAt: row.salesStartsAt ? String(row.salesStartsAt).slice(0, 16) : "",
     salesEndsAt: row.salesEndsAt ? String(row.salesEndsAt).slice(0, 16) : "",
     inheritLocation: !row.locationId,
-    inheritMap: !row.mapId,
     locationId: row.locationId ? String(row.locationId) : null,
-    mapId: row.mapId ? String(row.mapId) : null,
   };
 }
 
@@ -66,7 +62,6 @@ function sessaoProntaParaSalvar(value: SessionValue, options: SessionOptions): b
   const validation = validarSessao(draft);
   if (!validation.ok) return false;
   if (draft.locationMode === "default" && !options.defaultLocation) return false;
-  if (draft.mapMode === "default" && !options.defaultMap) return false;
   return true;
 }
 
@@ -81,9 +76,7 @@ function mesmaSessao(value: SessionValue, other: SessionValue): boolean {
     && value.salesStartsAt === other.salesStartsAt
     && value.salesEndsAt === other.salesEndsAt
     && value.inheritLocation === other.inheritLocation
-    && value.inheritMap === other.inheritMap
-    && value.locationId === other.locationId
-    && value.mapId === other.mapId;
+    && value.locationId === other.locationId;
 }
 
 async function descartarSessaoCriadaDepoisDaRemocao(eventId: string, sessionId: string): Promise<void> {
@@ -133,7 +126,7 @@ export default function SessoesPage() {
       setLocations(data.locations);
       setOptions(data.options);
     } catch {
-      if (active) setOptionsError("Erro ao carregar opções de local e mapa.");
+      if (active) setOptionsError("Erro ao carregar opções de local.");
     } finally {
       if (active) setOptionsLoading(false);
     }
@@ -292,10 +285,10 @@ export default function SessoesPage() {
     <section className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold">Sessões e local</h1>
-        <p className="text-sm text-slate-600">Use o local e o mapa padrão do evento ou defina uma exceção por sessão.</p>
+        <p className="text-sm text-slate-600">Use o local padrão do evento ou defina uma exceção por sessão.</p>
       </div>
       {error && <p role="alert" className="text-red-700">{error}</p>}
-      {optionsLoading && <p role="status" className="text-sm text-slate-600">Carregando opções de local e mapa…</p>}
+      {optionsLoading && <p role="status" className="text-sm text-slate-600">Carregando opções de local…</p>}
       {optionsError && <p role="alert" className="text-red-700">{optionsError}</p>}
       {locations && (
         <EventLocationManager

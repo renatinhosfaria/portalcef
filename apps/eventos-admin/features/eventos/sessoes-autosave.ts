@@ -81,9 +81,7 @@ function mesmosDadosSessao(value: SessaoValue, other: SessaoValue): boolean {
     && value.salesStartsAt === other.salesStartsAt
     && value.salesEndsAt === other.salesEndsAt
     && value.inheritLocation === other.inheritLocation
-    && value.inheritMap === other.inheritMap
-    && value.locationId === other.locationId
-    && value.mapId === other.mapId;
+    && value.locationId === other.locationId;
 }
 
 /**

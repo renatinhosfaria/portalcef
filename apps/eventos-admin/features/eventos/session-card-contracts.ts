@@ -7,18 +7,9 @@ export type SessionLocationOption = {
   room: string | null;
 };
 
-export type SessionMapOption = {
-  id: string;
-  version: number;
-  status: "CONFIRMADO";
-  originalFileName: string | null;
-};
-
 export type SessionOptions = {
   defaultLocation: SessionLocationOption | null;
   locations: SessionLocationOption[];
-  defaultMap: SessionMapOption | null;
-  maps: SessionMapOption[];
 };
 
 export type SessionLocationCatalog = {
@@ -35,12 +26,11 @@ export function aplicarLocaisNasOpcoes(options: SessionOptions, catalog: Session
   };
 }
 
-export type SessionDraftState = Omit<SessaoValue, "inheritLocation" | "inheritMap"> & {
+export type SessionDraftState = Omit<SessaoValue, "inheritLocation"> & {
   locationMode: "default" | "custom";
-  mapMode: "default" | "custom";
 };
 
-type SessionValidationErrors = Partial<Record<"startsAt" | "endsAt" | "capacity" | "salesStartsAt" | "salesEndsAt" | "location" | "map", string>>;
+type SessionValidationErrors = Partial<Record<"startsAt" | "endsAt" | "capacity" | "salesStartsAt" | "salesEndsAt" | "location", string>>;
 
 export function validarSessao(draft: SessionDraftState): { ok: boolean; errors: SessionValidationErrors } {
   const errors: SessionValidationErrors = {};
@@ -64,7 +54,6 @@ export function validarSessao(draft: SessionDraftState): { ok: boolean; errors: 
   }
 
   if (draft.locationMode === "custom" && !draft.locationId?.trim()) errors.location = "Escolha um local para esta sessão";
-  if (draft.mapMode === "custom" && !draft.mapId?.trim()) errors.map = "Escolha um mapa para esta sessão";
 
   return { ok: Object.keys(errors).length === 0, errors };
 }
@@ -73,7 +62,6 @@ export function sessaoProntaParaSalvar(draft: SessionDraftState, options: Sessio
   const validation = validarSessao(draft);
   if (!validation.ok) return false;
   if (draft.locationMode === "default" && !options.defaultLocation) return false;
-  if (draft.mapMode === "default" && !options.defaultMap) return false;
   return true;
 }
 

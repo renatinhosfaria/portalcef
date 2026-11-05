@@ -8,7 +8,7 @@ import {
   type PontoConferir,
   type PropostaMapa,
 } from "@essencia/shared/eventos/mapa-proposta";
-import { urlOriginal } from "./api-mapas";
+import { urlOriginal, type TravaMapa } from "./api-mapas";
 import { LegendaCores } from "./legenda-cores";
 import { ListaPontos } from "./lista-pontos";
 import { paraLugaresMapa } from "./lugares-mapa";
@@ -21,6 +21,7 @@ export interface ConferenciaMapaProps {
   eventoId: string;
   mapId: string;
   propostaInicial: PropostaMapa;
+  trava?: TravaMapa;
   onPublicar: (revisaoBase: number, motivo?: string) => Promise<void>;
   onReenviar: (arquivo: File) => Promise<void>;
 }
@@ -37,7 +38,7 @@ const ETAPAS = ["Enviar planta", "Conferir", "Publicar"];
 const BOTAO_PRIMARIO = "rounded-xl bg-[#a3d154] px-4 py-2 text-sm font-semibold text-[#24302c] disabled:opacity-50";
 const BOTAO_SECUNDARIO = "rounded-xl border border-[#e5e8df] bg-white px-4 py-2 text-sm text-[#24302c]";
 
-export function ConferenciaMapa({ eventoId, mapId, propostaInicial, onPublicar, onReenviar }: ConferenciaMapaProps) {
+export function ConferenciaMapa({ eventoId, mapId, propostaInicial, trava, onPublicar, onReenviar }: ConferenciaMapaProps) {
   const { proposta, aplicar, salvando, recarregando, erro } = useProposta(eventoId, mapId, propostaInicial);
   const [modo, setModo] = useState<Modo>("LADO_A_LADO");
   const [selecionadosIds, setSelecionadosIds] = useState<ReadonlySet<string>>(new Set());
@@ -54,6 +55,7 @@ export function ConferenciaMapa({ eventoId, mapId, propostaInicial, onPublicar, 
   const [reenviando, setReenviando] = useState(false);
   const reenviandoRef = useRef(false);
   const [erroReenviar, setErroReenviar] = useState<string | null>(null);
+  const bloqueadoPorTrava = trava?.tipo !== undefined && trava.tipo !== "LIVRE";
 
   const lugaresMapa = useMemo(() => paraLugaresMapa(proposta), [proposta]);
   const resumo = useMemo(() => resumoProposta(proposta), [proposta]);
@@ -69,7 +71,9 @@ export function ConferenciaMapa({ eventoId, mapId, propostaInicial, onPublicar, 
   );
   // Lugares excluídos saem da seleção sem precisar de efeito.
   const selecionados = useMemo(
-    () => proposta.lugares.filter((lugar) => selecionadosIds.has(lugar.id)),
+    () => Array.from(selecionadosIds)
+      .map((id) => proposta.lugares.find((lugar) => lugar.id === id))
+      .filter((lugar): lugar is (typeof proposta.lugares)[number] => lugar !== undefined),
     [proposta.lugares, selecionadosIds],
   );
   const selecionadosSet = useMemo(() => new Set(selecionados.map((l) => l.id)), [selecionados]);
@@ -100,6 +104,35 @@ export function ConferenciaMapa({ eventoId, mapId, propostaInicial, onPublicar, 
     setFoco({ x: minX, y: minY, largura: maxX - minX, altura: maxY - minY });
   }
 
+  function selecionarFileira(fileira: string) {
+    setPontoAtivoId(null);
+    setSelecionadosIds(new Set(proposta.lugares.filter((lugar) => lugar.fileira === fileira).map((lugar) => lugar.id)));
+  }
+
+  function selecionarPendencia(tipo: (typeof pendencias)[number]) {
+    if (tipo.tipo === "PONTO_NAO_CONFERIDO") {
+      const ponto = proposta.pontos.find(
+        (item) => !item.conferido && item.mensagem === tipo.mensagem && item.lugarIds.length === tipo.lugarIds.length && item.lugarIds.every((id) => tipo.lugarIds.includes(id)),
+      );
+      if (ponto) selecionarPonto(ponto);
+      return;
+    }
+
+    if (tipo.tipo === "COR_NAO_CONFIRMADA") {
+      const lugar = proposta.lugares.find((item) => tipo.lugarIds.includes(item.id));
+      const entrada = lugar ? proposta.legenda.find((item) => item.cor === lugar.cor) : undefined;
+      const item = entrada
+        ? Array.from(document.querySelectorAll<HTMLElement>("[aria-label^='Cor ']")).find((elemento) => elemento.getAttribute("aria-label") === `Cor ${entrada.cor}`)
+        : undefined;
+      item?.scrollIntoView?.({ behavior: "smooth", block: "center" });
+      item?.querySelector<HTMLElement>("select")?.focus();
+      return;
+    }
+
+    setPontoAtivoId(null);
+    setSelecionadosIds(new Set(tipo.lugarIds));
+  }
+
   function mudarModo(novo: Modo) {
     setModo(novo);
     if (novo !== "SOBREPOR") {
@@ -112,7 +145,7 @@ export function ConferenciaMapa({ eventoId, mapId, propostaInicial, onPublicar, 
 
   function adicionarLugar(e: React.FormEvent) {
     e.preventDefault();
-    if (!novoLugar || !novoLugarCompleto) return;
+    if (bloqueadoPorTrava || !novoLugar || !novoLugarCompleto) return;
     aplicar([
       {
         tipo: "ADICIONAR_LUGAR",
@@ -173,6 +206,9 @@ export function ConferenciaMapa({ eventoId, mapId, propostaInicial, onPublicar, 
 
       <div className="space-y-4 px-5 py-4">
         <ResumoProposta resumo={resumo} />
+        {bloqueadoPorTrava && trava?.mensagem ? (
+          <p role="alert" className="rounded-xl border border-[#f0d9a8] bg-[#fff8e8] px-3 py-2 text-sm">{trava.mensagem}</p>
+        ) : null}
         {erro ? (
           <p role="alert" className="rounded-xl border border-[#f0d9a8] bg-[#fff8e8] px-3 py-2 text-sm">
             {erro}
@@ -196,7 +232,7 @@ export function ConferenciaMapa({ eventoId, mapId, propostaInicial, onPublicar, 
                   </button>
                 ))}
                 {sobrepor ? (
-                  <button type="button" aria-pressed={armado} onClick={() => setArmado(true)} className={BOTAO_SECUNDARIO + " !py-1 text-xs"}>
+                  <button type="button" aria-pressed={armado} disabled={bloqueadoPorTrava} onClick={() => setArmado(true)} className={BOTAO_SECUNDARIO + " !py-1 text-xs"}>
                     Adicionar lugar
                   </button>
                 ) : null}
@@ -225,7 +261,7 @@ export function ConferenciaMapa({ eventoId, mapId, propostaInicial, onPublicar, 
                   opacidadeFundo={0.35}
                   onLugarClick={aoClicarNoLugar}
                   onFundoClick={
-                    armado
+                    armado && !bloqueadoPorTrava
                       ? (ponto) => {
                           setNovoLugar({ x: Math.round(ponto.x), y: Math.round(ponto.y), fileira: "", numero: "" });
                           setArmado(false);
@@ -262,29 +298,41 @@ export function ConferenciaMapa({ eventoId, mapId, propostaInicial, onPublicar, 
               selecionadoId={pontoAtivoId}
               onSelecionar={selecionarPonto}
               onConferir={(ponto) => aplicar([{ tipo: "CONFERIR_PONTO", pontoId: ponto.id }])}
+              disabled={bloqueadoPorTrava}
             />
-            <PainelLugar proposta={proposta} selecionados={selecionados} aplicar={aplicar} />
+            <PainelLugar proposta={proposta} selecionados={selecionados} aplicar={aplicar} onSelecionarFileira={selecionarFileira} disabled={bloqueadoPorTrava} />
             <LegendaCores
               legenda={proposta.legenda}
               contagens={contagens}
               onConfirmar={(cor, categoria, acessoExterno) => aplicar([{ tipo: "CONFIRMAR_LEGENDA", cor, categoria, acessoExterno }])}
+              disabled={bloqueadoPorTrava}
             />
 
             {pendencias.length > 0 ? (
               <ul aria-label="Pendências para publicar" className="list-disc space-y-1 pl-5 text-xs text-[#69736e]">
                 {pendencias.map((p, i) => (
-                  <li key={`${p.tipo}-${i}`}>{p.mensagem}</li>
+                  <li key={`${p.tipo}-${i}`}>
+                    <button type="button" aria-label={`Abrir pendência ${i + 1}`} onClick={() => selecionarPendencia(p)} className="text-left underline decoration-dotted underline-offset-2">
+                      {p.mensagem}
+                    </button>
+                  </li>
                 ))}
               </ul>
             ) : null}
-            <button type="button" disabled={pendencias.length > 0 || salvando || recarregando} onClick={() => setDialogoAberto(true)} className={BOTAO_PRIMARIO + " w-full"}>
+            <button type="button" disabled={bloqueadoPorTrava || pendencias.length > 0 || salvando || recarregando} onClick={() => setDialogoAberto(true)} className={BOTAO_PRIMARIO + " w-full"}>
               Publicar mapa
             </button>
-            <p className="text-center text-xs text-[#69736e]" aria-live="polite">
-              {salvando ? "Salvando…" : pendencias.length > 0 ? `Resolva as ${pendencias.length} pendências para liberar` : "Tudo conferido"}
-            </p>
+            {salvando ? (
+              <p className="text-center text-xs text-[#69736e]" aria-live="polite">Salvando…</p>
+            ) : pendencias.length > 0 ? (
+              <button type="button" disabled aria-live="polite" className="w-full border-0 bg-transparent text-center text-xs text-[#69736e]">
+                {`Resolva a${pendencias.length === 1 ? " 1 pendência" : `s ${pendencias.length} pendências`} para liberar`}
+              </button>
+            ) : (
+              <p className="text-center text-xs text-[#69736e]" aria-live="polite">Tudo conferido</p>
+            )}
 
-            <button type="button" disabled={reenviando} onClick={pedirOutraPlanta} className={BOTAO_SECUNDARIO + " w-full"}>
+            <button type="button" disabled={bloqueadoPorTrava || reenviando} onClick={pedirOutraPlanta} className={BOTAO_SECUNDARIO + " w-full"}>
               Enviar outra planta
             </button>
             <input
@@ -293,7 +341,7 @@ export function ConferenciaMapa({ eventoId, mapId, propostaInicial, onPublicar, 
               accept="application/pdf"
               aria-label="Arquivo da nova planta"
               hidden
-              disabled={reenviando}
+              disabled={bloqueadoPorTrava || reenviando}
               onChange={(e) => {
                 const arquivo = e.target.files?.[0];
                 e.target.value = "";

@@ -38,6 +38,17 @@ describe('EventosReadinessService', () => {
     expect(mapas.sincronizarInventarioMapa).toHaveBeenCalledWith(db, 'e1', 'm1', expect.objectContaining({ userId: 'u1' }));
   });
 
+  it.each(['m2', null])('marca como bloqueador sessão com mapa divergente (%s)', async (mapId) => {
+    const db = fakeDb([
+      [{ id: 'e1', schoolId: 's1', title: 'Evento', slug: 'evento', status: 'RASCUNHO', description: 'x', cancellationPolicy: 'x', contactEmail: 'a@b.com', defaultMapId: 'm4' }],
+      [{ id: 'sess1', eventId: 'e1', startsAt: new Date('2026-11-01T10:00:00Z'), endsAt: new Date('2026-11-01T11:00:00Z'), capacity: 1, locationId: 'l1', mapId, salesStartsAt: null, salesEndsAt: null }],
+      [{ id: 'm4', eventId: 'e1', status: 'CONFIRMADO' }],
+      [], [], [],
+    ]);
+    const resultado = await new EventosReadinessService({ db } as any).verificar('e1', { userId: 'u1', role: 'diretora_geral', schoolId: 's1' });
+    expect(resultado.items.find((item) => item.key === 'MAPA_CONFIRMADO')).toMatchObject({ state: 'BLOQUEADOR' });
+  });
+
   it('rejeita tenant divergente antes de consultar o checklist', async () => {
     const db = fakeDb([[{ id: 'e1', schoolId: 's1', title: 'Evento', status: 'RASCUNHO' }]]);
     await expect(new EventosReadinessService({ db } as any).verificar('e1', { userId: 'u2', role: 'diretora_geral', schoolId: 's2' })).rejects.toMatchObject({ response: { code: 'FORBIDDEN' } });

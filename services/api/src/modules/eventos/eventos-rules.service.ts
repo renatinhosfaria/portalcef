@@ -20,8 +20,8 @@ export class EventosRulesService {
       if (event.plannedPublicationAt && session.salesStartsAt && session.salesStartsAt < event.plannedPublicationAt) this.fail("INVALID_SALES_WINDOW", "A venda não pode começar antes da publicação prevista");
       if (session.salesStartsAt && session.salesEndsAt && session.salesEndsAt <= session.salesStartsAt) this.fail("INVALID_SALES_WINDOW", "Janela de vendas inválida");
       if (session.salesEndsAt && session.salesEndsAt > session.startsAt) this.fail("INVALID_SALES_WINDOW", "A venda deve terminar antes do início da sessão");
-      const effectiveMapId = session.mapId ?? event.defaultMapId;
-      const [sm] = await db.select().from(eventoMapas).where(eq(eventoMapas.id, effectiveMapId));
+      if (session.mapId !== event.defaultMapId) this.fail("SESSION_MAP_MISMATCH", "A sessão precisa usar exatamente o mapa do evento");
+      const [sm] = await db.select().from(eventoMapas).where(eq(eventoMapas.id, session.mapId));
       if (!sm || sm.status !== "CONFIRMADO") this.fail("MAP_NOT_CONFIRMED", "O mapa da sessão precisa estar confirmado");
     }
     const ticketTypes = await db.select().from(eventoTiposIngresso).where(and(eq(eventoTiposIngresso.eventId, eventId), eq(eventoTiposIngresso.active, true)));

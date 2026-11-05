@@ -1,58 +1,17 @@
 import "reflect-metadata";
+import { RequestMethod } from "@nestjs/common";
 import { MapasController } from "./mapas.controller";
 import { MAX_PLANTA_PDF_BYTES } from "./mapas.service";
 
 describe("MapasController", () => {
-  it("valida UUID e delega a substituição do mapa padrão", async () => {
-    const substituirMapaPadrao = jest.fn().mockResolvedValue({ updated: { id: "evento-1" } });
-    const controller = new MapasController({ substituirMapaPadrao } as any);
-    const actor = { userId: "user-1", role: "diretora_geral", schoolId: "school-1" };
-    const mapId = "11111111-1111-4111-8111-111111111111";
+  it("não expõe mais arquivar, substituir, migrar-e-excluir nem PATCH mapa-padrao", () => {
+    const caminhos = Object.getOwnPropertyNames(MapasController.prototype)
+      .filter((nome) => nome !== "constructor")
+      .map((nome) => Reflect.getMetadata("path", (MapasController.prototype as any)[nome]) as string | undefined);
 
-    await expect(controller.substituir("evento-1", { mapId }, actor)).resolves.toEqual({ success: true, data: { updated: { id: "evento-1" } } });
-    expect(substituirMapaPadrao).toHaveBeenCalledWith("evento-1", mapId, actor);
-    await expect(controller.substituir("evento-1", { mapId: "invalido" }, actor)).resolves.toMatchObject({ success: false, error: { code: "VALIDATION_ERROR" } });
-    expect(substituirMapaPadrao).toHaveBeenCalledTimes(1);
-  });
-
-  it("expõe a rota administrativa fora do prefixo de mapas", () => {
-    const paths = Reflect.getMetadata("path", MapasController) as string;
-    const route = Reflect.getMetadata("path", MapasController.prototype.substituir) as string;
-    expect(paths).toBe("eventos/admin/:id");
-    expect(route).toBe("mapa-padrao/substituir");
-  });
-
-  it("repassa a migração e exclusão com corpo parseado e ator", async () => {
-    const migrarSessoesEExcluir = jest.fn().mockResolvedValue({ deletedMap: { id: "map-old" } });
-    const controller = new MapasController({ migrarSessoesEExcluir } as any);
-    const actor = { userId: "user-1", role: "diretora_geral", schoolId: "school-1" };
-    const input = {
-      targetMapId: "22222222-2222-4222-8222-222222222222",
-      sessionIds: ["33333333-3333-4333-8333-333333333333"],
-    };
-
-    await expect(controller.migrarEExcluir("evento-1", "map-old", input, actor)).resolves.toEqual({
-      success: true,
-      data: { deletedMap: { id: "map-old" } },
-    });
-    expect(migrarSessoesEExcluir).toHaveBeenCalledWith("evento-1", "map-old", input, actor);
-  });
-
-  it("retorna erro de validação sem chamar o serviço para corpo inválido", async () => {
-    const migrarSessoesEExcluir = jest.fn();
-    const controller = new MapasController({ migrarSessoesEExcluir } as any);
-    const actor = { userId: "user-1", role: "diretora_geral", schoolId: "school-1" };
-
-    await expect(controller.migrarEExcluir("evento-1", "map-old", { targetMapId: "invalido", sessionIds: ["tambem-invalido"] }, actor)).resolves.toMatchObject({
-      success: false,
-      error: { code: "VALIDATION_ERROR" },
-    });
-    expect(migrarSessoesEExcluir).not.toHaveBeenCalled();
-  });
-
-  it("expõe a rota de migração e exclusão", () => {
-    const route = Reflect.getMetadata("path", MapasController.prototype.migrarEExcluir) as string;
-    expect(route).toBe("mapas/:versionId/migrar-e-excluir");
+    expect(caminhos).not.toContain("mapas/:versionId/arquivar");
+    expect(caminhos).not.toContain("mapa-padrao/substituir");
+    expect(caminhos).not.toContain("mapas/:versionId/migrar-e-excluir");
   });
 
   it("importar lê ?pagina como número e recusa página inválida", async () => {
@@ -115,6 +74,25 @@ describe("MapasController", () => {
   it("expõe as rotas de proposta e publicar", () => {
     expect(Reflect.getMetadata("path", MapasController.prototype.editarProposta)).toBe("mapas/:versionId/proposta");
     expect(Reflect.getMetadata("path", MapasController.prototype.publicar)).toBe("mapas/:versionId/publicar");
+  });
+
+  it("POST mapas/:versionId/editar responde com o novo id do mapa", async () => {
+    const editarVersao = jest.fn().mockResolvedValue({ mapId: "map-new" });
+    const controller = new MapasController({ editarVersao } as any);
+    const actor = { userId: "user-1", role: "diretora_geral", schoolId: "school-1" };
+    await expect(controller.editarVersao("evento-1", "map-old", actor)).resolves.toEqual({ success: true, data: { mapId: "map-new" } });
+    expect(editarVersao).toHaveBeenCalledWith("evento-1", "map-old", actor);
+    expect(Reflect.getMetadata("path", MapasController.prototype.editarVersao)).toBe("mapas/:versionId/editar");
+  });
+
+  it("DELETE mapas/:versionId responde com a exclusão e as sessões levadas", async () => {
+    const excluirVersao = jest.fn().mockResolvedValue({ excluida: true, sessionIds: ["sessao-1"] });
+    const controller = new MapasController({ excluirVersao } as any);
+    const actor = { userId: "user-1", role: "diretora_geral", schoolId: "school-1" };
+    await expect(controller.excluirVersao("evento-1", "map-old", actor)).resolves.toEqual({ success: true, data: { excluida: true, sessionIds: ["sessao-1"] } });
+    expect(excluirVersao).toHaveBeenCalledWith("evento-1", "map-old", actor);
+    expect(Reflect.getMetadata("path", MapasController.prototype.excluirVersao)).toBe("mapas/:versionId");
+    expect(Reflect.getMetadata("method", MapasController.prototype.excluirVersao)).toBe(RequestMethod.DELETE);
   });
 
   it("não expõe mais deteccoes nem confirmar", () => {

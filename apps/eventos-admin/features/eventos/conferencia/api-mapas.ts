@@ -1,5 +1,20 @@
 import type { OperacaoProposta, PropostaMapa } from "@essencia/shared/eventos/mapa-proposta";
 
+export type StatusVersaoMapa = "EM_REVISAO" | "CONFIRMADO" | "ARQUIVADO";
+export interface VersaoMapaResumo {
+  id: string;
+  version: number;
+  status: StatusVersaoMapa;
+  originalFileName: string | null;
+  createdAt: string;
+  confirmedAt: string | null;
+  atual: boolean;
+  lugares: number;
+  sessoes: Array<{ id: string; startsAt: string }>;
+  editavel: boolean;
+}
+export interface TravaMapa { tipo: string; mensagem: string | null }
+
 export class ErroApiMapa extends Error {
   code?: string;
   details?: Record<string, unknown>;
@@ -23,8 +38,16 @@ export const urlOriginal = (eventoId: string, mapId: string) => `${baseEvento(ev
 
 const JSON_HEADERS = { "content-type": "application/json" };
 
-export async function listarMapas(eventoId: string): Promise<Array<{ id: string; version: number; status: "EM_REVISAO" | "CONFIRMADO" | "ARQUIVADO"; originalFileName: string | null }>> {
+export async function listarMapas(eventoId: string): Promise<{ versoes: VersaoMapaResumo[]; trava: TravaMapa }> {
   return respostaApi(await fetch(`${baseEvento(eventoId)}/mapas`));
+}
+
+export async function editarVersao(eventoId: string, mapId: string): Promise<{ mapId: string }> {
+  return respostaApi(await fetch(`${baseEvento(eventoId)}/mapas/${mapId}/editar`, { method: "POST", headers: JSON_HEADERS }));
+}
+
+export async function excluirVersao(eventoId: string, mapId: string): Promise<{ excluida: true; sessionIds: string[] }> {
+  return respostaApi(await fetch(`${baseEvento(eventoId)}/mapas/${mapId}`, { method: "DELETE" }));
 }
 
 export async function importarPlanta(eventoId: string, arquivo: File, pagina?: number): Promise<{ mapId: string }> {
@@ -48,7 +71,7 @@ export async function enviarOperacoes(eventoId: string, mapId: string, revisaoBa
   );
 }
 
-export async function publicarMapa(eventoId: string, mapId: string, revisaoBase: number, motivo?: string): Promise<unknown> {
+export async function publicarMapa(eventoId: string, mapId: string, revisaoBase: number, motivo?: string): Promise<{ sessionIds: string[]; capacidade: number | null; arquivadas: string[] }> {
   return respostaApi(
     await fetch(`${baseEvento(eventoId)}/mapas/${mapId}/publicar`, {
       method: "POST",

@@ -8,9 +8,10 @@ interface ListaPontosProps {
   selecionadoId: string | null;
   onSelecionar: (ponto: PontoConferir) => void;
   onConferir: (ponto: PontoConferir) => void;
+  disabled?: boolean;
 }
 
-export function ListaPontos({ pontos, selecionadoId, onSelecionar, onConferir }: ListaPontosProps) {
+export function ListaPontos({ pontos, selecionadoId, onSelecionar, onConferir, disabled = false }: ListaPontosProps) {
   const pendentes = pontos.filter((ponto) => !ponto.conferido).length;
   return (
     <section aria-label="Pontos para conferir" className="space-y-2">
@@ -29,9 +30,10 @@ export function ListaPontos({ pontos, selecionadoId, onSelecionar, onConferir }:
               {ponto.conferido ? "✓ " : ""}
               {ponto.mensagem}
             </button>
-            {selecionadoId === ponto.id && !ponto.conferido ? (
+            {!ponto.conferido ? (
               <button
                 type="button"
+                disabled={disabled}
                 onClick={() => onConferir(ponto)}
                 className="mt-2 rounded-lg bg-[#a3d154] px-3 py-1 text-xs font-semibold text-[#24302c]"
               >

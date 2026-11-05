@@ -24,9 +24,10 @@ describe("contratos das etapas do workspace", () => {
     });
   });
 
-  it("preserva herança de local e mapa na sessão", () => {
-    expect(construirPayloadSessao({ startsAt: "2026-11-01T10:00", endsAt: "2026-11-01T12:00", capacity: 30, salesStartsAt: "", salesEndsAt: "", inheritLocation: true, inheritMap: true, locationId: "local", mapId: "mapa" })).toEqual(expect.objectContaining({ locationId: null, mapId: null, capacity: 30 }));
-    expect(construirPayloadSessao({ startsAt: "2026-11-01T10:00", endsAt: "2026-11-01T12:00", capacity: 30, salesStartsAt: "", salesEndsAt: "", inheritLocation: false, inheritMap: false, locationId: "local", mapId: "mapa" })).toEqual(expect.objectContaining({ locationId: "local", mapId: "mapa" }));
+  it("preserva a escolha de local sem enviar mapa na sessão", () => {
+    const payload = construirPayloadSessao({ startsAt: "2026-11-01T10:00", endsAt: "2026-11-01T12:00", capacity: 30, salesStartsAt: "", salesEndsAt: "", inheritLocation: true, locationId: "local" });
+    expect(payload).toEqual(expect.objectContaining({ locationId: null, capacity: 30 }));
+    expect(payload).not.toHaveProperty("mapId");
   });
 
   it("mantém preço de ingresso em centavos", () => {
@@ -49,11 +50,11 @@ describe("contratos das etapas do workspace", () => {
   });
 
   it("incorpora o id retornado ao criar uma sessão", () => {
-    expect(mesclarSessaoSalva({ startsAt: "a", endsAt: "b", capacity: 1, salesStartsAt: "", salesEndsAt: "", inheritLocation: true, inheritMap: true }, { id: "sessao-1" })).toMatchObject({ id: "sessao-1" });
+    expect(mesclarSessaoSalva({ startsAt: "a", endsAt: "b", capacity: 1, salesStartsAt: "", salesEndsAt: "", inheritLocation: true }, { id: "sessao-1" })).toMatchObject({ id: "sessao-1" });
   });
 
   it("persiste o id incrementalmente antes de uma próxima tentativa", () => {
-    const sessions = [{ startsAt: "a", endsAt: "b", capacity: 1, salesStartsAt: "", salesEndsAt: "", inheritLocation: true, inheritMap: true }, { startsAt: "c", endsAt: "d", capacity: 1, salesStartsAt: "", salesEndsAt: "", inheritLocation: true, inheritMap: true }];
+    const sessions = [{ startsAt: "a", endsAt: "b", capacity: 1, salesStartsAt: "", salesEndsAt: "", inheritLocation: true }, { startsAt: "c", endsAt: "d", capacity: 1, salesStartsAt: "", salesEndsAt: "", inheritLocation: true }];
     expect(persistirSessaoSalva(sessions, 0, { id: "sessao-1" })[0]).toMatchObject({ id: "sessao-1" });
   });
 

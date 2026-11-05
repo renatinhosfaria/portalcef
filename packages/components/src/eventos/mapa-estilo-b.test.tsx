@@ -17,6 +17,21 @@ function retangulo(container: HTMLElement, id: string): Element {
   return container.querySelector(`[data-lugar-id="${id}"] rect`)!;
 }
 
+function centroDentroDoPalco(path: string, x: number, y: number): boolean {
+  const valores = path.match(/-?\d+(?:\.\d+)?/g)?.map(Number) ?? [];
+  const [x0, yBase, xControle, yControle, x1] = valores;
+  if ([x0, yBase, xControle, yControle, x1].some((valor) => valor === undefined) || y < yControle! || y > yBase!) return false;
+  if (yBase === yControle) return x === x0 && y === yBase;
+  const proporcao = (yBase! - y) / (yBase! - yControle!);
+  const raiz = Math.sqrt(Math.max(0, 1 - proporcao));
+  const tEsquerda = (1 - raiz) / 2;
+  const tDireita = (1 + raiz) / 2;
+  const ponto = (t: number) => (1 - t) ** 2 * x0! + 2 * (1 - t) * t * xControle! + t ** 2 * x1!;
+  const esquerda = ponto(tEsquerda);
+  const direita = ponto(tDireita);
+  return x >= Math.min(esquerda, direita) && x <= Math.max(esquerda, direita);
+}
+
 describe("MapaEstiloB", () => {
   it("desenha um grupo por lugar com translate e rotate", () => {
     const { container } = render(
@@ -130,6 +145,77 @@ describe("MapaEstiloB", () => {
     expect(letra.getAttribute("font-weight")).toBe("700");
     expect(letra.getAttribute("fill")).toBe("#9aa29c");
     expect(container.querySelector("svg > rect")!.getAttribute("fill")).toBe("#fffdf8");
+  });
+
+  it("não deixa o palco cobrir o centro de nenhum lugar na faixa do palco", () => {
+    const { container } = render(
+      <MapaEstiloB
+        {...base}
+        lugares={[
+          lugar({ id: "esquerda", x: 1800, y: 600 }),
+          lugar({ id: "direita", x: 2200, y: 600 }),
+        ]}
+        elementos={[{ tipo: "PALCO", texto: "PALCO", x: 2000, y: 500 }]}
+      />,
+    );
+
+    const palco = container.querySelector("path[data-palco]")!;
+    const comando = palco.getAttribute("d")!;
+    const valores = comando.match(/-?\d+(?:\.\d+)?/g)?.map(Number) ?? [];
+    const x0 = valores[0] ?? Number.NaN;
+    const yBase = valores[1] ?? Number.NaN;
+    const yControle = valores[3] ?? Number.NaN;
+    const x1 = valores[4] ?? Number.NaN;
+    expect(x0).toBe(1840);
+    expect(x1).toBe(2160);
+    expect(x1 - x0).toBe(4 * 80);
+    expect(yControle).toBeLessThan(yBase);
+    expect(container.querySelector("[data-lugar-id='esquerda']")!.getAttribute("transform")).toContain("translate(1800 600)");
+  });
+
+  it("reduz o palco para preservar centros muito próximos e mantém o limite quando há folga", () => {
+    const perto = render(
+      <MapaEstiloB
+        {...base}
+        lugares={[lugar({ id: "perto-a", x: 1950, y: 500 }), lugar({ id: "perto-b", x: 2050, y: 500 })]}
+        elementos={[{ tipo: "PALCO", texto: "PALCO", x: 2000, y: 500 }]}
+      />,
+    );
+    const pertoPath = perto.container.querySelector("path[data-palco]")!.getAttribute("d")!;
+    const pertoValores = pertoPath.match(/-?\d+(?:\.\d+)?/g)?.map(Number) ?? [];
+    expect(pertoValores[0]).toBe(1578);
+    expect(pertoValores[4]).toBe(1898);
+    expect(pertoValores[4]! - pertoValores[0]!).toBe(4 * 80);
+    expect(centroDentroDoPalco(pertoPath, 1950, 500)).toBe(false);
+    expect(centroDentroDoPalco(pertoPath, 2050, 500)).toBe(false);
+
+    const folga = render(
+      <MapaEstiloB
+        {...base}
+        lugares={[lugar({ id: "folga-a", x: 1000, y: 500 }), lugar({ id: "folga-b", x: 3000, y: 500 })]}
+        elementos={[{ tipo: "PALCO", texto: "PALCO", x: 2000, y: 500 }]}
+      />,
+    );
+    const folgaPath = folga.container.querySelector("path[data-palco]")!.getAttribute("d")!;
+    const folgaValores = folgaPath.match(/-?\d+(?:\.\d+)?/g)?.map(Number) ?? [];
+    expect(folgaValores[0]).toBe(1370);
+    expect(folgaValores[4]).toBe(2630);
+  });
+
+  it("desloca o palco quando um centro de lugar coincide com o centro do palco", () => {
+    const { container } = render(
+      <MapaEstiloB
+        {...base}
+        lugares={[lugar({ id: "coincidente", x: 2000, y: 500 })]}
+        elementos={[{ tipo: "PALCO", texto: "PALCO", x: 2000, y: 500 }]}
+      />,
+    );
+    const path = container.querySelector("path[data-palco]")!.getAttribute("d")!;
+    const valores = path.match(/-?\d+(?:\.\d+)?/g)?.map(Number) ?? [];
+    const x0 = valores[0] ?? Number.NaN;
+    const x1 = valores[4] ?? Number.NaN;
+    expect(x1 - x0).toBeGreaterThanOrEqual(4 * 80);
+    expect(centroDentroDoPalco(path, 2000, 500)).toBe(false);
   });
 
   it("repassa o clique no fundo em coordenadas do mapa", () => {

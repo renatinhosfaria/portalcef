@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Query, Req, Res, UseGuards } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, Res, UseGuards } from "@nestjs/common";
 import type { FastifyReply } from "fastify";
 import { AuthGuard } from "../../../common/guards/auth.guard";
 import { RolesGuard } from "../../../common/guards/roles.guard";
@@ -41,15 +41,10 @@ export class MapasController {
     if (!parsed.success) return { success: false, error: { code: "VALIDATION_ERROR", details: parsed.error.flatten() } };
     return { success: true, data: await this.service.publicar(id, versionId, { revisaoBase: parsed.data.revisaoBase, motivo: parsed.data.motivo || undefined }, actor) };
   }
-  @Post("mapas/:versionId/arquivar") arquivar(@Param("id") id: string, @Param("versionId") versionId: string, @CurrentUser() actor: any) { return this.service.arquivar(id, versionId, actor); }
-  @Post("mapa-padrao/substituir") async substituir(@Param("id") id: string, @Body() body: unknown, @CurrentUser() actor: any) {
-    const parsed = z.object({ mapId: z.string().uuid() }).safeParse(body);
-    if (!parsed.success) return { success: false, error: { code: "VALIDATION_ERROR", details: parsed.error.flatten() } };
-    return { success: true, data: await this.service.substituirMapaPadrao(id, parsed.data.mapId, actor) };
+  @Post("mapas/:versionId/editar") async editarVersao(@Param("id") id: string, @Param("versionId") versionId: string, @CurrentUser() actor: any) {
+    return { success: true, data: await this.service.editarVersao(id, versionId, actor) };
   }
-  @Post("mapas/:versionId/migrar-e-excluir") async migrarEExcluir(@Param("id") id: string, @Param("versionId") versionId: string, @Body() body: unknown, @CurrentUser() actor: any) {
-    const parsed = z.object({ targetMapId: z.string().uuid(), sessionIds: z.array(z.string().uuid()).optional() }).safeParse(body);
-    if (!parsed.success) return { success: false, error: { code: "VALIDATION_ERROR", details: parsed.error.flatten() } };
-    return { success: true, data: await this.service.migrarSessoesEExcluir(id, versionId, parsed.data, actor) };
+  @Delete("mapas/:versionId") async excluirVersao(@Param("id") id: string, @Param("versionId") versionId: string, @CurrentUser() actor: any) {
+    return { success: true, data: await this.service.excluirVersao(id, versionId, actor) };
   }
 }

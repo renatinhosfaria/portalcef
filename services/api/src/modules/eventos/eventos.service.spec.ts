@@ -12,6 +12,45 @@ const event = (extra: Record<string, unknown> = {}) => ({
 });
 
 describe('EventosService contratos de workspace', () => {
+  it.each(['mapa-v2', null])('publicar recusa sessão legada com mapId %s mesmo se as regras já tiverem passado', async (mapId) => {
+    const db = fakeDb({
+      selects: [
+        [event({ defaultMapId: 'mapa-v4', status: 'RASCUNHO' })],
+        [{ id: 'sessao-1', eventId: 'e1', mapId }],
+      ],
+      update: async () => [event({ defaultMapId: 'mapa-v4', status: 'PUBLICADO' })],
+    });
+
+    await expect(service(db).publicar('e1', actor)).rejects.toMatchObject({ response: { code: 'SESSION_MAP_MISMATCH' } });
+    expect(db.updated).toBe(false);
+  });
+
+  it('criarSessao grava o mapa do evento na sessão', async () => {
+    const inserted: any[] = [];
+    const db = fakeDb({ selects: [[event({ defaultMapId: 'mapa-1' })]], insert: async (values: any) => { inserted.push(values); return [{ id: 's1', ...values }]; } });
+
+    await service(db).criarSessao('e1', {
+      startsAt: new Date('2026-11-01T10:00:00Z'),
+      endsAt: new Date('2026-11-01T11:00:00Z'),
+      capacity: 10,
+    }, actor);
+
+    expect(inserted[0]).toMatchObject({ mapId: 'mapa-1' });
+  });
+
+  it('criarSessao em evento sem mapa grava mapId null', async () => {
+    const inserted: any[] = [];
+    const db = fakeDb({ selects: [[event({ defaultMapId: null })]], insert: async (values: any) => { inserted.push(values); return [{ id: 's1', ...values }]; } });
+
+    await service(db).criarSessao('e1', {
+      startsAt: new Date('2026-11-01T10:00:00Z'),
+      endsAt: new Date('2026-11-01T11:00:00Z'),
+      capacity: 10,
+    }, actor);
+
+    expect(inserted[0]).toMatchObject({ mapId: null });
+  });
+
   it('registra MapasService como token de DI mesmo sendo opcional', () => {
     const selfParamTypes = Reflect.getMetadata('self:paramtypes', EventosService) as Array<{ index: number; param: unknown }>;
     expect(selfParamTypes).toEqual(expect.arrayContaining([{ index: 3, param: MapasService }]));
@@ -177,38 +216,6 @@ describe('EventosService contratos de workspace', () => {
     await expect(service(db).atualizarEvento('e1', { slug: 'publicado' }, actor)).rejects.toMatchObject({ response: { code: 'EVENT_SLUG_IMMUTABLE' } });
   });
 
-  it('rejeita mapa pertencente a outro evento', async () => {
-    const mapas = { substituirMapaPadrao: jest.fn().mockRejectedValue(new BadRequestException({ code: 'MAP_EVENT_MISMATCH' })) };
-    await expect(service(fakeDb(), undefined, mapas).atualizarMapaPadrao('e1', 'mapa-externo', actor)).rejects.toMatchObject({ response: { code: 'MAP_EVENT_MISMATCH' } });
-  });
-
-  it('rejeita mapa em revisão pelo PATCH legado', async () => {
-    const mapas = { substituirMapaPadrao: jest.fn().mockRejectedValue(new BadRequestException({ code: 'MAP_NOT_CONFIRMED' })) };
-    await expect(service(fakeDb(), undefined, mapas).atualizarMapaPadrao('e1', 'mapa-em-revisao', actor)).rejects.toMatchObject({ response: { code: 'MAP_NOT_CONFIRMED' } });
-  });
-
-  it('propaga mapa padrão somente para sessões herdadas e invalida seus inventários', async () => {
-    const mapas = { substituirMapaPadrao: jest.fn().mockResolvedValue({ updated: event({ defaultMapId: 'map-novo' }), inheritedSessionIds: ['sessao-herdada'], inventorySessionIds: ['sessao-herdada'], inventoryCreatedCount: 2 }) };
-    const result = await service(fakeDb(), undefined, mapas).atualizarMapaPadrao('e1', 'map-novo', actor);
-    expect(result.inheritedSessionIds).toEqual(['sessao-herdada']);
-    expect(mapas.substituirMapaPadrao).toHaveBeenCalledWith('e1', 'map-novo', actor);
-  });
-
-  it('devolve previousMapId e previousMapArchive no PATCH para permitir retomada após reload', async () => {
-    const mapas = { substituirMapaPadrao: jest.fn().mockResolvedValue({
-      updated: event({ defaultMapId: 'mapa-novo' }),
-      previousMapId: 'mapa-anterior',
-      inheritedSessionIds: ['sessao-herdada'],
-      inventorySessionIds: ['sessao-herdada'],
-      inventoryCreatedCount: 2,
-      previousMapArchive: { archived: false, code: 'MAP_IN_USE', sessionIds: ['sessao-explicita', 'sessao-herdada'] },
-    }) };
-    await expect(service(fakeDb(), undefined, mapas).atualizarMapaPadrao('e1', 'mapa-novo', actor)).resolves.toEqual(expect.objectContaining({
-      previousMapId: 'mapa-anterior',
-      previousMapArchive: { archived: false, code: 'MAP_IN_USE', sessionIds: ['sessao-explicita', 'sessao-herdada'] },
-    }));
-  });
-
   it('envia a imagem do evento, atualiza a URL e remove a imagem anterior', async () => {
     const db = fakeDb({ selects: [[event({ imageUrl: 'https://www.portalcef.com.br/storage/essencia-uploads/eventos/e1/imagem/antiga.jpg' })]], update: async () => [event({ imageUrl: 'https://www.portalcef.com.br/storage/essencia-uploads/eventos/e1/imagem/nova.jpg' })] });
     const storage = { uploadBuffer: jest.fn().mockResolvedValue({ url: 'https://www.portalcef.com.br/storage/essencia-uploads/eventos/e1/imagem/nova.jpg' }), deletePublicUrl: jest.fn() };
@@ -339,7 +346,6 @@ describe('EventosService contratos de workspace', () => {
       endsAt: new Date('2026-11-01T11:00:00Z'),
       capacity: 10,
       locationId: 'local-externo',
-      mapId: null,
     }, actor)).rejects.toMatchObject({ response: { code: 'SESSION_LOCATION_INVALID' } });
   });
 
@@ -355,20 +361,7 @@ describe('EventosService contratos de workspace', () => {
       startsAt: new Date('2026-11-01T10:00:00Z'),
       endsAt: new Date('2026-11-01T11:00:00Z'),
       capacity: 10,
-      mapId: null,
     }, actor)).rejects.toMatchObject({ response: { code: 'SESSION_LOCATION_INVALID' } });
-  });
-
-  it('rejeita atualização de sessão com mapa não confirmado de outro evento', async () => {
-    const db = fakeDb({
-      selects: [
-        [event()],
-        [{ id: 's1', eventId: 'e1' }],
-        [{ id: 'mapa-externo', eventId: 'outro-evento', status: 'EM_REVISAO' }],
-      ],
-    });
-
-    await expect(service(db).atualizarSessao('e1', 's1', { mapId: 'mapa-externo' }, actor)).rejects.toMatchObject({ response: { code: 'SESSION_MAP_INVALID' } });
   });
 
   it('trava o evento antes da sessão ao atualizar a referência do mapa', async () => {

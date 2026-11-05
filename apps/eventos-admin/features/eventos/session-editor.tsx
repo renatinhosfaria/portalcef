@@ -18,8 +18,6 @@ type SessionErrors = ReturnType<typeof validarSessao>["errors"];
 const EMPTY_OPTIONS: SessionOptions = {
   defaultLocation: null,
   locations: [],
-  defaultMap: null,
-  maps: [],
 };
 
 const FIELD_LABELS: Record<keyof SessionErrors, string> = {
@@ -29,7 +27,6 @@ const FIELD_LABELS: Record<keyof SessionErrors, string> = {
   salesStartsAt: "início das vendas",
   salesEndsAt: "encerramento das vendas",
   location: "local",
-  map: "mapa de assentos",
 };
 
 export function sessionValueToDraft(value: SessionValue): SessionDraftState {
@@ -42,9 +39,7 @@ export function sessionValueToDraft(value: SessionValue): SessionDraftState {
     salesStartsAt: value.salesStartsAt ?? "",
     salesEndsAt: value.salesEndsAt ?? "",
     locationId: value.locationId ?? null,
-    mapId: value.mapId ?? null,
     locationMode: value.inheritLocation ? "default" : "custom",
-    mapMode: value.inheritMap ? "default" : "custom",
   };
 }
 
@@ -63,9 +58,7 @@ export function sessionDraftToValue(draft: SessionDraftState): SessionValue {
     salesStartsAt: draft.salesStartsAt,
     salesEndsAt: draft.salesEndsAt,
     inheritLocation: draft.locationMode === "default",
-    inheritMap: draft.mapMode === "default",
     locationId: draft.locationId ?? null,
-    mapId: draft.mapId ?? null,
   };
 }
 
@@ -76,21 +69,12 @@ function validarRascunho(draft: SessionDraftState, options: SessionOptions): { o
   if (draft.locationMode === "default" && !options.defaultLocation) {
     errors.location = "Defina o local padrão do evento ou escolha uma exceção";
   }
-  if (draft.mapMode === "default" && !options.defaultMap) {
-    errors.map = "Defina o mapa padrão do evento ou escolha uma exceção";
-  }
-
   return { ok: Object.keys(errors).length === 0, errors };
 }
 
 function nomeLocal(location: SessionOptions["defaultLocation"]): string {
   if (!location) return "Local padrão ainda não definido";
   return location.room ? `${location.name} — ${location.room}` : location.name;
-}
-
-function nomeMapa(map: SessionOptions["defaultMap"]): string {
-  if (!map) return "Mapa padrão ainda não definido";
-  return `Mapa v${map.version} — ${map.originalFileName ?? "arquivo sem nome"} · Confirmado`;
 }
 
 function primeiroCampoAusente(errors: SessionErrors): string | null {
@@ -107,9 +91,7 @@ function novoRascunho(): SessionDraftState {
     salesStartsAt: "",
     salesEndsAt: "",
     locationId: null,
-    mapId: null,
     locationMode: "default",
-    mapMode: "default",
   };
 }
 
@@ -154,7 +136,6 @@ export function SessionEditor({ initialValue = [], options = EMPTY_OPTIONS, onCh
         const validation = validarRascunho(draft, options);
         const pending = primeiroCampoAusente(validation.errors);
         const locationDefault = options.defaultLocation;
-        const mapDefault = options.defaultMap;
         const sessionLabel = `Sessão ${index + 1}`;
 
         return (
@@ -220,30 +201,6 @@ export function SessionEditor({ initialValue = [], options = EMPTY_OPTIONS, onCh
               )}
             </section>
 
-            <section aria-labelledby={`sessao-${index}-mapa`} className="space-y-3">
-              <h4 id={`sessao-${index}-mapa`} className="font-medium text-slate-900">Mapa de assentos</h4>
-              <div className="grid gap-2 md:grid-cols-2">
-                <label className={`flex cursor-pointer gap-2 rounded-lg border p-3 text-sm ${draft.mapMode === "default" ? "border-slate-900 bg-slate-50" : "border-slate-200"}`}>
-                  <input type="radio" name={`sessao-${index}-mapa-mode`} value="default" checked={draft.mapMode === "default"} aria-describedby={validation.errors.map ? `sessao-${index}-mapa-erro` : undefined} onChange={() => atualizar(index, { mapMode: "default" })} />
-                  <span><span className="block font-medium">Usar mapa padrão</span><span className="text-slate-600">{nomeMapa(mapDefault)}</span></span>
-                </label>
-                <label className={`flex cursor-pointer gap-2 rounded-lg border p-3 text-sm ${draft.mapMode === "custom" ? "border-slate-900 bg-slate-50" : "border-slate-200"}`}>
-                  <input type="radio" name={`sessao-${index}-mapa-mode`} value="custom" checked={draft.mapMode === "custom"} aria-describedby={validation.errors.map ? `sessao-${index}-mapa-erro` : undefined} onChange={() => atualizar(index, { mapMode: "custom" })} />
-                  <span><span className="block font-medium">Escolher outro mapa</span><span className="text-slate-600">Exceção somente para esta sessão</span></span>
-                </label>
-              </div>
-              {validation.errors.map && draft.mapMode === "default" && <p id={`sessao-${index}-mapa-erro`} className="text-sm text-red-700">{validation.errors.map}</p>}
-              {draft.mapMode === "custom" && (
-                <div>
-                  <label className="block text-sm font-medium text-slate-700" htmlFor={`sessao-${index}-mapa-excecao`}>Mapa da exceção</label>
-                  <select id={`sessao-${index}-mapa-excecao`} aria-label="Mapa da exceção" aria-describedby={validation.errors.map ? `sessao-${index}-mapa-erro` : undefined} value={draft.mapId ?? ""} onChange={(event) => atualizar(index, { mapId: event.target.value || null })} className="mt-1 w-full rounded-lg border border-slate-300 p-2">
-                    <option value="">Escolha um mapa específico</option>
-                    {options.maps.map((map) => <option key={map.id} value={map.id}>Mapa v{map.version} — {map.originalFileName ?? "arquivo sem nome"} · Confirmado</option>)}
-                  </select>
-                  {validation.errors.map && <p id={`sessao-${index}-mapa-erro`} className="mt-1 text-sm text-red-700">{validation.errors.map}</p>}
-                </div>
-              )}
-            </section>
           </article>
         );
       })}

@@ -2,7 +2,6 @@ import { normalizarRespostaLocais, type LocalesResposta } from "./event-location
 import {
   aplicarLocaisNasOpcoes,
   type SessionLocationOption,
-  type SessionMapOption,
   type SessionOptions,
 } from "./session-card-contracts";
 
@@ -31,23 +30,13 @@ function normalizarLocal(value: unknown): SessionLocationOption | null {
   return { id: record.id, name: record.name, address: record.address, room: typeof record.room === "string" ? record.room : null };
 }
 
-function normalizarMapa(value: unknown): SessionMapOption | null {
-  const record = asRecord(value);
-  if (typeof record.id !== "string" || record.status !== "CONFIRMADO" || typeof record.version !== "number") return null;
-  return { id: record.id, version: record.version, status: "CONFIRMADO", originalFileName: typeof record.originalFileName === "string" ? record.originalFileName : null };
-}
-
 function normalizarOpcoesSessao(value: unknown): SessionOptions {
   const record = asRecord(unwrapData(value));
   const locations = Array.isArray(record.locations) ? record.locations.map(normalizarLocal).filter((item): item is SessionLocationOption => Boolean(item)) : [];
-  const maps = Array.isArray(record.maps) ? record.maps.map(normalizarMapa).filter((item): item is SessionMapOption => Boolean(item)) : [];
   const defaultLocation = normalizarLocal(record.defaultLocation);
-  const defaultMap = normalizarMapa(record.defaultMap);
   return {
     locations,
-    maps,
     defaultLocation: defaultLocation && locations.some((item) => item.id === defaultLocation.id) ? defaultLocation : null,
-    defaultMap: defaultMap && maps.some((item) => item.id === defaultMap.id) ? defaultMap : null,
   };
 }
 

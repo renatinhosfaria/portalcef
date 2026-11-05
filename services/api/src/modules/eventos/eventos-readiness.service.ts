@@ -24,8 +24,7 @@ export class EventosReadinessService {
     if (this.mapas) {
       const confirmedMapIds = new Set<string>();
       for (const session of sessions) {
-        const effectiveMapId = session.mapId ?? event.defaultMapId;
-        if (effectiveMapId && maps.some((map) => map.id === effectiveMapId && map.status === 'CONFIRMADO')) confirmedMapIds.add(effectiveMapId);
+        if ((session.mapId === event.defaultMapId || session.mapId === null) && event.defaultMapId && maps.some((map) => map.id === event.defaultMapId && map.status === 'CONFIRMADO')) confirmedMapIds.add(event.defaultMapId);
       }
       for (const mapId of confirmedMapIds) await this.mapas.sincronizarInventarioMapa(this.db, eventId, mapId, actor);
     }
@@ -38,8 +37,7 @@ export class EventosReadinessService {
     const locationOk = sessions.length > 0 && sessions.every((session) => Boolean(session.locationId || event.defaultLocationId));
     items.push(locationOk ? { key: 'LOCAL_SESSOES', label: 'Local das sessões', state: 'OK' } : { key: 'LOCAL_SESSOES', label: 'Local das sessões', state: 'BLOQUEADOR', href: '#sessoes', message: 'Defina um local efetivo para cada sessão' });
     const mapOk = sessionsValid && sessions.every((session) => {
-      const effectiveMapId = session.mapId ?? event.defaultMapId;
-      return Boolean(effectiveMapId && maps.some((map) => map.id === effectiveMapId && map.status === 'CONFIRMADO'));
+      return Boolean(session.mapId && session.mapId === event.defaultMapId && maps.some((map) => map.id === event.defaultMapId && map.status === 'CONFIRMADO'));
     });
     items.push(mapOk ? { key: 'MAPA_CONFIRMADO', label: 'Mapa confirmado', state: 'OK' } : { key: 'MAPA_CONFIRMADO', label: 'Mapa confirmado', state: 'BLOQUEADOR', href: '#mapa', message: 'Confirme o mapa do evento e das sessões' });
     let inventoryOk = sessions.length > 0;

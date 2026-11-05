@@ -57,7 +57,7 @@ export class EventosService {
     const { publishImmediately, sessions, ticketTypes, policies, ...eventInput } = input;
     let event: typeof eventos.$inferSelect | undefined;
     try {
-      [event] = await this.db.insert(eventos).values({ ...eventInput, slug, status: "RASCUNHO", publishedAt: null, plannedPublicationAt: input.plannedPublicationAt ?? null, defaultLocationId: input.defaultLocationId ?? null, defaultMapId: input.defaultMapId ?? null }).returning();
+      [event] = await this.db.insert(eventos).values({ ...eventInput, slug, status: "RASCUNHO", publishedAt: null, plannedPublicationAt: input.plannedPublicationAt ?? null, defaultLocationId: input.defaultLocationId ?? null, defaultMapId: null }).returning();
       if (!event) throw new BadRequestException({ code: "EVENT_CREATE_FAILED", message: "Não foi possível criar o evento" });
       for (const session of sessions) await this.criarSessao(event.id, session, actor, false);
       for (const ticket of ticketTypes) await this.db.insert(eventoTiposIngresso).values({ eventId: event.id, name: ticket.name, description: ticket.description ?? null, priceCents: ticket.priceCents, eligibility: ticket.eligibility ?? null, maxPerOrder: ticket.maxPerOrder ?? null, salesLot: ticket.salesLot ?? null, rules: ticket.rules ?? null });
@@ -110,7 +110,7 @@ export class EventosService {
     }
     const nextValues = { ...updateInput, ...(nextSlug ? { slug: nextSlug } : {}) } as Record<string, unknown>;
     const previousValues = Object.fromEntries(Object.keys(nextValues).map((key) => [key, (existing as Record<string, unknown>)[key]]));
-    await this.audit(id, actor, "ATUALIZADO", "evento", id, { etapa: input.defaultMapId !== undefined ? "mapa" : "informacoes", version: existing.updatedAt?.toISOString(), previous: previousValues, next: nextValues });
+    await this.audit(id, actor, "ATUALIZADO", "evento", id, { etapa: "informacoes", version: existing.updatedAt?.toISOString(), previous: previousValues, next: nextValues });
     if (publishImmediately) return this.publicar(id, actor);
     const result = this.resumo(updated);
     if (input.title && !normalizedSlug && manualSlug && titleSuggestion && titleSuggestion !== existing.slug) result.slugSuggestion = titleSuggestion;
@@ -146,12 +146,6 @@ export class EventosService {
     return { imageUrl: updated.imageUrl, updatedAt: updated.updatedAt };
   }
 
-  async atualizarMapaPadrao(eventId: string, mapId: string, actor: EventoActor) {
-    if (!this.mapas) throw new BadRequestException({ code: "MAP_SERVICE_UNAVAILABLE", message: "Serviço de mapas indisponível" });
-    const result = await this.mapas.substituirMapaPadrao(eventId, mapId, actor);
-    return { ...this.resumo(result.updated as typeof eventos.$inferSelect), previousMapId: result.previousMapId, previousMapArchive: result.previousMapArchive, inheritedSessionIds: result.inheritedSessionIds, inventorySessionIds: result.inventorySessionIds, inventoryCreatedCount: result.inventoryCreatedCount, inventoryRequiresReview: result.inheritedSessionIds.length > 0 };
-  }
-
   async listarAdmin(query: EventoListQuery = {}, actor?: EventoActor) {
     if (!actor) throw new BadRequestException({ code: "FORBIDDEN", message: "Usuário administrativo obrigatório" });
     const filters = query.status ? [eq(eventos.status, query.status)] : [];
@@ -179,7 +173,7 @@ export class EventosService {
       if (actor) this.assertSchoolScope(actor, event.schoolId);
       await this.validarReferenciasSessao(eventId, event, input, db);
       if (input.status === "PUBLICADA") throw new BadRequestException({ code: "SESSION_PUBLICATION_REQUIRES_INVENTORY", message: "Publique a sessão pelo fluxo de publicação após inicializar o inventário" });
-      const [session] = await db.insert(eventoSessoes).values({ eventId, startsAt: input.startsAt, endsAt: input.endsAt, capacity: input.capacity, locationId: input.locationId === undefined ? event.defaultLocationId : input.locationId, mapId: input.mapId ?? null, salesStartsAt: input.salesStartsAt ?? null, salesEndsAt: input.salesEndsAt ?? null, status: input.status ?? "RASCUNHO" }).returning();
+      const [session] = await db.insert(eventoSessoes).values({ eventId, startsAt: input.startsAt, endsAt: input.endsAt, capacity: input.capacity, locationId: input.locationId === undefined ? event.defaultLocationId : input.locationId, mapId: event.defaultMapId ?? null, salesStartsAt: input.salesStartsAt ?? null, salesEndsAt: input.salesEndsAt ?? null, status: input.status ?? "RASCUNHO" }).returning();
       if (audit && session) await this.audit(eventId, actor, "ATUALIZADO", "sessao", session.id, undefined, db);
       return session;
     };
@@ -238,11 +232,6 @@ export class EventosService {
       const [location] = await db.select().from(eventoLocais).where(eq(eventoLocais.id, locationId));
       if (!location || location.schoolId !== event.schoolId) throw new BadRequestException({ code: "SESSION_LOCATION_INVALID", message: "O local informado não pertence à escola do evento" });
     }
-    if (input.mapId) {
-      const mapQuery = db.select().from(eventoMapas).where(eq(eventoMapas.id, input.mapId));
-      const [map] = await (typeof mapQuery.for === "function" ? mapQuery.for("update") : mapQuery);
-      if (!map || map.eventId !== eventId || map.status !== "CONFIRMADO") throw new BadRequestException({ code: "SESSION_MAP_INVALID", message: "O mapa informado não está confirmado para este evento" });
-    }
   }
 
   async listarPublicados(now: Date): Promise<PublicEventCard[]> {
@@ -288,7 +277,7 @@ export class EventosService {
     if (!parentEvent || parentEvent.status !== "PUBLICADO") throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Evento não encontrado" });
     const [map] = await this.db.select().from(eventoMapas).where(eq(eventoMapas.id, session.mapId));
     if (!map || map.status !== "CONFIRMADO") throw new NotFoundException({ code: "MAP_NOT_CONFIRMED", message: "Mapa não disponível" });
-    const rows = await this.db.select({ seat: eventoMapaAssentos, inventory: eventoInventarioAssentos }).from(eventoInventarioAssentos).innerJoin(eventoMapaAssentos, eq(eventoMapaAssentos.id, eventoInventarioAssentos.seatId)).where(eq(eventoInventarioAssentos.sessionId, sessionId));
+    const rows = await this.db.select({ seat: eventoMapaAssentos, inventory: eventoInventarioAssentos }).from(eventoInventarioAssentos).innerJoin(eventoMapaAssentos, eq(eventoMapaAssentos.id, eventoInventarioAssentos.seatId)).where(and(eq(eventoInventarioAssentos.sessionId, sessionId), eq(eventoMapaAssentos.mapId, session.mapId)));
     return { sessionId, mapId: session.mapId, seats: rows.map(({ seat, inventory }: any) => ({ id: seat.id, sessionId, rowLabel: seat.rowLabel, seatNumber: seat.seatNumber, x: seat.x, y: seat.y, width: seat.width, height: seat.height, category: seat.category, accessible: seat.accessible, state: inventory.status === "VENDIDO" ? "sold" : inventory.status === "RESERVADO" ? "reserved" : inventory.status === "BLOQUEADO" ? "blocked" : "available" })) };
   }
 
@@ -297,6 +286,10 @@ export class EventosService {
     if (!existing) throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Evento não encontrado" });
     if (actor) this.assertSchoolScope(actor, existing.schoolId);
     await this.rules.validarPublicacao(id);
+    const sessoes = await this.db.select().from(eventoSessoes).where(eq(eventoSessoes.eventId, id));
+    if (sessoes.some((sessao: any) => sessao.mapId !== existing.defaultMapId)) {
+      throw new BadRequestException({ code: "SESSION_MAP_MISMATCH", message: "A sessão precisa usar exatamente o mapa do evento" });
+    }
     const [event] = await this.db.update(eventos).set({ status: "PUBLICADO", publishedAt: new Date(), updatedAt: new Date() }).where(eq(eventos.id, id)).returning();
     if (!event) throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Evento não encontrado" });
     await this.db.update(eventoSessoes).set({ status: "PUBLICADA", updatedAt: new Date() }).where(and(eq(eventoSessoes.eventId, id), eq(eventoSessoes.status, "RASCUNHO")));
