@@ -26,6 +26,17 @@ describe("api-mapas", () => {
     ]);
   });
 
+  it("editar não declara JSON sem corpo, porque o Fastify recusa esse pedido com 400", async () => {
+    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => new Response(JSON.stringify({ success: true, data: { mapId: "m2" } })));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await editarVersao("ev1", "m1");
+
+    const init = fetchMock.mock.calls[0]?.[1];
+    expect(init?.body).toBeUndefined();
+    expect(new Headers(init?.headers).get("content-type")).toBeNull();
+  });
+
   it("respostaApi lança ErroApiMapa com code e details", async () => {
     const response = new Response(
       JSON.stringify({ success: false, error: { code: "PDF_PAGINA_OBRIGATORIA", message: "Informe a página", details: { paginas: 3 } } }),

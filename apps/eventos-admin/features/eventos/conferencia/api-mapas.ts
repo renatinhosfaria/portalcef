@@ -43,7 +43,7 @@ export async function listarMapas(eventoId: string): Promise<{ versoes: VersaoMa
 }
 
 export async function editarVersao(eventoId: string, mapId: string): Promise<{ mapId: string }> {
-  return respostaApi(await fetch(`${baseEvento(eventoId)}/mapas/${mapId}/editar`, { method: "POST", headers: JSON_HEADERS }));
+  return respostaApi(await fetch(`${baseEvento(eventoId)}/mapas/${mapId}/editar`, { method: "POST" }));
 }
 
 export async function excluirVersao(eventoId: string, mapId: string): Promise<{ excluida: true; sessionIds: string[] }> {
