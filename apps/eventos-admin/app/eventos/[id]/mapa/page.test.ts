@@ -115,6 +115,20 @@ describe("MapaPage versões", () => {
     expect((await screen.findByRole("status")).textContent).toContain("Publicado: 2 sessão(ões) levada(s) para a versão 2. Capacidade: 4 lugares."); await waitFor(() => expect(chamadasEm("GET", "/mapas").length).toBeGreaterThan(1));
   });
 
+  it("publicar atualiza o status das etapas do workspace", async () => {
+    servidor({ "GET /mapas": () => lista([versaoRevisao]), "GET /mapas/m2/revisao": () => envelope({ map: { id: "m2", status: "EM_REVISAO" }, proposta: proposta() }), "POST /mapas/m2/publicar": () => envelope({ sessionIds: ["s1"], capacidade: 1, arquivadas: [] }) }); entrar();
+    const publicar = await screen.findByRole("button", { name: "Publicar mapa" }); await waitFor(() => expect((publicar as HTMLButtonElement).disabled).toBe(false)); fireEvent.click(publicar); const confirmar = await screen.findByRole("button", { name: "Confirmar publicação" }); await waitFor(() => expect((confirmar as HTMLButtonElement).disabled).toBe(false)); fireEvent.click(confirmar);
+    await screen.findByRole("status");
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("excluir uma versão atualiza o status das etapas do workspace", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    servidor({ "GET /mapas": () => lista([versaoAtual, { ...versaoAtual, id: "m0", version: 0, atual: false }]), "DELETE /mapas/m0": () => envelope({ excluida: true, sessionIds: [] }) }); entrar();
+    fireEvent.click(await screen.findByRole("button", { name: "Excluir versão 0" }));
+    await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
+  });
+
   it("Editar e publicar usa o número da versão recarregada", async () => {
     let editado = false; let publicado = false;
     const m2: VersaoMapaResumo = { ...versaoRevisao, version: 4 };

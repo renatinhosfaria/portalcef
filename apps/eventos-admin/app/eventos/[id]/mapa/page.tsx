@@ -1,7 +1,7 @@
 "use client";
 
 import { DM_Sans, Outfit } from "next/font/google";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import type { PropostaMapa } from "@essencia/shared/eventos/mapa-proposta";
 
@@ -49,6 +49,7 @@ function CampoArquivo({ rotulo, desabilitado, aoEscolher }: { rotulo: string; de
 
 export default function MapaPage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const [vista, setVista] = useState<Vista>({ tipo: "carregando" });
   const [versoes, setVersoes] = useState<VersaoMapaResumo[]>([]);
   const [trava, setTrava] = useState<TravaMapa>({ tipo: "LIVRE", mensagem: null });
@@ -127,7 +128,7 @@ export default function MapaPage() {
     const versao = versoes.find((item) => item.id === mapId);
     if (!versao || !window.confirm(`Excluir a versão ${versao.version}? Esta ação não pode ser desfeita.`)) return;
     setError(""); setOcupado(true);
-    try { await excluirVersao(id, mapId); await carregarLista(false); }
+    try { await excluirVersao(id, mapId); router.refresh(); await carregarLista(false); }
     catch (erro) { await recarregarDepoisDeTrava(erro); if (!eTrava(erro)) setError(mensagemErro(erro, "Falha ao excluir a versão.")); }
     finally { setOcupado(false); }
   };
@@ -136,6 +137,7 @@ export default function MapaPage() {
     setError("");
     try {
       const resultado = await publicarMapa(id, mapId, revisaoBase, motivo);
+      router.refresh();
       const listaAtualizada = await carregarLista(false);
       const versao = listaAtualizada.versoes.find((item) => item.id === mapId);
       if (!versao) throw new Error("A versão publicada não foi encontrada na lista atualizada.");
