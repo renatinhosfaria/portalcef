@@ -52,7 +52,7 @@ export class EventosReadinessService {
     const required = ['PRIVACIDADE', 'COMPRA', 'CANCELAMENTO_REEMBOLSO', 'ACESSIBILIDADE', 'CONTATO'];
     const policyOk = required.every((type) => policies.some((policy) => policy.type === type));
     items.push(policyOk ? { key: 'POLITICAS_OBRIGATORIAS', label: 'Políticas obrigatórias', state: 'OK' } : { key: 'POLITICAS_OBRIGATORIAS', label: 'Políticas obrigatórias', state: 'BLOQUEADOR', href: '#politicas', message: 'Ative as cinco políticas obrigatórias' });
-    const statusOk = ['RASCUNHO', 'REVISAO', 'PAUSADO'].includes(event.status);
+    const statusOk = ['RASCUNHO', 'REVISAO', 'PAUSADO', 'PUBLICADO'].includes(event.status);
     items.push(statusOk ? { key: 'ESTADO_NEGOCIO', label: 'Estado do evento', state: 'OK' } : { key: 'ESTADO_NEGOCIO', label: 'Estado do evento', state: 'BLOQUEADOR', message: 'O estado atual não permite publicação' });
     const okCount = items.filter((item) => item.state === 'OK').length;
     return { eventId, status: event.status, progress: Math.round((okCount / items.length) * 100), items };
