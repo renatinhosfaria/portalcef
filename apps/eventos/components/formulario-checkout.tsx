@@ -46,7 +46,9 @@ export function FormularioCheckout({ seatIds, ticketTypeIds = [], sessionId, pol
   const resumoSessao = session ? `${formatarDataPublica(session.startsAt, { hour: "2-digit", minute: "2-digit" })}${session.location?.name ? ` · ${session.location.name}` : ""}` : "Sessão selecionada";
   const rotulosAssentos = seatIds.map((seatId, index) => /^[\p{L}\d]+[- ]\d+$/u.test(seatId) ? seatId : `Assento ${index + 1}`);
   const preco = calcularPrecoSelecao(seatIds.map((seatId, index) => ({ seatId, ticketTypeId: tiposPorAssento[index] ?? "", label: rotulosAssentos[index] })), tiposDisponiveis, ofertasDisponiveis);
-  const ofertaTexto = ofertasDisponiveis.find((offer) => offer.discountPercent != null && (seatIds.length < offer.minQuantity || (seatIds.length >= offer.minQuantity && seatIds.length <= (offer.maxQuantity ?? Number.POSITIVE_INFINITY))));
+  const ofertaTexto = seatIds.length > 0
+    ? ofertasDisponiveis.find((offer) => offer.discountPercent != null && (seatIds.length < offer.minQuantity || (seatIds.length >= offer.minQuantity && seatIds.length <= (offer.maxQuantity ?? Number.POSITIVE_INFINITY))))
+    : undefined;
 
   async function enviar(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();

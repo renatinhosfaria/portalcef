@@ -16,6 +16,7 @@ export function classeEstadoAssento(state: PublicSeat["state"]): string {
 }
 
 const estadoLabel: Record<PublicSeat["state"], string> = { available: "disponível", reserved: "reservado", sold: "vendido", blocked: "bloqueado" };
+const MAX_ASSENTOS_PEDIDO = 20;
 
 function descricaoAssento(seat: PublicSeat) {
   return `Assento ${seat.rowLabel}-${seat.seatNumber}, ${estadoLabel[seat.state]}, categoria ${categoriaAssento(seat)}${seat.accessible ? ", assento acessível" : ", assento não acessível"}`;
@@ -40,7 +41,7 @@ function normalizarSelecaoInicial(map: PublicMap, selection: AssentoSelecionado[
       label: item.label ?? rotuloAssento(seat),
       accessible: item.accessible ?? seat.accessible,
     }];
-  });
+  }).slice(0, MAX_ASSENTOS_PEDIDO);
 }
 
 export type MapaAssentosProps = {
@@ -55,9 +56,10 @@ export type MapaAssentosProps = {
 };
 
 export function MapaAssentos({ map, checkoutHref, ticketTypes, offers = [], initialTicketTypeId, initialSelection = [], unavailableSeatIds = [], initialSelectionInvalid = false }: MapaAssentosProps): React.JSX.Element {
-  const [selection, setSelection] = useState<AssentoSelecionado[]>(() => normalizarSelecaoInicial(map, initialSelection, unavailableSeatIds));
+  const selecaoInicial = normalizarSelecaoInicial(map, initialSelection, unavailableSeatIds);
+  const [selection, setSelection] = useState<AssentoSelecionado[]>(() => selecaoInicial);
   const [selectionInvalid, setSelectionInvalid] = useState(initialSelectionInvalid);
-  const [selectionLimitReached, setSelectionLimitReached] = useState(false);
+  const [selectionLimitReached, setSelectionLimitReached] = useState(initialSelection.length > MAX_ASSENTOS_PEDIDO);
   const [fileiraSelecionada, setFileiraSelecionada] = useState("");
   const [modoVisualizacao, setModoVisualizacao] = useState<"lista" | "mapa">("lista");
 
@@ -92,7 +94,7 @@ export function MapaAssentos({ map, checkoutHref, ticketTypes, offers = [], init
 
   function alternarAssento(seat: PublicSeat) {
     if (seat.state !== "available" || indisponiveis.has(seat.id)) return;
-    if (!selectedIds.has(seat.id) && selection.length >= 20) {
+    if (!selectedIds.has(seat.id) && selection.length >= MAX_ASSENTOS_PEDIDO) {
       setSelectionLimitReached(true);
       return;
     }

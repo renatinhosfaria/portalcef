@@ -114,6 +114,16 @@ describe("formulário de checkout público", () => {
     expect(html).toContain("15% de desconto a partir de 10 lugares");
   });
 
+  it("não mostra mensagem de oferta quando o checkout está sem assentos", () => {
+    const html = renderToStaticMarkup(<FormularioCheckout
+      seatIds={[]}
+      ticketTypeIds={[]}
+      sessionId="sessao-1"
+      session={{ id: "sessao-1", startsAt: "2026-06-20T02:00:00.000Z" as unknown as Date, endsAt: "2026-06-20T04:00:00.000Z" as unknown as Date, status: "PUBLICADA", capacity: 20, location: null, mapId: "map-1", salesStartsAt: null, salesEndsAt: null, availability: "available", offers: [{ id: "oferta-15", version: 1, name: "Grupos", minQuantity: 10, maxQuantity: null, discountPercent: 15 }], ticketTypes: [{ id: "inteira", name: "Inteira", description: null, priceCents: 1000, maxPerOrder: 20, eligibility: null }] }}
+    />);
+    expect(html).not.toContain("15% de desconto a partir de 10 lugares");
+  });
+
   it("exibe o conflito e o retorno explícito ao mapa quando um assento fica indisponível", async () => {
     vi.spyOn(eventosApi, "reservarAssentos").mockRejectedValue(new EventosApiError("Um dos assentos selecionados ficou indisponível. Escolha novamente.", 409, "SEAT_UNAVAILABLE"));
     render(<FormularioCheckout seatIds={["seat-1"]} ticketTypeIds={["ticket-1"]} sessionId="sessao-1" mapHref="/evento/ballet/sessao/sessao-1?assentos=seat-1&ticketTypeIds=ticket-1&conflito=disponibilidade" politicas={politicas} />);

@@ -72,6 +72,15 @@ describe("mapa público de assentos", () => {
     fetchSpy.mockRestore();
   });
 
+  it("limita a 20 assentos uma seleção inicial reidratada", () => {
+    const initialSelection = Array.from({ length: 21 }, (_, index) => ({ seatId: `s-${index + 1}`, ticketTypeId: "inteira" }));
+    render(<MapaAssentos map={criarMapaDisponivel(21)} checkoutHref="/checkout" ticketTypes={[tipoInteira]} offers={[ofertaVolume]} initialSelection={initialSelection} />);
+
+    expect(screen.getAllByText("20 assento(s) selecionado(s)").length).toBeGreaterThan(0);
+    const links = screen.getAllByRole("link", { name: "Continuar para checkout" });
+    expect(links.every((link) => !link.getAttribute("href")?.includes("s-21"))).toBe(true);
+  });
+
   it("aplica 15% ao misturar seis adultos e quatro crianças", () => {
     const tipoCrianca: PublicEventTicketType = { id: "crianca", name: "Criança", description: null, priceCents: 5000, maxPerOrder: null, eligibility: null };
     render(<MapaAssentos map={criarMapaDisponivel(10)} checkoutHref="/checkout" ticketTypes={[tipoInteira, tipoCrianca]} offers={[ofertaVolume]} />);
