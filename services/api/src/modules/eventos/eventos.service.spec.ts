@@ -438,6 +438,16 @@ describe('EventosService contratos de workspace', () => {
     expect(lockCalls).toEqual(['update']);
     expect(committedDeletes).toHaveLength(0);
   });
+  it("desativa ingresso existente dentro do evento e devolve seu id", async () => {
+    const db = fakeDb({
+      selects: [[event()]],
+      update: async () => [{ id: "ticket-1" }],
+    });
+
+    await expect(service(db).removerIngresso("e1", "ticket-1", actor)).resolves.toEqual({ id: "ticket-1" });
+    expect(db.updated).toBe(true);
+  });
+
 });
 
 function service(db: any, storage?: any, mapas?: any) { return new EventosService({ db } as any, { validarPublicacao: jest.fn() } as any, storage, mapas); }

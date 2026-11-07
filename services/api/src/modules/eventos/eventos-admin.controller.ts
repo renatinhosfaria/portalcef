@@ -122,6 +122,11 @@ export class EventosAdminController {
     return { success: true, data: await this.service.atualizarIngressos(id, values as any, actor) };
   }
 
+  @Delete(":id/ingressos/:ticketId")
+  async deleteTicket(@Param("id") id: string, @Param("ticketId") ticketId: string, @CurrentUser() actor: any) {
+    return { success: true, data: await this.service.removerIngresso(id, ticketId, actor) };
+  }
+
   @Delete(":id/sessoes/:sessionId")
   async deleteSession(@Param("id") id: string, @Param("sessionId") sessionId: string, @CurrentUser() actor: any) {
     return { success: true, data: await this.service.removerSessao(id, sessionId, actor) };

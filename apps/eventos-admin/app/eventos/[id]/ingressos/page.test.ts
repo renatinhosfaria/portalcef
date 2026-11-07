@@ -8,4 +8,10 @@ describe("etapa de ingressos", () => {
     expect(source).toContain("useRouter");
     expect(source).toContain("onSaved: () => router.refresh()");
   });
+
+  it("oferece exclusão explícita do ingresso já criado", () => {
+    expect(source).toContain("Excluir ingresso");
+    expect(source).toContain('method: "DELETE"');
+    expect(source).toContain("window.confirm");
+  });
 });
