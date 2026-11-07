@@ -27,6 +27,7 @@ export const ofertaInicial: OfertaValue = {
 export function construirPayloadOferta(value: OfertaValue): AtualizarOfertaInput {
   const payload: AtualizarOfertaInput = {
     ...(value.id ? { id: value.id } : {}),
+    ...(value.id && value.version !== undefined ? { version: value.version } : {}),
     name: value.name.trim(),
     pricingType: value.pricingType,
     minQuantity: Math.round(Number(value.minQuantity)),

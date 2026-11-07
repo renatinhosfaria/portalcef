@@ -32,6 +32,7 @@ describe("contrato de ofertas do painel", () => {
       maxQuantity: null,
       discountPercent: 15,
       priceCents: null,
+      version: 2,
       active: true,
     });
   });
@@ -58,5 +59,11 @@ describe("OfertaEditor", () => {
     expect(html).toContain("15% a partir de 10 lugares");
     expect(html).toContain("Desconto para grupos");
     expect(html).toContain("Oferta ativa");
+  });
+
+  it("desabilita os campos durante carregamento ou erro da oferta", () => {
+    const html = renderToStaticMarkup(React.createElement(OfertaEditor, { initialValue: ofertaBase, disabled: true }));
+
+    expect((html.match(/disabled=""/g) ?? []).length).toBeGreaterThanOrEqual(5);
   });
 });

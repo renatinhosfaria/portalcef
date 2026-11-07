@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
@@ -180,6 +181,24 @@ export class EventosOfertasService {
           throw new NotFoundException({
             code: "OFFER_NOT_FOUND",
             message: "Oferta não encontrada",
+          });
+        }
+      }
+
+      for (const input of inputs) {
+        if (!input.id) continue;
+        const previous = byId.get(input.id)!;
+        if (input.version === undefined) {
+          throw new BadRequestException({
+            code: "OFFER_VERSION_REQUIRED",
+            message: "Informe a versão atual da oferta para atualizar",
+          });
+        }
+        if (input.version !== previous.version) {
+          throw new ConflictException({
+            code: "VERSION_CONFLICT",
+            message: "A oferta foi alterada por outra pessoa",
+            current: this.resumo(previous),
           });
         }
       }

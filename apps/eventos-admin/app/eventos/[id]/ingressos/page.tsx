@@ -17,6 +17,9 @@ export default function IngressosPage() {
   const [oferta, setOferta] = useState<OfertaValue>(ofertaInicial);
   const [ofertasArquivadas, setOfertasArquivadas] = useState<OfertaValue[]>([]);
   const [ofertaDirty, setOfertaDirty] = useState(false);
+  const [ofertaLoading, setOfertaLoading] = useState(true);
+  const [ofertaLoaded, setOfertaLoaded] = useState(false);
+  const [ofertaError, setOfertaError] = useState("");
   const changeRevision = useRef(0);
   const ofertaRevision = useRef(0);
 
@@ -28,6 +31,9 @@ export default function IngressosPage() {
   }, [id]);
 
   useEffect(() => {
+    setOfertaLoading(true);
+    setOfertaLoaded(false);
+    setOfertaError("");
     fetch(`/eventos-admin/api/eventos/admin/${id}/ofertas`, { credentials: "include" })
       .then((response) => response.ok ? response.json() : Promise.reject())
       .then((body: unknown) => {
@@ -36,8 +42,10 @@ export default function IngressosPage() {
         const active = rows.find((row) => row.active);
         setOferta(active ?? ofertaInicial);
         setOfertasArquivadas(rows.filter((row) => !row.active));
+        setOfertaLoaded(true);
       })
-      .catch(() => setError("Não foi possível carregar as ofertas."));
+      .catch(() => setOfertaError("Não foi possível carregar as ofertas."))
+      .finally(() => setOfertaLoading(false));
   }, [id]);
 
   const autosave = useEventoAutosave({
@@ -69,7 +77,7 @@ export default function IngressosPage() {
   const ofertaAutosave = useEventoAutosave({
     eventId: id,
     value: oferta,
-    dirty: ofertaDirty && ofertaProntaParaSalvar(oferta),
+    dirty: ofertaLoaded && !ofertaError && ofertaDirty && ofertaProntaParaSalvar(oferta),
     serialize: (value) => [construirPayloadOferta(value)],
     save: async (payload, eventId) => {
       const revision = ofertaRevision.current;
@@ -174,7 +182,10 @@ export default function IngressosPage() {
           <h2 id="ofertas-heading" className="text-xl font-semibold">Descontos e ofertas</h2>
           <p className="text-sm text-slate-600">Configure uma única oferta ativa para pedidos com vários lugares. A API versiona cada salvamento.</p>
         </div>
-        <OfertaEditor initialValue={oferta} disabled={ofertaAutosave.state === "saving"} onChange={(next) => {
+        {ofertaLoading && <p className="text-sm text-slate-600" role="status">Carregando oferta…</p>}
+        {ofertaError && <p className="text-sm text-red-700" role="alert">{ofertaError}</p>}
+        <OfertaEditor initialValue={oferta} disabled={ofertaLoading || Boolean(ofertaError) || ofertaAutosave.state === "saving"} onChange={(next) => {
+          if (!ofertaLoaded || ofertaError) return;
           ofertaRevision.current += 1;
           setOferta(next);
           setOfertaDirty(true);
@@ -188,7 +199,7 @@ export default function IngressosPage() {
           </div>
         )}
         <p className="text-sm text-slate-500" role="status">
-          {ofertaDirty && !ofertaProntaParaSalvar(oferta) ? "Revise a oferta antes de salvar." : ofertaAutosave.state === "saving" ? "Salvando oferta…" : ofertaAutosave.state === "saved" ? "ofertas salvas automaticamente" : ofertaAutosave.state === "conflict" ? "Conflito de edição da oferta; recarregue para revisar." : ofertaAutosave.state === "error" ? "Não foi possível salvar a oferta." : ""}
+          {ofertaLoading ? "Carregando oferta…" : ofertaError ? "A oferta está bloqueada até o carregamento ser concluído." : ofertaDirty && !ofertaProntaParaSalvar(oferta) ? "Revise a oferta antes de salvar." : ofertaAutosave.state === "saving" ? "Salvando oferta…" : ofertaAutosave.state === "saved" ? "ofertas salvas automaticamente" : ofertaAutosave.state === "conflict" ? "Conflito de edição da oferta; recarregue para revisar." : ofertaAutosave.state === "error" ? "Não foi possível salvar a oferta." : ""}
         </p>
       </section>
     </section>

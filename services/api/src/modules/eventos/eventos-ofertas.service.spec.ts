@@ -131,6 +131,7 @@ describe("EventosOfertasService", () => {
           minQuantity: 10,
           maxQuantity: null,
           discountPercent: 20,
+          version: 1,
         },
       ],
       actor,
@@ -164,6 +165,35 @@ describe("EventosOfertasService", () => {
     );
   });
 
+  it("recusa uma versão stale antes de desativar ou inserir a oferta", async () => {
+    const inserted: any[] = [];
+    const updated: any[] = [];
+    const db = fakeDb({
+      selects: [[evento()], [oferta({ version: 3 })]],
+      insert: (values) => {
+        inserted.push(values);
+        return [{ id: "o2", ...values }];
+      },
+      update: (values) => {
+        updated.push(values);
+        return [oferta({ active: false })];
+      },
+    });
+
+    await expect(service(db).atualizar("e1", [{
+      id: "o1",
+      version: 2,
+      name: "Oferta stale",
+      pricingType: "PERCENTUAL",
+      minQuantity: 10,
+      discountPercent: 20,
+    }], actor)).rejects.toMatchObject({
+      response: { code: "VERSION_CONFLICT", message: "A oferta foi alterada por outra pessoa" },
+    });
+    expect(inserted).toHaveLength(0);
+    expect(updated).toHaveLength(0);
+  });
+
   it("preserva compatibilidade por tipo ao versionar quando o campo é omitido", async () => {
     const inserted: any[] = [];
     const db = fakeDb({
@@ -174,7 +204,7 @@ describe("EventosOfertasService", () => {
       },
     });
 
-    await service(db).atualizar("e1", [{ id: "o1", name: "Oferta revisada", pricingType: "PERCENTUAL", minQuantity: 10, discountPercent: 20 }], actor);
+    await service(db).atualizar("e1", [{ id: "o1", version: 1, name: "Oferta revisada", pricingType: "PERCENTUAL", minQuantity: 10, discountPercent: 20 }], actor);
 
     expect(inserted[0]).toMatchObject({ compatibleTicketTypeIds: ["ticket-adulto", "ticket-infantil"] });
   });
@@ -189,7 +219,7 @@ describe("EventosOfertasService", () => {
       },
     });
 
-    await service(db).atualizar("e1", [{ id: "o1", name: "Oferta geral", pricingType: "PERCENTUAL", minQuantity: 10, discountPercent: 20, compatibleTicketTypeIds: null }], actor);
+    await service(db).atualizar("e1", [{ id: "o1", version: 1, name: "Oferta geral", pricingType: "PERCENTUAL", minQuantity: 10, discountPercent: 20, compatibleTicketTypeIds: null }], actor);
 
     expect(inserted[0]).toMatchObject({ compatibleTicketTypeIds: null });
   });
@@ -201,6 +231,20 @@ describe("EventosOfertasService", () => {
       { id: "o1", name: "Primeira", pricingType: "PERCENTUAL", minQuantity: 10, discountPercent: 15, active: false },
       { id: "o1", name: "Segunda", pricingType: "PERCENTUAL", minQuantity: 10, discountPercent: 20, active: false },
     ], actor)).rejects.toMatchObject({ response: { code: "DUPLICATE_OFFER_ID" } });
+  });
+
+  it("exige versão ao atualizar uma oferta existente", async () => {
+    const db = fakeDb({ selects: [[evento()], [oferta()]] });
+
+    await expect(service(db).atualizar("e1", [{
+      id: "o1",
+      name: "Sem versão",
+      pricingType: "PERCENTUAL",
+      minQuantity: 10,
+      discountPercent: 15,
+    }], actor)).rejects.toMatchObject({
+      response: { code: "OFFER_VERSION_REQUIRED" },
+    });
   });
 
   it("recusa duas ofertas ativas no mesmo evento", async () => {

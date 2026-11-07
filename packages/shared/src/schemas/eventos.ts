@@ -9,6 +9,7 @@ export const finalizarPedidoSchema = z.object({ participants: z.array(z.object({
 export const checkoutPublicoSchema = z.object({ successUrl: z.string().url().refine((v) => v.startsWith("https://")), cancelUrl: z.string().url().refine((v) => v.startsWith("https://")), idempotencyKey: z.string().trim().min(8).max(180) }).strict();
 export const atualizarOfertaSchema = z.object({
   id: z.string().uuid().optional(),
+  version: z.number().int().positive().optional(),
   name: z.string().trim().min(1).max(200),
   pricingType: z.enum(["PERCENTUAL", "VALOR_FIXO"]),
   minQuantity: z.number().int().positive(),
