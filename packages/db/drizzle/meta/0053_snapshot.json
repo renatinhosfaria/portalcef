@@ -7877,14 +7877,14 @@
           "name": "subtotal_cents",
           "type": "integer",
           "primaryKey": false,
-          "notNull": true,
+          "notNull": false,
           "default": 0
         },
         "discount_cents": {
           "name": "discount_cents",
           "type": "integer",
           "primaryKey": false,
-          "notNull": true,
+          "notNull": false,
           "default": 0
         },
         "applied_offer_id": {

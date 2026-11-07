@@ -4,8 +4,8 @@ ALTER TABLE "evento_ofertas" ALTER COLUMN "max_quantity" DROP NOT NULL;--> state
 ALTER TABLE "evento_ofertas" ALTER COLUMN "price_cents" DROP NOT NULL;--> statement-breakpoint
 ALTER TABLE "evento_ofertas" ADD COLUMN "pricing_type" text DEFAULT 'VALOR_FIXO' NOT NULL;--> statement-breakpoint
 ALTER TABLE "evento_ofertas" ADD COLUMN "discount_percent" integer;--> statement-breakpoint
-ALTER TABLE "evento_pedidos" ADD COLUMN "subtotal_cents" integer DEFAULT 0 NOT NULL;--> statement-breakpoint
-ALTER TABLE "evento_pedidos" ADD COLUMN "discount_cents" integer DEFAULT 0 NOT NULL;--> statement-breakpoint
+ALTER TABLE "evento_pedidos" ADD COLUMN "subtotal_cents" integer DEFAULT 0;--> statement-breakpoint
+ALTER TABLE "evento_pedidos" ADD COLUMN "discount_cents" integer DEFAULT 0;--> statement-breakpoint
 ALTER TABLE "evento_pedidos" ADD COLUMN "applied_offer_id" uuid;--> statement-breakpoint
 UPDATE "evento_pedidos" SET "subtotal_cents" = "total_cents", "discount_cents" = 0;--> statement-breakpoint
 ALTER TABLE "evento_pedidos" ADD CONSTRAINT "evento_pedidos_applied_offer_id_evento_ofertas_id_fk" FOREIGN KEY ("applied_offer_id") REFERENCES "public"."evento_ofertas"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint

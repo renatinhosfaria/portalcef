@@ -508,8 +508,8 @@ export const eventoPedidos = pgTable(
       .notNull()
       .default("INICIADO"),
     totalCents: integer("total_cents").notNull(),
-    subtotalCents: integer("subtotal_cents").notNull().default(0),
-    discountCents: integer("discount_cents").notNull().default(0),
+    subtotalCents: integer("subtotal_cents").default(0),
+    discountCents: integer("discount_cents").default(0),
     appliedOfferId: uuid("applied_offer_id").references(
       () => eventoOfertas.id,
       { onDelete: "set null" },

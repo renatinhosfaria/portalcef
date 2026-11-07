@@ -53,8 +53,8 @@ test("pedido preserva total legado e detalha subtotal, desconto e oferta aplicad
   assert.ok("subtotalCents" in eventoPedidos);
   assert.ok("discountCents" in eventoPedidos);
   assert.ok("appliedOfferId" in eventoPedidos);
-  assert.equal(eventoPedidos.subtotalCents.notNull, true);
-  assert.equal(eventoPedidos.discountCents.notNull, true);
+  assert.equal(eventoPedidos.subtotalCents.notNull, false);
+  assert.equal(eventoPedidos.discountCents.notNull, false);
   assert.equal(eventoPedidos.appliedOfferId.notNull, false);
 
   const checks = getTableConfig(eventoPedidos).checks.map((check) => check.name);
