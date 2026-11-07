@@ -1,21 +1,22 @@
 import type { Multipart } from "@fastify/multipart";
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, UseGuards, Optional } from "@nestjs/common";
 import type { FastifyRequest } from "fastify";
 import { ExactRoles, Roles } from "../../common/decorators/roles.decorator";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { AuthGuard } from "../../common/guards/auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
-import { atualizarLocalEventoSchema, atualizarLocalPadraoEventoSchema, atualizarRascunhoSchema, criarEventoSchema, criarRascunhoSchema, criarSessaoSchema, eventoListQuerySchema, localEventoSchema, politicaSchema } from "@essencia/shared/schemas";
+import { atualizarLocalEventoSchema, atualizarLocalPadraoEventoSchema, atualizarOfertaSchema, atualizarRascunhoSchema, criarEventoSchema, criarRascunhoSchema, criarSessaoSchema, eventoListQuerySchema, localEventoSchema, politicaSchema } from "@essencia/shared/schemas";
 import { EventosService } from "./eventos.service";
 import { EventosReadinessService } from "./eventos-readiness.service";
 import { EVENTOS_ADMIN_ROLES } from "./eventos.constants";
+import { EventosOfertasService } from "./eventos-ofertas.service";
 
 @Controller("eventos/admin")
 @UseGuards(AuthGuard, RolesGuard)
 @ExactRoles()
 @Roles(...EVENTOS_ADMIN_ROLES)
 export class EventosAdminController {
-  constructor(private readonly service: EventosService, private readonly readinessService: EventosReadinessService) {}
+  constructor(private readonly service: EventosService, private readonly readinessService: EventosReadinessService, @Optional() private readonly ofertasService?: EventosOfertasService) {}
 
   @Get()
   async list(@Query() query: unknown, @CurrentUser() actor: any) {
@@ -114,6 +115,18 @@ export class EventosAdminController {
 
   @Get(":id/ingressos")
   tickets(@Param("id") id: string, @CurrentUser() actor: any) { return this.service.listarIngressosAdmin(id, actor); }
+
+  @Get(":id/ofertas")
+  offers(@Param("id") id: string, @CurrentUser() actor: any) { return this.ofertasService!.listarAdmin(id, actor); }
+
+  @Patch(":id/ofertas")
+  async updateOffers(@Param("id") id: string, @Body() body: unknown, @CurrentUser() actor: any) {
+    const values = Array.isArray(body) ? body : [body];
+    const parsed = values.map((value) => atualizarOfertaSchema.safeParse(value));
+    const invalid = parsed.find((item) => !item.success);
+    if (invalid && !invalid.success) return { success: false, error: { code: "VALIDATION_ERROR", details: invalid.error.flatten() } };
+    return { success: true, data: await this.ofertasService!.atualizar(id, parsed.filter((item): item is { success: true; data: any } => item.success).map((item) => item.data), actor) };
+  }
 
   @Patch(":id/ingressos")
   async updateTickets(@Param("id") id: string, @Body() body: unknown, @CurrentUser() actor: any) {

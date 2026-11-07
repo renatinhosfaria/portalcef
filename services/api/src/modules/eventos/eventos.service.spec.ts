@@ -448,6 +448,19 @@ describe('EventosService contratos de workspace', () => {
     expect(db.updated).toBe(true);
   });
 
+  it("inclui somente as ofertas públicas ativas em cada sessão pública", async () => {
+    const ofertas = { listarPublicas: jest.fn().mockResolvedValue([{ id: "o1", version: 2, name: "A partir de 10", minQuantity: 10, maxQuantity: null, discountPercent: 15 }]) };
+    const db: any = publicSessionsDb([
+      [{ id: "t1", eventId: "e1", name: "Inteira", description: null, priceCents: 4500, maxPerOrder: null, eligibility: null, active: true }],
+      [{ session: { id: "s1", startsAt: new Date("2026-11-01T10:00:00Z"), endsAt: new Date("2026-11-01T11:00:00Z"), status: "PUBLICADA", capacity: 20, mapId: null, salesStartsAt: null, salesEndsAt: null }, location: null, inventory: { status: "DISPONIVEL" } }],
+    ]);
+    const instance = new EventosService({ db } as any, { validarPublicacao: jest.fn() } as any, undefined, undefined, ofertas as any);
+    jest.spyOn(instance as any, "getPublicBySlug").mockResolvedValue({ id: "e1" });
+
+    await expect(instance.listarSessoesPublicas("evento")).resolves.toEqual([expect.objectContaining({ id: "s1", offers: [{ id: "o1", version: 2, name: "A partir de 10", minQuantity: 10, maxQuantity: null, discountPercent: 15 }] })]);
+    expect(ofertas.listarPublicas).toHaveBeenCalledWith("e1");
+  });
+
 });
 
 function service(db: any, storage?: any, mapas?: any) { return new EventosService({ db } as any, { validarPublicacao: jest.fn() } as any, storage, mapas); }
@@ -461,5 +474,22 @@ function fakeDb(options: { selects?: unknown[][]; lockCalls?: string[]; insert?:
   db.update = () => ({ set: () => ({ where: () => ({ returning: async () => { db.updated = true; return options.update ? options.update() : []; } }) }) });
   db.delete = (table: unknown) => options.delete ? options.delete(table) : ({ where: async () => undefined });
   db.transaction = async (callback: (tx: any) => Promise<unknown>) => callback(db);
+  return db;
+}
+
+function publicSessionsDb(selects: unknown[][]) {
+  let index = 0;
+  const db: any = {};
+  db.select = () => {
+    const builder: any = {};
+    builder.from = () => builder;
+    builder.leftJoin = () => builder;
+    builder.where = () => {
+      const query: any = Promise.resolve(selects[index++] ?? []);
+      query.orderBy = () => query;
+      return query;
+    };
+    return builder;
+  };
   return db;
 }
