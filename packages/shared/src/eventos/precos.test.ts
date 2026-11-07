@@ -71,6 +71,17 @@ describe("calcularPrecoPedido", () => {
     expect(calcularPrecoPedido({ items, offers: [faixa] }).discountCents).toBe(0);
   });
 
+  it("preserva o resumo de uma oferta elegível mesmo com desconto zero", () => {
+    const ofertaSemDesconto = { ...ofertaPercentual, discountPercent: 0 };
+    const resultado = calcularPrecoPedido({
+      items: Array.from({ length: 10 }, (_, index) => item(index)),
+      offers: [ofertaSemDesconto],
+    });
+
+    expect(resultado.discountCents).toBe(0);
+    expect(resultado.appliedOffer).toMatchObject({ id: ofertaSemDesconto.id, discountPercent: 0 });
+  });
+
   it("trata priceCents de VALOR_FIXO como preço total da faixa", () => {
     const ofertaFixa: OfertaPreco = { ...ofertaPercentual, pricingType: "VALOR_FIXO", priceCents: 30000, discountPercent: null };
     const resultado = calcularPrecoPedido({

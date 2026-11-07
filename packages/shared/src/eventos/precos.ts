@@ -65,6 +65,7 @@ export function calcularPrecoPedido(input: {
   );
 
   let discountCents = 0;
+  let ofertaImpedidaPeloMinimo = false;
   if (oferta) {
     discountCents =
       oferta.pricingType === "PERCENTUAL"
@@ -73,6 +74,7 @@ export function calcularPrecoPedido(input: {
     const totalComOferta = subtotalCents - discountCents;
     if (input.minimumTotalCents !== undefined && totalComOferta < input.minimumTotalCents) {
       discountCents = 0;
+      ofertaImpedidaPeloMinimo = true;
     }
   }
 
@@ -106,5 +108,5 @@ export function calcularPrecoPedido(input: {
     const unitPriceCents = Math.max(0, item.basePriceCents - allocatedDiscountCents);
     return { ...item, baseUnitPriceCents: item.basePriceCents, allocatedDiscountCents, unitPriceCents, totalPriceCents: unitPriceCents };
   });
-  return { subtotalCents, discountCents, totalCents: subtotalCents - discountCents, appliedOffer: oferta && discountCents > 0 ? resumirOferta(oferta) : null, items };
+  return { subtotalCents, discountCents, totalCents: subtotalCents - discountCents, appliedOffer: oferta && !ofertaImpedidaPeloMinimo ? resumirOferta(oferta) : null, items };
 }
