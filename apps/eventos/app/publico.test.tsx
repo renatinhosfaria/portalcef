@@ -98,7 +98,9 @@ describe("vitrine pública de Eventos", () => {
     expect(smoke).toContain("minQuantity: 10");
     expect(smoke).toContain("maxQuantity: null");
     expect(smoke).toContain("discountPercent: 15");
+    expect(smoke).toContain("O chamado do oceano");
     expect(smoke).toContain("15% de desconto a partir de 10 lugares");
+    expect(smoke).toContain("Quantidade: 20 assento(s)");
     expect(smoke).toContain("POST de reserva");
   });
 });

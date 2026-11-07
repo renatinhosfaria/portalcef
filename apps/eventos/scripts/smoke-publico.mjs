@@ -2,10 +2,10 @@ import { chromium } from "@playwright/test";
 import { spawn } from "node:child_process";
 import { createServer } from "node:http";
 
-const evento = { id: "e1", slug: "festival-demo", title: "Festival Demo", summary: "Experiência", description: "Descrição", category: "Cultura", imageUrl: "https://www.portalcef.com.br/storage/demo.jpg", startsAt: "2026-11-05T18:00:00Z", locationName: "Auditório", fromPriceCents: 4500, availability: "available" };
+const evento = { id: "e1", slug: "ballet", title: "O chamado do oceano", summary: "Experiência", description: "Descrição", category: "Cultura", imageUrl: "https://www.portalcef.com.br/storage/demo.jpg", startsAt: "2026-11-05T18:00:00Z", locationName: "Auditório", fromPriceCents: 4500, availability: "available" };
 const ofertaVolume = { id: "oferta-volume", version: 1, name: "Ballet em grupo", minQuantity: 10, maxQuantity: null, discountPercent: 15 };
 const sessoes = [{ id: "s1", startsAt: "2026-11-05T18:00:00Z", endsAt: "2026-11-05T20:00:00Z", availability: "available", mapId: "m1", location: { name: "Auditório", room: "Sala A", address: "Rua A", accessibility: "Rampa" }, ticketTypes: [{ id: "t1", name: "Adulto", priceCents: 4500 }, { id: "t2", name: "Criança", priceCents: 2250 }], offers: [ofertaVolume] }, { id: "s3", startsAt: "2026-11-05T16:00:00Z", availability: "available", mapId: "m1", location: { name: "Auditório" }, ticketTypes: [{ id: "t1", name: "Adulto", priceCents: 4500 }], offers: [] }, { id: "s2", startsAt: "2026-11-06T18:00:00Z", availability: "sold_out", mapId: null, location: { name: "Auditório" }, ticketTypes: [], offers: [] }];
-const assentosAdicionais = Array.from({ length: 13 }, (_, index) => ({ id: `a${index + 4}`, rowLabel: "A", seatNumber: index + 4, x: (index + 3) * 2, y: 0, width: 1, height: 1, state: "available", accessible: false }));
+const assentosAdicionais = Array.from({ length: 18 }, (_, index) => ({ id: `a${index + 4}`, rowLabel: "A", seatNumber: index + 4, x: (index + 3) * 2, y: 0, width: 1, height: 1, state: "available", accessible: false }));
 const mapa = { sessionId: "s1", seats: [{ id: "c1", rowLabel: "C", seatNumber: 1, x: 0, y: -1, width: 1, height: 1, state: "blocked", accessible: false }, { id: "a1", rowLabel: "A", seatNumber: 1, x: 0, y: 0, width: 1, height: 1, state: "available", accessible: true }, { id: "a2", rowLabel: "A", seatNumber: 2, x: 2, y: 0, width: 1, height: 1, state: "reserved", accessible: false }, { id: "a3", rowLabel: "A", seatNumber: 3, x: 4, y: 0, width: 1, height: 1, state: "available", accessible: false }, ...assentosAdicionais, { id: "b1", rowLabel: "B", seatNumber: 1, x: 0, y: 1, width: 1, height: 1, state: "sold", accessible: false }, { id: "b2", rowLabel: "B", seatNumber: 2, x: 2, y: 1, width: 1, height: 1, state: "blocked", accessible: false }, { id: "b3", rowLabel: "B", seatNumber: 3, x: 0, y: 1, width: 1, height: 1, state: "blocked", accessible: false }] };
 
 let catalogoModo = "normal";
@@ -13,9 +13,9 @@ function resposta(path) {
   if (path === "/api/eventos/public" && catalogoModo === "empty") return [];
   if (path === "/api/eventos/public" && catalogoModo === "error") return { erroCatalogo: true };
   if (path === "/api/eventos/public") return [evento, { ...evento, id: "e2", slug: "sem-imagem", title: "Sem imagem", imageUrl: null, availability: "sold_out" }];
-  if (path === "/api/eventos/public/festival-demo") return evento;
-  if (path === "/api/eventos/public/festival-demo/sessoes") return sessoes;
-  if (path === "/api/eventos/public/festival-demo/politicas") return ["PRIVACIDADE", "COMPRA", "CANCELAMENTO_REEMBOLSO", "ACESSIBILIDADE", "CONTATO"].map((type) => ({ type, version: 1, content: "Política" }));
+  if (path === "/api/eventos/public/ballet") return evento;
+  if (path === "/api/eventos/public/ballet/sessoes") return sessoes;
+  if (path === "/api/eventos/public/ballet/politicas") return ["PRIVACIDADE", "COMPRA", "CANCELAMENTO_REEMBOLSO", "ACESSIBILIDADE", "CONTATO"].map((type) => ({ type, version: 1, content: "Política" }));
   if (path === "/api/eventos/public/sessoes/s1/map") return mapa;
   if (path.startsWith("/api/eventos/public/pedidos/")) { const orderNumber = path.split("/").pop(); return { orderNumber, eventTitle: evento.title, status: orderNumber === "PENDENTE" ? "AGUARDANDO_PAGAMENTO" : "CONFIRMADO", session: sessoes[0], items: [{ seatId: "a1" }] }; }
   return undefined;
@@ -43,6 +43,8 @@ async function portaLivre() {
 async function aguardarServidor(baseUrl) { for (let tentativa = 0; tentativa < 30; tentativa += 1) { try { const response = await fetch(`${baseUrl}/pedido/consulta`); if (response.ok) return; } catch {} await new Promise((resolve) => setTimeout(resolve, 1000)); } throw new Error("Servidor Next não iniciou a tempo"); }
 
 async function exercitarViewport(browser, nome, viewport) {
+  const lugaresDisponiveis = mapa.seats.filter((seat) => seat.state === "available");
+  if (mapa.seats.length < 20 || lugaresDisponiveis.length < 20) throw new Error(`${nome}: fixture precisa ter pelo menos 20 assentos disponíveis`);
   const contexto = await browser.newContext({ viewport, reducedMotion: "reduce" });
   const pagina = await contexto.newPage();
   const errosConsole = [];
@@ -80,15 +82,15 @@ async function exercitarViewport(browser, nome, viewport) {
   const acessar = async (url) => pagina.goto(`${baseUrl}${url}`, { waitUntil: "networkidle", timeout: 30000 });
   const mudarCatalogo = async (modo) => { await fetch(`http://127.0.0.1:${apiPort}/__mode?value=${modo}`); await acessar("/"); };
   await acessar("/");
-  const catalogo = { titulo: await pagina.getByText("Festival Demo").count(), semImagem: await pagina.getByText("Sem imagem").count(), imagem: await pagina.locator('img[alt="Festival Demo"], [role="img"][aria-label="Festival Demo"]').count(), link: await pagina.getByRole("link", { name: /Festival Demo/ }).count() };
+  const catalogo = { titulo: await pagina.getByText("O chamado do oceano").count(), semImagem: await pagina.getByText("Sem imagem").count(), imagem: await pagina.locator('img[alt="O chamado do oceano"], [role="img"][aria-label="O chamado do oceano"]').count(), link: await pagina.getByRole("link", { name: /O chamado do oceano/ }).count() };
   if (!catalogo.titulo || !catalogo.semImagem || !catalogo.imagem || !catalogo.link) throw new Error(`${nome}: catálogo incompleto (${JSON.stringify(catalogo)})`);
   await mudarCatalogo("empty");
   if (!await pagina.getByText("Nenhum evento disponível").count() || await pagina.locator('p[role="alert"]').count()) throw new Error(`${nome}: catálogo vazio incorreto`);
   await mudarCatalogo("error");
   if (!await pagina.locator('[role="alert"]').filter({ hasText: "Não foi possível carregar os eventos" }).count() || await pagina.getByText("Nenhum evento disponível").count()) throw new Error(`${nome}: catálogo de erro incorreto`);
   await mudarCatalogo("normal");
-  await acessar("/evento/festival-demo");
-  if (!await pagina.getByRole("heading", { name: "Festival Demo" }).count() || !await pagina.getByText("Sessões").count() || !await pagina.getByText("Esgotada").count()) throw new Error(`${nome}: detalhe incompleto`);
+  await acessar("/evento/ballet");
+  if (!await pagina.getByRole("heading", { name: "O chamado do oceano" }).count() || !await pagina.getByText("Sessões").count() || !await pagina.getByText("Esgotada").count()) throw new Error(`${nome}: detalhe incompleto`);
   const grupos = pagina.locator('section[aria-labelledby^="dia-"]');
   if (await grupos.count() !== 2) throw new Error(`${nome}: agrupamento de sessões incorreto`);
   const primeiroGrupo = await grupos.nth(0).innerText();
@@ -101,7 +103,7 @@ async function exercitarViewport(browser, nome, viewport) {
       respostas: Object.freeze(respostasErro.filter((resposta) => eh403ImagemRemotaConhecida(resposta.status, resposta.url)).map(chaveRespostaErro)),
     }),
   };
-  await acessar("/evento/festival-demo/sessao/s1?ticketTypeId=t1");
+  await acessar("/evento/ballet/sessao/s1?ticketTypeId=t1");
   const lista = pagina.getByRole("button", { name: "Lista", exact: true });
   const mapaBotao = pagina.getByRole("button", { name: "Mapa", exact: true });
   const modoEsperado = viewport.width < 768 ? "lista" : "mapa";
@@ -110,6 +112,16 @@ async function exercitarViewport(browser, nome, viewport) {
     const botao = grupo?.querySelector(`button[aria-pressed="true"]`);
     return botao?.textContent?.trim().toLowerCase() === esperado;
   }, modoEsperado);
+  const garantirLista = async () => {
+    await pagina.waitForFunction(() => Boolean(document.querySelector('[aria-label="Modo de visualização dos assentos"] button[aria-pressed]')));
+    await pagina.waitForTimeout(100);
+    for (let tentativa = 0; tentativa < 3; tentativa += 1) {
+      if (await lista.getAttribute("aria-pressed") === "true") return;
+      await lista.click({ force: true });
+      await pagina.waitForTimeout(100);
+    }
+    throw new Error(`${nome}: não foi possível ativar a lista de assentos`);
+  };
   const fimCarregamentoInicial = { errosConsole: errosConsole.length, respostasErro: respostasErro.length };
   const errosMapaInicial = filtrarErrosConsole(errosConsole.slice(inicioSessao.errosConsole, fimCarregamentoInicial.errosConsole), inicioSessao.snapshotConhecido);
   const respostasMapaInicial = filtrarRespostasErro(respostasErro.slice(inicioSessao.respostasErro, fimCarregamentoInicial.respostasErro), inicioSessao.snapshotConhecido);
@@ -143,7 +155,7 @@ async function exercitarViewport(browser, nome, viewport) {
   const transformFileiraA = await grupoSvg.getAttribute("transform");
   if (!transformFileiraA || !transformFileiraB || transformFileiraA === transformFileiraB) throw new Error(`${nome}: foco do mapa não acompanha a fileira`);
 
-  if (await pagina.getByRole("button", { name: /A-2/ }).count() || await pagina.getByRole("button", { name: /B-1/ }).count() || await pagina.getByRole("button", { name: /B-2/ }).count()) throw new Error(`${nome}: assento indisponível acionável`);
+  if (await pagina.getByRole("button", { name: /^Assento A-2,/ }).count() || await pagina.getByRole("button", { name: /^Assento B-1,/ }).count() || await pagina.getByRole("button", { name: /^Assento B-2,/ }).count()) throw new Error(`${nome}: assento indisponível acionável`);
   const assentoDisponivel = svg.locator('[data-seat-id="a3"][role="button"]');
   await assentoDisponivel.focus();
   if (!await assentoDisponivel.evaluate((element) => document.activeElement === element)) throw new Error(`${nome}: foco de teclado ausente`);
@@ -172,8 +184,8 @@ async function exercitarViewport(browser, nome, viewport) {
 
   // Aceite integrado: a vitrine lê a oferta, calcula a prévia para 9/10
   // lugares e mantém a seleção mista sem reservar antes do CTA.
-  await acessar("/evento/festival-demo/sessao/s1?ticketTypeId=t1");
-  await lista.click();
+  await acessar("/evento/ballet/sessao/s1?ticketTypeId=t1");
+  await garantirLista();
   const listaOferta = pagina.getByRole("list", { name: "Assentos da fileira A" });
   const selecionarAssento = async (numero) => {
     const botao = listaOferta.getByRole("button", { name: new RegExp(`Assento A-${numero}, disponível`) });
@@ -194,10 +206,16 @@ async function exercitarViewport(browser, nome, viewport) {
   const checkoutAntesDeContinuar = pagina.getByRole("link", { name: "Continuar para checkout" }).last();
   if (!await checkoutAntesDeContinuar.getAttribute("href") || postsReserva.length) throw new Error(`${nome}: seleção de 10 lugares não habilitou o CTA sem POST de reserva`);
 
-  await acessar("/evento/festival-demo/sessao/s1?ticketTypeId=t1");
-  const listaReiniciada = pagina.getByRole("button", { name: "Lista", exact: true });
-  await listaReiniciada.click();
-  await lista.click();
+  await acessar("/evento/ballet/sessao/s1?ticketTypeId=t1");
+  await garantirLista();
+  const numerosVinte = [1, 3, ...Array.from({ length: 18 }, (_, index) => index + 4)];
+  for (const numero of numerosVinte) await selecionarAssento(numero);
+  const vinteAssentos = await pagina.getByRole("region", { name: "Resumo dos assentos selecionados" }).innerText();
+  const checkoutVinte = pagina.getByRole("link", { name: "Continuar para checkout" }).last();
+  if (!vinteAssentos.includes("Quantidade: 20 assento(s)") || !await checkoutVinte.getAttribute("href") || postsReserva.length) throw new Error(`${nome}: seleção de 20 lugares não habilitou o CTA sem POST de reserva (${vinteAssentos})`);
+
+  await acessar("/evento/ballet/sessao/s1?ticketTypeId=t1");
+  await garantirLista();
   const listaAssentos = pagina.getByRole("list", { name: "Assentos da fileira A" });
   await listaAssentos.getByRole("button", { name: /A-3, disponível/ }).click();
   await listaAssentos.getByRole("button", { name: /A-3, disponível/ }).click();
@@ -228,10 +246,10 @@ async function exercitarViewport(browser, nome, viewport) {
     if (!caixaResumo || caixaResumo.x < 0 || caixaResumo.right > viewport.width || caixaResumo.bottom > viewport.height || sobreposicao) throw new Error(`${nome}: resumo fixo sobrepõe conteúdo ou excede a viewport`);
   }
 
-  await acessar("/evento/festival-demo/sessao/s1?assentos=a1%2Ca2&ticketTypeIds=t1%2Ct2&conflito=disponibilidade");
+  await acessar("/evento/ballet/sessao/s1?assentos=a1%2Ca2&ticketTypeIds=t1%2Ct2&conflito=disponibilidade");
   await mapaBotao.click();
   const assentoConflito = pagina.getByRole("button", { name: /A-1, disponível/ }).first();
-  if (!await pagina.getByRole("alert").filter({ hasText: "Assento A-2 ficou indisponível" }).count() || !await assentoConflito.count() || await assentoConflito.getAttribute("aria-pressed") !== "true" || !await pagina.getByRole("img", { name: /A-2, indisponível/ }).count() || await pagina.getByRole("button", { name: /A-2/ }).count()) throw new Error(`${nome}: conflito não reidrata seleção no mapa`);
+  if (!await pagina.getByRole("alert").filter({ hasText: "Assento A-2 ficou indisponível" }).count() || !await assentoConflito.count() || await assentoConflito.getAttribute("aria-pressed") !== "true" || !await pagina.getByRole("img", { name: /A-2, indisponível/ }).count() || await pagina.getByRole("button", { name: /^Assento A-2,/ }).count()) throw new Error(`${nome}: conflito não reidrata seleção no mapa`);
   const errosMapa = [
     ...filtrarErrosConsole(errosConsole.slice(inicioSessao.errosConsole, fimCarregamentoInicial.errosConsole), inicioSessao.snapshotConhecido),
     ...errosConsole.slice(fimCarregamentoInicial.errosConsole),
@@ -241,7 +259,7 @@ async function exercitarViewport(browser, nome, viewport) {
     ...respostasErro.slice(fimCarregamentoInicial.respostasErro),
   ];
   if (errosMapa.length || respostasMapa.length) throw new Error(`${nome}: erros durante a experiência do mapa (console: ${descreverErrosConsole(errosMapa)}; rede: ${descreverRespostasErro(respostasMapa)})`);
-  await acessar("/checkout?assentos=a1%2Cb2&ticketTypeIds=t1%2Ct2&sessionId=s1&slug=festival-demo");
+  await acessar("/checkout?assentos=a1%2Cb2&ticketTypeIds=t1%2Ct2&sessionId=s1&slug=ballet");
   if (!await pagina.getByText("Assento 1: Adulto · R$ 45,00").count() || !await pagina.getByText("Assento 2: Criança · R$ 22,50").count() || !await pagina.getByLabel("Nome completo").count()) throw new Error(`${nome}: checkout incompleto`);
   await acessar("/pedido/PENDENTE?retorno=sucesso");
   if (!await pagina.getByText("Pagamento pendente").count()) throw new Error(`${nome}: pedido pendente ausente`);
