@@ -7,6 +7,26 @@ export const politicaPublicaTipoSchema = z.enum(["PRIVACIDADE","COMPRA","CANCELA
 export const reservaPublicaSchema = z.object({ sessionId: z.string().uuid(), seats: z.array(z.object({ seatId: z.string().uuid(), ticketTypeId: z.string().uuid(), participantIndex: z.number().int().nonnegative() })).min(1).max(20), buyer: z.object({ name: z.string().trim().min(2).max(200), email: z.string().trim().email().max(320), phone: z.string().trim().min(8).max(30) }), idempotencyKey: z.string().trim().min(8).max(180) }).strict();
 export const finalizarPedidoSchema = z.object({ participants: z.array(z.object({ participantIndex: z.number().int().nonnegative(), fullName: z.string().trim().min(2).max(200), type: eventoParticipanteTipoSchema, email: z.string().email().optional(), phone: z.string().max(30).optional() })).min(1).max(20), acceptances: z.array(z.object({ type: politicaPublicaTipoSchema, version: z.number().int().positive() })).length(5), idempotencyKey: z.string().trim().min(8).max(180) }).strict();
 export const checkoutPublicoSchema = z.object({ successUrl: z.string().url().refine((v) => v.startsWith("https://")), cancelUrl: z.string().url().refine((v) => v.startsWith("https://")), idempotencyKey: z.string().trim().min(8).max(180) }).strict();
+export const atualizarOfertaSchema = z.object({
+  id: z.string().uuid().optional(),
+  name: z.string().trim().min(1).max(200),
+  pricingType: z.enum(["PERCENTUAL", "VALOR_FIXO"]),
+  minQuantity: z.number().int().positive(),
+  maxQuantity: z.number().int().positive().nullable().optional(),
+  priceCents: z.number().int().nonnegative().nullable().optional(),
+  discountPercent: z.number().int().min(0).max(100).nullable().optional(),
+  active: z.boolean().optional(),
+}).strict().superRefine((value, context) => {
+  if (value.maxQuantity !== null && value.maxQuantity !== undefined && value.maxQuantity < value.minQuantity) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["maxQuantity"], message: "A quantidade máxima deve ser maior ou igual à mínima" });
+  }
+  if (value.pricingType === "PERCENTUAL" && (value.discountPercent === null || value.discountPercent === undefined)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["discountPercent"], message: "Informe o percentual da oferta" });
+  }
+  if (value.pricingType === "VALOR_FIXO" && (value.priceCents === null || value.priceCents === undefined)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["priceCents"], message: "Informe o preço total da faixa" });
+  }
+});
 
 const date = z.coerce.date();
 export const criarEventoSchema = z.object({
@@ -48,3 +68,4 @@ export type EventoListQuery = z.infer<typeof eventoListQuerySchema>;
 export type ReservaPublicaInput = z.infer<typeof reservaPublicaSchema>;
 export type FinalizarPedidoInput = z.infer<typeof finalizarPedidoSchema>;
 export type CheckoutPublicoInput = z.infer<typeof checkoutPublicoSchema>;
+export type AtualizarOfertaInput = z.infer<typeof atualizarOfertaSchema>;
