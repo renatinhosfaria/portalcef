@@ -77,6 +77,7 @@ export class EventosOfertasService {
       discountPercent: row.discountPercent,
       pricingType: row.pricingType as EventoOfertaAdmin["pricingType"],
       priceCents: row.priceCents,
+      compatibleTicketTypeIds: (row.compatibleTicketTypeIds as string[] | null) ?? null,
       active: row.active,
     };
   }
@@ -147,6 +148,13 @@ export class EventosOfertasService {
     actor: EventoActor,
   ): Promise<EventoOfertaAdmin[]> {
     inputs.forEach((input) => this.validarInput(input));
+    const ids = inputs.flatMap((input) => (input.id ? [input.id] : []));
+    if (new Set(ids).size !== ids.length) {
+      throw new BadRequestException({
+        code: "DUPLICATE_OFFER_ID",
+        message: "Não repita o mesmo id de oferta na atualização",
+      });
+    }
     const ativasSolicitadas = inputs.filter((input) => input.active !== false);
     if (ativasSolicitadas.length > 1) {
       throw new BadRequestException({
@@ -205,6 +213,10 @@ export class EventosOfertasService {
             input.pricingType === "VALOR_FIXO"
               ? (input.priceCents ?? null)
               : null,
+          compatibleTicketTypeIds:
+            input.compatibleTicketTypeIds === undefined
+              ? ((previous?.compatibleTicketTypeIds as string[] | null) ?? null)
+              : input.compatibleTicketTypeIds,
           version: previous ? previous.version + 1 : 1,
           active: input.active !== false,
         } as const;

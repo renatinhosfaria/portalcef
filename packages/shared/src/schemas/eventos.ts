@@ -15,6 +15,7 @@ export const atualizarOfertaSchema = z.object({
   maxQuantity: z.number().int().positive().nullable().optional(),
   priceCents: z.number().int().nonnegative().nullable().optional(),
   discountPercent: z.number().int().min(0).max(100).nullable().optional(),
+  compatibleTicketTypeIds: z.array(z.string().trim().min(1)).nullable().optional(),
   active: z.boolean().optional(),
 }).strict().superRefine((value, context) => {
   if (value.maxQuantity !== null && value.maxQuantity !== undefined && value.maxQuantity < value.minQuantity) {
