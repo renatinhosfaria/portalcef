@@ -16,3 +16,23 @@ ALTER TABLE "evento_ofertas" ADD CONSTRAINT "evento_ofertas_positive_quantity" C
 ALTER TABLE "evento_ofertas" ADD CONSTRAINT "evento_ofertas_non_negative_price" CHECK ("evento_ofertas"."price_cents" IS NULL OR "evento_ofertas"."price_cents" >= 0);--> statement-breakpoint
 ALTER TABLE "evento_pedidos" ADD CONSTRAINT "evento_pedidos_non_negative_subtotal" CHECK ("evento_pedidos"."subtotal_cents" >= 0);--> statement-breakpoint
 ALTER TABLE "evento_pedidos" ADD CONSTRAINT "evento_pedidos_non_negative_discount" CHECK ("evento_pedidos"."discount_cents" >= 0);
+--> statement-breakpoint
+WITH ofertas_ativas_ranqueadas AS (
+  SELECT
+    "id",
+    ROW_NUMBER() OVER (
+      PARTITION BY "event_id"
+      ORDER BY "version" DESC, "updated_at" DESC, "created_at" DESC, "id" DESC
+    ) AS "posicao"
+  FROM "evento_ofertas"
+  WHERE "active" = true
+)
+UPDATE "evento_ofertas" AS oferta
+SET "active" = false, "updated_at" = now()
+FROM ofertas_ativas_ranqueadas AS ranqueada
+WHERE oferta."id" = ranqueada."id"
+  AND ranqueada."posicao" > 1;
+--> statement-breakpoint
+CREATE UNIQUE INDEX "uq_evento_ofertas_event_active"
+  ON "evento_ofertas" USING btree ("event_id")
+  WHERE "active" = true;

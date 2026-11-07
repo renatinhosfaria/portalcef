@@ -465,6 +465,9 @@ export const eventoOfertas = pgTable(
   },
   (table) => ({
     eventIdx: index("idx_evento_ofertas_event").on(table.eventId),
+    activeEventUnique: uniqueIndex("uq_evento_ofertas_event_active")
+      .on(table.eventId)
+      .where(sql`${table.active} = true`),
     positiveQuantity: check(
       "evento_ofertas_positive_quantity",
       sql`${table.minQuantity} > 0 AND (${table.maxQuantity} IS NULL OR ${table.maxQuantity} >= ${table.minQuantity})`,

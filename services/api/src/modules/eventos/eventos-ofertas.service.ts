@@ -270,8 +270,15 @@ export class EventosOfertasService {
       .where(
         and(eq(eventoOfertas.eventId, eventId), eq(eventoOfertas.active, true)),
       );
-    return (rows as (typeof eventoOfertas.$inferSelect)[])
-      .filter((row) => row.pricingType === "PERCENTUAL" && row.active)
+    const activeRows = (rows as (typeof eventoOfertas.$inferSelect)[]).filter((row) => row.active);
+    if (activeRows.length > 1) {
+      throw new ConflictException({
+        code: "MULTIPLE_ACTIVE_OFFERS",
+        message: "Mais de uma oferta ativa para o evento",
+      });
+    }
+    return activeRows
+      .filter((row) => row.pricingType === "PERCENTUAL")
       .map((row) => ({
         id: row.id,
         version: row.version,

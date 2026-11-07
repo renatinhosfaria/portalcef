@@ -210,6 +210,51 @@ describe("EventosPublicSalesService - contratos públicos", () => {
     expect(segunda).toEqual(primeira);
     expect(segunda.appliedOffer).toMatchObject({ id: oferta.id, version: 3 });
   });
+
+  it("rejeita a corrida de idempotência quando a reserva encontrada pertence a outro comprador", async () => {
+    const existing = { id: "order-outro-comprador", orderNumber: "ABC123DEF456", buyerEmail: "outro@example.com", totalCents: 1250, expiresAt: new Date(Date.now() + 60_000) };
+    let selectCalls = 0;
+    const db: any = {
+      transaction: async () => { throw { code: "23505", constraint: "uq_evento_pedidos_idempotency_key" }; },
+      select: () => {
+        const chain: any = { from: () => chain, innerJoin: () => chain, where: async () => (selectCalls++ === 0 ? [existing] : []) };
+        return chain;
+      },
+    };
+
+    await expect(new EventosPublicSalesService({ db } as any).reservarAssentos(entradaReserva(1, "corrida-email-123456"))).rejects.toMatchObject({
+      response: { code: "IDEMPOTENCY_CONFLICT" },
+    });
+  });
+
+  it("preserva o replay da corrida de idempotência para o mesmo comprador", async () => {
+    const existing = { id: "order-proprio", orderNumber: "ABC123DEF456", buyerEmail: "A@B.COM", totalCents: 1250, expiresAt: new Date(Date.now() + 60_000) };
+    let selectCalls = 0;
+    const db: any = {
+      transaction: async () => { throw { code: "23505", constraint: "uq_evento_pedidos_idempotency_key" }; },
+      select: () => {
+        const chain: any = { from: () => chain, innerJoin: () => chain, where: async () => (selectCalls++ === 0 ? [existing] : []) };
+        return chain;
+      },
+    };
+
+    await expect(new EventosPublicSalesService({ db } as any).reservarAssentos(entradaReserva(1, "corrida-email-proprio"))).resolves.toMatchObject({
+      reservationId: existing.id,
+      orderNumber: existing.orderNumber,
+    });
+  });
+
+  it("explicita a ambiguidade quando existem várias ofertas ativas no evento", async () => {
+    const ofertas = [
+      { id: uuid(94), version: 1, name: "Dez", pricingType: "PERCENTUAL", minQuantity: 10, maxQuantity: null, discountPercent: 15, priceCents: null, active: true },
+      { id: uuid(95), version: 2, name: "Vinte", pricingType: "PERCENTUAL", minQuantity: 20, maxQuantity: null, discountPercent: 20, priceCents: null, active: true },
+    ];
+    const banco = criarBancoReserva({ quantidade: 10, precoAdulto: 4500, offers: ofertas });
+
+    await expect(new EventosPublicSalesService({ db: banco } as any).reservarAssentos(entradaReserva(10, "oferta-ambigua-123456"))).rejects.toMatchObject({
+      response: { code: "MULTIPLE_ACTIVE_OFFERS" },
+    });
+  });
 });
 
 function uuid(n: number) {

@@ -33,11 +33,12 @@ export class EventosPublicSalesService {
     ) {
       throw fail("VALIDATION_ERROR", "Participantes devem corresponder aos assentos");
     }
+    const buyerEmail = input.buyer.email.trim().toLowerCase();
 
     const executar = async (tx: any) => {
       const existing = await this.first<any>(tx.select().from(eventoPedidos).where(eq(eventoPedidos.idempotencyKey, input.idempotencyKey)));
       if (existing) {
-        if (existing.buyerEmail !== input.buyer.email.trim().toLowerCase()) {
+        if (existing.buyerEmail.trim().toLowerCase() !== buyerEmail) {
           throw new ConflictException({ code: "IDEMPOTENCY_CONFLICT", message: "Chave de idempotência já utilizada" });
         }
         return this.reservaResult(tx, existing);
@@ -80,7 +81,11 @@ export class EventosPublicSalesService {
       }
 
       const rawOffers = await this.lockRows<any[]>(tx.select().from(eventoOfertas).where(and(eq(eventoOfertas.eventId, event.id), eq(eventoOfertas.active, true))));
-      const offers: OfertaPreco[] = rawOffers
+      const activeOffers = rawOffers.filter((candidate: any) => candidate.active);
+      if (activeOffers.length > 1) {
+        throw new ConflictException({ code: "MULTIPLE_ACTIVE_OFFERS", message: "Mais de uma oferta ativa para o evento" });
+      }
+      const offers: OfertaPreco[] = activeOffers
         .filter((candidate: any) => {
           const quantity = selected.length;
           const inRange = quantity >= candidate.minQuantity && (candidate.maxQuantity === null || candidate.maxQuantity === undefined || quantity <= candidate.maxQuantity);
@@ -120,7 +125,7 @@ export class EventosPublicSalesService {
         sessionId: input.sessionId,
         orderNumber: this.orderNumber(),
         buyerName: input.buyer.name.trim(),
-        buyerEmail: input.buyer.email.trim().toLowerCase(),
+        buyerEmail,
         buyerPhone: this.normalizePhone(input.buyer.phone),
         status: "INICIADO",
         subtotalCents: preco.subtotalCents,
@@ -159,7 +164,12 @@ export class EventosPublicSalesService {
     return (this.db as any).transaction ? this.db.transaction(executar).catch(async (error: any) => {
       if (error?.code === "23505" || error?.constraint?.includes("idempotency")) {
         const existing = await this.first<any>(this.db.select().from(eventoPedidos).where(eq(eventoPedidos.idempotencyKey, input.idempotencyKey)));
-        if (existing) return this.reservaResult(this.db, existing);
+        if (existing) {
+          if (existing.buyerEmail.trim().toLowerCase() !== buyerEmail) {
+            throw new ConflictException({ code: "IDEMPOTENCY_CONFLICT", message: "Chave de idempotência já utilizada" });
+          }
+          return this.reservaResult(this.db, existing);
+        }
       }
       throw error;
     }) : executar(this.db);

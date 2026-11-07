@@ -285,6 +285,7 @@ describe("EventosOfertasService", () => {
             pricingType: "VALOR_FIXO",
             priceCents: 12000,
             discountPercent: null,
+            active: false,
           }),
         ],
       ],
@@ -300,6 +301,14 @@ describe("EventosOfertasService", () => {
         discountPercent: 15,
       },
     ]);
+  });
+
+  it("explicita a ambiguidade de ofertas ativas legadas", async () => {
+    const db = fakeDb({ selects: [[oferta(), oferta({ id: "o2", version: 2 })]] });
+
+    await expect(service(db).listarPublicas("e1")).rejects.toMatchObject({
+      response: { code: "MULTIPLE_ACTIVE_OFFERS" },
+    });
   });
 });
 
