@@ -91,6 +91,16 @@ describe("vitrine pública de Eventos", () => {
     for (const state of ["available", "reserved", "sold", "blocked"]) expect(source).toContain(state);
     expect(source).toContain("disabled");
   });
+
+  it("mantém no smoke o contrato público da oferta de volume do evento", () => {
+    const smoke = readFileSync(new URL("../scripts/smoke-publico.mjs", import.meta.url), "utf8");
+    expect(smoke).toContain("offers");
+    expect(smoke).toContain("minQuantity: 10");
+    expect(smoke).toContain("maxQuantity: null");
+    expect(smoke).toContain("discountPercent: 15");
+    expect(smoke).toContain("15% de desconto a partir de 10 lugares");
+    expect(smoke).toContain("POST de reserva");
+  });
 });
 
 function procurarArquivos(diretorio: string): string[] {

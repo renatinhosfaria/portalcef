@@ -2,9 +2,11 @@ import { chromium } from "@playwright/test";
 import { spawn } from "node:child_process";
 import { createServer } from "node:http";
 
-const evento = { id: "e1", slug: "festival-demo", title: "Festival Demo", summary: "Experiência", description: "Descrição", category: "Cultura", imageUrl: "https://www.portalcef.com.br/storage/demo.jpg", startsAt: "2026-11-05T18:00:00Z", locationName: "Auditório", fromPriceCents: 5000, availability: "available" };
-const sessoes = [{ id: "s1", startsAt: "2026-11-05T18:00:00Z", endsAt: "2026-11-05T20:00:00Z", availability: "available", mapId: "m1", location: { name: "Auditório", room: "Sala A", address: "Rua A", accessibility: "Rampa" }, ticketTypes: [{ id: "t1", name: "Inteira", priceCents: 5000 }, { id: "t2", name: "Meia", priceCents: 2500 }] }, { id: "s3", startsAt: "2026-11-05T16:00:00Z", availability: "available", mapId: "m1", location: { name: "Auditório" }, ticketTypes: [{ id: "t1", name: "Inteira", priceCents: 5000 }] }, { id: "s2", startsAt: "2026-11-06T18:00:00Z", availability: "sold_out", mapId: null, location: { name: "Auditório" }, ticketTypes: [] }];
-const mapa = { sessionId: "s1", seats: [{ id: "c1", rowLabel: "C", seatNumber: 1, x: 0, y: -1, width: 1, height: 1, state: "blocked", accessible: false }, { id: "a1", rowLabel: "A", seatNumber: 1, x: 0, y: 0, width: 1, height: 1, state: "available", accessible: true }, { id: "a2", rowLabel: "A", seatNumber: 2, x: 2, y: 0, width: 1, height: 1, state: "reserved", accessible: false }, { id: "a3", rowLabel: "A", seatNumber: 3, x: 4, y: 0, width: 1, height: 1, state: "available", accessible: false }, { id: "b1", rowLabel: "B", seatNumber: 1, x: 0, y: 1, width: 1, height: 1, state: "sold", accessible: false }, { id: "b2", rowLabel: "B", seatNumber: 2, x: 2, y: 1, width: 1, height: 1, state: "blocked", accessible: false }, { id: "b3", rowLabel: "B", seatNumber: 3, x: 0, y: 1, width: 1, height: 1, state: "blocked", accessible: false }] };
+const evento = { id: "e1", slug: "festival-demo", title: "Festival Demo", summary: "Experiência", description: "Descrição", category: "Cultura", imageUrl: "https://www.portalcef.com.br/storage/demo.jpg", startsAt: "2026-11-05T18:00:00Z", locationName: "Auditório", fromPriceCents: 4500, availability: "available" };
+const ofertaVolume = { id: "oferta-volume", version: 1, name: "Ballet em grupo", minQuantity: 10, maxQuantity: null, discountPercent: 15 };
+const sessoes = [{ id: "s1", startsAt: "2026-11-05T18:00:00Z", endsAt: "2026-11-05T20:00:00Z", availability: "available", mapId: "m1", location: { name: "Auditório", room: "Sala A", address: "Rua A", accessibility: "Rampa" }, ticketTypes: [{ id: "t1", name: "Adulto", priceCents: 4500 }, { id: "t2", name: "Criança", priceCents: 2250 }], offers: [ofertaVolume] }, { id: "s3", startsAt: "2026-11-05T16:00:00Z", availability: "available", mapId: "m1", location: { name: "Auditório" }, ticketTypes: [{ id: "t1", name: "Adulto", priceCents: 4500 }], offers: [] }, { id: "s2", startsAt: "2026-11-06T18:00:00Z", availability: "sold_out", mapId: null, location: { name: "Auditório" }, ticketTypes: [], offers: [] }];
+const assentosAdicionais = Array.from({ length: 13 }, (_, index) => ({ id: `a${index + 4}`, rowLabel: "A", seatNumber: index + 4, x: (index + 3) * 2, y: 0, width: 1, height: 1, state: "available", accessible: false }));
+const mapa = { sessionId: "s1", seats: [{ id: "c1", rowLabel: "C", seatNumber: 1, x: 0, y: -1, width: 1, height: 1, state: "blocked", accessible: false }, { id: "a1", rowLabel: "A", seatNumber: 1, x: 0, y: 0, width: 1, height: 1, state: "available", accessible: true }, { id: "a2", rowLabel: "A", seatNumber: 2, x: 2, y: 0, width: 1, height: 1, state: "reserved", accessible: false }, { id: "a3", rowLabel: "A", seatNumber: 3, x: 4, y: 0, width: 1, height: 1, state: "available", accessible: false }, ...assentosAdicionais, { id: "b1", rowLabel: "B", seatNumber: 1, x: 0, y: 1, width: 1, height: 1, state: "sold", accessible: false }, { id: "b2", rowLabel: "B", seatNumber: 2, x: 2, y: 1, width: 1, height: 1, state: "blocked", accessible: false }, { id: "b3", rowLabel: "B", seatNumber: 3, x: 0, y: 1, width: 1, height: 1, state: "blocked", accessible: false }] };
 
 let catalogoModo = "normal";
 function resposta(path) {
@@ -168,8 +170,36 @@ async function exercitarViewport(browser, nome, viewport) {
   const overflowMapa = await pagina.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
   if (overflowMapa) throw new Error(`${nome}: overflow horizontal no mapa visível`);
 
+  // Aceite integrado: a vitrine lê a oferta, calcula a prévia para 9/10
+  // lugares e mantém a seleção mista sem reservar antes do CTA.
+  await acessar("/evento/festival-demo/sessao/s1?ticketTypeId=t1");
+  await lista.click();
+  const listaOferta = pagina.getByRole("list", { name: "Assentos da fileira A" });
+  const selecionarAssento = async (numero) => {
+    const botao = listaOferta.getByRole("button", { name: new RegExp(`Assento A-${numero}, disponível`) });
+    if (!await botao.count()) throw new Error(`${nome}: assento A-${numero} ausente no mock de aceite`);
+    await botao.click();
+  };
+  for (const numero of [1, 3, 4, 5, 6, 7, 8, 9, 10]) await selecionarAssento(numero);
+  const resumoOferta = pagina.getByRole("region", { name: "Resumo dos assentos selecionados" });
+  const nove = await resumoOferta.innerText();
+  if (!nove.includes("15% de desconto a partir de 10 lugares")) throw new Error(`${nome}: oferta pública ativa ausente`);
+  if (!nove.includes("Quantidade: 9 assento(s)") || !nove.includes("Subtotal: R$ 405,00") || !nove.includes("Desconto: R$ 0,00") || !nove.includes("Total: R$ 405,00")) throw new Error(`${nome}: prévia de 9 lugares incorreta (${nove})`);
+  await selecionarAssento(11);
+  const dezAdultos = await resumoOferta.innerText();
+  if (!dezAdultos.includes("Quantidade: 10 assento(s)") || !dezAdultos.includes("Subtotal: R$ 450,00") || !dezAdultos.includes("Desconto: R$ 67,50") || !dezAdultos.includes("Total: R$ 382,50")) throw new Error(`${nome}: prévia de 10 adultos incorreta (${dezAdultos})`);
+  for (const numero of [7, 8, 9, 10]) await pagina.getByRole("combobox", { name: new RegExp(`Tipo de ingresso do assento A-${numero}`) }).selectOption("t2");
+  const misto = await resumoOferta.innerText();
+  if (!misto.includes("Subtotal: R$ 360,00") || !misto.includes("Desconto: R$ 54,00") || !misto.includes("Total: R$ 306,00")) throw new Error(`${nome}: prévia mista 6+4 incorreta (${misto})`);
+  const checkoutAntesDeContinuar = pagina.getByRole("link", { name: "Continuar para checkout" }).last();
+  if (!await checkoutAntesDeContinuar.getAttribute("href") || postsReserva.length) throw new Error(`${nome}: seleção de 10 lugares não habilitou o CTA sem POST de reserva`);
+
+  await acessar("/evento/festival-demo/sessao/s1?ticketTypeId=t1");
+  const listaReiniciada = pagina.getByRole("button", { name: "Lista", exact: true });
+  await listaReiniciada.click();
   await lista.click();
   const listaAssentos = pagina.getByRole("list", { name: "Assentos da fileira A" });
+  await listaAssentos.getByRole("button", { name: /A-3, disponível/ }).click();
   await listaAssentos.getByRole("button", { name: /A-3, disponível/ }).click();
   await pagina.waitForTimeout(30);
   await listaAssentos.getByRole("button", { name: /A-1, disponível/ }).click();
@@ -212,7 +242,7 @@ async function exercitarViewport(browser, nome, viewport) {
   ];
   if (errosMapa.length || respostasMapa.length) throw new Error(`${nome}: erros durante a experiência do mapa (console: ${descreverErrosConsole(errosMapa)}; rede: ${descreverRespostasErro(respostasMapa)})`);
   await acessar("/checkout?assentos=a1%2Cb2&ticketTypeIds=t1%2Ct2&sessionId=s1&slug=festival-demo");
-  if (!await pagina.getByText("Assento 1: Inteira · R$ 50,00").count() || !await pagina.getByText("Assento 2: Meia · R$ 25,00").count() || !await pagina.getByLabel("Nome completo").count()) throw new Error(`${nome}: checkout incompleto`);
+  if (!await pagina.getByText("Assento 1: Adulto · R$ 45,00").count() || !await pagina.getByText("Assento 2: Criança · R$ 22,50").count() || !await pagina.getByLabel("Nome completo").count()) throw new Error(`${nome}: checkout incompleto`);
   await acessar("/pedido/PENDENTE?retorno=sucesso");
   if (!await pagina.getByText("Pagamento pendente").count()) throw new Error(`${nome}: pedido pendente ausente`);
   await acessar("/pedido/CONFIRMADO");
