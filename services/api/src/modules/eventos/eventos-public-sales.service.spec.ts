@@ -19,7 +19,30 @@ describe("EventosPublicSalesService - contratos públicos", () => {
     const db = vendaDb({ event: { id: "e1", status: "PUBLICADO" }, session: { id: "s1", status: "PUBLICADA" }, inventory: { id: "i1", status: "DISPONIVEL", seatId: "seat-1" }, ticket: { id: "t1", priceCents: 1250, maxPerOrder: 1, version: 1 } });
     const result = await new EventosPublicSalesService({ db } as any).reservarAssentos({ sessionId: "00000000-0000-4000-8000-000000000001", seats: [{ seatId: "00000000-0000-4000-8000-000000000002", ticketTypeId: "00000000-0000-4000-8000-000000000003", participantIndex: 0 }], buyer: { name: "Ana", email: "a@b.com", phone: "11999999999" }, idempotencyKey: "price-123456" });
     expect(result.totalCents).toBe(1250);
+    expect(result.subtotalCents).toBe(1250);
+    expect(result.discountCents).toBe(0);
+    expect(result.appliedOffer).toBeNull();
     expect(result.items).toHaveLength(1);
+  });
+
+  it("recusa assento duplicado antes de mutar pedido ou inventário", async () => {
+    const db = vendaDbComIngressos({
+      event: { id: "e1", status: "PUBLICADO" },
+      session: { id: "s1", status: "PUBLICADA" },
+      inventories: [{ id: "i1", status: "DISPONIVEL", seatId: "seat-1" }],
+      ticket: { id: "t1", priceCents: 1250, maxPerOrder: null, version: 1 },
+    });
+
+    await expect(new EventosPublicSalesService({ db } as any).reservarAssentos({
+      sessionId: "00000000-0000-4000-8000-000000000001",
+      seats: [
+        { seatId: "00000000-0000-4000-8000-000000000002", ticketTypeId: "00000000-0000-4000-8000-000000000003", participantIndex: 0 },
+        { seatId: "00000000-0000-4000-8000-000000000002", ticketTypeId: "00000000-0000-4000-8000-000000000003", participantIndex: 1 },
+      ],
+      buyer: { name: "Ana", email: "a@b.com", phone: "11999999999" },
+      idempotencyKey: "duplicate-seat-123456",
+    })).rejects.toMatchObject({ response: { code: "DUPLICATE_SEAT" } });
+    expect(db.mutations.value).toBe(0);
   });
 
   it("rejeita excesso por tipo de ingresso antes de mutar inventário ou pedido", async () => {
@@ -116,7 +139,106 @@ describe("EventosPublicSalesService - contratos públicos", () => {
     const service = new EventosPublicSalesService({ db: {} } as any, {} as any);
     expect(() => (service as any).validarUrlCheckout("https://evil.example/retorno")).toThrow();
   });
+
+  it("aplica 15% a partir de 10 lugares, mas mantém 9 e aceita 20", async () => {
+    const oferta = { id: uuid(90), version: 2, name: "Volume", pricingType: "PERCENTUAL", minQuantity: 10, maxQuantity: null, discountPercent: 15, priceCents: null, active: true };
+    const fazer = async (quantidade: number, chave: string) => {
+      const banco = criarBancoReserva({ quantidade, precoAdulto: 4500, offers: [oferta] });
+      const resultado = await new EventosPublicSalesService({ db: banco } as any).reservarAssentos(entradaReserva(quantidade, chave));
+      return { resultado, banco };
+    };
+    expect((await fazer(9, "volume-9-123456")).resultado).toMatchObject({ subtotalCents: 40500, discountCents: 0, totalCents: 40500, appliedOffer: null });
+    expect((await fazer(10, "volume-10-123456")).resultado).toMatchObject({ subtotalCents: 45000, discountCents: 6750, totalCents: 38250, appliedOffer: { id: oferta.id, version: 2 } });
+    const vinte = await fazer(20, "volume-20-123456");
+    expect(vinte.resultado).toMatchObject({ subtotalCents: 90000, discountCents: 13500, totalCents: 76500 });
+    expect(vinte.resultado.items).toHaveLength(20);
+  });
+
+  it("calcula o desconto sobre tipos mistos e preserva preço fixo legado como total da faixa", async () => {
+    const ofertaPercentual = { id: uuid(91), version: 1, name: "Volume", pricingType: "PERCENTUAL", minQuantity: 10, maxQuantity: null, discountPercent: 15, priceCents: null, active: true };
+    const misto = criarBancoReserva({ quantidade: 10, precoAdulto: 4500, precoCrianca: 2250, offers: [ofertaPercentual], tiposMistos: true });
+    const resultadoMisto = await new EventosPublicSalesService({ db: misto } as any).reservarAssentos(entradaReserva(10, "misto-6-4-123456", true));
+    expect(resultadoMisto).toMatchObject({ subtotalCents: 36000, discountCents: 5400, totalCents: 30600 });
+    expect(resultadoMisto.items.reduce((total, item) => total + item.totalPriceCents, 0)).toBe(30600);
+
+    const ofertaFixa = { id: uuid(92), version: 4, name: "Faixa legada", pricingType: "VALOR_FIXO", minQuantity: 10, maxQuantity: null, discountPercent: null, priceCents: 30000, active: true };
+    const fixo = criarBancoReserva({ quantidade: 10, precoAdulto: 4500, offers: [ofertaFixa] });
+    const resultadoFixo = await new EventosPublicSalesService({ db: fixo } as any).reservarAssentos(entradaReserva(10, "fixo-10-123456"));
+    expect(resultadoFixo).toMatchObject({ subtotalCents: 45000, discountCents: 15000, totalCents: 30000 });
+  });
+
+  it("recusa total final inferior a R$ 1,00 antes de qualquer mutação", async () => {
+    const banco = criarBancoReserva({ quantidade: 1, precoAdulto: 50, offers: [] });
+    await expect(new EventosPublicSalesService({ db: banco } as any).reservarAssentos(entradaReserva(1, "minimo-123456"))).rejects.toMatchObject({ response: { code: "INVALID_AMOUNT" } });
+    expect(banco.mutations.value).toBe(0);
+  });
+
+  it("repete a reserva idempotente com o snapshot persistido", async () => {
+    const oferta = { id: uuid(93), version: 3, name: "Volume", pricingType: "PERCENTUAL", minQuantity: 2, maxQuantity: null, discountPercent: 15, priceCents: null, active: true };
+    const banco = criarBancoReserva({ quantidade: 2, precoAdulto: 4500, offers: [oferta], repetir: true });
+    const servico = new EventosPublicSalesService({ db: banco } as any);
+    const entrada = entradaReserva(2, "idempotencia-123456");
+    const primeira = await servico.reservarAssentos(entrada);
+    banco.configuracaoAtual = [];
+    const segunda = await servico.reservarAssentos(entrada);
+    expect(segunda).toEqual(primeira);
+    expect(segunda.appliedOffer).toMatchObject({ id: oferta.id, version: 3 });
+  });
 });
+
+function uuid(n: number) {
+  return `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+}
+
+function entradaReserva(quantidade: number, idempotencyKey: string, misto = false) {
+  return {
+    sessionId: uuid(1),
+    seats: Array.from({ length: quantidade }, (_, index) => ({ seatId: uuid(100 + index), ticketTypeId: uuid(misto && index >= 6 ? 3 : 2), participantIndex: index })),
+    buyer: { name: "Ana", email: "a@b.com", phone: "11999999999" },
+    idempotencyKey,
+  };
+}
+
+function criarBancoReserva(config: { quantidade: number; precoAdulto: number; precoCrianca?: number; offers: any[]; tiposMistos?: boolean; repetir?: boolean }) {
+  const event = { id: uuid(10), status: "PUBLICADO" };
+  const session = { id: uuid(1), status: "PUBLICADA" };
+  const tickets = [
+    { id: uuid(2), eventId: event.id, priceCents: config.precoAdulto, maxPerOrder: null, version: 1, active: true },
+    { id: uuid(3), eventId: event.id, priceCents: config.precoCrianca ?? config.precoAdulto, maxPerOrder: null, version: 1, active: true },
+  ];
+  const inventories = Array.from({ length: config.quantidade }, (_, index) => ({ id: uuid(200 + index), sessionId: session.id, seatId: uuid(100 + index), status: "DISPONIVEL" }));
+  const order: any = { id: uuid(500), orderNumber: "ABC123DEF456", eventId: event.id, sessionId: session.id, buyerEmail: "a@b.com", expiresAt: new Date(Date.now() + 60_000) };
+  const itemRows: any[] = [];
+  let selectCalls = 0;
+  let insertCalls = 0;
+  const mutations = { value: 0 };
+  const banco: any = {
+    mutations,
+    configuracaoAtual: config.offers,
+    transaction: async (fn: any) => fn(banco),
+    select: () => {
+      const index = selectCalls++;
+      let value: any[] = [];
+      if (config.repetir && banco.jaCriado && index >= 7) {
+        value = index === 7 ? [order] : itemRows.map((item) => ({ item, inventory: inventories.find((inventory) => inventory.id === item.inventorySeatId) }));
+      } else if (index === 0) value = [];
+      else if (index === 1) value = [{ event, session }];
+      else if (index >= 2 && index < 2 + (config.tiposMistos ? 2 : 1)) value = [tickets[index - 2]];
+      else if (index >= 2 + (config.tiposMistos ? 2 : 1) && index < 2 + (config.tiposMistos ? 2 : 1) + config.quantidade) value = [inventories[index - (2 + (config.tiposMistos ? 2 : 1))]];
+      else if (index === 2 + (config.tiposMistos ? 2 : 1) + config.quantidade) value = banco.configuracaoAtual;
+      else value = itemRows.map((item) => ({ item, inventory: inventories.find((inventory) => inventory.id === item.inventorySeatId) }));
+      const chain: any = { from: () => chain, innerJoin: () => chain, where: async () => value, orderBy: async () => value };
+      return chain;
+    },
+    insert: () => {
+      mutations.value += 1;
+      insertCalls += 1;
+      return { values: (payload: any) => { if (insertCalls === 1) { Object.assign(order, payload); banco.jaCriado = true; return { returning: async () => [order] }; } if (insertCalls >= 3 && payload.ticketTypeId) itemRows.push(payload); return Promise.resolve([]); } };
+    },
+    update: () => { mutations.value += 1; return { set: () => ({ where: () => ({ returning: async () => [{}] }) }) }; },
+  };
+  return banco;
+}
 
 function vendaDb(data: any) {
   let selects = 0;

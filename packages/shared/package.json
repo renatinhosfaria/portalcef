@@ -76,6 +76,12 @@
       "import": "./src/eventos/mapa-proposta.ts",
       "require": "./dist/eventos/mapa-proposta.js",
       "default": "./dist/eventos/mapa-proposta.js"
+    },
+    "./eventos/precos": {
+      "types": "./dist/eventos/precos.d.ts",
+      "import": "./src/eventos/precos.ts",
+      "require": "./dist/eventos/precos.js",
+      "default": "./dist/eventos/precos.js"
     }
   },
   "scripts": {
