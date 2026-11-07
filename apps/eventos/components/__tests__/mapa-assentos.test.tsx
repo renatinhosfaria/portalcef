@@ -3,13 +3,14 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import type { PublicEventTicketType, PublicMap, PublicSeat } from "@essencia/shared/types";
+import type { OfertaPrecoPublica, PublicEventTicketType, PublicMap, PublicSeat } from "@essencia/shared/types";
 import { MapaAssentos } from "../mapa-assentos";
 import { calcularTotalSelecao, ResumoAssentosFixo } from "../resumo-assentos";
 import { calcularBoundsMapa, estiloAssento, serializarSelecaoAssentos } from "../mapa-assentos-utils";
 
 const tipoInteira: PublicEventTicketType = { id: "inteira", name: "Inteira", description: null, priceCents: 1000, maxPerOrder: null, eligibility: null };
 const tipoMeia: PublicEventTicketType = { id: "meia", name: "Meia", description: null, priceCents: 500, maxPerOrder: null, eligibility: "Estudante" };
+const ofertaVolume: OfertaPrecoPublica = { id: "oferta-15", version: 1, name: "Desconto para grupos", minQuantity: 10, maxQuantity: null, discountPercent: 15 };
 const assentos: PublicSeat[] = [
   { id: "s-1", sessionId: "sessao-1", rowLabel: "A", seatNumber: "1", x: 10, y: 20, width: 20, height: 10, category: "plateia", accessible: true, state: "available" },
   { id: "s-2", sessionId: "sessao-1", rowLabel: "A", seatNumber: "2", x: 50, y: 20, width: 20, height: 10, category: "plateia", accessible: false, state: "reserved" },
@@ -18,9 +19,70 @@ const assentos: PublicSeat[] = [
 ];
 const mapa: PublicMap = { sessionId: "sessao-1", mapId: "mapa-1", seats: assentos };
 
+function criarMapaDisponivel(quantidade: number): PublicMap {
+  return {
+    sessionId: "sessao-1",
+    mapId: "mapa-1",
+    seats: Array.from({ length: quantidade }, (_, index) => ({
+      id: `s-${index + 1}`,
+      sessionId: "sessao-1",
+      rowLabel: "A",
+      seatNumber: String(index + 1),
+      x: index * 20,
+      y: 0,
+      width: 18,
+      height: 18,
+      category: "plateia",
+      accessible: false,
+      state: "available" as const,
+    })),
+  };
+}
+
 afterEach(() => cleanup());
 
 describe("mapa público de assentos", () => {
+  it("mostra a prévia de desconto com 9, 10 e 20 lugares", () => {
+    const mapaVinte = criarMapaDisponivel(20);
+    const renderizar = (quantidade: number) => {
+      const view = render(<MapaAssentos map={mapaVinte} checkoutHref="/checkout" ticketTypes={[tipoInteira]} offers={[ofertaVolume]} />);
+      for (let index = 1; index <= quantidade; index += 1) fireEvent.click(screen.getByRole("button", { name: new RegExp(`Assento A-${index}\\b`) }));
+      return view;
+    };
+
+    renderizar(9);
+    expect(screen.queryAllByText("15% de desconto a partir de 10 lugares").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Desconto: R$ 0,00")).toBeTruthy();
+    cleanup();
+    renderizar(10);
+    expect(screen.getAllByText("15% de desconto a partir de 10 lugares").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Desconto: R$ 15,00").length).toBeGreaterThan(0);
+    cleanup();
+    renderizar(20);
+    expect(screen.getAllByText("20 assento(s) selecionado(s)").length).toBeGreaterThan(0);
+  }, 30000);
+
+  it("bloqueia o 21º assento com estado acessível e sem reserva", () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    render(<MapaAssentos map={criarMapaDisponivel(21)} checkoutHref="/checkout" ticketTypes={[tipoInteira]} offers={[ofertaVolume]} />);
+    for (let index = 1; index <= 21; index += 1) fireEvent.click(screen.getByRole("button", { name: new RegExp(`Assento A-${index}\\b`) }));
+    expect(screen.getByRole("status").textContent).toContain("máximo 20");
+    expect(screen.getAllByText("20 assento(s) selecionado(s)").length).toBeGreaterThan(0);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
+  });
+
+  it("aplica 15% ao misturar seis adultos e quatro crianças", () => {
+    const tipoCrianca: PublicEventTicketType = { id: "crianca", name: "Criança", description: null, priceCents: 5000, maxPerOrder: null, eligibility: null };
+    render(<MapaAssentos map={criarMapaDisponivel(10)} checkoutHref="/checkout" ticketTypes={[tipoInteira, tipoCrianca]} offers={[ofertaVolume]} />);
+    for (let index = 1; index <= 10; index += 1) fireEvent.click(screen.getByRole("button", { name: new RegExp(`Assento A-${index}\\b`) }));
+    const selects = screen.getAllByRole("combobox", { name: /Tipo de ingresso do assento/ });
+    for (const select of selects.slice(6)) fireEvent.change(select, { target: { value: "crianca" } });
+    expect(screen.getAllByText("Subtotal: R$ 260,00").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Desconto: R$ 39,00").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Total: R$ 221,00").length).toBeGreaterThan(0);
+  });
+
   it("renderiza a planta SVG e mantém mapa e lista em modos acessíveis", () => {
     const html = renderToStaticMarkup(<MapaAssentos map={mapa} checkoutHref="/checkout" ticketTypes={[tipoInteira]} />);
 

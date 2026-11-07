@@ -19,7 +19,10 @@ const resultado: ConsultaPedidoPublica = {
   status: "AGUARDANDO_PAGAMENTO",
   eventTitle: "Festival",
   session: { startsAt: new Date("2026-01-01T10:00:00Z"), endsAt: new Date("2026-01-01T12:00:00Z") },
+  subtotalCents: 1000,
+  discountCents: 0,
   totalCents: 1000,
+  appliedOffer: null,
   items: [],
 };
 

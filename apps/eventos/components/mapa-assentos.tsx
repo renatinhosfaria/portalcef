@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import type { PublicEventTicketType, PublicMap, PublicSeat } from "@essencia/shared/types";
+import type { OfertaPrecoPublica, PublicEventTicketType, PublicMap, PublicSeat } from "@essencia/shared/types";
 import { MapaAssentosSvg } from "./mapa-assentos-svg";
 import { ResumoAssentos, ResumoAssentosFixo, type AssentoSelecionado } from "./resumo-assentos";
 import { serializarSelecaoAssentos } from "./mapa-assentos-utils";
@@ -47,15 +47,17 @@ export type MapaAssentosProps = {
   map: PublicMap;
   checkoutHref: string;
   ticketTypes: PublicEventTicketType[];
+  offers?: OfertaPrecoPublica[];
   initialTicketTypeId?: string;
   initialSelection?: AssentoSelecionado[];
   unavailableSeatIds?: string[];
   initialSelectionInvalid?: boolean;
 };
 
-export function MapaAssentos({ map, checkoutHref, ticketTypes, initialTicketTypeId, initialSelection = [], unavailableSeatIds = [], initialSelectionInvalid = false }: MapaAssentosProps): React.JSX.Element {
+export function MapaAssentos({ map, checkoutHref, ticketTypes, offers = [], initialTicketTypeId, initialSelection = [], unavailableSeatIds = [], initialSelectionInvalid = false }: MapaAssentosProps): React.JSX.Element {
   const [selection, setSelection] = useState<AssentoSelecionado[]>(() => normalizarSelecaoInicial(map, initialSelection, unavailableSeatIds));
   const [selectionInvalid, setSelectionInvalid] = useState(initialSelectionInvalid);
+  const [selectionLimitReached, setSelectionLimitReached] = useState(false);
   const [fileiraSelecionada, setFileiraSelecionada] = useState("");
   const [modoVisualizacao, setModoVisualizacao] = useState<"lista" | "mapa">("lista");
 
@@ -90,6 +92,11 @@ export function MapaAssentos({ map, checkoutHref, ticketTypes, initialTicketType
 
   function alternarAssento(seat: PublicSeat) {
     if (seat.state !== "available" || indisponiveis.has(seat.id)) return;
+    if (!selectedIds.has(seat.id) && selection.length >= 20) {
+      setSelectionLimitReached(true);
+      return;
+    }
+    setSelectionLimitReached(false);
     if (!selectedIds.has(seat.id)) setSelectionInvalid(false);
     setSelection((current) => {
       if (current.some((item) => item.seatId === seat.id)) return current.filter((item) => item.seatId !== seat.id);
@@ -153,8 +160,9 @@ export function MapaAssentos({ map, checkoutHref, ticketTypes, initialTicketType
       <MapaAssentosSvg map={map} selection={selection} focusRow={fileiraAtiva} unavailableSeatIds={unavailableSeatIds} onToggleSeat={alternarAssento} />
     </section>
 
-    <ResumoAssentos selection={selection} ticketTypes={ticketTypes} onChangeTicketType={alterarTipoIngresso} />
-    <ResumoAssentosFixo selection={selection} ticketTypes={ticketTypes} checkoutHref={target} onChangeTicketType={alterarTipoIngresso} />
+    {selectionLimitReached && <p role="status" aria-live="assertive" className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">Você pode selecionar no máximo 20 assentos por pedido.</p>}
+    <ResumoAssentos selection={selection} ticketTypes={ticketTypes} offers={offers} onChangeTicketType={alterarTipoIngresso} />
+    <ResumoAssentosFixo selection={selection} ticketTypes={ticketTypes} offers={offers} checkoutHref={target} onChangeTicketType={alterarTipoIngresso} />
     <a aria-disabled={!target} href={target} className={`mt-5 inline-block rounded px-4 py-2 text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 ${target ? "bg-blue-700" : "pointer-events-none bg-slate-400"}`}>Continuar para checkout</a>
     <p className="sr-only" aria-live="polite">{selection.length ? `${selection.length} assento(s) selecionado(s)` : "Nenhum assento selecionado"}</p>
   </div>;

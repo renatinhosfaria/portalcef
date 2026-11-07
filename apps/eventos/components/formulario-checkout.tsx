@@ -1,9 +1,10 @@
 "use client";
 
 import React, { useMemo, useRef, useState } from "react";
-import type { PoliticaPublica, PedidoPublicoResult, PublicEventSession } from "@essencia/shared/types";
+import type { OfertaPrecoPublica, PoliticaPublica, PedidoPublicoResult, PublicEventSession } from "@essencia/shared/types";
 import { EventosApiError, finalizarPedido, gerarChaveIdempotenciaPublica, iniciarCheckout, origemPublicaEventos, reservarAssentos } from "../lib/eventos-api";
 import { formatarDataPublica, formatarPrecoPublico } from "../lib/eventos-formatters";
+import { calcularPrecoSelecao } from "./resumo-assentos";
 
 const TIPOS_POLITICA: PoliticaPublica["type"][] = ["PRIVACIDADE", "COMPRA", "CANCELAMENTO_REEMBOLSO", "ACESSIBILIDADE", "CONTATO"];
 const CODIGOS_PEDIDO_ENCERRADO = new Set(["ORDER_NOT_AVAILABLE", "ORDER_NOT_FOUND", "RESERVATION_EXPIRED", "RESERVATION_CANCELLED"]);
@@ -23,11 +24,12 @@ type Props = {
   politicas?: PoliticaPublica[];
   event?: { title: string; startsAt: Date | string | null; locationName: string | null };
   session?: PublicEventSession;
+  offers?: OfertaPrecoPublica[];
   mapHref?: string;
   onComplete?: (pedido: PedidoPublicoResult) => void;
 };
 
-export function FormularioCheckout({ seatIds, ticketTypeIds = [], sessionId, politicas = [], event, session, mapHref, onComplete }: Props) {
+export function FormularioCheckout({ seatIds, ticketTypeIds = [], sessionId, politicas = [], event, session, offers, mapHref, onComplete }: Props) {
   const reservationKeyRef = useRef<string | null>(null);
   if (!reservationKeyRef.current) reservationKeyRef.current = gerarChaveIdempotenciaPublica("reserva");
   const [accepted, setAccepted] = useState<Record<string, boolean>>({});
@@ -40,8 +42,11 @@ export function FormularioCheckout({ seatIds, ticketTypeIds = [], sessionId, pol
   const tiposPorAssento = useMemo(() => ticketTypeIds.length === seatIds.length ? ticketTypeIds : ticketTypeIds.length === 1 ? seatIds.map(() => ticketTypeIds[0]) : [], [seatIds, ticketTypeIds]);
   const hasTicketTypes = seatIds.length > 0 && tiposPorAssento.length === seatIds.length && tiposPorAssento.every(Boolean);
   const tiposDisponiveis = session?.ticketTypes ?? [];
+  const ofertasDisponiveis = offers ?? session?.offers ?? [];
   const resumoSessao = session ? `${formatarDataPublica(session.startsAt, { hour: "2-digit", minute: "2-digit" })}${session.location?.name ? ` · ${session.location.name}` : ""}` : "Sessão selecionada";
   const rotulosAssentos = seatIds.map((seatId, index) => /^[\p{L}\d]+[- ]\d+$/u.test(seatId) ? seatId : `Assento ${index + 1}`);
+  const preco = calcularPrecoSelecao(seatIds.map((seatId, index) => ({ seatId, ticketTypeId: tiposPorAssento[index] ?? "", label: rotulosAssentos[index] })), tiposDisponiveis, ofertasDisponiveis);
+  const ofertaTexto = ofertasDisponiveis.find((offer) => offer.discountPercent != null && (seatIds.length < offer.minQuantity || (seatIds.length >= offer.minQuantity && seatIds.length <= (offer.maxQuantity ?? Number.POSITIVE_INFINITY))));
 
   async function enviar(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -90,12 +95,18 @@ export function FormularioCheckout({ seatIds, ticketTypeIds = [], sessionId, pol
       <p className="text-sm text-slate-700">Sessão: {resumoSessao}</p>
       <p className="text-sm text-slate-700">Data: {event ? formatarDataPublica(event.startsAt) : "Data a confirmar"}</p>
       <p className="text-sm text-slate-700">Local: {event?.locationName ?? session?.location?.name ?? "Local a confirmar"}</p>
+      {ofertaTexto?.discountPercent != null && <p className="mt-2 text-sm font-medium text-blue-700">{ofertaTexto.discountPercent}% de desconto a partir de {ofertaTexto.minQuantity} lugares</p>}
       <ul className="mt-2 space-y-1 text-sm text-slate-700">{seatIds.map((seatId, index) => {
         const tipo = tiposDisponiveis.find((item) => item.id === tiposPorAssento[index]);
         const nomeTipo = tipo?.name ?? "Ingresso selecionado";
         const preco = tipo ? ` · ${formatarPrecoPublico(tipo.priceCents).replace("A partir de ", "")}` : "";
         return <li key={`${seatId}-${index}`}>{rotulosAssentos[index]}: {nomeTipo}{preco}</li>;
       })}</ul>
+      <dl className="mt-4 space-y-1 text-sm text-slate-700" aria-label="Prévia de preço">
+        <div className="flex justify-between"><dt>Subtotal</dt><dd>{formatarPrecoPublico(preco.subtotalCents).replace("A partir de ", "")}</dd></div>
+        <div className="flex justify-between"><dt>Desconto</dt><dd>{formatarPrecoPublico(preco.discountCents).replace("A partir de ", "")}</dd></div>
+        <div className="flex justify-between font-semibold"><dt>Total</dt><dd>{formatarPrecoPublico(preco.totalCents).replace("A partir de ", "")}</dd></div>
+      </dl>
     </section>
     <fieldset className="space-y-3"><legend className="text-lg font-semibold">Dados do comprador</legend>
       <label className="block">Nome completo<input required minLength={2} name="buyerName" autoComplete="name" className="mt-1 w-full rounded border p-2" /></label>
