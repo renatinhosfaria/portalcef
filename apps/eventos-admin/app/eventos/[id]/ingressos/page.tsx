@@ -1,8 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
+
 import { assertRespostaApi, construirPayloadIngresso, ingressosProntosParaSalvar, type IngressoValue } from "@/features/eventos/etapas-contratos";
+import { OfertaEditor } from "@/features/eventos/oferta-editor";
+import { construirPayloadOferta, ofertaInicial, ofertaProntaParaSalvar, type OfertaValue } from "@/features/eventos/ofertas-contratos";
 import { useEventoAutosave } from "@/features/eventos/use-evento-autosave";
 
 export default function IngressosPage() {
@@ -11,13 +14,30 @@ export default function IngressosPage() {
   const [items, setItems] = useState<IngressoValue[]>([]);
   const [dirty, setDirty] = useState(false);
   const [error, setError] = useState("");
+  const [oferta, setOferta] = useState<OfertaValue>(ofertaInicial);
+  const [ofertasArquivadas, setOfertasArquivadas] = useState<OfertaValue[]>([]);
+  const [ofertaDirty, setOfertaDirty] = useState(false);
   const changeRevision = useRef(0);
+  const ofertaRevision = useRef(0);
 
   useEffect(() => {
     fetch(`/eventos-admin/api/eventos/admin/${id}/ingressos`, { credentials: "include" })
       .then((response) => response.ok ? response.json() : Promise.reject())
       .then((rows) => setItems(rows))
       .catch(() => setError("Não foi possível carregar os ingressos."));
+  }, [id]);
+
+  useEffect(() => {
+    fetch(`/eventos-admin/api/eventos/admin/${id}/ofertas`, { credentials: "include" })
+      .then((response) => response.ok ? response.json() : Promise.reject())
+      .then((body: unknown) => {
+        const data = body && typeof body === "object" && "data" in body ? (body as { data?: unknown }).data : body;
+        const rows = Array.isArray(data) ? data as OfertaValue[] : [];
+        const active = rows.find((row) => row.active);
+        setOferta(active ?? ofertaInicial);
+        setOfertasArquivadas(rows.filter((row) => !row.active));
+      })
+      .catch(() => setError("Não foi possível carregar as ofertas."));
   }, [id]);
 
   const autosave = useEventoAutosave({
@@ -39,6 +59,39 @@ export default function IngressosPage() {
         if (changeRevision.current === revision) {
           setItems((body.data ?? body) as IngressoValue[]);
           setDirty(false);
+        }
+      });
+    },
+    onSaved: () => router.refresh(),
+    debounceMs: 700,
+  });
+
+  const ofertaAutosave = useEventoAutosave({
+    eventId: id,
+    value: oferta,
+    dirty: ofertaDirty && ofertaProntaParaSalvar(oferta),
+    serialize: (value) => [construirPayloadOferta(value)],
+    save: async (payload, eventId) => {
+      const revision = ofertaRevision.current;
+      const response = await fetch(`/eventos-admin/api/eventos/admin/${eventId}/ofertas`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const body = await response.json().catch(() => ({}));
+      assertRespostaApi({ ok: response.ok, status: response.status, body });
+      const data = body.data ?? body;
+      const saved = (Array.isArray(data) ? data[0] : data) as OfertaValue | undefined;
+      if (!saved) throw new Error("A API não retornou a oferta salva.");
+      queueMicrotask(() => {
+        if (ofertaRevision.current === revision) {
+          setOfertasArquivadas((current) => [
+            ...(oferta.id ? [{ ...oferta, active: false }] : []),
+            ...current.filter((item) => item.id !== saved.id),
+          ]);
+          setOferta(saved);
+          setOfertaDirty(false);
         }
       });
     },
@@ -116,6 +169,28 @@ export default function IngressosPage() {
         ))}
       </div>
       <p className="text-sm text-slate-500" role="status">{autosave.state === "saving" ? "Salvando…" : autosave.state === "saved" ? "Ingressos salvos automaticamente" : ""}</p>
+      <section className="space-y-4 border-t border-slate-200 pt-5" aria-labelledby="ofertas-heading">
+        <div>
+          <h2 id="ofertas-heading" className="text-xl font-semibold">Descontos e ofertas</h2>
+          <p className="text-sm text-slate-600">Configure uma única oferta ativa para pedidos com vários lugares. A API versiona cada salvamento.</p>
+        </div>
+        <OfertaEditor initialValue={oferta} disabled={ofertaAutosave.state === "saving"} onChange={(next) => {
+          ofertaRevision.current += 1;
+          setOferta(next);
+          setOfertaDirty(true);
+        }} />
+        {ofertasArquivadas.length > 0 && (
+          <div className="space-y-2" aria-label="Ofertas arquivadas">
+            <h3 className="text-sm font-medium text-slate-700">Histórico</h3>
+            {ofertasArquivadas.map((item) => (
+              <p key={`${item.id ?? "arquivada"}-${item.version ?? 0}`} className="text-sm text-slate-500">Oferta arquivada · {item.name} · versão {item.version ?? "—"}</p>
+            ))}
+          </div>
+        )}
+        <p className="text-sm text-slate-500" role="status">
+          {ofertaDirty && !ofertaProntaParaSalvar(oferta) ? "Revise a oferta antes de salvar." : ofertaAutosave.state === "saving" ? "Salvando oferta…" : ofertaAutosave.state === "saved" ? "ofertas salvas automaticamente" : ofertaAutosave.state === "conflict" ? "Conflito de edição da oferta; recarregue para revisar." : ofertaAutosave.state === "error" ? "Não foi possível salvar a oferta." : ""}
+        </p>
+      </section>
     </section>
   );
 }
