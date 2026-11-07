@@ -214,6 +214,16 @@ export class EventosPublicSalesService {
     const checkoutExpiresAt = order.expiresAt && order.expiresAt > minimumCheckoutExpiry ? order.expiresAt : minimumCheckoutExpiry;
     const rows = await this.db.select({ item: eventoItensPedido, ticket: eventoTiposIngresso }).from(eventoItensPedido).innerJoin(eventoTiposIngresso, eq(eventoTiposIngresso.id, eventoItensPedido.ticketTypeId)).where(eq(eventoItensPedido.orderId, order.id));
     if (!rows.length) throw fail("ORDER_NOT_AVAILABLE", "Pedido sem itens");
+    const items = rows.map((row: any) => {
+      const unitAmount = row.item?.unitPriceCents;
+      const quantity = row.item?.quantity;
+      if (!Number.isInteger(unitAmount) || unitAmount < 0 || !Number.isInteger(quantity) || quantity < 1) {
+        throw fail("CHECKOUT_AMOUNT_MISMATCH", "Preços persistidos do pedido inválidos");
+      }
+      return { name: row.ticket?.name ?? "Ingresso de Evento", unitAmount, quantity };
+    });
+    const linesTotalCents = items.reduce((total: number, item: { unitAmount: number; quantity: number }) => total + item.unitAmount * item.quantity, 0);
+    if (linesTotalCents !== order.totalCents) throw fail("CHECKOUT_AMOUNT_MISMATCH", "Linhas do checkout não fecham o total do pedido");
     const checkout = await this.paymentsService.createCheckoutSession({
       orderId: order.id,
       orderNumber: order.orderNumber,
@@ -222,7 +232,7 @@ export class EventosPublicSalesService {
       customerPhone: order.buyerPhone,
       customerEmail: order.buyerEmail,
       expiresAt: checkoutExpiresAt,
-      items: rows.map((row: any) => ({ name: row.ticket?.name ?? "Ingresso de Evento", unitAmount: row.item?.unitPriceCents ?? 0, quantity: row.item?.quantity ?? 1 })),
+      items,
       successUrl: input.successUrl,
       cancelUrl: input.cancelUrl,
       idempotencyKey: `evento-checkout:${order.id}`,
@@ -230,9 +240,9 @@ export class EventosPublicSalesService {
     });
     const existing = await this.first<any>(this.db.select().from(eventoPagamentos).where(eq(eventoPagamentos.orderId, order.id)));
     if (existing) {
-      await this.db.update(eventoPagamentos).set({ stripeCheckoutSessionId: checkout.checkoutSessionId, stripePaymentIntentId: checkout.paymentIntentId ?? null, expectedAmountCents: order.totalCents, status: "PENDENTE", updatedAt: new Date() }).where(eq(eventoPagamentos.id, existing.id));
+      await this.db.update(eventoPagamentos).set({ stripeCheckoutSessionId: checkout.checkoutSessionId, stripePaymentIntentId: checkout.paymentIntentId ?? null, expectedAmountCents: linesTotalCents, status: "PENDENTE", updatedAt: new Date() }).where(eq(eventoPagamentos.id, existing.id));
     } else {
-      await this.db.insert(eventoPagamentos).values({ orderId: order.id, stripeCheckoutSessionId: checkout.checkoutSessionId, stripePaymentIntentId: checkout.paymentIntentId ?? null, method: "card", expectedAmountCents: order.totalCents, receivedAmountCents: null, currency: "BRL", status: "PENDENTE" });
+      await this.db.insert(eventoPagamentos).values({ orderId: order.id, stripeCheckoutSessionId: checkout.checkoutSessionId, stripePaymentIntentId: checkout.paymentIntentId ?? null, method: "card", expectedAmountCents: linesTotalCents, receivedAmountCents: null, currency: "BRL", status: "PENDENTE" });
     }
     await this.db.update(eventoPedidos).set({ status: "AGUARDANDO_PAGAMENTO", expiresAt: checkoutExpiresAt, updatedAt: new Date() }).where(and(eq(eventoPedidos.id, order.id), inArray(eventoPedidos.status, ["RESERVADO", "INICIADO"] as any)));
     await this.db.update(eventoReservas).set({ expiresAt: checkoutExpiresAt, updatedAt: new Date() }).where(and(eq(eventoReservas.orderId, order.id), eq(eventoReservas.status, "ATIVA")));
