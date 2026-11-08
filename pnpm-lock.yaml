@@ -205,6 +205,9 @@ importers:
 
   apps/eventos:
     dependencies:
+      '@essencia/components':
+        specifier: workspace:*
+        version: link:../../packages/components
       '@essencia/shared':
         specifier: workspace:*
         version: link:../../packages/shared

@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 module.exports = {
   output: "standalone",
-  transpilePackages: ["@essencia/ui", "@essencia/shared"],
+  transpilePackages: ["@essencia/ui", "@essencia/shared", "@essencia/components"],
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "www.portalcef.com.br", pathname: "/storage/**" },
