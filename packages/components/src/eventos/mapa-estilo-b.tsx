@@ -422,7 +422,7 @@ export function MapaEstiloB({
               data-lugar-id={lugar.id}
               transform={`translate(${lugar.x} ${lugar.y}) rotate(${lugar.rotacao})`}
               role={interativo ? "button" : "img"}
-              tabIndex={interativo ? (desabilitado ? -1 : 0) : undefined}
+              tabIndex={desabilitado ? -1 : interativo ? 0 : undefined}
               aria-disabled={desabilitado ? "true" : undefined}
               aria-label={rotuloDoLugar?.(lugar) ?? rotuloAcessivelDoLugar(lugar)}
               style={podeInteragir ? { cursor: "pointer" } : undefined}
@@ -447,8 +447,8 @@ export function MapaEstiloB({
                 fill={cores.preenchimento}
                 stroke={cores.contorno}
                 strokeWidth={Math.max(2, lugar.altura * 0.05)}
-                className={lugar.categoria === "CADEIRANTE" ? "mapa-estilo-b-cadeirinha" : undefined}
-                style={lugar.categoria === "CADEIRANTE" ? { transition: "fill 150ms, stroke 150ms" } : undefined}
+                className="mapa-estilo-b-cadeirinha"
+                style={{ transition: "fill 150ms, stroke 150ms" }}
               />
               <rect
                 x={-lugar.largura / 2}

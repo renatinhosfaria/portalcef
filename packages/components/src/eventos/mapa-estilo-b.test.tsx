@@ -144,6 +144,30 @@ describe("MapaEstiloB", () => {
     expect(aoClicar).not.toHaveBeenCalled();
   });
 
+  it("lugar desabilitado sem handler também fica fora do tab", () => {
+    const { container } = render(
+      <MapaEstiloB {...base} lugares={[lugar({ id: "a" })]} lugarDesabilitado={() => true} />,
+    );
+    const g = container.querySelector("[data-lugar-id='a']")!;
+    expect(g.getAttribute("tabindex")).toBe("-1");
+  });
+
+  it("aplica a transição ao retângulo principal de todo lugar", () => {
+    const lugares = [
+      lugar({ id: "comum", categoria: "COMUM" }),
+      lugar({ id: "cadeirante", categoria: "CADEIRANTE" }),
+      lugar({ id: "opcional", categoria: "OPCIONAL_CADEIRANTE" }),
+      lugar({ id: "obeso", categoria: "OBESO" }),
+      lugar({ id: "sem", categoria: null }),
+    ];
+    const { container } = render(<MapaEstiloB {...base} lugares={lugares} />);
+    for (const lugarAtual of lugares) {
+      const retanguloPrincipal = container.querySelector(`[data-lugar-id='${lugarAtual.id}'] rect`) as SVGRectElement;
+      expect(retanguloPrincipal.classList.contains("mapa-estilo-b-cadeirinha")).toBe(true);
+      expect(retanguloPrincipal.style.transition).toBe("fill 150ms, stroke 150ms");
+    }
+  });
+
   it("oculta números abaixo da escala mínima", () => {
     const { container } = render(<MapaEstiloB {...base} lugares={[lugar({ id: "a" })]} escalaMinimaNumeros={2} />);
     const svg = container.querySelector("svg")!;
