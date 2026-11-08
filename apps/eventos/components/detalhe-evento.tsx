@@ -15,7 +15,7 @@ export function DetalheEvento({ event, sessions, politicas = [] }: { event: Publ
     <TopoEvento event={event} sessions={sessions} />
     <div className="mt-8 grid gap-10 lg:grid-cols-[minmax(0,1fr)_21rem]">
       <div className="min-w-0">
-        <section aria-labelledby="sobre-espetaculo"><h2 id="sobre-espetaculo" className="font-display text-2xl font-semibold">Sobre o espetáculo</h2><p className="mt-4 whitespace-pre-wrap text-base leading-7 text-[var(--ink-muted)]">{event.description ?? event.summary ?? "Resumo do evento não informado."}{event.summary == null && event.description != null && <span className="sr-only">Resumo do evento não informado.</span>}</p></section>
+        <section aria-labelledby="sobre-espetaculo"><h2 id="sobre-espetaculo" className="font-display text-2xl font-semibold">Sobre o espetáculo</h2><p className="mt-4 whitespace-pre-wrap text-base leading-7 text-[var(--ink-muted)]">{event.description ?? event.summary ?? "Resumo do evento não informado."}</p></section>
         <div className="mt-10"><BomSaber sessions={sessions} /></div>
         <section id="sessoes" className="mt-10 scroll-mt-6" aria-labelledby="sessoes-titulo"><h2 id="sessoes-titulo" className="font-display text-2xl font-semibold">Sessões</h2><div className="mt-4"><SessoesEvento eventSlug={event.slug} sessions={sessions} mostrarAcoes={false} /></div></section>
         <PoliticasResumidas politicas={politicas} cancellationPolicy={event.cancellationPolicy} />

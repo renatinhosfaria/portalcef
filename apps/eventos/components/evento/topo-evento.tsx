@@ -13,7 +13,7 @@ export function TopoEvento({ event, sessions }: { event: PublicEventDetail; sess
   const primeira = primeiroVendavel(vendaveis);
   const local = primeira?.location;
   const tipos = vendaveis.flatMap((session) => session.ticketTypes ?? []);
-  const oferta = vendaveis.flatMap((session) => session.offers ?? []).find((item) => item.discountPercent != null);
+  const oferta = vendaveis.flatMap((session) => session.offers ?? [])[0];
   const destino = vendaveis.length === 1 ? hrefSessao(event.slug, vendaveis[0].id) : "#sessoes";
   const meia = tipos.some((tipo) => /meia/i.test(tipo.name) || /meia/i.test(tipo.eligibility ?? ""));
   const temMapa = sessions.some((session) => Boolean(session.mapId));
@@ -30,7 +30,7 @@ export function TopoEvento({ event, sessions }: { event: PublicEventDetail; sess
           <div className="mt-6 flex flex-wrap gap-2 text-sm">
             {temMapa && <span className="rounded-full border border-white/25 bg-white/10 px-3 py-1.5">Assentos numerados</span>}
             {meia && <span className="rounded-full border border-white/25 bg-white/10 px-3 py-1.5">Meia-entrada</span>}
-            {oferta?.discountPercent != null && <span className="rounded-full border border-white/25 bg-white/10 px-3 py-1.5">{oferta.discountPercent}% off a partir de {oferta.minQuantity} lugares</span>}
+            {oferta && <span className="rounded-full border border-white/25 bg-white/10 px-3 py-1.5">{oferta.discountPercent != null ? `${oferta.discountPercent}% off a partir de ${oferta.minQuantity} lugares` : `${oferta.name} a partir de ${oferta.minQuantity} lugares`}</span>}
           </div>
           <p className="mt-6 text-sm text-white/70">Realização: Colégio Essência Feliz</p>
           {vendaveis.length > 0 && <a className="mt-7 hidden min-h-11 w-fit items-center justify-center rounded-lg bg-[var(--acao)] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[var(--acao-hover)] md:inline-flex" href={destino}>Escolher assentos</a>}

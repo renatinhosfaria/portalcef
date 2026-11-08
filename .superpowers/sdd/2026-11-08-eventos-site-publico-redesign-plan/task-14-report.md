@@ -45,3 +45,26 @@
 - Não houve alteração de dependências nem deploy.
 
 Atualizado em: 2026-11-08
+
+## Fix round 1 — revisão da implementação
+
+### RED
+
+- Foram adicionados testes para arte inteira, data/hora e endereço, selos, oferta de valor fixo na caixa e no bloco “Bom saber”, seletor de sessão, políticas sem nomes internos, organizador/telefone, descrição sem fallback falso, ausência de classes azuis e tratamento 404 da página.
+- O foco inicial falhou em 3 cenários: oferta de valor fixo não era reconhecida, a asserção do seletor encontrava três links iguais e o texto de data do teste não correspondia à capitalização real do formatador.
+
+### GREEN
+
+- Ofertas agora são reconhecidas pela presença do objeto, independentemente de `discountPercent`; percentuais continuam mostrando desconto e ofertas fixas usam o nome da oferta e a quantidade mínima.
+- O texto “Resumo do evento não informado.” só aparece quando descrição e resumo estão ausentes; descrição real com quebras permanece intacta.
+- `page.test.tsx` cobre `EventosApiError` 404 e verifica a chamada de `notFound()`.
+- `pnpm --filter @essencia/eventos test -- components/__tests__/detalhe-evento-ingresso.test.tsx app/evento/[slug]/page.test.tsx` — 2 arquivos, 16 testes aprovados.
+- `pnpm --filter @essencia/eventos lint` — 0 erros e 0 avisos no app.
+- `pnpm --filter @essencia/eventos typecheck` — exit 0.
+
+### Self-review do fix
+
+- `SessoesEvento` e `agruparSessoesPorDia` permanecem exportados por compatibilidade com a lista de sessões e os testes legados; os novos componentes dependem publicamente apenas de `sessaoVendavel` e `hrefSessao`, conforme o contrato da tarefa.
+- Não foram alterados endpoints, dependências ou arquivos de mapa; nenhuma oferta de valor fixo é descartada na apresentação pública.
+
+Atualizado em: 2026-11-08

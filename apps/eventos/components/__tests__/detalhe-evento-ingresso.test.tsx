@@ -1,9 +1,13 @@
+// @vitest-environment jsdom
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it } from "vitest";
 import { DetalheEvento } from "../detalhe-evento";
 import { SessoesEvento, agruparSessoesPorDia } from "../sessoes-evento";
-import type { PublicEventDetail, PublicEventSession } from "@essencia/shared/types";
+import type { OfertaPrecoPublica, PoliticaPublica, PublicEventDetail, PublicEventSession } from "@essencia/shared/types";
+
+afterEach(() => cleanup());
 
 const evento: PublicEventDetail = {
   id: "event-1", slug: "festival", title: "Festival", summary: "Resumo", imageUrl: null, category: null,
@@ -51,10 +55,16 @@ describe("caminho público de ingresso", () => {
   });
 
   it("usa fallback textual para resumo ausente, imagem pública e raiz sem main aninhado", () => {
-    const html = renderToStaticMarkup(<DetalheEvento event={{ ...evento, summary: null, imageUrl: "https://www.portalcef.com.br/storage/festival.jpg" }} sessions={[]} />);
+    const html = renderToStaticMarkup(<DetalheEvento event={{ ...evento, summary: null, description: null, imageUrl: "https://www.portalcef.com.br/storage/festival.jpg" }} sessions={[]} />);
     expect(html).toContain("Resumo do evento não informado.");
     expect(html).toContain("festival.jpg");
     expect(html).not.toMatch(/^<main/);
+  });
+
+  it("preserva a descrição sem anunciar fallback de resumo inexistente", () => {
+    const html = renderToStaticMarkup(<DetalheEvento event={{ ...evento, summary: null, description: "Texto real\ncom quebra" }} sessions={[]} />);
+    expect(html).toContain("Texto real\ncom quebra");
+    expect(html).not.toContain("Resumo do evento não informado.");
   });
 
   it("não oferece compra para sessão esgotada ou sem mapa", () => {
@@ -131,5 +141,52 @@ describe("caminho público de ingresso", () => {
     ]} />);
     expect(html).not.toContain("Escolher assentos");
   });
+
+  it("mostra a arte inteira, data por extenso, endereço e selos", () => {
+    const ofertaFixa: OfertaPrecoPublica = { id: "grupo-fixo", version: 1, name: "Grupo", minQuantity: 5, maxQuantity: null, discountPercent: null };
+    const html = renderToStaticMarkup(<DetalheEvento event={{ ...evento, imageUrl: "https://www.portalcef.com.br/storage/festival.jpg" }} sessions={[criarSessao({ startsAt: "2026-01-02T15:00:00.000Z" as unknown as Date, ticketTypes: [{ id: "meia", name: "Meia-entrada", description: null, priceCents: 500, maxPerOrder: null, eligibility: "Estudantes" }], offers: [ofertaFixa] })]} />);
+    expect(html).toContain("object-contain");
+    expect(html).toContain("aspect-[16/9]");
+    expect(html).toContain("Sexta, 2 de janeiro de 2026 · 12h");
+    expect(html).toContain("Rua A");
+    expect(html).toContain("Assentos numerados");
+    expect(html).toContain("Meia-entrada");
+    expect(html).toContain("Grupo a partir de 5 lugares.");
+  });
+
+  it("exibe a caixa com preços, oferta fixa e link da sessão", () => {
+    const ofertaFixa: OfertaPrecoPublica = { id: "grupo-fixo", version: 1, name: "Grupo", minQuantity: 5, maxQuantity: null, discountPercent: null };
+    const html = renderToStaticMarkup(<DetalheEvento event={evento} sessions={[criarSessao({ offers: [ofertaFixa], ticketTypes: [{ id: "inteira", name: "Inteira", description: null, priceCents: 1000, maxPerOrder: null, eligibility: null }] })]} />);
+    expect(html).toContain("R$ 10,00");
+    expect(html).toContain("Grupo a partir de 5 lugares.");
+    expect(html).toContain('href="/evento/festival/sessao/sessao"');
+    expect(html).toContain("Pagamento seguro · cartão ou Pix");
+  });
+
+  it("permite trocar a sessão no seletor da caixa de compra", () => {
+    render(<DetalheEvento event={evento} sessions={[criarSessao({ id: "primeira" }), criarSessao({ id: "segunda", startsAt: new Date("2026-01-03T02:00:00Z") })]} />);
+    expect(screen.getByRole("combobox", { name: "Sessão" })).toBeTruthy();
+    expect(screen.getAllByRole("link", { name: "Escolher assentos" }).find((link) => link.getAttribute("href") === "/evento/festival/sessao/primeira")).toBeTruthy();
+    fireEvent.change(screen.getByRole("combobox", { name: "Sessão" }), { target: { value: "segunda" } });
+    expect(screen.getAllByRole("link", { name: "Escolher assentos" }).find((link) => link.getAttribute("href") === "/evento/festival/sessao/segunda")).toBeTruthy();
+  });
+
+  it("mostra políticas com rótulos amigáveis, organizador e telefone sem azul", () => {
+    const politicas: PoliticaPublica[] = [
+      { type: "CONTATO", version: 1, content: "Fale conosco." },
+      { type: "COMPRA", version: 1, content: "Compra segura." },
+      { type: "CANCELAMENTO_REEMBOLSO", version: 1, content: "Reembolso." },
+    ];
+    const html = renderToStaticMarkup(<DetalheEvento event={evento} sessions={[criarSessao()]} politicas={politicas} />);
+    expect(html).toContain("Cancelamento e reembolso");
+    expect(html).toContain("Compra e meia-entrada");
+    expect(html).toContain("Contato");
+    expect(html).not.toContain("CANCELAMENTO_REEMBOLSO");
+    expect(html).not.toContain("COMPRA");
+    expect(html).toContain("Quem organiza");
+    expect(html).toContain("tel:+553432927388");
+    expect(html).not.toMatch(/blue-/);
+  });
+
 
 });
