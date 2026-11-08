@@ -37,10 +37,14 @@ describe("vitrine pública de Eventos", () => {
 
   it("mantém layout anônimo e catálogo com links públicos", () => {
     const layout = readFileSync(new URL("./layout.tsx", import.meta.url), "utf8");
+    const cabecalho = readFileSync(new URL("../components/base/cabecalho.tsx", import.meta.url), "utf8");
     expect(layout).toContain('lang="pt-BR"');
     expect(layout).toContain("export const metadata");
     expect(layout).toContain("export const viewport");
-    expect(layout).toContain("/pedido/consulta");
+    expect(cabecalho).toContain("/pedido/consulta");
+    expect(layout).toContain("<Cabecalho />");
+    expect(layout).toContain("<RodapeConfianca />");
+    expect(layout).not.toContain("bg-blue");
     expect(layout).not.toContain("TenantProvider");
     expect(layout).not.toContain("Shell");
     expect(layout).not.toContain("/api/auth/me");
@@ -52,6 +56,7 @@ describe("vitrine pública de Eventos", () => {
 
   it("integra a vitrine ao shell compartilhado e à consulta pública", () => {
     const layout = readFileSync(new URL("./layout.tsx", import.meta.url), "utf8");
+    const cabecalho = readFileSync(new URL("../components/base/cabecalho.tsx", import.meta.url), "utf8");
     const consulta = readFileSync(new URL("./pedido/consulta/page.tsx", import.meta.url), "utf8");
     const catalog = readFileSync(new URL("../components/catalogo-eventos.tsx", import.meta.url), "utf8");
     const card = readFileSync(new URL("../components/evento-card.tsx", import.meta.url), "utf8");
@@ -59,7 +64,7 @@ describe("vitrine pública de Eventos", () => {
 
     expect(layout).toContain('import "@essencia/ui/globals.css"');
     expect(layout).toContain('import "./globals.css"');
-    expect(layout).toContain('href="/pedido/consulta"');
+    expect(cabecalho).toContain('href="/pedido/consulta"');
     expect(consulta).toContain("ConsultaPedido");
     expect(catalog).toContain("<EventoCard");
     expect(card).toContain("event.imageUrl");

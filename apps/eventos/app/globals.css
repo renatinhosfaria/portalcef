@@ -4,15 +4,25 @@
 
 @layer base {
   :root {
-    --surface-page: #fffdf8;
-    --surface-card: #ffffff;
+    --fundo: #faf9f5;
+    --cartao: #ffffff;
+    --tinta: #1f2a24;
+    --tinta-2: #5b6660;
+    --linha: #e6e9e1;
+    --acao: #3f6f12;
+    --acao-hover: #355e0f;
+    --verde-colegio: #a3d154;
+    --aviso-fundo: #fff7e6;
+    --aviso-texto: #6b4a00;
+    --surface-page: var(--fundo);
+    --surface-card: var(--cartao);
     --surface-muted: #f5f3ed;
-    --ink: #24302c;
-    --ink-muted: #69736e;
-    --brand-green: #a3d154;
-    --brand-green-dark: #6f922b;
+    --ink: var(--tinta);
+    --ink-muted: var(--tinta-2);
+    --brand-green: var(--verde-colegio);
+    --brand-green-dark: var(--acao);
     --brand-orange: #f59e0b;
-    --line: #e5e8df;
+    --line: var(--linha);
     --font-display: "Outfit", system-ui, sans-serif;
     --font-body: "DM Sans", system-ui, sans-serif;
     color-scheme: light;
@@ -29,7 +39,7 @@
     -webkit-font-smoothing: antialiased;
   }
 
-  :focus-visible { outline: 3px solid var(--brand-orange); outline-offset: 3px; }
+  :focus-visible { outline: 3px solid var(--acao); outline-offset: 3px; }
   a { color: inherit; }
 }
 
