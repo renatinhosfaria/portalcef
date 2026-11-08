@@ -504,9 +504,9 @@ export const eventoPedidos = pgTable(
       .notNull()
       .references(() => eventoSessoes.id, { onDelete: "restrict" }),
     orderNumber: varchar("order_number", { length: 32 }).notNull(),
-    buyerName: varchar("buyer_name", { length: 200 }).notNull(),
-    buyerEmail: varchar("buyer_email", { length: 320 }).notNull(),
-    buyerPhone: varchar("buyer_phone", { length: 30 }).notNull(),
+    buyerName: varchar("buyer_name", { length: 200 }),
+    buyerEmail: varchar("buyer_email", { length: 320 }),
+    buyerPhone: varchar("buyer_phone", { length: 30 }),
     status: text("status", { enum: eventoPedidoStatusEnum })
       .notNull()
       .default("INICIADO"),
@@ -796,6 +796,7 @@ export const eventoIngressos = pgTable(
     participantId: uuid("participant_id")
       .notNull()
       .references(() => eventoParticipantes.id, { onDelete: "restrict" }),
+    numero: varchar("numero", { length: 8 }).notNull(),
     status: text("status", { enum: eventoIngressoStatusEnum })
       .notNull()
       .default("EMITIDO"),
@@ -810,6 +811,7 @@ export const eventoIngressos = pgTable(
     ...timestamps(),
   },
   (table) => ({
+    numeroUnique: uniqueIndex("uq_evento_ingressos_numero").on(table.numero),
     tokenUnique: uniqueIndex("uq_evento_ingressos_signed_token").on(
       table.signedToken,
     ),

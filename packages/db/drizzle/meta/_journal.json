@@ -379,6 +379,13 @@
       "when": 1794075590548,
       "tag": "0053_eventos_desconto_volume",
       "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1794160000000,
+      "tag": "0054_eventos_site_publico",
+      "breakpoints": true
     }
   ]
 }

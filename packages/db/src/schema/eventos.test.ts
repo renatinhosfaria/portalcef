@@ -77,3 +77,31 @@ test("migration saneia ofertas ativas legadas antes do índice parcial", () => {
   assert.match(migration, /CREATE UNIQUE INDEX "uq_evento_ofertas_event_active"/);
   assert.match(migration, /WHERE "active" = true/);
 });
+
+test("permite comprador opcional na reserva", () => {
+  const columns = getTableConfig(eventoPedidos).columns;
+  assert.equal(columns.find((column) => column.name === "buyer_name")?.notNull, false);
+  assert.equal(columns.find((column) => column.name === "buyer_email")?.notNull, false);
+  assert.equal(columns.find((column) => column.name === "buyer_phone")?.notNull, false);
+});
+
+test("ingresso exige número único", () => {
+  const columns = getTableConfig(eventoIngressos).columns;
+  assert.equal(columns.find((column) => column.name === "numero")?.notNull, true);
+  const numeroUniqueIndex = getTableConfig(eventoIngressos).indexes.find(
+    (index) => index.config.name === "uq_evento_ingressos_numero",
+  );
+  assert.ok(numeroUniqueIndex);
+  assert.equal(numeroUniqueIndex?.config.unique, true);
+});
+
+test("migration 0054 torna comprador opcional e preenche números correlacionados", () => {
+  const migration = readFileSync(join(__dirname, "../../drizzle/0054_eventos_site_publico.sql"), "utf8");
+  assert.match(migration, /ALTER COLUMN "buyer_name" DROP NOT NULL/);
+  assert.match(migration, /ALTER COLUMN "buyer_email" DROP NOT NULL/);
+  assert.match(migration, /ALTER COLUMN "buyer_phone" DROP NOT NULL/);
+  assert.match(migration, /UPDATE "evento_ingressos" AS ingresso SET "numero" = \(/);
+  assert.match(migration, /WHERE ingresso\."id" IS NOT NULL/);
+  assert.match(migration, /ALTER COLUMN "numero" SET NOT NULL/);
+  assert.match(migration, /CREATE UNIQUE INDEX "uq_evento_ingressos_numero"/);
+});
