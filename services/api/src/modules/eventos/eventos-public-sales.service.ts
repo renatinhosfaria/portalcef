@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException, ServiceUnavailableException, forwardRef } from "@nestjs/common";
-import { and, desc, eq, eventoAceites, eventoIngressos, eventoInventarioAssentos, eventoItensPedido, eventoMapaAssentos, eventoOfertas, eventoPagamentos, eventoParticipantes, eventoPedidos, eventoPoliticas, eventoReservas, eventoSessoes, eventoTiposIngresso, eventoTokensConsulta, eventos, inArray, lte, type Database } from "@essencia/db";
+import { and, desc, eq, eventoAceites, eventoIngressos, eventoInventarioAssentos, eventoItensPedido, eventoLocais, eventoMapaAssentos, eventoOfertas, eventoPagamentos, eventoParticipantes, eventoPedidos, eventoPoliticas, eventoReservas, eventoSessoes, eventoTiposIngresso, eventoTokensConsulta, eventos, gt, inArray, isNull, lte, or, schema, type Database } from "@essencia/db";
 import { finalizarPedidoSchema, meusIngressosSchema, pagamentoEmbutidoSchema, reservaPublicaSchema, type FinalizarPedidoInput, type MeusIngressosInput, type PagamentoEmbutidoInput, type ReservaPublicaInput } from "@essencia/shared/schemas";
 import { calcularPrecoPedido, type OfertaPreco } from "@essencia/shared/eventos/precos";
 import type { ConsultaPedidoPublica, FinalizacaoPublicaResult, MeusIngressosResult, PagamentoEmbutidoResult, PedidoComIngressos, PedidoPublicoResult, PoliticaPublica, ReservaPublicaResult } from "@essencia/shared/types";
@@ -9,6 +9,8 @@ import { gerarTokenAcesso, hashTokenAcesso, validadeAcesso } from "./acesso-pedi
 
 const fail = (code: string, message: string) => new BadRequestException({ code, message });
 const validated = <T>(schema: { safeParse(value: unknown): { success: boolean; data?: T } }, value: unknown): T => { const result = schema.safeParse(value); if (!result.success) throw fail("VALIDATION_ERROR", "Dados inválidos"); return result.data as T; };
+const eventoLocaisTabela = (eventoLocais as any) ?? (schema as any)?.eventoLocais ?? { id: "evento_locais.id" };
+const eventoTokensConsultaTabela = (eventoTokensConsulta as any) ?? (schema as any)?.eventoTokensConsulta ?? { __eventoTokensConsulta: true, tokenHash: "evento_tokens_consulta.token_hash", orderId: "evento_tokens_consulta.order_id", expiresAt: "evento_tokens_consulta.expires_at" };
 
 @Injectable()
 export class EventosPublicSalesService {
@@ -287,13 +289,17 @@ export class EventosPublicSalesService {
 
   async obterIngressos(orderNumber: string, acesso: string): Promise<PedidoComIngressos> {
     const order = await this.getOrder(orderNumber, this.db);
-    const tokenHash = hashTokenAcesso(acesso);
-    const tokenHashColumn = (eventoTokensConsulta as any)?.tokenHash;
-    const tokenRows = await this.db.select().from(eventoTokensConsulta).where(tokenHashColumn ? eq(tokenHashColumn, tokenHash) : undefined);
-    const token = (tokenRows as any[]).find((candidate) => candidate.tokenHash === tokenHash);
-    if (!token || token.orderId !== order.id || (token.expiresAt && token.expiresAt <= new Date())) {
+    if (typeof acesso !== "string" || acesso.length === 0) {
       throw new NotFoundException({ code: "ORDER_NOT_FOUND", message: "Pedido não encontrado" });
     }
+    const tokenHash = hashTokenAcesso(acesso);
+    const tokenRows = await this.db.select().from(eventoTokensConsultaTabela).where(and(
+      eq(eventoTokensConsultaTabela.tokenHash, tokenHash),
+      eq(eventoTokensConsultaTabela.orderId, order.id),
+      or(isNull(eventoTokensConsultaTabela.expiresAt), gt(eventoTokensConsultaTabela.expiresAt, new Date())),
+    ));
+    const token = await this.first<any>(tokenRows);
+    if (!token || token.orderId !== order.id || (token.expiresAt && token.expiresAt <= new Date())) throw new NotFoundException({ code: "ORDER_NOT_FOUND", message: "Pedido não encontrado" });
 
     const pedido = await this.pedidoResult(order, this.db);
     const tickets = ["CONFIRMADO", "USADO"].includes(order.status)
@@ -315,7 +321,7 @@ export class EventosPublicSalesService {
         title: order.event?.title ?? "",
         slug: order.event?.slug ?? "",
         imageUrl: order.event?.imageUrl ?? null,
-        locationName: order.event?.locationName ?? order.session?.locationName ?? null,
+        locationName: order.location?.name ?? order.event?.locationName ?? order.session?.locationName ?? null,
       },
       tickets,
     };
@@ -332,7 +338,7 @@ export class EventosPublicSalesService {
       const sameEmail = String(order.buyerEmail ?? "").trim().toLowerCase() === email;
       const sameOrder = !orderNumber || order.orderNumber === orderNumber;
       const samePhone = !phone || this.normalizePhone(String(order.buyerPhone ?? "")) === phone;
-      return sameEmail && sameOrder && samePhone && ["CONFIRMADO", "USADO"].includes(order.status);
+      return sameEmail && sameOrder && samePhone && ["CONFIRMADO", "USADO"].includes(order.status) && row.event?.status === "PUBLICADO" && row.session?.status === "PUBLICADA";
     });
     if (!encontrados.length) throw new NotFoundException({ code: "ORDER_NOT_FOUND", message: "Não encontramos um pedido com esses dados" });
 
@@ -341,7 +347,7 @@ export class EventosPublicSalesService {
       const order = row.order ?? row;
       const session = row.session ?? {};
       const { token, hash } = gerarTokenAcesso();
-      await this.db.insert(eventoTokensConsulta).values({ orderId: order.id, email: order.buyerEmail, tokenHash: hash, expiresAt: validadeAcesso(session.endsAt) });
+      await this.db.insert(eventoTokensConsultaTabela).values({ orderId: order.id, email: order.buyerEmail, tokenHash: hash, expiresAt: validadeAcesso(session.endsAt) });
       pedidos.push({ orderNumber: order.orderNumber, eventTitle: row.event?.title ?? "", sessionStartsAt: session.startsAt, acesso: token });
     }
     return { pedidos };
@@ -349,7 +355,7 @@ export class EventosPublicSalesService {
 
   async consultarPedido(orderNumber: string, db: any = this.db): Promise<ConsultaPedidoPublica> { const order = await this.getOrder(orderNumber, db); if (order.expiresAt && order.expiresAt <= new Date() && !["CONFIRMADO", "USADO"].includes(order.status)) throw new NotFoundException({ code: "ORDER_NOT_FOUND", message: "Pedido não encontrado" }); return this.pedidoResult(order, db); }
   private async pedidoResult(order: any, db: any): Promise<PedidoPublicoResult> { if (order.event?.status !== "PUBLICADO" || order.session?.status !== "PUBLICADA") throw new NotFoundException({ code: "ORDER_NOT_FOUND", message: "Pedido não encontrado" }); const rows = await db.select({ item: eventoItensPedido, inventory: eventoInventarioAssentos, seat: eventoMapaAssentos, ticket: eventoTiposIngresso }).from(eventoItensPedido).innerJoin(eventoInventarioAssentos, eq(eventoInventarioAssentos.id, eventoItensPedido.inventorySeatId)).innerJoin(eventoMapaAssentos, eq(eventoMapaAssentos.id, eventoInventarioAssentos.seatId)).innerJoin(eventoTiposIngresso, eq(eventoTiposIngresso.id, eventoItensPedido.ticketTypeId)).where(eq(eventoItensPedido.orderId, order.id)); const snapshot = order.appliedOffer ?? rows.find((row: any) => row.item?.pricingEvidence?.offerSnapshot)?.item?.pricingEvidence?.offerSnapshot ?? null; return { orderNumber: order.orderNumber, status: order.status, eventTitle: order.event?.title ?? "", eventSlug: order.event?.slug ?? "", sessionId: order.session?.id ?? order.sessionId, expiresAt: order.expiresAt ?? null, session: { startsAt: order.session?.startsAt, endsAt: order.session?.endsAt }, subtotalCents: order.subtotalCents ?? order.totalCents, discountCents: order.discountCents ?? 0, totalCents: order.totalCents, appliedOffer: snapshot, items: rows.map((row: any) => ({ seatId: row.inventory?.seatId, ticketTypeId: row.item?.ticketTypeId, unitPriceCents: row.item?.unitPriceCents, totalPriceCents: row.item?.totalPriceCents, rowLabel: row.seat?.rowLabel ?? row.inventory?.rowLabel ?? "", seatNumber: row.seat?.seatNumber ?? row.inventory?.seatNumber ?? "", ticketTypeName: row.ticket?.name ?? row.item?.ticketTypeName ?? "" })) }; }
-  private async getOrder(orderNumber: string, db: any, lock = false): Promise<any> { const query = db.select({ order: eventoPedidos, event: eventos, session: eventoSessoes }).from(eventoPedidos).innerJoin(eventos, eq(eventos.id, eventoPedidos.eventId)).innerJoin(eventoSessoes, eq(eventoSessoes.id, eventoPedidos.sessionId)).where(eq(eventoPedidos.orderNumber, orderNumber)); const result = await this.first<any>(lock ? await this.lockRows(query) : query); if (!result) throw new NotFoundException({ code: "ORDER_NOT_FOUND", message: "Pedido não encontrado" }); return result.order ? { ...result.order, event: result.event, session: result.session } : result; }
+  private async getOrder(orderNumber: string, db: any, lock = false): Promise<any> { let query = db.select({ order: eventoPedidos, event: eventos, session: eventoSessoes, location: eventoLocaisTabela }).from(eventoPedidos).innerJoin(eventos, eq(eventos.id, eventoPedidos.eventId)).innerJoin(eventoSessoes, eq(eventoSessoes.id, eventoPedidos.sessionId)); if (typeof query.leftJoin === "function") query = query.leftJoin(eventoLocaisTabela, eq(eventoLocaisTabela.id, eventoSessoes.locationId)); query = query.where(eq(eventoPedidos.orderNumber, orderNumber)); const result = await this.first<any>(lock ? await this.lockRows(query) : query); if (!result) throw new NotFoundException({ code: "ORDER_NOT_FOUND", message: "Pedido não encontrado" }); return result.order ? { ...result.order, event: result.event, session: result.session, location: result.location } : result; }
   private updatedExactlyOne(result: any): boolean { if (typeof result?.count === "number") return result.count === 1; return Array.isArray(result) ? result.length === 1 : result?.rowCount === 1; }
 
   async liberarPedido(orderNumber: string): Promise<{ liberado: true }> {
