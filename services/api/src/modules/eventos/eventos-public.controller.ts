@@ -32,6 +32,9 @@ export class EventosPublicController {
   @Post("pedidos/:orderNumber/checkout")
   @Throttle({ strict: { limit: 20, ttl: 60000 } })
   checkout(@Param("orderNumber") orderNumber: string, @Body() input: unknown) { return this.sales.iniciarCheckout(orderNumber, input); }
+  @Post("pedidos/:orderNumber/liberar")
+  @Throttle({ strict: { limit: 20, ttl: 60000 } })
+  liberar(@Param("orderNumber") orderNumber: string) { return this.sales.liberarPedido(orderNumber); }
   @Get("pedidos/:orderNumber")
   @Throttle({ strict: { limit: 60, ttl: 60000 } })
   consultarPedido(@Param("orderNumber") orderNumber: string) { return this.sales.consultarPedido(orderNumber); }

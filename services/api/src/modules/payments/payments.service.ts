@@ -439,6 +439,30 @@ export class PaymentsService {
   }
 
   /**
+   * Encerra uma Checkout Session aberta e informa o estado observado no Stripe.
+   * Erros do provider são propagados para que o chamador não libere o pedido
+   * sem confirmar o estado da cobrança.
+   */
+  async encerrarCheckoutSessionSeAberta(
+    checkoutSessionId: string,
+  ): Promise<"expirada" | "concluida" | "encerrada"> {
+    const session = await this.stripe.checkout.sessions.retrieve(
+      checkoutSessionId,
+    );
+
+    if (session.status === "open") {
+      await this.stripe.checkout.sessions.expire(checkoutSessionId);
+      return "expirada";
+    }
+
+    if (session.status === "complete") {
+      return "concluida";
+    }
+
+    return "encerrada";
+  }
+
+  /**
    * Atualiza metadata do PaymentIntent
    */
   async updatePaymentIntent(

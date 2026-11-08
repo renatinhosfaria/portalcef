@@ -276,6 +276,50 @@ export class EventosPublicSalesService {
   async consultarPedido(orderNumber: string, db: any = this.db): Promise<ConsultaPedidoPublica> { const order = await this.getOrder(orderNumber, db); if (order.expiresAt && order.expiresAt <= new Date() && !["CONFIRMADO", "USADO"].includes(order.status)) throw new NotFoundException({ code: "ORDER_NOT_FOUND", message: "Pedido não encontrado" }); return this.pedidoResult(order, db); }
   private async pedidoResult(order: any, db: any): Promise<PedidoPublicoResult> { if (order.event?.status !== "PUBLICADO" || order.session?.status !== "PUBLICADA") throw new NotFoundException({ code: "ORDER_NOT_FOUND", message: "Pedido não encontrado" }); const rows = await db.select({ item: eventoItensPedido, inventory: eventoInventarioAssentos, seat: eventoMapaAssentos, ticket: eventoTiposIngresso }).from(eventoItensPedido).innerJoin(eventoInventarioAssentos, eq(eventoInventarioAssentos.id, eventoItensPedido.inventorySeatId)).innerJoin(eventoMapaAssentos, eq(eventoMapaAssentos.id, eventoInventarioAssentos.seatId)).innerJoin(eventoTiposIngresso, eq(eventoTiposIngresso.id, eventoItensPedido.ticketTypeId)).where(eq(eventoItensPedido.orderId, order.id)); const snapshot = order.appliedOffer ?? rows.find((row: any) => row.item?.pricingEvidence?.offerSnapshot)?.item?.pricingEvidence?.offerSnapshot ?? null; return { orderNumber: order.orderNumber, status: order.status, eventTitle: order.event?.title ?? "", eventSlug: order.event?.slug ?? "", sessionId: order.session?.id ?? order.sessionId, expiresAt: order.expiresAt ?? null, session: { startsAt: order.session?.startsAt, endsAt: order.session?.endsAt }, subtotalCents: order.subtotalCents ?? order.totalCents, discountCents: order.discountCents ?? 0, totalCents: order.totalCents, appliedOffer: snapshot, items: rows.map((row: any) => ({ seatId: row.inventory?.seatId, ticketTypeId: row.item?.ticketTypeId, unitPriceCents: row.item?.unitPriceCents, totalPriceCents: row.item?.totalPriceCents, rowLabel: row.seat?.rowLabel ?? row.inventory?.rowLabel ?? "", seatNumber: row.seat?.seatNumber ?? row.inventory?.seatNumber ?? "", ticketTypeName: row.ticket?.name ?? row.item?.ticketTypeName ?? "" })) }; }
   private async getOrder(orderNumber: string, db: any): Promise<any> { const result = await this.first<any>(db.select({ order: eventoPedidos, event: eventos, session: eventoSessoes }).from(eventoPedidos).innerJoin(eventos, eq(eventos.id, eventoPedidos.eventId)).innerJoin(eventoSessoes, eq(eventoSessoes.id, eventoPedidos.sessionId)).where(eq(eventoPedidos.orderNumber, orderNumber))); if (!result) throw new NotFoundException({ code: "ORDER_NOT_FOUND", message: "Pedido não encontrado" }); return result.order ? { ...result.order, event: result.event, session: result.session } : result; }
+
+  async liberarPedido(orderNumber: string): Promise<{ liberado: true }> {
+    const order = await this.getOrder(orderNumber, this.db);
+    if (["CANCELADO", "EXPIRADO"].includes(order.status)) return { liberado: true };
+    if (["CONFIRMADO", "USADO"].includes(order.status)) {
+      throw new ConflictException({ code: "PAYMENT_ALREADY_COMPLETED" });
+    }
+
+    const payment = await this.first<any>(
+      this.db.select().from(eventoPagamentos).where(eq(eventoPagamentos.orderId, order.id)),
+    );
+    if (payment?.stripeCheckoutSessionId) {
+      if (!this.paymentsService) {
+        throw new ServiceUnavailableException({ code: "CHECKOUT_UNAVAILABLE", message: "Checkout ainda indisponível" });
+      }
+      const estado = await this.paymentsService.encerrarCheckoutSessionSeAberta(payment.stripeCheckoutSessionId);
+      if (estado === "concluida") {
+        throw new ConflictException({ code: "PAYMENT_ALREADY_COMPLETED" });
+      }
+    }
+
+    await this.db.transaction(async (tx: any) => {
+      const current = await this.getOrder(orderNumber, tx);
+      if (["CANCELADO", "EXPIRADO"].includes(current.status)) return;
+      if (["CONFIRMADO", "USADO"].includes(current.status)) {
+        throw new ConflictException({ code: "PAYMENT_ALREADY_COMPLETED" });
+      }
+      const now = new Date();
+      await tx.update(eventoInventarioAssentos)
+        .set({ status: "DISPONIVEL", reservationExpiresAt: null, reservedByOrderId: null, updatedAt: now })
+        .where(and(eq(eventoInventarioAssentos.status, "RESERVADO"), eq(eventoInventarioAssentos.reservedByOrderId, current.id)));
+      await tx.update(eventoReservas)
+        .set({ status: "LIBERADA", releasedAt: now, updatedAt: now })
+        .where(and(eq(eventoReservas.orderId, current.id), eq(eventoReservas.status, "ATIVA")));
+      await tx.update(eventoPagamentos)
+        .set({ status: "EXPIRADO", processedAt: now, updatedAt: now })
+        .where(and(eq(eventoPagamentos.orderId, current.id), eq(eventoPagamentos.status, "PENDENTE")));
+      await tx.update(eventoPedidos)
+        .set({ status: "CANCELADO", cancelledAt: now, cancellationReason: "Lugares liberados pelo comprador", updatedAt: now })
+        .where(eq(eventoPedidos.id, current.id));
+    });
+    return { liberado: true };
+  }
+
   async liberarReservasExpiradas(now = new Date()) {
     return this.db.transaction(async (tx: any) => {
       const expired = await tx.select().from(eventoReservas).where(and(eq(eventoReservas.status, "ATIVA"), lte(eventoReservas.expiresAt, now)));

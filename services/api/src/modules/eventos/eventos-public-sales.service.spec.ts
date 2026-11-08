@@ -1,5 +1,5 @@
 import { EventosPublicSalesService } from "./eventos-public-sales.service";
-import { eventoAceites, eventoParticipantes, eventoTokensConsulta } from "@essencia/db";
+import { eventoAceites, eventoInventarioAssentos, eventoPagamentos, eventoPedidos, eventoParticipantes, eventoReservas, eventoTokensConsulta } from "@essencia/db";
 import { hashTokenAcesso } from "./acesso-pedido";
 
 describe("EventosPublicSalesService - contratos públicos", () => {
@@ -15,6 +15,49 @@ describe("EventosPublicSalesService - contratos públicos", () => {
 
   it("falha fechado no checkout e nunca devolve URL do cliente", async () => {
     await expect(service().iniciarCheckout("ABC123DEF456", { successUrl: "https://ok.example/sucesso", cancelUrl: "https://ok.example/cancelar", idempotencyKey: "checkout-123456" })).rejects.toMatchObject({ response: { code: "CHECKOUT_UNAVAILABLE" } });
+  });
+
+  it("libera assentos, reservas, pagamento e cancela o pedido", async () => {
+    const db = liberarPedidoDb({
+      order: { id: "order-liberar", orderNumber: "ABC123DEF456", status: "AGUARDANDO_PAGAMENTO" },
+      payment: { id: "payment-1", orderId: "order-liberar", status: "PENDENTE", stripeCheckoutSessionId: null },
+      inventories: [{ id: "inventory-1", status: "RESERVADO", reservedByOrderId: "order-liberar" }],
+      reservations: [{ id: "reservation-1", orderId: "order-liberar", status: "ATIVA" }],
+    });
+
+    await expect(new EventosPublicSalesService({ db } as any).liberarPedido("ABC123DEF456")).resolves.toEqual({ liberado: true });
+    expect(db.inventory[0]).toMatchObject({ status: "DISPONIVEL", reservedByOrderId: null, reservationExpiresAt: null });
+    expect(db.reservations[0]).toMatchObject({ status: "LIBERADA", releasedAt: expect.any(Date) });
+    expect(db.payment).toMatchObject({ status: "EXPIRADO" });
+    expect(db.order).toMatchObject({ status: "CANCELADO", cancellationReason: "Lugares liberados pelo comprador" });
+  });
+
+  it("recusa sem mutar quando a Stripe diz que o pagamento foi concluído", async () => {
+    const db = liberarPedidoDb({
+      order: { id: "order-pago", orderNumber: "ABC123DEF456", status: "AGUARDANDO_PAGAMENTO" },
+      payment: { id: "payment-pago", orderId: "order-pago", status: "PENDENTE", stripeCheckoutSessionId: "cs_pago" },
+      inventories: [{ id: "inventory-pago", status: "RESERVADO", reservedByOrderId: "order-pago" }],
+      reservations: [{ id: "reservation-pago", orderId: "order-pago", status: "ATIVA" }],
+    });
+    const payments = { encerrarCheckoutSessionSeAberta: jest.fn().mockResolvedValue("concluida") };
+
+    await expect(new EventosPublicSalesService({ db } as any, payments as any).liberarPedido("ABC123DEF456")).rejects.toMatchObject({ response: { code: "PAYMENT_ALREADY_COMPLETED" } });
+    expect(payments.encerrarCheckoutSessionSeAberta).toHaveBeenCalledWith("cs_pago");
+    expect(db.mutations).toBe(0);
+  });
+
+  it("recusa pedido confirmado", async () => {
+    const db = liberarPedidoDb({ order: { id: "order-confirmado", orderNumber: "ABC123DEF456", status: "CONFIRMADO" } });
+
+    await expect(new EventosPublicSalesService({ db } as any).liberarPedido("ABC123DEF456")).rejects.toMatchObject({ response: { code: "PAYMENT_ALREADY_COMPLETED" } });
+    expect(db.mutations).toBe(0);
+  });
+
+  it("repetir a liberação de pedido cancelado não muda nada", async () => {
+    const db = liberarPedidoDb({ order: { id: "order-cancelado", orderNumber: "ABC123DEF456", status: "CANCELADO" } });
+
+    await expect(new EventosPublicSalesService({ db } as any).liberarPedido("ABC123DEF456")).resolves.toEqual({ liberado: true });
+    expect(db.mutations).toBe(0);
   });
 
   it("envia ao Stripe as linhas persistidas do pedido com desconto e fecha em R$ 382,50", async () => {
@@ -528,6 +571,48 @@ function checkoutDb(order: any, rows: any[]) {
     },
     insert: (_table: any) => ({ values: (payload: any) => { db.paymentPayload = payload; return Promise.resolve([]); } }),
     update: () => ({ set: (payload: any) => ({ where: async () => { if (payload.expectedAmountCents !== undefined) db.paymentPayload = payload; return []; } }) }),
+  };
+  return db;
+}
+
+function liberarPedidoDb(config: { order: any; payment?: any; inventories?: any[]; reservations?: any[] }) {
+  const db: any = {
+    order: config.order,
+    payment: config.payment ?? null,
+    inventory: config.inventories ?? [],
+    reservations: config.reservations ?? [],
+    mutations: 0,
+    transaction: async (fn: any) => fn(db),
+  };
+  db.select = () => {
+    let table: unknown;
+    const chain: any = {
+      from: (selected: unknown) => { table = selected; return chain; },
+      innerJoin: () => chain,
+      where: async () => {
+        if (table === eventoPedidos) return [{ order: db.order, event: { status: "PUBLICADO" }, session: { status: "PUBLICADA" } }];
+        if (table === eventoPagamentos) return db.payment ? [db.payment] : [];
+        if (table === eventoInventarioAssentos) return db.inventory;
+        if (table === eventoReservas) return db.reservations;
+        return [];
+      },
+    };
+    return chain;
+  };
+  db.update = (table: unknown) => {
+    let payload: any;
+    const chain: any = {
+      set: (values: any) => { payload = values; return chain; },
+      where: async () => {
+        db.mutations += 1;
+        if (table === eventoInventarioAssentos) db.inventory.forEach((row: any) => { if (row.status === "RESERVADO") Object.assign(row, payload); });
+        if (table === eventoReservas) db.reservations.forEach((row: any) => { if (row.status === "ATIVA") Object.assign(row, payload); });
+        if (table === eventoPagamentos && db.payment?.status === "PENDENTE") Object.assign(db.payment, payload);
+        if (table === eventoPedidos) Object.assign(db.order, payload);
+        return [];
+      },
+    };
+    return chain;
   };
   return db;
 }
