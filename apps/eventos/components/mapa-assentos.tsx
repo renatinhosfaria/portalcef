@@ -49,13 +49,12 @@ export type MapaAssentosProps = {
   checkoutHref: string;
   ticketTypes: PublicEventTicketType[];
   offers?: OfertaPrecoPublica[];
-  initialTicketTypeId?: string;
   initialSelection?: AssentoSelecionado[];
   unavailableSeatIds?: string[];
   initialSelectionInvalid?: boolean;
 };
 
-export function MapaAssentos({ map, checkoutHref, ticketTypes, offers = [], initialTicketTypeId, initialSelection = [], unavailableSeatIds = [], initialSelectionInvalid = false }: MapaAssentosProps): React.JSX.Element {
+export function MapaAssentos({ map, checkoutHref, ticketTypes, offers = [], initialSelection = [], unavailableSeatIds = [], initialSelectionInvalid = false }: MapaAssentosProps): React.JSX.Element {
   const selecaoInicial = normalizarSelecaoInicial(map, initialSelection, unavailableSeatIds);
   const [selection, setSelection] = useState<AssentoSelecionado[]>(() => selecaoInicial);
   const [selectionInvalid, setSelectionInvalid] = useState(initialSelectionInvalid);
@@ -102,7 +101,7 @@ export function MapaAssentos({ map, checkoutHref, ticketTypes, offers = [], init
     if (!selectedIds.has(seat.id)) setSelectionInvalid(false);
     setSelection((current) => {
       if (current.some((item) => item.seatId === seat.id)) return current.filter((item) => item.seatId !== seat.id);
-      const ticketTypeId = initialTicketTypeId && ticketTypes.some((type) => type.id === initialTicketTypeId) ? initialTicketTypeId : ticketTypes[0]?.id ?? "";
+      const ticketTypeId = ticketTypes.length === 1 ? ticketTypes[0].id : "";
       return [...current, { seatId: seat.id, ticketTypeId, label: rotuloAssento(seat), accessible: seat.accessible }];
     });
   }

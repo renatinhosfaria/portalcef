@@ -39,6 +39,15 @@ function criarMapaDisponivel(quantidade: number): PublicMap {
   };
 }
 
+function escolherTipo(rotuloAssento: string, nomeTipo: RegExp) {
+  const grupo = screen.getByRole("radiogroup", { name: `Tipo de ingresso do assento ${rotuloAssento}` });
+  fireEvent.click(within(grupo).getByRole("radio", { name: nomeTipo }));
+}
+
+function hrefCheckout() {
+  return screen.getAllByText("Continuar para checkout").at(-1)?.closest("a")?.getAttribute("href") ?? null;
+}
+
 afterEach(() => cleanup());
 
 describe("mapa público de assentos", () => {
@@ -85,8 +94,7 @@ describe("mapa público de assentos", () => {
     const tipoCrianca: PublicEventTicketType = { id: "crianca", name: "Criança", description: null, priceCents: 5000, maxPerOrder: null, eligibility: null };
     render(<MapaAssentos map={criarMapaDisponivel(10)} checkoutHref="/checkout" ticketTypes={[tipoInteira, tipoCrianca]} offers={[ofertaVolume]} />);
     for (let index = 1; index <= 10; index += 1) fireEvent.click(screen.getByRole("button", { name: new RegExp(`Assento A-${index}\\b`) }));
-    const selects = screen.getAllByRole("combobox", { name: /Tipo de ingresso do assento/ });
-    for (const select of selects.slice(6)) fireEvent.change(select, { target: { value: "crianca" } });
+    for (let index = 1; index <= 10; index += 1) escolherTipo(`A-${index}`, index <= 6 ? /Inteira/ : /Criança/);
     expect(screen.getAllByText("Subtotal: R$ 260,00").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Desconto: R$ 39,00").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Total: R$ 221,00").length).toBeGreaterThan(0);
@@ -241,20 +249,67 @@ describe("mapa público de assentos", () => {
     expect(html).not.toContain('href="/checkout?');
   });
 
-  it("aplica o tipo escolhido ao selecionar dois assentos e inclui sessão no checkout", () => {
+  it("oferece a escolha do tipo como botões em cada assento e leva a escolha ao checkout", () => {
     const mapaComDoisDisponiveis: PublicMap = { ...mapa, seats: [assentos[0], { ...assentos[1], id: "s-5", seatNumber: "3", state: "available" }, assentos[2], assentos[3]] };
-    render(<MapaAssentos map={mapaComDoisDisponiveis} checkoutHref="/checkout?slug=festival" ticketTypes={[tipoInteira, tipoMeia]} initialTicketTypeId="meia" />);
+    render(<MapaAssentos map={mapaComDoisDisponiveis} checkoutHref="/checkout?slug=festival" ticketTypes={[tipoInteira, tipoMeia]} />);
     const lista = screen.getByRole("list", { name: "Assentos da fileira A" });
     fireEvent.click(within(lista).getByRole("button", { name: /Assento A-1/ }));
     fireEvent.click(within(lista).getByRole("button", { name: /Assento A-3/ }));
-    const selects = screen.getAllByRole("combobox", { name: /Tipo de ingresso do assento/ });
-    expect(selects).toHaveLength(2);
-    expect((selects[0] as HTMLSelectElement).value).toBe("meia");
-    expect((selects[1] as HTMLSelectElement).value).toBe("meia");
-    fireEvent.change(selects[0], { target: { value: "inteira" } });
-    const href = screen.getAllByRole("link", { name: "Continuar para checkout" }).at(-1)?.getAttribute("href");
-    expect(href).toContain("sessionId=sessao-1");
-    expect(href).toContain("ticketTypeIds=inteira%2Cmeia");
+
+    expect(screen.getAllByRole("radiogroup", { name: /Tipo de ingresso do assento/ })).toHaveLength(2);
+    escolherTipo("A-1", /Inteira/);
+    escolherTipo("A-3", /Meia/);
+    const grupoA3 = screen.getByRole("radiogroup", { name: "Tipo de ingresso do assento A-3" });
+    expect((within(grupoA3).getByRole("radio", { name: /Meia/ }) as HTMLInputElement).checked).toBe(true);
+    expect((within(grupoA3).getByRole("radio", { name: /Inteira/ }) as HTMLInputElement).checked).toBe(false);
+    expect(hrefCheckout()).toContain("sessionId=sessao-1");
+    expect(hrefCheckout()).toContain("ticketTypeIds=inteira%2Cmeia");
+  });
+
+  it("começa cada assento sem tipo quando há mais de um e só libera o checkout após a escolha", () => {
+    render(<MapaAssentos map={mapa} checkoutHref="/checkout" ticketTypes={[tipoInteira, tipoMeia]} />);
+    fireEvent.click(screen.getByRole("button", { name: /Assento A-1, disponível/ }));
+
+    const grupo = screen.getByRole("radiogroup", { name: "Tipo de ingresso do assento A-1" });
+    expect(within(grupo).getAllByRole("radio").some((radio) => (radio as HTMLInputElement).checked)).toBe(false);
+    expect(hrefCheckout()).toBeNull();
+    escolherTipo("A-1", /Meia/);
+    expect(hrefCheckout()).toContain("ticketTypeIds=meia");
+  });
+
+  it("marca sozinho o único tipo de ingresso da sessão", () => {
+    render(<MapaAssentos map={mapa} checkoutHref="/checkout" ticketTypes={[tipoInteira]} />);
+    fireEvent.click(screen.getByRole("button", { name: /Assento A-1, disponível/ }));
+
+    const grupo = screen.getByRole("radiogroup", { name: "Tipo de ingresso do assento A-1" });
+    expect((within(grupo).getByRole("radio", { name: /Inteira/ }) as HTMLInputElement).checked).toBe(true);
+    expect(hrefCheckout()).toContain("ticketTypeIds=inteira");
+  });
+
+  it("avisa no resumo o que falta escolher e mostra quem tem direito a cada tipo", () => {
+    render(<MapaAssentos map={mapa} checkoutHref="/checkout" ticketTypes={[tipoInteira, tipoMeia]} />);
+    fireEvent.click(screen.getByRole("button", { name: /Assento A-1, disponível/ }));
+
+    const resumo = screen.getByRole("region", { name: "Resumo dos assentos selecionados" });
+    expect(within(resumo).getByText("Escolha o tipo de ingresso de cada assento para continuar.")).toBeTruthy();
+    expect(resumo.textContent).toContain("Meia: Estudante");
+    escolherTipo("A-1", /Meia/);
+    expect(within(resumo).queryByText(/Escolha o tipo de ingresso de cada assento/)).toBeNull();
+  });
+
+  it("leva da barra fixa até o resumo enquanto faltar tipo em algum assento", () => {
+    const pendente = renderToStaticMarkup(<ResumoAssentosFixo selection={[{ seatId: "s-1", ticketTypeId: "", label: "A-1" }]} ticketTypes={[tipoInteira, tipoMeia]} checkoutHref="/checkout?assentos=s-1" onChangeTicketType={() => undefined} />);
+    expect(pendente).toMatch(/<a[^>]*href="#resumo-selecao"[^>]*>Escolha o tipo de ingresso de cada assento<\/a>/);
+
+    const completo = renderToStaticMarkup(<ResumoAssentosFixo selection={[{ seatId: "s-1", ticketTypeId: "meia", label: "A-1" }]} ticketTypes={[tipoInteira, tipoMeia]} checkoutHref="/checkout?assentos=s-1" onChangeTicketType={() => undefined} />);
+    expect(completo).not.toContain("Escolha o tipo de ingresso de cada assento");
+  });
+
+  it("aponta o link da barra fixa para o resumo da seleção", () => {
+    render(<MapaAssentos map={mapa} checkoutHref="/checkout" ticketTypes={[tipoInteira, tipoMeia]} />);
+    fireEvent.click(screen.getByRole("button", { name: /Assento A-1, disponível/ }));
+
+    expect(document.getElementById("resumo-selecao")).toBe(screen.getByRole("region", { name: "Resumo dos assentos selecionados" }));
   });
 
   it("não permite selecionar assentos indisponíveis", () => {
