@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useId, useMemo, useRef } from "react";
+import React, { useEffect, useId, useImperativeHandle, useMemo, useRef } from "react";
 import { select } from "d3-selection";
 import { zoom, zoomIdentity, type ZoomBehavior } from "d3-zoom";
 import {
@@ -11,11 +11,14 @@ import {
 } from "@essencia/shared/eventos/mapa-proposta";
 import {
   converterPontoTela,
+  type CaixaFoco,
   ESCALA_MAXIMA,
   ESCALA_MINIMA,
   transformParaFoco,
   type TransformacaoZoom,
 } from "./converter-ponto";
+
+export type { CaixaFoco, TransformacaoZoom } from "./converter-ponto";
 
 export interface LugarMapa {
   id: string;
@@ -45,8 +48,21 @@ export interface MapaEstiloBProps {
   /** Colocado num foreignObject dentro do grupo com zoom, sob os lugares. */
   fundo?: React.ReactNode;
   opacidadeFundo?: number;
+  coresDoLugar?: (lugar: LugarMapa, selecionado: boolean) => Cores;
+  rotuloDoLugar?: (lugar: LugarMapa) => string;
+  lugarDesabilitado?: (lugar: LugarMapa) => boolean;
+  escalaMinimaNumeros?: number;
+  onTransformacao?: (transformacao: TransformacaoZoom) => void;
+  controleRef?: React.Ref<ControleMapa>;
   onLugarClick?: (id: string, evento: { shiftKey: boolean }) => void;
   onFundoClick?: (ponto: { x: number; y: number }) => void;
+}
+
+export interface ControleMapa {
+  aproximar(): void;
+  afastar(): void;
+  enquadrar(): void;
+  focar(caixa: CaixaFoco): void;
 }
 
 interface Cores {
@@ -62,7 +78,7 @@ const COR_DESTAQUE = "#d97706";
 const FONTE = "var(--font-body, 'DM Sans'), system-ui, sans-serif";
 
 /** Precedência: selecionado > bloqueado > acesso externo > categoria. */
-function coresDoLugar(lugar: LugarMapa, selecionado: boolean): Cores {
+function coresPadraoDoLugar(lugar: LugarMapa, selecionado: boolean): Cores {
   if (selecionado) return { preenchimento: "#7fae2e", contorno: "#4d6a17", numero: COR_TEXTO };
   if (lugar.estado === "bloqueado") return { preenchimento: "#e4e6e1", contorno: "#c9cdc6", numero: "#69736e" };
   if (lugar.acessoExterno) return { preenchimento: "#ecfeff", contorno: "#06b6d4", numero: COR_TEXTO };
@@ -102,6 +118,12 @@ export function MapaEstiloB({
   foco,
   fundo,
   opacidadeFundo = 0.4,
+  coresDoLugar: obterCoresDoLugar,
+  rotuloDoLugar,
+  lugarDesabilitado,
+  escalaMinimaNumeros = 0,
+  onTransformacao,
+  controleRef,
   onLugarClick,
   onFundoClick,
 }: MapaEstiloBProps): React.JSX.Element {
@@ -110,6 +132,15 @@ export function MapaEstiloB({
   const grupoRef = useRef<SVGGElement | null>(null);
   const zoomRef = useRef<ZoomBehavior<SVGSVGElement, unknown> | null>(null);
   const transformacaoRef = useRef<TransformacaoZoom>({ x: 0, y: 0, k: 1 });
+  const onTransformacaoRef = useRef(onTransformacao);
+  onTransformacaoRef.current = onTransformacao;
+  const escalaMinimaNumerosRef = useRef(escalaMinimaNumeros);
+  escalaMinimaNumerosRef.current = escalaMinimaNumeros;
+
+  function atualizarVisibilidadeNumeros(svg: SVGSVGElement, k: number): void {
+    if (k < escalaMinimaNumerosRef.current) svg.setAttribute("data-numeros", "ocultos");
+    else svg.removeAttribute("data-numeros");
+  }
 
   useEffect(() => {
     const svg = svgRef.current;
@@ -123,14 +154,50 @@ export function MapaEstiloB({
         const { x, y, k } = evento.transform as TransformacaoZoom;
         transformacaoRef.current = { x, y, k };
         grupo.setAttribute("transform", `translate(${x} ${y}) scale(${k})`);
+        atualizarVisibilidadeNumeros(svg, k);
+        onTransformacaoRef.current?.({ x, y, k });
       });
     zoomRef.current = comportamento;
     select(svg).call(comportamento);
+    atualizarVisibilidadeNumeros(svg, transformacaoRef.current.k);
+    onTransformacaoRef.current?.({ ...transformacaoRef.current });
     return () => {
       select(svg).on(".zoom", null);
       zoomRef.current = null;
     };
   }, [largura, altura]);
+
+  useImperativeHandle(
+    controleRef,
+    () => ({
+      aproximar() {
+        const svg = svgRef.current;
+        const comportamento = zoomRef.current;
+        if (!svg || !comportamento) return;
+        select(svg).call(comportamento.scaleBy, 1.5);
+      },
+      afastar() {
+        const svg = svgRef.current;
+        const comportamento = zoomRef.current;
+        if (!svg || !comportamento) return;
+        select(svg).call(comportamento.scaleBy, 1 / 1.5);
+      },
+      enquadrar() {
+        const svg = svgRef.current;
+        const comportamento = zoomRef.current;
+        if (!svg || !comportamento) return;
+        select(svg).call(comportamento.transform, zoomIdentity);
+      },
+      focar(caixa: CaixaFoco) {
+        const svg = svgRef.current;
+        const comportamento = zoomRef.current;
+        if (!svg || !comportamento) return;
+        const transformacao = transformParaFoco(caixa, largura, altura);
+        select(svg).call(comportamento.transform, zoomIdentity.translate(transformacao.x, transformacao.y).scale(transformacao.k));
+      },
+    }),
+    [controleRef, largura, altura],
+  );
 
   // Depende dos valores do foco, e não da identidade do objeto: um `foco` inline
   // recriado a cada render do pai não pode reiniciar o zoom do usuário.
@@ -252,8 +319,10 @@ export function MapaEstiloB({
       preserveAspectRatio="xMidYMid meet"
       role="group"
       aria-label={rotuloAcessivel}
+      data-numeros={transformacaoRef.current.k < escalaMinimaNumeros ? "ocultos" : undefined}
       style={{ width: "100%", height: "100%", display: "block", touchAction: "none" }}
     >
+      <style>{`[data-numeros="ocultos"] .mapa-estilo-b-numero { visibility: hidden; } @media (prefers-reduced-motion: reduce) { .mapa-estilo-b-cadeirinha { transition: none !important; } }`}</style>
       <rect x={0} y={0} width={largura} height={altura} fill={COR_FUNDO} />
       <defs>
         {Array.from(recortes.values()).map((r) => (
@@ -341,22 +410,25 @@ export function MapaEstiloB({
           </text>
         ))}
         {lugares.map((lugar) => {
-          const cores = coresDoLugar(lugar, selecionados?.has(lugar.id) ?? false);
+          const cores = (obterCoresDoLugar ?? coresPadraoDoLugar)(lugar, selecionados?.has(lugar.id) ?? false);
           const recorte = recortes.get(`${arredondar(lugar.largura)}x${arredondar(lugar.altura)}`);
           const alturaBase = 0.23 * lugar.altura;
           const interativo = Boolean(onLugarClick);
+          const desabilitado = lugarDesabilitado?.(lugar) ?? false;
+          const podeInteragir = interativo && !desabilitado;
           return (
             <g
               key={lugar.id}
               data-lugar-id={lugar.id}
               transform={`translate(${lugar.x} ${lugar.y}) rotate(${lugar.rotacao})`}
               role={interativo ? "button" : "img"}
-              tabIndex={interativo ? 0 : undefined}
-              aria-label={rotuloAcessivelDoLugar(lugar)}
-              style={interativo ? { cursor: "pointer" } : undefined}
-              onClick={interativo ? (e) => onLugarClick?.(lugar.id, { shiftKey: e.shiftKey }) : undefined}
+              tabIndex={interativo ? (desabilitado ? -1 : 0) : undefined}
+              aria-disabled={desabilitado ? "true" : undefined}
+              aria-label={rotuloDoLugar?.(lugar) ?? rotuloAcessivelDoLugar(lugar)}
+              style={podeInteragir ? { cursor: "pointer" } : undefined}
+              onClick={podeInteragir ? (e) => onLugarClick?.(lugar.id, { shiftKey: e.shiftKey }) : undefined}
               onKeyDown={
-                interativo
+                podeInteragir
                   ? (e) => {
                       if (e.key === "Enter" || e.key === " ") {
                         e.preventDefault();
@@ -375,6 +447,8 @@ export function MapaEstiloB({
                 fill={cores.preenchimento}
                 stroke={cores.contorno}
                 strokeWidth={Math.max(2, lugar.altura * 0.05)}
+                className={lugar.categoria === "CADEIRANTE" ? "mapa-estilo-b-cadeirinha" : undefined}
+                style={lugar.categoria === "CADEIRANTE" ? { transition: "fill 150ms, stroke 150ms" } : undefined}
               />
               <rect
                 x={-lugar.largura / 2}
@@ -390,6 +464,7 @@ export function MapaEstiloB({
                 textAnchor="middle"
                 dominantBaseline="central"
                 style={{ fontFamily: FONTE }}
+                className="mapa-estilo-b-numero"
                 fontSize={0.5 * lugar.altura}
                 fontWeight={600}
                 fill={cores.numero}

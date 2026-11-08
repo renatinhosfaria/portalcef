@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render } from "@testing-library/react";
+import { act, createRef } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { MapaEstiloB, type LugarMapa } from "./mapa-estilo-b";
+import { MapaEstiloB, type ControleMapa, type LugarMapa } from "./mapa-estilo-b";
 
 afterEach(cleanup);
 
@@ -108,6 +109,66 @@ describe("MapaEstiloB", () => {
     expect(aoClicar).toHaveBeenCalledTimes(3);
     fireEvent.keyDown(g, { key: "a" });
     expect(aoClicar).toHaveBeenCalledTimes(3);
+  });
+
+  it("aplica coresDoLugar quando informado", () => {
+    const { container } = render(
+      <MapaEstiloB
+        {...base}
+        lugares={[lugar({ id: "a" })]}
+        coresDoLugar={() => ({ preenchimento: "#123456", contorno: "#654321", numero: "#abcdef" })}
+      />,
+    );
+    const g = container.querySelector("[data-lugar-id='a']")!;
+    expect(g.querySelector("rect")!.getAttribute("fill")).toBe("#123456");
+    expect(g.querySelector("rect")!.getAttribute("stroke")).toBe("#654321");
+    expect(g.querySelector("text")!.getAttribute("fill")).toBe("#abcdef");
+  });
+
+  it("lugar desabilitado não clica e fica fora do tab", () => {
+    const aoClicar = vi.fn();
+    const { container } = render(
+      <MapaEstiloB
+        {...base}
+        lugares={[lugar({ id: "a" })]}
+        onLugarClick={aoClicar}
+        lugarDesabilitado={() => true}
+      />,
+    );
+    const g = container.querySelector("[data-lugar-id='a']")!;
+    expect(g.getAttribute("aria-disabled")).toBe("true");
+    expect(g.getAttribute("tabindex")).toBe("-1");
+    fireEvent.click(g);
+    fireEvent.keyDown(g, { key: "Enter" });
+    fireEvent.keyDown(g, { key: " " });
+    expect(aoClicar).not.toHaveBeenCalled();
+  });
+
+  it("oculta números abaixo da escala mínima", () => {
+    const { container } = render(<MapaEstiloB {...base} lugares={[lugar({ id: "a" })]} escalaMinimaNumeros={2} />);
+    const svg = container.querySelector("svg")!;
+    expect(svg.getAttribute("data-numeros")).toBe("ocultos");
+    expect(svg.querySelector("style")?.textContent).toContain("mapa-estilo-b-numero");
+    expect(svg.querySelector("text.mapa-estilo-b-numero")).not.toBeNull();
+  });
+
+  it("informa a transformação na montagem", () => {
+    const onTransformacao = vi.fn();
+    render(<MapaEstiloB {...base} lugares={[]} onTransformacao={onTransformacao} />);
+    expect(onTransformacao).toHaveBeenCalledWith({ x: 0, y: 0, k: 1 });
+  });
+
+  it("controle enquadra de volta em k=1", () => {
+    const controle = createRef<ControleMapa>();
+    const { container } = render(<MapaEstiloB {...base} lugares={[]} controleRef={controle} />);
+    act(() => {
+      controle.current?.focar({ x: 100, y: 100, largura: 500, altura: 400 });
+    });
+    expect(container.querySelector("svg > g")!.getAttribute("transform")).not.toBe("translate(0 0) scale(1)");
+    act(() => {
+      controle.current?.enquadrar();
+    });
+    expect(container.querySelector("svg > g")!.getAttribute("transform")).toBe("translate(0 0) scale(1)");
   });
 
   it("sem onLugarClick vira imagem sem foco, e rotula sem categoria e não vender", () => {
