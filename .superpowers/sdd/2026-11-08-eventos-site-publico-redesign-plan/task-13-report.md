@@ -44,3 +44,29 @@
 - Classes azuis não foram introduzidas nos arquivos do catálogo; componentes legados de assentos e detalhe permanecem fora do escopo desta tarefa.
 
 Atualizado em: 2026-11-08
+
+## Fix round 1 — ajuste de objeto da imagem pública
+
+### Causa raiz
+
+`ImagemPublicaEvento` interpolava a prop em `object-${ajuste}`, produzindo `object-cobrir` e `object-conter`, classes que não existem no Tailwind. O fallback também não recebia a classe de ajuste.
+
+### Correção
+
+- Mapeamento explícito: `conter` para `object-contain`; qualquer outro valor suportado (`cobrir`) para `object-cover`.
+- A classe mapeada é aplicada à imagem otimizada e ao fallback textual.
+- Teste de regressão cobre os dois ajustes e o fallback.
+
+### Verificação
+
+- RED: o teste novo falhou com `Expected: "object-contain"` e HTML contendo `object-conter`.
+- GREEN: `pnpm --filter @essencia/eventos test -- components/__tests__/catalogo-eventos.test.tsx app/publico.test.tsx` — 2 arquivos, 26 testes aprovados.
+- `pnpm --filter @essencia/eventos lint` — 0 erros e 0 avisos no app.
+- `pnpm --filter @essencia/eventos typecheck` — exit 0.
+
+Arquivo alterado nesta rodada:
+
+- `apps/eventos/components/imagem-publica-evento.tsx`
+- `apps/eventos/components/__tests__/catalogo-eventos.test.tsx`
+
+Atualizado em: 2026-11-08

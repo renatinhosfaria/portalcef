@@ -6,6 +6,7 @@ import { EventoCard } from "../evento-card";
 import { CatalogoEstados } from "../catalogo-estados";
 import { CatalogoEventos } from "../catalogo-eventos";
 import { EventoDestaque } from "../catalogo/evento-destaque";
+import { ImagemPublicaEvento } from "../imagem-publica-evento";
 import { formatarDataHoraExtenso, formatarDataCurta, formatarMoeda, formatarDataPublica, formatarPrecoPublico, rotuloDisponibilidade, rotuloCurto } from "../../lib/eventos-formatters";
 
 const evento: PublicEventCard = {
@@ -61,6 +62,16 @@ describe("catálogo público", () => {
     const html = renderToStaticMarkup(<EventoDestaque event={evento} />);
     expect(html).toContain('data-testid="evento-destaque"');
     expect(html).toContain("festa.jpg");
+  });
+  it("mapeia ajuste da imagem para classes Tailwind válidas inclusive no fallback", () => {
+    const conter = renderToStaticMarkup(<ImagemPublicaEvento src="https://www.portalcef.com.br/storage/festa.jpg" alt="Festa" ajuste="conter" width={320} height={180} />);
+    const cobrir = renderToStaticMarkup(<ImagemPublicaEvento src="https://www.portalcef.com.br/storage/festa.jpg" alt="Festa" ajuste="cobrir" width={320} height={180} />);
+    const fallback = renderToStaticMarkup(<ImagemPublicaEvento src={null} alt="Festa" ajuste="conter" />);
+    expect(conter).toContain("object-contain");
+    expect(conter).not.toContain("object-conter");
+    expect(cobrir).toContain("object-cover");
+    expect(cobrir).not.toContain("object-cobrir");
+    expect(fallback).toContain("object-contain");
   });
   it("renderiza card com imagem, dados e link público", () => {
     const html = renderToStaticMarkup(<EventoCard event={evento} />);
