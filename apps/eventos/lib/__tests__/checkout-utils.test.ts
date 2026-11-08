@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
-import { lerListaQuery, montarHrefRetornoMapa } from "../checkout-utils";
+import { lerListaQuery, montarHrefRetornoMapa, montarUrlRetornoPagamento } from "../checkout-utils";
 
 describe("utilidades do checkout", () => {
   it("trata percent-encoding inválido sem lançar e marca a consulta como inválida", () => {
@@ -43,6 +43,10 @@ describe("utilidades do checkout", () => {
       seatIds: ["s-1"],
       ticketTypeIds: ["inteira"],
     })).toBe("/evento/ballet/sessao/sessao-1?assentos=s-1&ticketTypeIds=inteira");
+  });
+
+  it("monta a URL de retorno do pagamento codificando pedido e acesso", () => {
+    expect(montarUrlRetornoPagamento("ABC/123", "acesso com espaço")).toBe("https://eventos.portalcef.com.br/pedido/ABC%2F123?acesso=acesso%20com%20espa%C3%A7o");
   });
 
   it("mantém a página de sessão compatível com retorno e acesso sem parâmetros", () => {

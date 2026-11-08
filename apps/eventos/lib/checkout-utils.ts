@@ -1,3 +1,5 @@
+import { origemPublicaEventos } from "./eventos-api";
+
 export function lerListaQuery(valor?: string): { values: string[]; invalid: boolean } {
   if (!valor) return { values: [], invalid: false };
   try {
@@ -38,4 +40,8 @@ export function montarHrefRetornoMapa({
   params.set("ticketTypeIds", ticketTypeIds.join(","));
   if (motivo) params.set("conflito", motivo);
   return `/evento/${encodeURIComponent(slug)}/sessao/${encodeURIComponent(sessionId)}?${params.toString()}`;
+}
+
+export function montarUrlRetornoPagamento(orderNumber: string, acesso: string): string {
+  return `${origemPublicaEventos()}/pedido/${encodeURIComponent(orderNumber)}?acesso=${encodeURIComponent(acesso)}`;
 }
