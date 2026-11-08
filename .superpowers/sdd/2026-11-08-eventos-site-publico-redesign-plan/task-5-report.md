@@ -93,3 +93,30 @@ Arquivos alterados nesta rodada:
 - `services/api/src/modules/eventos/eventos-public-sales.service.spec.ts`
 
 Atualizado em: 2026-11-08
+
+## Fix round 2 — resultado de UPDATE do postgres-js
+
+### Causa raiz
+
+O adapter postgres-js pode devolver um `Array` vazio com `count: 1` para um `UPDATE` sem `returning()`. A checagem anterior priorizava `Array.isArray` e interpretava esse resultado como zero linhas afetadas.
+
+### Correção
+
+- `updatedExactlyOne` agora verifica `result.count === 1` antes do caso de array, preservando também resultados com `rowCount` e arrays com uma linha.
+- O teste de caminho feliz passou a simular explicitamente o formato `Object.assign([], { count: 1 })`.
+- Adicionado teste unitário que exige o reconhecimento de `count: 1`.
+
+### Verificação
+
+- RED: `pnpm --filter @essencia/api test -- eventos-public-sales --runInBand` falhou no teste de `count: 1` antes da alteração (`Expected: true / Received: false`).
+- GREEN: `pnpm --filter @essencia/api test -- payments.service eventos-public`
+  - `Test Suites: 3 passed, 3 total`
+  - `Tests: 41 passed, 41 total`
+- `pnpm --filter @essencia/api lint`: exit 0, 808 avisos e 0 erros.
+- `pnpm --filter @essencia/api typecheck`: exit 0.
+
+Arquivo de produção alterado nesta rodada:
+
+- `services/api/src/modules/eventos/eventos-public-sales.service.ts`
+
+Atualizado em: 2026-11-08

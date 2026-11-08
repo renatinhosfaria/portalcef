@@ -80,6 +80,11 @@ describe("EventosPublicSalesService - contratos públicos", () => {
     expect(db.lockedReads).toBeGreaterThan(0);
   });
 
+  it("reconhece resultado postgres-js com count de uma linha afetada", () => {
+    const service = new EventosPublicSalesService({ db: {} } as any);
+    expect((service as any).updatedExactlyOne(Object.assign([], { count: 1 }))).toBe(true);
+  });
+
   it("envia ao Stripe as linhas persistidas do pedido com desconto e fecha em R$ 382,50", async () => {
     const createCheckoutSession = jest.fn().mockResolvedValue({ checkoutSessionId: "cs-38250", checkoutUrl: "https://checkout.example/cs-38250", paymentIntentId: "pi-38250" });
     const order = { id: "order-38250", orderNumber: "ABC123DEF456", status: "RESERVADO", totalCents: 38250, buyerName: "Ana", buyerEmail: "a@b.com", buyerPhone: "11999999999", expiresAt: new Date(Date.now() + 60_000), eventId: "event-1", sessionId: "session-1" };
@@ -646,7 +651,7 @@ function liberarPedidoDb(config: { order: any; payment?: any; inventories?: any[
         if (table === eventoPagamentos && db.payment?.status === "PENDENTE") { affected = 1; Object.assign(db.payment, payload); }
         if (table === eventoPedidos && ["INICIADO", "RESERVADO", "AGUARDANDO_PAGAMENTO"].includes(db.order.status)) { affected = 1; Object.assign(db.order, payload); }
         db.mutations += affected;
-        return { rowCount: affected };
+        return Object.assign([], { count: affected });
       },
     };
     return chain;
