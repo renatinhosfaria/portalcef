@@ -82,6 +82,12 @@
       "import": "./src/eventos/precos.ts",
       "require": "./dist/eventos/precos.js",
       "default": "./dist/eventos/precos.js"
+    },
+    "./eventos/ingresso": {
+      "types": "./dist/eventos/ingresso.d.ts",
+      "import": "./src/eventos/ingresso.ts",
+      "require": "./dist/eventos/ingresso.js",
+      "default": "./dist/eventos/ingresso.js"
     }
   },
   "scripts": {

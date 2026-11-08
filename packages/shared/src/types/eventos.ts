@@ -18,3 +18,36 @@ export type ConsultaPedidoPublica = PedidoPublicoResult;
 export type ProntidaoState = "BLOQUEADOR" | "AVISO" | "OK";
 export interface ProntidaoItem { key: string; label: string; state: ProntidaoState; href?: string; message?: string; }
 export interface EventoProntidao { eventId: string; status: EventoStatus; progress: number; items: ProntidaoItem[]; }
+
+export interface PublicMapLayout {
+  largura: number;
+  altura: number;
+  rotulos: Array<{ fileira: string; x: number; y: number }>;
+  elementos: Array<{ tipo: "PALCO" | "ENTRADA" | "SAIDA"; texto: string; x: number; y: number }>;
+}
+
+export interface ItemPedidoPublico {
+  seatId: string;
+  ticketTypeId: string;
+  unitPriceCents: number;
+  totalPriceCents: number;
+  rowLabel: string;
+  seatNumber: string;
+  ticketTypeName: string;
+}
+
+export interface IngressoPublico {
+  numero: string;
+  qrPayload: string;
+  rowLabel: string;
+  seatNumber: string;
+  ticketTypeName: string;
+  participantName: string;
+  status: string;
+}
+
+export interface PagamentoEmbutidoResult { clientSecret: string; expiresAt: Date; orderNumber: string; }
+
+export interface MeusIngressosResult {
+  pedidos: Array<{ orderNumber: string; eventTitle: string; sessionStartsAt: Date; acesso: string }>;
+}
