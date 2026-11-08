@@ -1,7 +1,6 @@
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
 import { DetalheEvento } from "../detalhe-evento";
 import { agruparSessoesPorDia } from "../sessoes-evento";
 import type { PublicEventDetail, PublicEventSession } from "@essencia/shared/types";
@@ -69,23 +68,30 @@ describe("caminho público de ingresso", () => {
     expect(html).not.toContain("sessao/sem-mapa");
   });
 
-  it("oferece comprar ingressos no hero e na barra móvel para a primeira sessão vendável", () => {
+  it("leva comprar ingressos do hero e da barra móvel até as sessões quando há mais de uma vendável", () => {
     const html = renderToStaticMarkup(<DetalheEvento event={evento} sessions={[
       criarSessao({ id: "indisponivel", availability: "sold_out" }),
       criarSessao({ id: "primeira-vendavel" }),
       criarSessao({ id: "segunda-vendavel" }),
     ]} />);
-    const destino = "/evento/festival/sessao/primeira-vendavel";
 
     expect(html).toContain('id="sessoes"');
-    expect(html.match(/href="#sessoes"/g)).toHaveLength(2);
-    expect(html).toContain(`data-destino-compra="${destino}"`);
-    expect(html).not.toContain(`href="${destino}"`);
+    expect(html.match(/<a[^>]*href="#sessoes"[^>]*>Comprar ingressos<\/a>/g)).toHaveLength(2);
     expect(html.match(/Comprar ingressos/g)).toHaveLength(2);
     expect(html).toMatch(/class="[^"]*hidden[^"]*md:inline-flex/);
     expect(html).toContain("md:hidden");
     expect(html).toMatch(/(?:fixed|sticky)/);
     expect(html).toContain("pb-24");
+  });
+
+  it("leva comprar ingressos direto ao mapa quando só uma sessão está à venda", () => {
+    const html = renderToStaticMarkup(<DetalheEvento event={evento} sessions={[
+      criarSessao({ id: "esgotada", availability: "sold_out" }),
+      criarSessao({ id: "unica-vendavel" }),
+    ]} />);
+
+    expect(html.match(/<a[^>]*href="\/evento\/festival\/sessao\/unica-vendavel"[^>]*>Comprar ingressos<\/a>/g)).toHaveLength(2);
+    expect(html).not.toContain('href="#sessoes"');
   });
 
   it("não exibe CTAs de compra quando nenhuma sessão é vendável", () => {
@@ -99,32 +105,23 @@ describe("caminho público de ingresso", () => {
     expect(html).toContain('id="sessoes"');
   });
 
-  it("mantém escolhas inequívocas para vários tipos e detalhes do local", () => {
-    const html = renderToStaticMarkup(<DetalheEvento event={evento} sessions={[criarSessao({ ticketTypes: [
-      { id: "adulto", name: "Adulto", description: null, priceCents: 1000, maxPerOrder: null, eligibility: null },
-      { id: "meia", name: "Meia", description: "Com comprovante", priceCents: 500, maxPerOrder: null, eligibility: "Estudante" },
-    ] })]} />);
-    expect(html).toContain("Escolha o tipo de ingresso");
-    expect(html).toContain("ticketTypeId=adulto");
-    expect(html).toContain("ticketTypeId=meia");
-    expect(html).toContain("Sala 2");
-    expect(html).toContain("Chegue 15 min antes");
-    expect(html).toContain("Rampas disponíveis");
-  });
-
-  it("apresenta cada tipo vendável como card com preço, detalhes e ação explícita", () => {
+  it("mostra os tipos só como informação e um único botão de assentos por sessão", () => {
     const html = renderToStaticMarkup(<DetalheEvento event={evento} sessions={[criarSessao({ ticketTypes: [
       { id: "adulto", name: "Adulto", description: "Acesso à programação completa", priceCents: 1000, maxPerOrder: null, eligibility: null },
       { id: "meia", name: "Meia", description: "Com comprovante", priceCents: 500, maxPerOrder: null, eligibility: "Estudante" },
     ] })]} />);
-    expect(html).toContain("Escolher assentos");
-    expect(html.match(/Escolher assentos/g)).toHaveLength(2);
+    expect(html.match(/Escolher assentos/g)).toHaveLength(1);
+    expect(html).toContain('href="/evento/festival/sessao/sessao"');
+    expect(html).not.toContain("ticketTypeId");
+    expect(html).not.toContain("Escolha o tipo de ingresso");
     expect(html).toContain("Adulto");
     expect(html).toContain("R$ 10,00");
+    expect(html).toContain("R$ 5,00");
     expect(html).toContain("Acesso à programação completa");
     expect(html).toContain("Elegibilidade: Estudante");
-    expect(html).toContain("ticketTypeId=adulto");
-    expect(html).toContain("ticketTypeId=meia");
+    expect(html).toContain("Sala 2");
+    expect(html).toContain("Chegue 15 min antes");
+    expect(html).toContain("Rampas disponíveis");
   });
 
   it("não exibe ação explícita em sessão esgotada ou não vendável", () => {
@@ -135,20 +132,4 @@ describe("caminho público de ingresso", () => {
     expect(html).not.toContain("Escolher assentos");
   });
 
-  it("oferece tipo de ingresso quando a sessão é renderizada sem query", () => {
-    const session: PublicEventSession = {
-      id: "session-1", startsAt: new Date("2026-01-01T10:00:00Z"), endsAt: new Date("2026-01-01T12:00:00Z"), status: "PUBLICADA", capacity: 10,
-      location: null, mapId: "map-1", salesStartsAt: null, salesEndsAt: null, availability: "available",
-      ticketTypes: [{ id: "ticket-1", name: "Inteira", description: null, priceCents: 1000, maxPerOrder: 4, eligibility: null }], offers: [],
-    };
-    const html = renderToStaticMarkup(<DetalheEvento event={evento} sessions={[session]} />);
-    expect(html).toContain("Inteira");
-    expect(html).toContain("ticketTypeId=ticket-1");
-    expect(html).not.toContain("Escolha seus assentos</a>");
-    const sessionPage = readFileSync(new URL("../../app/evento/[slug]/sessao/[sessionId]/page.tsx", import.meta.url), "utf8");
-    expect(sessionPage).toContain("session?.ticketTypes.length === 1");
-    expect(sessionPage).toContain("EscolhaTipoIngresso");
-    expect(sessionPage).toContain("initialSelectionInvalid={rehidratacao.invalid}");
-    expect(sessionPage).toContain("unavailableSeatIds={rehidratacao.unavailableSeatIds}");
-  });
 });

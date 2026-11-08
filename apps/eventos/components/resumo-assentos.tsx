@@ -51,11 +51,15 @@ function formatarOferta(offers: OfertaPrecoPublica[], quantidade: number): strin
   return `${oferta.discountPercent}% de desconto a partir de ${oferta.minQuantity} lugares`;
 }
 
+function faltaEscolherTipo(selection: AssentoSelecionado[], ticketTypes: PublicEventTicketType[]): boolean {
+  return selection.some((seat) => !ticketTypes.some((type) => type.id === seat.ticketTypeId));
+}
+
 export type ResumoAssentosFixoProps = ResumoAssentosProps & { checkoutHref?: string };
 
 export function ResumoAssentosFixo({ selection, ticketTypes, offers = [], checkoutHref }: ResumoAssentosFixoProps) {
   const preco = calcularPrecoSelecao(selection, ticketTypes, offers);
-  const completo = selection.length > 0 && selection.every((seat) => ticketTypes.some((type) => type.id === seat.ticketTypeId));
+  const completo = selection.length > 0 && !faltaEscolherTipo(selection, ticketTypes);
   const href = completo ? checkoutHref : undefined;
   const mensagemOferta = formatarOferta(offers, selection.length);
 
@@ -63,6 +67,7 @@ export function ResumoAssentosFixo({ selection, ticketTypes, offers = [], checko
     <div className="mx-auto flex max-w-5xl items-center justify-between gap-3">
       <div className="min-w-0">
         <p className="truncate text-sm font-semibold text-slate-950">{selection.length ? `${selection.length} assento(s) selecionado(s)` : "Nenhum assento selecionado"}</p>
+        {selection.length > 0 && !completo && <a href="#resumo-selecao" className="block text-xs font-semibold text-amber-800 underline">Escolha o tipo de ingresso de cada assento</a>}
         {mensagemOferta && <p className="text-xs text-blue-700">{mensagemOferta}</p>}
         <p className="text-xs text-slate-600" aria-live="polite">Subtotal: {formatarPreco(preco.subtotalCents)} · Desconto: {formatarPreco(preco.discountCents)}</p>
         <p className="text-sm font-semibold text-slate-700" aria-live="polite">Total: {formatarPreco(preco.totalCents)}</p>
@@ -76,19 +81,22 @@ export function ResumoAssentos({ selection, ticketTypes, offers = [], onChangeTi
   if (!selection.length) return <p className="mt-4 text-sm text-slate-600" aria-live="polite">Nenhum assento selecionado.</p>;
   const preco = calcularPrecoSelecao(selection, ticketTypes, offers);
   const mensagemOferta = formatarOferta(offers, selection.length);
-  return <section className="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4" aria-label="Resumo dos assentos selecionados">
+  const regrasDosTipos = ticketTypes.filter((type) => type.eligibility?.trim());
+  return <section id="resumo-selecao" className="mt-5 scroll-mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4" aria-label="Resumo dos assentos selecionados">
     <h2 className="text-base font-semibold">Resumo da seleção</h2>
     <ul className="mt-3 space-y-3">
       {selection.map((seat) => <li key={seat.seatId} className="flex flex-wrap items-center justify-between gap-3">
         <span className="font-medium">Assento {seat.label ?? seat.seatId}{seat.accessible ? " · acessível" : ""}</span>
-        <label className="flex items-center gap-2 text-sm">Tipo de ingresso
-          <select value={seat.ticketTypeId} onChange={(event) => onChangeTicketType(seat.seatId, event.target.value)} aria-label={`Tipo de ingresso do assento ${seat.label ?? seat.seatId}`} className="rounded border border-slate-300 bg-white px-2 py-1">
-            <option value="">Selecione</option>
-            {ticketTypes.map((type) => <option key={type.id} value={type.id}>{type.name} · {formatarPreco(type.priceCents)}</option>)}
-          </select>
-        </label>
+        <div role="radiogroup" aria-label={`Tipo de ingresso do assento ${seat.label ?? seat.seatId}`} className="flex flex-wrap gap-2">
+          {ticketTypes.map((type) => <label key={type.id} className="cursor-pointer">
+            <input type="radio" name={`tipo-ingresso-${seat.seatId}`} value={type.id} checked={seat.ticketTypeId === type.id} onChange={() => onChangeTicketType(seat.seatId, type.id)} className="peer sr-only" />
+            <span className="inline-flex min-h-11 items-center rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800 peer-checked:border-blue-700 peer-checked:bg-blue-700 peer-checked:text-white peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-blue-700">{type.name} · {formatarPreco(type.priceCents)}</span>
+          </label>)}
+        </div>
       </li>)}
     </ul>
+    {faltaEscolherTipo(selection, ticketTypes) && <p className="mt-3 text-sm font-medium text-amber-800">Escolha o tipo de ingresso de cada assento para continuar.</p>}
+    {regrasDosTipos.length > 0 && <ul className="mt-3 space-y-1 text-xs text-slate-600">{regrasDosTipos.map((type) => <li key={type.id}>{type.name}: {type.eligibility}</li>)}</ul>}
     <div className="mt-4 space-y-1 text-right text-sm" aria-live="polite">
       {mensagemOferta && <p className="font-medium text-blue-700">{mensagemOferta}</p>}
       <p>Quantidade: {selection.length} assento(s)</p>

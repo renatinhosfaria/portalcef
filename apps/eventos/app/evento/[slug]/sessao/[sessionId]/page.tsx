@@ -1,10 +1,10 @@
-import { EscolhaTipoIngresso } from "../../../../../components/escolha-tipo-ingresso";
+import React from "react";
 import { MapaAssentos } from "../../../../../components/mapa-assentos";
 import { listarSessoesPublicas, obterMapaSessao } from "../../../../../lib/eventos-api";
 import { reidratarSelecaoAssentos } from "../../../../../components/mapa-assentos-utils";
 
 type ParametroBusca = string | string[] | undefined;
-type ParametrosSessao = { ticketTypeId?: ParametroBusca; assentos?: ParametroBusca; ticketTypeIds?: ParametroBusca; conflito?: ParametroBusca };
+type ParametrosSessao = { assentos?: ParametroBusca; ticketTypeIds?: ParametroBusca; conflito?: ParametroBusca };
 
 function primeiroParametro(value: ParametroBusca): string | undefined {
   return Array.isArray(value) ? value[0] : value;
@@ -29,14 +29,10 @@ export default async function Page({ params, searchParams }: { params: Promise<{
   const session = sessions.find((item) => item.id === sessionId);
   if (!session || session.availability !== "available" || !session.ticketTypes.length || !session.mapId) return <p role="alert" className="rounded border border-red-300 bg-red-50 p-4">Não há ingressos disponíveis para esta sessão.</p>;
 
-  const requestedTicketTypeId = session.ticketTypes.find((type) => type.id === primeiroParametro(query.ticketTypeId))?.id;
-  const selectedTicketTypeId = requestedTicketTypeId || (session?.ticketTypes.length === 1 ? session.ticketTypes[0].id : undefined);
   const seatIdsFromUrl = separarIds(query.assentos);
   const ticketTypeIdsFromUrl = separarIds(query.ticketTypeIds);
   const conflitoDisponibilidade = primeiroParametro(query.conflito) === "disponibilidade";
   const hasSelectionInUrl = seatIdsFromUrl.length > 0;
-  if (!selectedTicketTypeId && !hasSelectionInUrl) return <EscolhaTipoIngresso eventSlug={slug} sessionId={sessionId} ticketTypes={session.ticketTypes} />;
-
   const map = await obterMapaSessao(sessionId);
   const rehidratacaoBase = hasSelectionInUrl || conflitoDisponibilidade
     ? reidratarSelecaoAssentos(map, seatIdsFromUrl, ticketTypeIdsFromUrl)
@@ -44,5 +40,5 @@ export default async function Page({ params, searchParams }: { params: Promise<{
   const rehidratacao = conflitoDisponibilidade && rehidratacaoBase.unavailableSeatIds.length > 0
     ? { ...rehidratacaoBase, invalid: true }
     : rehidratacaoBase;
-  return <><h1 className="text-2xl font-bold">Escolha seus assentos</h1><p className="my-2 text-slate-600">Você poderá escolher o tipo de ingresso de cada assento no resumo.</p><p className="my-4 text-slate-600">Assentos cinza estão indisponíveis. No celular, comece pela lista e escolha uma fileira para encontrar seu lugar.</p><MapaAssentos map={map} checkoutHref={`/checkout?slug=${encodeURIComponent(slug)}`} ticketTypes={session.ticketTypes} offers={session.offers} initialTicketTypeId={selectedTicketTypeId} initialSelection={rehidratacao.selection} unavailableSeatIds={rehidratacao.unavailableSeatIds} initialSelectionInvalid={rehidratacao.invalid} /></>;
+  return <><h1 className="text-2xl font-bold">Escolha seus assentos</h1><p className="my-2 text-slate-600">Escolha os lugares e, depois, defina no resumo o tipo de ingresso de cada assento.</p><p className="my-4 text-slate-600">Assentos cinza estão indisponíveis. No celular, comece pela lista e escolha uma fileira para encontrar seu lugar.</p><MapaAssentos map={map} checkoutHref={`/checkout?slug=${encodeURIComponent(slug)}`} ticketTypes={session.ticketTypes} offers={session.offers} initialSelection={rehidratacao.selection} unavailableSeatIds={rehidratacao.unavailableSeatIds} initialSelectionInvalid={rehidratacao.invalid} /></>;
 }

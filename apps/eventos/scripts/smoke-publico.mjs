@@ -184,7 +184,7 @@ async function exercitarViewport(browser, nome, viewport) {
 
   // Aceite integrado: a vitrine lê a oferta, calcula a prévia para 9/10
   // lugares e mantém a seleção mista sem reservar antes do CTA.
-  await acessar("/evento/ballet/sessao/s1?ticketTypeId=t1");
+  await acessar("/evento/ballet/sessao/s1");
   await garantirLista();
   const listaOferta = pagina.getByRole("list", { name: "Assentos da fileira A" });
   const selecionarAssento = async (numero) => {
@@ -192,29 +192,37 @@ async function exercitarViewport(browser, nome, viewport) {
     if (!await botao.count()) throw new Error(`${nome}: assento A-${numero} ausente no mock de aceite`);
     await botao.click();
   };
+  const escolherTipo = async (numero, tipo) => {
+    await pagina.getByRole("radiogroup", { name: `Tipo de ingresso do assento A-${numero}`, exact: true }).getByText(tipo, { exact: false }).click();
+  };
   for (const numero of [1, 3, 4, 5, 6, 7, 8, 9, 10]) await selecionarAssento(numero);
+  // Assentos começam sem tipo: o checkout só libera depois da escolha.
+  if (await pagina.getByText("Continuar para checkout").last().getAttribute("href") || !await pagina.getByText("Escolha o tipo de ingresso de cada assento para continuar.").count()) throw new Error(`${nome}: checkout liberado antes de escolher o tipo de cada assento`);
+  for (const numero of [1, 3, 4, 5, 6, 7, 8, 9, 10]) await escolherTipo(numero, "Adulto");
   const resumoOferta = pagina.getByRole("region", { name: "Resumo dos assentos selecionados" });
   const nove = await resumoOferta.innerText();
   if (!nove.includes("15% de desconto a partir de 10 lugares")) throw new Error(`${nome}: oferta pública ativa ausente`);
   if (!nove.includes("Quantidade: 9 assento(s)") || !nove.includes("Subtotal: R$ 405,00") || !nove.includes("Desconto: R$ 0,00") || !nove.includes("Total: R$ 405,00")) throw new Error(`${nome}: prévia de 9 lugares incorreta (${nove})`);
   await selecionarAssento(11);
+  await escolherTipo(11, "Adulto");
   const dezAdultos = await resumoOferta.innerText();
   if (!dezAdultos.includes("Quantidade: 10 assento(s)") || !dezAdultos.includes("Subtotal: R$ 450,00") || !dezAdultos.includes("Desconto: R$ 67,50") || !dezAdultos.includes("Total: R$ 382,50")) throw new Error(`${nome}: prévia de 10 adultos incorreta (${dezAdultos})`);
-  for (const numero of [7, 8, 9, 10]) await pagina.getByRole("combobox", { name: new RegExp(`Tipo de ingresso do assento A-${numero}`) }).selectOption("t2");
+  for (const numero of [7, 8, 9, 10]) await escolherTipo(numero, "Criança");
   const misto = await resumoOferta.innerText();
   if (!misto.includes("Subtotal: R$ 360,00") || !misto.includes("Desconto: R$ 54,00") || !misto.includes("Total: R$ 306,00")) throw new Error(`${nome}: prévia mista 6+4 incorreta (${misto})`);
   const checkoutAntesDeContinuar = pagina.getByRole("link", { name: "Continuar para checkout" }).last();
   if (!await checkoutAntesDeContinuar.getAttribute("href") || postsReserva.length) throw new Error(`${nome}: seleção de 10 lugares não habilitou o CTA sem POST de reserva`);
 
-  await acessar("/evento/ballet/sessao/s1?ticketTypeId=t1");
+  await acessar("/evento/ballet/sessao/s1");
   await garantirLista();
   const numerosVinte = [1, 3, ...Array.from({ length: 18 }, (_, index) => index + 4)];
   for (const numero of numerosVinte) await selecionarAssento(numero);
+  for (const numero of numerosVinte) await escolherTipo(numero, "Adulto");
   const vinteAssentos = await pagina.getByRole("region", { name: "Resumo dos assentos selecionados" }).innerText();
   const checkoutVinte = pagina.getByRole("link", { name: "Continuar para checkout" }).last();
   if (!vinteAssentos.includes("Quantidade: 20 assento(s)") || !await checkoutVinte.getAttribute("href") || postsReserva.length) throw new Error(`${nome}: seleção de 20 lugares não habilitou o CTA sem POST de reserva (${vinteAssentos})`);
 
-  await acessar("/evento/ballet/sessao/s1?ticketTypeId=t1");
+  await acessar("/evento/ballet/sessao/s1");
   await garantirLista();
   const listaAssentos = pagina.getByRole("list", { name: "Assentos da fileira A" });
   await listaAssentos.getByRole("button", { name: /A-3, disponível/ }).click();
@@ -224,16 +232,21 @@ async function exercitarViewport(browser, nome, viewport) {
   await pagina.waitForTimeout(30);
   await listaAssentos.getByRole("button", { name: /A-3, disponível/ }).click();
   await pagina.waitForTimeout(30);
-  await pagina.getByRole("combobox", { name: /Tipo de ingresso do assento A-3/ }).selectOption("t2");
+  await escolherTipo(1, "Adulto");
+  await escolherTipo(3, "Criança");
   const checkoutLink = pagina.getByRole("link", { name: "Continuar para checkout" }).last();
   const hrefCheckout = await checkoutLink.getAttribute("href");
-  const alinhamento = { resumo: await pagina.getByRole("region", { name: "Resumo dos assentos selecionados" }).count(), href: hrefCheckout, a1: await listaAssentos.getByText("Assento A-1").count(), a3: await listaAssentos.getByText("Assento A-3").count(), tipoA1: await pagina.getByRole("combobox", { name: /Tipo de ingresso do assento A-1/ }).inputValue(), tipoA3: await pagina.getByRole("combobox", { name: /Tipo de ingresso do assento A-3/ }).inputValue() };
+  const alinhamento = { resumo: await pagina.getByRole("region", { name: "Resumo dos assentos selecionados" }).count(), href: hrefCheckout, a1: await listaAssentos.getByText("Assento A-1").count(), a3: await listaAssentos.getByText("Assento A-3").count(), tipoA1: await pagina.getByRole("radiogroup", { name: "Tipo de ingresso do assento A-1", exact: true }).locator("input:checked").inputValue(), tipoA3: await pagina.getByRole("radiogroup", { name: "Tipo de ingresso do assento A-3", exact: true }).locator("input:checked").inputValue() };
   if (!alinhamento.resumo || !hrefCheckout?.includes("sessionId=s1") || !hrefCheckout.includes("assentos=a1%2Ca3") || !hrefCheckout.includes("ticketTypeIds=t1%2Ct2") || !alinhamento.a1 || !alinhamento.a3 || alinhamento.tipoA1 !== "t1" || alinhamento.tipoA3 !== "t2") throw new Error(`${nome}: resumo, sessão, assentos e tipos desalinhados (${JSON.stringify(alinhamento)})`);
   if (postsReserva.length) throw new Error(`${nome}: seleção acionou POST de reserva`);
   const overflowLista = await pagina.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
   if (overflowLista) throw new Error(`${nome}: overflow horizontal na lista`);
   const resumoFixo = pagina.getByRole("region", { name: "Resumo fixo da seleção" });
   if (await resumoFixo.count()) {
+    // A folga no fim da página deve deixar todo o conteúdo visível acima da
+    // barra fixa; durante a rolagem, ficar atrás dela por instantes é esperado.
+    await pagina.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    await pagina.waitForTimeout(50);
     const caixaResumo = await resumoFixo.boundingBox();
     const sobreposicao = await pagina.evaluate(() => {
       const resumo = document.querySelector('[aria-label="Resumo fixo da seleção"]')?.getBoundingClientRect();
@@ -243,7 +256,7 @@ async function exercitarViewport(browser, nome, viewport) {
         return caixa.bottom > resumo.top && caixa.top < resumo.bottom && !link.closest('[aria-label="Resumo fixo da seleção"]');
       });
     });
-    if (!caixaResumo || caixaResumo.x < 0 || caixaResumo.right > viewport.width || caixaResumo.bottom > viewport.height || sobreposicao) throw new Error(`${nome}: resumo fixo sobrepõe conteúdo ou excede a viewport`);
+    if (!caixaResumo || caixaResumo.x < 0 || caixaResumo.x + caixaResumo.width > viewport.width || caixaResumo.y + caixaResumo.height > viewport.height || sobreposicao) throw new Error(`${nome}: resumo fixo sobrepõe conteúdo ou excede a viewport`);
   }
 
   await acessar("/evento/ballet/sessao/s1?assentos=a1%2Ca2&ticketTypeIds=t1%2Ct2&conflito=disponibilidade");
