@@ -16,6 +16,7 @@ import {
   type Database,
 } from "@essencia/db";
 import { DatabaseService } from "../../common/database/database.service";
+import { gerarNumeroIngresso } from "@essencia/shared/eventos/ingresso";
 
 type ConfirmarCheckoutInput = {
   checkoutSessionId: string;
@@ -201,7 +202,7 @@ export class EventosPagamentosService {
         if (!this.changed(converted)) throw new ConflictException({ code: "RESERVATION_STATE_CHANGED", message: "Estado da reserva mudou durante a confirmação" });
         if (typeof tx.insert === "function") {
           const token = this.token(order.orderNumber, item.id);
-          await tx.insert(eventoIngressos).values({ orderId: order.id, itemId: item.id, sessionId: order.sessionId, inventorySeatId: item.inventorySeatId, participantId, status: "EMITIDO", ...token }).returning();
+          await tx.insert(eventoIngressos).values({ numero: gerarNumeroIngresso(), orderId: order.id, itemId: item.id, sessionId: order.sessionId, inventorySeatId: item.inventorySeatId, participantId, status: "EMITIDO", ...token }).returning();
         }
       }
 

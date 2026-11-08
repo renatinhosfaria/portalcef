@@ -48,6 +48,15 @@ describe("EventosPagamentosService", () => {
     expect(db.state.tickets[0].signedToken).toContain(".");
   });
 
+  it("emite ingresso com número de 8 caracteres do alfabeto", async () => {
+    const db = new FakeEventosDb();
+    const service = new EventosPagamentosService({ db } as any);
+
+    await service.confirmarCheckout({ checkoutSessionId: "cs-1", amountCents: 1_000 });
+
+    expect(db.state.tickets[0].numero).toMatch(/^[ABCDEFGHJKMNPQRSTUVWXYZ2-9]{8}$/);
+  });
+
   it("serializa duas confirmações concorrentes: uma emite e a outra recebe PAYMENT_IN_PROGRESS", async () => {
     const db = new FakeEventosDb();
     const service = new EventosPagamentosService({ db } as any);
