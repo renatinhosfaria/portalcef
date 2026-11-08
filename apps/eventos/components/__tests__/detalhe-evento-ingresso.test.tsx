@@ -2,7 +2,7 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { DetalheEvento } from "../detalhe-evento";
-import { agruparSessoesPorDia } from "../sessoes-evento";
+import { SessoesEvento, agruparSessoesPorDia } from "../sessoes-evento";
 import type { PublicEventDetail, PublicEventSession } from "@essencia/shared/types";
 
 const evento: PublicEventDetail = {
@@ -68,7 +68,7 @@ describe("caminho público de ingresso", () => {
     expect(html).not.toContain("sessao/sem-mapa");
   });
 
-  it("leva comprar ingressos do hero e da barra móvel até as sessões quando há mais de uma vendável", () => {
+  it("leva escolher assentos do hero e da barra móvel até as sessões quando há mais de uma vendável", () => {
     const html = renderToStaticMarkup(<DetalheEvento event={evento} sessions={[
       criarSessao({ id: "indisponivel", availability: "sold_out" }),
       criarSessao({ id: "primeira-vendavel" }),
@@ -76,21 +76,21 @@ describe("caminho público de ingresso", () => {
     ]} />);
 
     expect(html).toContain('id="sessoes"');
-    expect(html.match(/<a[^>]*href="#sessoes"[^>]*>Comprar ingressos<\/a>/g)).toHaveLength(2);
-    expect(html.match(/Comprar ingressos/g)).toHaveLength(2);
+    expect(html.match(/<a[^>]*href="#sessoes"[^>]*>Escolher assentos<\/a>/g)).toHaveLength(2);
+    expect(html).not.toContain("Comprar ingressos");
     expect(html).toMatch(/class="[^"]*hidden[^"]*md:inline-flex/);
     expect(html).toContain("md:hidden");
     expect(html).toMatch(/(?:fixed|sticky)/);
     expect(html).toContain("pb-24");
   });
 
-  it("leva comprar ingressos direto ao mapa quando só uma sessão está à venda", () => {
+  it("leva escolher assentos do hero direto ao mapa quando só uma sessão está à venda", () => {
     const html = renderToStaticMarkup(<DetalheEvento event={evento} sessions={[
       criarSessao({ id: "esgotada", availability: "sold_out" }),
       criarSessao({ id: "unica-vendavel" }),
     ]} />);
 
-    expect(html.match(/<a[^>]*href="\/evento\/festival\/sessao\/unica-vendavel"[^>]*>Comprar ingressos<\/a>/g)).toHaveLength(2);
+    expect(html.match(/<a[^>]*href="\/evento\/festival\/sessao\/unica-vendavel"[^>]*>Escolher assentos<\/a>/g)).toHaveLength(3);
     expect(html).not.toContain('href="#sessoes"');
   });
 
@@ -101,12 +101,12 @@ describe("caminho público de ingresso", () => {
       criarSessao({ id: "sem-tipos", ticketTypes: [] }),
     ]} />);
 
-    expect(html).not.toContain("Comprar ingressos");
+    expect(html).not.toContain("Escolher assentos");
     expect(html).toContain('id="sessoes"');
   });
 
   it("mostra os tipos só como informação e um único botão de assentos por sessão", () => {
-    const html = renderToStaticMarkup(<DetalheEvento event={evento} sessions={[criarSessao({ ticketTypes: [
+    const html = renderToStaticMarkup(<SessoesEvento eventSlug="festival" sessions={[criarSessao({ ticketTypes: [
       { id: "adulto", name: "Adulto", description: "Acesso à programação completa", priceCents: 1000, maxPerOrder: null, eligibility: null },
       { id: "meia", name: "Meia", description: "Com comprovante", priceCents: 500, maxPerOrder: null, eligibility: "Estudante" },
     ] })]} />);
