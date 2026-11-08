@@ -190,55 +190,14 @@ export class PaymentsService {
         this.configService.get<string>("LOJA_PUBLIC_URL") ||
         "https://loja.portalcef.com.br";
       const orderUrl = `${lojaPublicUrl}/pedido/${input.orderNumber}?phone=${input.customerPhone}`;
-      const minimumExpiresAtSeconds = Math.floor(Date.now() / 1000) + 30 * 60;
-      const requestedExpiresAtSeconds = Math.ceil(
-        input.expiresAt.getTime() / 1000,
-      );
-      const expiresAtSeconds = Math.max(
-        requestedExpiresAtSeconds,
-        minimumExpiresAtSeconds,
-      );
-      const metadata: Stripe.MetadataParam = input.eventOrderId
-        ? {
-            eventOrderId: input.eventOrderId,
-            orderNumber: input.orderNumber,
-          }
-        : {
-            orderId: input.orderId,
-            orderNumber: input.orderNumber,
-            customerName: input.customerName,
-            customerPhone: input.customerPhone,
-          };
+      const checkoutParams = this.montarParametrosCheckout(input);
 
       const session = await this.stripe.checkout.sessions.create({
-        mode: "payment",
-        payment_method_types: ["card", "pix"],
-        client_reference_id: input.orderNumber,
-        customer_email: input.customerEmail,
-        line_items: input.items.map((item) => ({
-          quantity: item.quantity,
-          price_data: {
-            currency: "brl",
-            unit_amount: item.unitAmount,
-            product_data: {
-              name: item.name,
-            },
-          },
-        })),
-        metadata,
-        payment_intent_data: {
-          metadata,
-        },
-        payment_method_options: {
-          pix: {
-            expires_after_seconds: 30 * 60,
-          },
-        },
+        ...checkoutParams,
         success_url:
           input.successUrl ?? `${orderUrl}&pagamento=sucesso`,
         cancel_url:
           input.cancelUrl ?? `${orderUrl}&pagamento=cancelado`,
-        expires_at: expiresAtSeconds,
       }, input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : undefined);
 
       if (!session.url) {
@@ -288,6 +247,158 @@ export class PaymentsService {
           process.env.NODE_ENV === "development" ? errorMessage : undefined,
       });
     }
+  }
+
+  /**
+   * Cria Checkout Session embutida para pagamento online.
+   */
+  async createEmbeddedCheckoutSession(
+    input: Omit<CreateCheckoutSessionInput, "successUrl" | "cancelUrl"> & {
+      returnUrl: string;
+    },
+  ): Promise<{
+    checkoutSessionId: string;
+    clientSecret: string;
+    paymentIntentId?: string;
+  }> {
+    try {
+      if (input.totalAmount < 100) {
+        throw new BadRequestException({
+          code: "INVALID_AMOUNT",
+          message: "Valor mínimo para pagamento: R$ 1,00",
+        });
+      }
+
+      if (input.items.length === 0) {
+        throw new BadRequestException({
+          code: "EMPTY_CHECKOUT",
+          message: "Checkout sem itens",
+        });
+      }
+
+      const session = await this.stripe.checkout.sessions.create(
+        {
+          ...this.montarParametrosCheckout(input),
+          ui_mode: "embedded",
+          return_url: input.returnUrl,
+        },
+        input.idempotencyKey
+          ? { idempotencyKey: input.idempotencyKey }
+          : undefined,
+      );
+
+      if (!session.client_secret) {
+        throw new InternalServerErrorException({
+          code: "CHECKOUT_CLIENT_SECRET_MISSING",
+          message: "Stripe não retornou client_secret para checkout embutido",
+        });
+      }
+
+      const paymentIntentId =
+        typeof session.payment_intent === "string"
+          ? session.payment_intent
+          : session.payment_intent?.id;
+
+      return {
+        checkoutSessionId: session.id,
+        clientSecret: session.client_secret,
+        paymentIntentId,
+      };
+    } catch (error: unknown) {
+      const stripeError =
+        error instanceof Stripe.errors.StripeError ? error : null;
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
+      const errorStack = error instanceof Error ? error.stack : undefined;
+
+      this.logger.error(
+        `Erro ao criar Checkout Session embutida: ${errorMessage}`,
+        errorStack,
+      );
+
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+
+      if (
+        error instanceof InternalServerErrorException &&
+        this.getExceptionCode(error) === "CHECKOUT_CLIENT_SECRET_MISSING"
+      ) {
+        throw error;
+      }
+
+      if (stripeError?.type === "StripeInvalidRequestError") {
+        throw new BadRequestException({
+          code: "CHECKOUT_ERROR",
+          message: errorMessage,
+        });
+      }
+
+      throw new InternalServerErrorException({
+        code: "STRIPE_ERROR",
+        message: "Erro ao iniciar pagamento online. Tente novamente.",
+        details:
+          process.env.NODE_ENV === "development" ? errorMessage : undefined,
+      });
+    }
+  }
+
+  private montarParametrosCheckout(
+    input: CreateCheckoutSessionInput,
+  ): Stripe.Checkout.SessionCreateParams {
+    const minimumExpiresAtSeconds = Math.floor(Date.now() / 1000) + 30 * 60;
+    const requestedExpiresAtSeconds = Math.ceil(
+      input.expiresAt.getTime() / 1000,
+    );
+    const expiresAtSeconds = Math.max(
+      requestedExpiresAtSeconds,
+      minimumExpiresAtSeconds,
+    );
+    const metadata: Stripe.MetadataParam = input.eventOrderId
+      ? {
+          eventOrderId: input.eventOrderId,
+          orderNumber: input.orderNumber,
+        }
+      : {
+          orderId: input.orderId,
+          orderNumber: input.orderNumber,
+          customerName: input.customerName,
+          customerPhone: input.customerPhone,
+        };
+
+    return {
+      mode: "payment",
+      payment_method_types: ["card", "pix"],
+      client_reference_id: input.orderNumber,
+      customer_email: input.customerEmail,
+      line_items: input.items.map((item) => ({
+        quantity: item.quantity,
+        price_data: {
+          currency: "brl",
+          unit_amount: item.unitAmount,
+          product_data: {
+            name: item.name,
+          },
+        },
+      })),
+      metadata,
+      payment_intent_data: {
+        metadata,
+      },
+      payment_method_options: {
+        pix: {
+          expires_after_seconds: 30 * 60,
+        },
+      },
+      expires_at: expiresAtSeconds,
+    };
+  }
+
+  private getExceptionCode(error: InternalServerErrorException): unknown {
+    const response = error.getResponse();
+    return typeof response === "object" && response !== null && "code" in response
+      ? response.code
+      : undefined;
   }
 
   /**
