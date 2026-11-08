@@ -64,3 +64,32 @@ A suíte completa da API foi executada. Resultado: 99/105 suites e 1145/1146 tes
 - A suíte completa continua sensível a tempo e memória quando executada com seus workers padrão; os testes focados e o pipeline Turbo passaram.
 
 Atualizado em: 2026-11-08
+
+## Fix round 1 — corrida durante a liberação
+
+### Causa raiz
+
+A leitura do pedido dentro da transação não usava `FOR UPDATE`, e o `UPDATE` final filtrava apenas pelo ID. Uma confirmação concorrente poderia, portanto, deixar a leitura com um status aberto e permitir que o cancelamento sobrescrevesse um pedido já confirmado.
+
+### Correção
+
+- `getOrder` agora aceita `lock` e aplica `FOR UPDATE` à leitura transacional de `liberarPedido`.
+- O `UPDATE` do pedido exige status aberto (`INICIADO`, `RESERVADO` ou `AGUARDANDO_PAGAMENTO`).
+- O resultado do `UPDATE` é validado; quando nenhuma linha é alterada, o estado é relido com lock e uma confirmação concorrente retorna `PAYMENT_ALREADY_COMPLETED` sem concluir a liberação.
+- Adicionado teste que simula confirmação durante a transação e comprova que pedido, inventário, reserva e pagamento não são mutados.
+
+### Verificação
+
+- RED: o novo teste falhou antes da correção, resolvendo `{ liberado: true }` e permitindo a mutação concorrente.
+- GREEN: `pnpm --filter @essencia/api test -- payments.service eventos-public`
+  - `Test Suites: 3 passed, 3 total`
+  - `Tests: 40 passed, 40 total`
+- `pnpm --filter @essencia/api lint`: exit 0, 806 avisos existentes/permitidos e 0 erros.
+- `pnpm --filter @essencia/api typecheck`: exit 0.
+
+Arquivos alterados nesta rodada:
+
+- `services/api/src/modules/eventos/eventos-public-sales.service.ts`
+- `services/api/src/modules/eventos/eventos-public-sales.service.spec.ts`
+
+Atualizado em: 2026-11-08

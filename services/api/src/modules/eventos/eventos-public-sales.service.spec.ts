@@ -60,6 +60,26 @@ describe("EventosPublicSalesService - contratos públicos", () => {
     expect(db.mutations).toBe(0);
   });
 
+  it("não cancela pedido quando uma confirmação ocorre durante a transação", async () => {
+    const db = liberarPedidoDb({
+      order: { id: "order-corrida", orderNumber: "ABC123DEF456", status: "AGUARDANDO_PAGAMENTO" },
+      payment: { id: "payment-corrida", orderId: "order-corrida", status: "PENDENTE", stripeCheckoutSessionId: null },
+      inventories: [{ id: "inventory-corrida", status: "RESERVADO", reservedByOrderId: "order-corrida" }],
+      reservations: [{ id: "reservation-corrida", orderId: "order-corrida", status: "ATIVA" }],
+      onTransactionOrderRead: () => {
+        db.order.status = "CONFIRMADO";
+        db.payment.status = "APROVADO";
+        db.inventory[0].status = "VENDIDO";
+        db.reservations[0].status = "CONVERTIDA";
+      },
+    });
+
+    await expect(new EventosPublicSalesService({ db } as any).liberarPedido("ABC123DEF456")).rejects.toMatchObject({ response: { code: "PAYMENT_ALREADY_COMPLETED" } });
+    expect(db.order.status).toBe("CONFIRMADO");
+    expect(db.mutations).toBe(0);
+    expect(db.lockedReads).toBeGreaterThan(0);
+  });
+
   it("envia ao Stripe as linhas persistidas do pedido com desconto e fecha em R$ 382,50", async () => {
     const createCheckoutSession = jest.fn().mockResolvedValue({ checkoutSessionId: "cs-38250", checkoutUrl: "https://checkout.example/cs-38250", paymentIntentId: "pi-38250" });
     const order = { id: "order-38250", orderNumber: "ABC123DEF456", status: "RESERVADO", totalCents: 38250, buyerName: "Ana", buyerEmail: "a@b.com", buyerPhone: "11999999999", expiresAt: new Date(Date.now() + 60_000), eventId: "event-1", sessionId: "session-1" };
@@ -575,27 +595,37 @@ function checkoutDb(order: any, rows: any[]) {
   return db;
 }
 
-function liberarPedidoDb(config: { order: any; payment?: any; inventories?: any[]; reservations?: any[] }) {
+function liberarPedidoDb(config: { order: any; payment?: any; inventories?: any[]; reservations?: any[]; onTransactionOrderRead?: () => void }) {
   const db: any = {
     order: config.order,
     payment: config.payment ?? null,
     inventory: config.inventories ?? [],
     reservations: config.reservations ?? [],
     mutations: 0,
+    lockedReads: 0,
     transaction: async (fn: any) => fn(db),
   };
+  let orderReads = 0;
   db.select = () => {
     let table: unknown;
+    let result: any[] = [];
     const chain: any = {
       from: (selected: unknown) => { table = selected; return chain; },
       innerJoin: () => chain,
-      where: async () => {
-        if (table === eventoPedidos) return [{ order: db.order, event: { status: "PUBLICADO" }, session: { status: "PUBLICADA" } }];
-        if (table === eventoPagamentos) return db.payment ? [db.payment] : [];
-        if (table === eventoInventarioAssentos) return db.inventory;
-        if (table === eventoReservas) return db.reservations;
-        return [];
+      where: () => {
+        if (table === eventoPedidos) {
+          orderReads += 1;
+          const order = config.onTransactionOrderRead && orderReads === 2 ? { ...db.order } : db.order;
+          result = [{ order, event: { status: "PUBLICADO" }, session: { status: "PUBLICADA" } }];
+          if (config.onTransactionOrderRead && orderReads === 2) config.onTransactionOrderRead();
+        } else if (table === eventoPagamentos) result = db.payment ? [db.payment] : [];
+        else if (table === eventoInventarioAssentos) result = db.inventory;
+        else if (table === eventoReservas) result = db.reservations;
+        else result = [];
+        return chain;
       },
+      for: () => { db.lockedReads += 1; return chain; },
+      then: (resolve: (value: any[]) => unknown, reject: (reason: unknown) => unknown) => Promise.resolve(result).then(resolve, reject),
     };
     return chain;
   };
@@ -604,12 +634,19 @@ function liberarPedidoDb(config: { order: any; payment?: any; inventories?: any[
     const chain: any = {
       set: (values: any) => { payload = values; return chain; },
       where: async () => {
-        db.mutations += 1;
-        if (table === eventoInventarioAssentos) db.inventory.forEach((row: any) => { if (row.status === "RESERVADO") Object.assign(row, payload); });
-        if (table === eventoReservas) db.reservations.forEach((row: any) => { if (row.status === "ATIVA") Object.assign(row, payload); });
-        if (table === eventoPagamentos && db.payment?.status === "PENDENTE") Object.assign(db.payment, payload);
-        if (table === eventoPedidos) Object.assign(db.order, payload);
-        return [];
+        let affected = 0;
+        if (table === eventoInventarioAssentos) {
+          affected = db.inventory.filter((row: any) => row.status === "RESERVADO").length;
+          db.inventory.forEach((row: any) => { if (row.status === "RESERVADO") Object.assign(row, payload); });
+        }
+        if (table === eventoReservas) {
+          affected = db.reservations.filter((row: any) => row.status === "ATIVA").length;
+          db.reservations.forEach((row: any) => { if (row.status === "ATIVA") Object.assign(row, payload); });
+        }
+        if (table === eventoPagamentos && db.payment?.status === "PENDENTE") { affected = 1; Object.assign(db.payment, payload); }
+        if (table === eventoPedidos && ["INICIADO", "RESERVADO", "AGUARDANDO_PAGAMENTO"].includes(db.order.status)) { affected = 1; Object.assign(db.order, payload); }
+        db.mutations += affected;
+        return { rowCount: affected };
       },
     };
     return chain;
