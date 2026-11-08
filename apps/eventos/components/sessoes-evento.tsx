@@ -52,7 +52,7 @@ export function hrefSessao(eventSlug: string, sessionId: string): string {
   return `/evento/${eventSlug}/sessao/${sessionId}`;
 }
 
-export function SessoesEvento({ eventSlug, sessions }: { eventSlug: string; sessions: PublicEventSession[] }): React.ReactElement {
+export function SessoesEvento({ eventSlug, sessions, mostrarAcoes = true }: { eventSlug: string; sessions: PublicEventSession[]; mostrarAcoes?: boolean }): React.ReactElement {
   if (!sessions.length) return <p className="rounded-xl border border-dashed p-5 text-slate-600">Nenhuma sessão publicada no momento.</p>;
   return <div className="space-y-6">{agruparSessoesPorDia(sessions).map((grupo) => <section key={grupo.key} aria-labelledby={`dia-${grupo.key}`}>
     <h3 id={`dia-${grupo.key}`} className="mb-3 text-lg font-semibold capitalize">{grupo.label}</h3>
@@ -65,7 +65,7 @@ export function SessoesEvento({ eventSlug, sessions }: { eventSlug: string; sess
         {session.location?.instructions && <p className="mt-2 text-sm text-slate-700"><strong>Instruções:</strong> {session.location.instructions}</p>}
         {session.location?.accessibility && <p className="mt-2 text-sm text-slate-700"><strong>Acessibilidade:</strong> {session.location.accessibility}</p>}
         <p className="mt-2 text-sm text-slate-600">{janelaDeVendas(session)}</p>
-        {session.availability === "sold_out" ? <p className="mt-4 text-sm font-medium text-rose-700">Sessão esgotada.</p> : !vendavel ? <p className="mt-4 text-sm text-amber-700">Sessão não vendável no momento.</p> : <div className="mt-4"><h4 className="mb-2 font-medium">Valores</h4><ul className="grid gap-2 sm:grid-cols-2">{tipos.map((tipo) => <li key={tipo.id} className="rounded-lg border border-slate-200 p-3"><p className="flex items-baseline justify-between gap-3"><span className="font-semibold text-slate-900">{tipo.name}</span><span className="font-semibold text-slate-900">{formatarPrecoPublico(tipo.priceCents).replace("A partir de ", "")}</span></p>{detalhesDoTipo(tipo) && <p className="mt-1 text-sm text-slate-600">{detalhesDoTipo(tipo)}</p>}</li>)}</ul><Link className="mt-4 inline-flex min-h-11 w-full items-center justify-center rounded-lg bg-blue-700 px-4 py-2 font-semibold text-white hover:bg-blue-800 sm:w-auto" href={hrefSessao(eventSlug, session.id)}>Escolher assentos</Link></div>}
+        {session.availability === "sold_out" ? <p className="mt-4 text-sm font-medium text-[var(--ink-muted)]">Sessão esgotada.</p> : !vendavel ? <p className="mt-4 text-sm text-[var(--aviso-texto)]">Sessão não vendável no momento.</p> : <div className="mt-4"><h4 className="mb-2 font-medium">Valores</h4><ul className="grid gap-2 sm:grid-cols-2">{tipos.map((tipo) => <li key={tipo.id} className="rounded-lg border border-[var(--line)] p-3"><p className="flex items-baseline justify-between gap-3"><span className="font-semibold text-[var(--ink)]">{tipo.name}</span><span className="font-semibold text-[var(--ink)]">{formatarPrecoPublico(tipo.priceCents).replace("A partir de ", "")}</span></p>{detalhesDoTipo(tipo) && <p className="mt-1 text-sm text-[var(--ink-muted)]">{detalhesDoTipo(tipo)}</p>}</li>)}</ul>{mostrarAcoes && <Link className="mt-4 inline-flex min-h-11 w-full items-center justify-center rounded-lg bg-[var(--acao)] px-4 py-2 font-semibold text-white hover:bg-[var(--acao-hover)] sm:w-auto" href={hrefSessao(eventSlug, session.id)}>Escolher assentos</Link>}</div>}
       </article>;
     })}</div>
   </section>)}</div>;

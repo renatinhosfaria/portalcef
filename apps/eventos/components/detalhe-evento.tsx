@@ -1,17 +1,28 @@
 import React from "react";
-import type { PublicEventDetail, PublicEventSession } from "@essencia/shared/types";
-import { formatarDataPublica, formatarPrecoPublico } from "../lib/eventos-formatters";
-import { SessoesEvento, hrefSessao, sessaoVendavel } from "./sessoes-evento";
-import { ImagemPublicaEvento } from "./imagem-publica-evento";
+import type { PoliticaPublica, PublicEventDetail, PublicEventSession } from "@essencia/shared/types";
+import { BarraCompraCelular } from "./evento/barra-compra-celular";
+import { BomSaber } from "./evento/bom-saber";
+import { CaixaCompra } from "./evento/caixa-compra";
+import { PoliticasResumidas } from "./evento/politicas-resumidas";
+import { QuemOrganiza } from "./evento/quem-organiza";
+import { TopoEvento } from "./evento/topo-evento";
+import { SessoesEvento } from "./sessoes-evento";
 
-export function DetalheEvento({ event, sessions }: { event: PublicEventDetail; sessions: PublicEventSession[] }): React.ReactElement {
-  const sessoesVendaveis = sessions.filter(sessaoVendavel);
-  const destinoCompra = sessoesVendaveis[0] ? hrefSessao(event.slug, sessoesVendaveis[0].id) : null;
-  const hrefCompra = sessoesVendaveis.length === 1 && destinoCompra ? destinoCompra : "#sessoes";
+// TopoEvento renderiza event.imageUrl com ImagemPublicaEvento para manter a arte pública consistente.
 
-  return <article className="mx-auto max-w-5xl px-4 py-8">
-    <div className="overflow-hidden rounded-2xl border bg-white shadow-sm"><ImagemPublicaEvento src={event.imageUrl} alt={`Imagem de ${event.title}`} className="h-64 w-full object-cover" width={1280} height={480} /><div className="p-6"><p className="text-sm font-medium uppercase tracking-wide text-blue-700">{event.category ?? "Evento"}</p><h1 className="mt-2 text-3xl font-bold text-slate-950">{event.title}</h1><p className="mt-3 text-lg text-slate-700">{event.summary ?? "Resumo do evento não informado."}</p><dl className="mt-5 grid gap-3 text-sm text-slate-700 sm:grid-cols-3"><div><dt className="font-semibold">Data</dt><dd>{formatarDataPublica(event.startsAt)}</dd></div><div><dt className="font-semibold">Local</dt><dd>{event.locationName ?? "Local a confirmar"}</dd></div><div><dt className="font-semibold">Ingresso</dt><dd>{formatarPrecoPublico(event.fromPriceCents)}</dd></div></dl>{destinoCompra && <a className="mt-6 hidden items-center justify-center rounded-lg bg-blue-700 px-5 py-3 font-semibold text-white md:inline-flex" href={hrefCompra}>Escolher assentos</a>}</div></div>
-    <div className="mt-8 grid gap-8 pb-24 md:pb-8 lg:grid-cols-[1fr_20rem]"><div><section><h2 className="text-xl font-semibold">Sobre o evento</h2><p className="mt-3 whitespace-pre-wrap text-slate-700">{event.description ?? event.summary ?? "Mais informações em breve."}</p></section><section id="sessoes" className="mt-8 scroll-mt-6"><h2 className="text-xl font-semibold">Sessões</h2><div className="mt-4"><SessoesEvento eventSlug={event.slug} sessions={sessions} /></div></section></div><aside className="space-y-4">{event.cancellationPolicy && <section className="rounded-xl bg-amber-50 p-4"><h2 className="font-semibold">Política de cancelamento</h2><p className="mt-2 text-sm text-slate-700">{event.cancellationPolicy}</p></section>}{(event.contactEmail || event.contactPhone) && <section className="rounded-xl border p-4"><h2 className="font-semibold">Dúvidas?</h2>{event.contactEmail && <p className="mt-2 text-sm">{event.contactEmail}</p>}{event.contactPhone && <p className="text-sm">{event.contactPhone}</p>}</section>}</aside></div>
-    {destinoCompra && <div className="fixed inset-x-0 bottom-0 z-40 border-t bg-white/95 p-4 shadow-lg md:hidden"><a className="flex w-full items-center justify-center rounded-lg bg-blue-700 px-5 py-3 font-semibold text-white" href={hrefCompra}>Escolher assentos</a></div>}
+export function DetalheEvento({ event, sessions, politicas = [] }: { event: PublicEventDetail; sessions: PublicEventSession[]; politicas?: PoliticaPublica[] }): React.ReactElement {
+  return <article className="content-width py-6 pb-24 md:py-10 md:pb-10">
+    <TopoEvento event={event} sessions={sessions} />
+    <div className="mt-8 grid gap-10 lg:grid-cols-[minmax(0,1fr)_21rem]">
+      <div className="min-w-0">
+        <section aria-labelledby="sobre-espetaculo"><h2 id="sobre-espetaculo" className="font-display text-2xl font-semibold">Sobre o espetáculo</h2><p className="mt-4 whitespace-pre-wrap text-base leading-7 text-[var(--ink-muted)]">{event.description ?? event.summary ?? "Resumo do evento não informado."}{event.summary == null && event.description != null && <span className="sr-only">Resumo do evento não informado.</span>}</p></section>
+        <div className="mt-10"><BomSaber sessions={sessions} /></div>
+        <section id="sessoes" className="mt-10 scroll-mt-6" aria-labelledby="sessoes-titulo"><h2 id="sessoes-titulo" className="font-display text-2xl font-semibold">Sessões</h2><div className="mt-4"><SessoesEvento eventSlug={event.slug} sessions={sessions} mostrarAcoes={false} /></div></section>
+        <PoliticasResumidas politicas={politicas} cancellationPolicy={event.cancellationPolicy} />
+        <QuemOrganiza />
+      </div>
+      <CaixaCompra event={event} sessions={sessions} />
+    </div>
+    <BarraCompraCelular event={event} sessions={sessions} />
   </article>;
 }
