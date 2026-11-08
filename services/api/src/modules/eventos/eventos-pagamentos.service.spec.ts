@@ -14,6 +14,17 @@ describe("EventosPagamentosService", () => {
     expect(db.state.inventory.status).toBe("RESERVADO");
   });
 
+  it("rejeita no webhook um valor diferente do total descontado persistido", async () => {
+    const db = new FakeEventosDb();
+    db.state.order.totalCents = 38_250;
+    db.state.payment.expectedAmountCents = 38_250;
+    const service = new EventosPagamentosService({ db } as any);
+
+    await expect(service.confirmarCheckout({ checkoutSessionId: "cs-1", amountCents: 38_249 })).rejects.toMatchObject({ response: { code: "PAYMENT_AMOUNT_MISMATCH" } });
+    expect(db.transactionCalls).toBe(0);
+    expect(db.state.inventory.status).toBe("RESERVADO");
+  });
+
   it("falha atomicamente quando uma reserva não está ativa", async () => {
     const db = new FakeEventosDb();
     db.state.reservation.status = "LIBERADA";

@@ -89,7 +89,7 @@ describe("formulário de checkout público", () => {
       ticketTypeIds={["meia"]}
       sessionId="sessao-1"
       event={{ title: "Festival da Família", startsAt: "2026-06-20T02:00:00.000Z" as unknown as Date, locationName: "Pátio central" }}
-      session={{ id: "sessao-1", startsAt: "2026-06-20T02:00:00.000Z" as unknown as Date, endsAt: "2026-06-20T04:00:00.000Z" as unknown as Date, status: "PUBLICADA", capacity: 10, location: { name: "Pátio central", address: "Rua A", room: null, instructions: null, accessibility: null }, mapId: "map-1", salesStartsAt: null, salesEndsAt: null, availability: "available", ticketTypes: [{ id: "meia", name: "Meia-entrada", description: "Com comprovante", priceCents: 500, maxPerOrder: 2, eligibility: "Estudantes" }] }}
+      session={{ id: "sessao-1", startsAt: "2026-06-20T02:00:00.000Z" as unknown as Date, endsAt: "2026-06-20T04:00:00.000Z" as unknown as Date, status: "PUBLICADA", capacity: 10, location: { name: "Pátio central", address: "Rua A", room: null, instructions: null, accessibility: null }, mapId: "map-1", salesStartsAt: null, salesEndsAt: null, availability: "available", offers: [], ticketTypes: [{ id: "meia", name: "Meia-entrada", description: "Com comprovante", priceCents: 500, maxPerOrder: 2, eligibility: "Estudantes" }] }}
       politicas={politicas}
     />);
     expect(html).toContain("Festival da Família");
@@ -98,6 +98,30 @@ describe("formulário de checkout público", () => {
     expect(html).toContain("R$ 5,00");
     expect(html).not.toContain("sessao-1");
     expect(html).not.toContain("ticketTypeId");
+  });
+
+  it("mostra a prévia pública de subtotal, desconto e total no checkout", () => {
+    const html = renderToStaticMarkup(<FormularioCheckout
+      seatIds={Array.from({ length: 10 }, (_, index) => `A-${index + 1}`)}
+      ticketTypeIds={Array.from({ length: 10 }, () => "inteira")}
+      sessionId="sessao-1"
+      session={{ id: "sessao-1", startsAt: "2026-06-20T02:00:00.000Z" as unknown as Date, endsAt: "2026-06-20T04:00:00.000Z" as unknown as Date, status: "PUBLICADA", capacity: 20, location: null, mapId: "map-1", salesStartsAt: null, salesEndsAt: null, availability: "available", offers: [{ id: "oferta-15", version: 1, name: "Grupos", minQuantity: 10, maxQuantity: null, discountPercent: 15 }], ticketTypes: [{ id: "inteira", name: "Inteira", description: null, priceCents: 1000, maxPerOrder: 20, eligibility: null }] }}
+      politicas={politicas}
+    />);
+    expect(html).toContain("<dt>Subtotal</dt><dd>R$ 100,00</dd>");
+    expect(html).toContain("<dt>Desconto</dt><dd>R$ 15,00</dd>");
+    expect(html).toContain("<dt>Total</dt><dd>R$ 85,00</dd>");
+    expect(html).toContain("15% de desconto a partir de 10 lugares");
+  });
+
+  it("não mostra mensagem de oferta quando o checkout está sem assentos", () => {
+    const html = renderToStaticMarkup(<FormularioCheckout
+      seatIds={[]}
+      ticketTypeIds={[]}
+      sessionId="sessao-1"
+      session={{ id: "sessao-1", startsAt: "2026-06-20T02:00:00.000Z" as unknown as Date, endsAt: "2026-06-20T04:00:00.000Z" as unknown as Date, status: "PUBLICADA", capacity: 20, location: null, mapId: "map-1", salesStartsAt: null, salesEndsAt: null, availability: "available", offers: [{ id: "oferta-15", version: 1, name: "Grupos", minQuantity: 10, maxQuantity: null, discountPercent: 15 }], ticketTypes: [{ id: "inteira", name: "Inteira", description: null, priceCents: 1000, maxPerOrder: 20, eligibility: null }] }}
+    />);
+    expect(html).not.toContain("15% de desconto a partir de 10 lugares");
   });
 
   it("exibe o conflito e o retorno explícito ao mapa quando um assento fica indisponível", async () => {

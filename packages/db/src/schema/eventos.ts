@@ -110,6 +110,9 @@ export const eventoOperacaoStatusEnum = [
 ] as const;
 export type EventoOperacaoStatus = (typeof eventoOperacaoStatusEnum)[number];
 
+export const eventoOfertaPricingTypeEnum = ["PERCENTUAL", "VALOR_FIXO"] as const;
+export type EventoOfertaPricingType = (typeof eventoOfertaPricingTypeEnum)[number];
+
 export const eventoIngressoStatusEnum = [
   "EMITIDO",
   "USADO",
@@ -448,8 +451,13 @@ export const eventoOfertas = pgTable(
       .references(() => eventos.id, { onDelete: "cascade" }),
     name: varchar("name", { length: 160 }).notNull(),
     minQuantity: integer("min_quantity").notNull(),
-    maxQuantity: integer("max_quantity").notNull(),
-    priceCents: integer("price_cents").notNull(),
+    maxQuantity: integer("max_quantity"),
+    pricingType: text("pricing_type", { enum: eventoOfertaPricingTypeEnum })
+      .notNull()
+      .default("VALOR_FIXO"),
+    discountPercent: integer("discount_percent"),
+    // Em ofertas legadas VALOR_FIXO, representa o preço TOTAL da faixa.
+    priceCents: integer("price_cents"),
     compatibleTicketTypeIds: jsonb("compatible_ticket_type_ids"),
     version: integer("version").notNull().default(1),
     active: boolean("active").notNull().default(true),
@@ -457,13 +465,28 @@ export const eventoOfertas = pgTable(
   },
   (table) => ({
     eventIdx: index("idx_evento_ofertas_event").on(table.eventId),
+    activeEventUnique: uniqueIndex("uq_evento_ofertas_event_active")
+      .on(table.eventId)
+      .where(sql`${table.active} = true`),
     positiveQuantity: check(
       "evento_ofertas_positive_quantity",
-      sql`${table.minQuantity} > 0 AND ${table.maxQuantity} >= ${table.minQuantity}`,
+      sql`${table.minQuantity} > 0 AND (${table.maxQuantity} IS NULL OR ${table.maxQuantity} >= ${table.minQuantity})`,
+    ),
+    validPricingType: check(
+      "evento_ofertas_valid_pricing_type",
+      sql`${table.pricingType} IN ('PERCENTUAL', 'VALOR_FIXO')`,
+    ),
+    validDiscountPercent: check(
+      "evento_ofertas_valid_discount_percent",
+      sql`${table.discountPercent} IS NULL OR (${table.discountPercent} >= 0 AND ${table.discountPercent} <= 100)`,
+    ),
+    validPricingValues: check(
+      "evento_ofertas_valid_pricing_values",
+      sql`(${table.pricingType} = 'PERCENTUAL' AND ${table.discountPercent} IS NOT NULL) OR (${table.pricingType} = 'VALOR_FIXO' AND ${table.priceCents} IS NOT NULL)`,
     ),
     nonNegativePrice: check(
       "evento_ofertas_non_negative_price",
-      sql`${table.priceCents} >= 0`,
+      sql`${table.priceCents} IS NULL OR ${table.priceCents} >= 0`,
     ),
   }),
 );
@@ -488,6 +511,12 @@ export const eventoPedidos = pgTable(
       .notNull()
       .default("INICIADO"),
     totalCents: integer("total_cents").notNull(),
+    subtotalCents: integer("subtotal_cents").default(0),
+    discountCents: integer("discount_cents").default(0),
+    appliedOfferId: uuid("applied_offer_id").references(
+      () => eventoOfertas.id,
+      { onDelete: "set null" },
+    ),
     idempotencyKey: varchar("idempotency_key", { length: 180 }).notNull(),
     finalizationIdempotencyKey: varchar("finalization_idempotency_key", { length: 180 }),
     expiresAt: timestamp("expires_at", { withTimezone: true }),
@@ -514,6 +543,14 @@ export const eventoPedidos = pgTable(
     nonNegativeTotal: check(
       "evento_pedidos_non_negative_total",
       sql`${table.totalCents} >= 0`,
+    ),
+    nonNegativeSubtotal: check(
+      "evento_pedidos_non_negative_subtotal",
+      sql`${table.subtotalCents} >= 0`,
+    ),
+    nonNegativeDiscount: check(
+      "evento_pedidos_non_negative_discount",
+      sql`${table.discountCents} >= 0`,
     ),
   }),
 );
@@ -1126,13 +1163,15 @@ export const eventoTiposIngressoRelations = relations(eventoTiposIngresso, ({ on
   orderItems: many(eventoItensPedido),
 }));
 
-export const eventoOfertasRelations = relations(eventoOfertas, ({ one }) => ({
+export const eventoOfertasRelations = relations(eventoOfertas, ({ one, many }) => ({
   event: one(eventos, { fields: [eventoOfertas.eventId], references: [eventos.id] }),
+  appliedOrders: many(eventoPedidos),
 }));
 
 export const eventoPedidosRelations = relations(eventoPedidos, ({ one, many }) => ({
   event: one(eventos, { fields: [eventoPedidos.eventId], references: [eventos.id] }),
   session: one(eventoSessoes, { fields: [eventoPedidos.sessionId], references: [eventoSessoes.id] }),
+  appliedOffer: one(eventoOfertas, { fields: [eventoPedidos.appliedOfferId], references: [eventoOfertas.id] }),
   items: many(eventoItensPedido),
   reservations: many(eventoReservas),
   participants: many(eventoParticipantes),

@@ -3,10 +3,20 @@ import { EventosPublicController } from "./eventos-public.controller";
 describe("EventosPublicController", () => {
   it("expõe as rotas públicas de políticas e vendas", () => {
     const proto = EventosPublicController.prototype as any;
+    expect(typeof proto.sessions).toBe("function");
     expect(typeof proto.politicas).toBe("function");
     expect(typeof proto.reservar).toBe("function");
     expect(typeof proto.finalizar).toBe("function");
     expect(typeof proto.checkout).toBe("function");
     expect(typeof proto.consultarPedido).toBe("function");
+  });
+
+  it("devolve a oferta percentual ativa no contrato público da sessão", async () => {
+    const sessions = [{ id: "s-ballet", offers: [{ id: "oferta-volume", version: 1, name: "Ballet em grupo", minQuantity: 10, maxQuantity: null, discountPercent: 15 }] }];
+    const service = { listarSessoesPublicas: jest.fn().mockResolvedValue(sessions) };
+    const controller = new EventosPublicController(service as any, {} as any);
+
+    await expect(controller.sessions("ballet")).resolves.toEqual(sessions);
+    expect(service.listarSessoesPublicas).toHaveBeenCalledWith("ballet");
   });
 });

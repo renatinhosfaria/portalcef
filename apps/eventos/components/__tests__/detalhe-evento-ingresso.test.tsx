@@ -17,7 +17,7 @@ describe("caminho público de ingresso", () => {
     id: "sessao", startsAt: new Date("2026-01-02T02:00:00Z"), endsAt: new Date("2026-01-02T04:00:00Z"), status: "PUBLICADA", capacity: 10,
     location: { name: "Teatro", address: "Rua A", room: "Sala 2", instructions: "Chegue 15 min antes", accessibility: "Rampas disponíveis" },
     mapId: "map-1", salesStartsAt: null, salesEndsAt: null, availability: "available",
-    ticketTypes: [{ id: "ticket-1", name: "Inteira", description: null, priceCents: 1000, maxPerOrder: 4, eligibility: null }], ...overrides,
+    ticketTypes: [{ id: "ticket-1", name: "Inteira", description: null, priceCents: 1000, maxPerOrder: 4, eligibility: null }], offers: [], ...overrides,
   });
 
   it("agrupa sessões por dia no fuso de São Paulo e ordena horários", () => {
@@ -139,7 +139,7 @@ describe("caminho público de ingresso", () => {
     const session: PublicEventSession = {
       id: "session-1", startsAt: new Date("2026-01-01T10:00:00Z"), endsAt: new Date("2026-01-01T12:00:00Z"), status: "PUBLICADA", capacity: 10,
       location: null, mapId: "map-1", salesStartsAt: null, salesEndsAt: null, availability: "available",
-      ticketTypes: [{ id: "ticket-1", name: "Inteira", description: null, priceCents: 1000, maxPerOrder: 4, eligibility: null }],
+      ticketTypes: [{ id: "ticket-1", name: "Inteira", description: null, priceCents: 1000, maxPerOrder: 4, eligibility: null }], offers: [],
     };
     const html = renderToStaticMarkup(<DetalheEvento event={evento} sessions={[session]} />);
     expect(html).toContain("Inteira");

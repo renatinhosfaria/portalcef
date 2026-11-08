@@ -372,6 +372,13 @@
       "when": 1793300000000,
       "tag": "0052_evento_mapas_gerador",
       "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1794075590548,
+      "tag": "0053_eventos_desconto_volume",
+      "breakpoints": true
     }
   ]
 }
