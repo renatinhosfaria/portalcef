@@ -244,6 +244,25 @@ describe("EventosPublicSalesService - contratos públicos", () => {
     });
   });
 
+  it("trata a colisão do INSERT interno com comprador diferente fora da transação abortada", async () => {
+    const banco = criarBancoReservaComColisao("outro@example.com");
+
+    await expect(new EventosPublicSalesService({ db: banco } as any).reservarAssentos(entradaReserva(1, "colisao-interna-outro-123456"))).rejects.toMatchObject({
+      response: { code: "IDEMPOTENCY_CONFLICT" },
+    });
+    expect(banco.colisao.insertAttempts).toBe(1);
+  });
+
+  it("repete o snapshot quando a colisão do INSERT interno pertence ao mesmo comprador", async () => {
+    const banco = criarBancoReservaComColisao("A@B.COM");
+
+    await expect(new EventosPublicSalesService({ db: banco } as any).reservarAssentos(entradaReserva(1, "colisao-interna-proprio-123456"))).resolves.toMatchObject({
+      reservationId: banco.colisao.order.id,
+      orderNumber: banco.colisao.order.orderNumber,
+    });
+    expect(banco.colisao.insertAttempts).toBe(1);
+  });
+
   it("explicita a ambiguidade quando existem várias ofertas ativas no evento", async () => {
     const ofertas = [
       { id: uuid(94), version: 1, name: "Dez", pricingType: "PERCENTUAL", minQuantity: 10, maxQuantity: null, discountPercent: 15, priceCents: null, active: true },
@@ -270,7 +289,11 @@ function entradaReserva(quantidade: number, idempotencyKey: string, misto = fals
   };
 }
 
-function criarBancoReserva(config: { quantidade: number; precoAdulto: number; precoCrianca?: number; offers: any[]; tiposMistos?: boolean; repetir?: boolean }) {
+function criarBancoReservaComColisao(buyerEmail: string) {
+  return criarBancoReserva({ quantidade: 1, precoAdulto: 1250, offers: [], colisao: { buyerEmail } });
+}
+
+function criarBancoReserva(config: { quantidade: number; precoAdulto: number; precoCrianca?: number; offers: any[]; tiposMistos?: boolean; repetir?: boolean; colisao?: { buyerEmail: string } }) {
   const event = { id: uuid(10), status: "PUBLICADO" };
   const session = { id: uuid(1), status: "PUBLICADA" };
   const tickets = [
@@ -282,15 +305,32 @@ function criarBancoReserva(config: { quantidade: number; precoAdulto: number; pr
   const itemRows: any[] = [];
   let selectCalls = 0;
   let insertCalls = 0;
+  let inTransaction = false;
+  let transactionAborted = false;
+  let externalCollisionLookupDone = false;
+  const collisionOrder: any = { id: uuid(501), orderNumber: "COLISAO123456", eventId: event.id, sessionId: session.id, buyerEmail: config.colisao?.buyerEmail, totalCents: config.precoAdulto, expiresAt: new Date(Date.now() + 60_000) };
   const mutations = { value: 0 };
   const banco: any = {
     mutations,
+    colisao: { order: collisionOrder, insertAttempts: 0 },
     configuracaoAtual: config.offers,
-    transaction: async (fn: any) => fn(banco),
+    transaction: async (fn: any) => {
+      inTransaction = true;
+      transactionAborted = false;
+      try {
+        return await fn(banco);
+      } finally {
+        inTransaction = false;
+      }
+    },
     select: () => {
+      if (inTransaction && transactionAborted) throw { code: "25P02", message: "current transaction is aborted" };
       const index = selectCalls++;
       let value: any[] = [];
-      if (config.repetir && banco.jaCriado && index >= 7) {
+      if (config.colisao && !inTransaction && !externalCollisionLookupDone) {
+        externalCollisionLookupDone = true;
+        value = [collisionOrder];
+      } else if (config.repetir && banco.jaCriado && index >= 7) {
         value = index === 7 ? [order] : itemRows.map((item) => ({ item, inventory: inventories.find((inventory) => inventory.id === item.inventorySeatId) }));
       } else if (index === 0) value = [];
       else if (index === 1) value = [{ event, session }];
@@ -304,7 +344,16 @@ function criarBancoReserva(config: { quantidade: number; precoAdulto: number; pr
     insert: () => {
       mutations.value += 1;
       insertCalls += 1;
-      return { values: (payload: any) => { if (insertCalls === 1) { Object.assign(order, payload); banco.jaCriado = true; return { returning: async () => [order] }; } if (insertCalls >= 3 && payload.ticketTypeId) itemRows.push(payload); return Promise.resolve([]); } };
+      return { values: (payload: any) => {
+        if (config.colisao && !banco.jaCriado && !payload.ticketTypeId) {
+          banco.colisao.insertAttempts += 1;
+          transactionAborted = true;
+          throw { code: "23505", constraint: "uq_evento_pedidos_idempotency_key" };
+        }
+        if (insertCalls === 1) { Object.assign(order, payload); banco.jaCriado = true; return { returning: async () => [order] }; }
+        if (insertCalls >= 3 && payload.ticketTypeId) itemRows.push(payload);
+        return Promise.resolve([]);
+      } };
     },
     update: () => { mutations.value += 1; return { set: () => ({ where: () => ({ returning: async () => [{}] }) }) }; },
   };

@@ -135,17 +135,7 @@ export class EventosPublicSalesService {
         idempotencyKey: input.idempotencyKey,
         expiresAt,
       };
-      for (let attempt = 0; attempt < 3 && !order; attempt += 1) {
-        try {
-          [order] = await tx.insert(eventoPedidos).values(valoresPedido).returning();
-        } catch (error) {
-          if (attempt === 2) {
-            const duplicate = await this.first<any>(tx.select().from(eventoPedidos).where(eq(eventoPedidos.idempotencyKey, input.idempotencyKey)));
-            if (duplicate) return this.reservaResult(tx, duplicate);
-            throw error;
-          }
-        }
-      }
+      [order] = await tx.insert(eventoPedidos).values(valoresPedido).returning();
       if (!order) throw new ConflictException({ code: "ORDER_NOT_CREATED", message: "Não foi possível criar o pedido" });
       order = { ...valoresPedido, ...order, subtotalCents: order.subtotalCents ?? preco.subtotalCents, discountCents: order.discountCents ?? preco.discountCents, appliedOfferId: order.appliedOfferId ?? preco.appliedOffer?.id ?? null, totalCents: order.totalCents ?? preco.totalCents };
 
