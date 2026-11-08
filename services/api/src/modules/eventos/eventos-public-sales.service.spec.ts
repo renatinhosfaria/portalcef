@@ -1,4 +1,6 @@
 import { EventosPublicSalesService } from "./eventos-public-sales.service";
+import { eventoAceites, eventoParticipantes, eventoTokensConsulta } from "@essencia/db";
+import { hashTokenAcesso } from "./acesso-pedido";
 
 describe("EventosPublicSalesService - contratos públicos", () => {
   const service = () => new EventosPublicSalesService({ db: {} } as any);
@@ -49,6 +51,73 @@ describe("EventosPublicSalesService - contratos públicos", () => {
     expect(result.discountCents).toBe(0);
     expect(result.appliedOffer).toBeNull();
     expect(result.items).toHaveLength(1);
+  });
+
+  it("reserva sem dados do comprador grava comprador nulo", async () => {
+    const db = criarBancoReserva({ quantidade: 1, precoAdulto: 1250, offers: [] });
+
+    await new EventosPublicSalesService({ db } as any).reservarAssentos(entradaReserva(1, "buyer-nulo-123456", false, false));
+
+    expect(db.order).toMatchObject({ buyerName: null, buyerEmail: null, buyerPhone: null });
+  });
+
+  it("reserva ignora buyer enviado e grava comprador nulo", async () => {
+    const db = criarBancoReserva({ quantidade: 1, precoAdulto: 1250, offers: [] });
+    const input = entradaReserva(1, "buyer-ignorado-123456");
+    input.buyer = { name: "Pessoa Enviada", email: "enviado@example.com", phone: "11999999999" };
+
+    await new EventosPublicSalesService({ db } as any).reservarAssentos(input);
+
+    expect(db.order).toMatchObject({ buyerName: null, buyerEmail: null, buyerPhone: null });
+  });
+
+  it("recusa repetição idempotente com outros assentos na mesma sessão", async () => {
+    const db = criarBancoReserva({ quantidade: 1, precoAdulto: 1250, offers: [], repetir: true });
+    const service = new EventosPublicSalesService({ db } as any);
+    await service.reservarAssentos(entradaReserva(1, "idempotencia-assento-123456"));
+    const repeticao = entradaReserva(1, "idempotencia-assento-123456");
+    repeticao.seats[0]!.seatId = uuid(999);
+
+    await expect(service.reservarAssentos(repeticao)).rejects.toMatchObject({ response: { code: "IDEMPOTENCY_CONFLICT" } });
+  });
+
+  it("recusa a colisão de idempotência com outros assentos no caminho de corrida", async () => {
+    const db = corridaIdempotenciaDb({ seatId: uuid(300) });
+    const input = entradaReserva(1, "idempotencia-corrida-assento-123456");
+    input.seats[0]!.seatId = uuid(301);
+
+    await expect(new EventosPublicSalesService({ db } as any).reservarAssentos(input)).rejects.toMatchObject({ response: { code: "IDEMPOTENCY_CONFLICT" } });
+  });
+
+  it("finalização grava comprador normalizado e usa o nome nos aceites", async () => {
+    const db = pedidoFinalizacaoDb();
+
+    await new EventosPublicSalesService({ db } as any).finalizarPedidoConvidado("ABC123DEF456", entradaFinalizacao());
+
+    expect(db.order).toMatchObject({ buyerName: "Ana Maria", buyerEmail: "ana@example.com", buyerPhone: "5511999999999" });
+    expect(db.acceptances).toHaveLength(5);
+    expect(db.acceptances.every((acceptance: any) => acceptance.acceptedByName === "Ana Maria" && acceptance.acceptedByEmail === "ana@example.com")).toBe(true);
+  });
+
+  it("finalização devolve acesso e guarda só o hash com validade de 30 dias após o fim da sessão", async () => {
+    const db = pedidoFinalizacaoDb();
+    const result = await new EventosPublicSalesService({ db } as any).finalizarPedidoConvidado("ABC123DEF456", entradaFinalizacao());
+    const token = db.tokens[0];
+
+    expect(result).toHaveProperty("pedido");
+    expect(result.acesso).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(token).toMatchObject({ orderId: db.order.id, email: "ana@example.com", expiresAt: new Date("2027-01-06T12:00:00Z") });
+    expect(token).not.toHaveProperty("token");
+    expect(token.tokenHash).toBe(hashTokenAcesso(result.acesso));
+  });
+
+  it("consulta devolve rótulo do lugar, nome do tipo, slug, sessão e expiresAt", async () => {
+    const db = pedidoConsultaDb();
+
+    const result = await new EventosPublicSalesService({ db } as any).consultarPedido("ABC123DEF456");
+
+    expect(result).toMatchObject({ eventSlug: "festival-escola", sessionId: "session-1", expiresAt: db.order.expiresAt, items: [{ rowLabel: "A", seatNumber: "12", ticketTypeName: "Inteira" }] });
+    expect(result).not.toHaveProperty("tickets");
   });
 
   it("recusa assento duplicado antes de mutar pedido ou inventário", async () => {
@@ -279,11 +348,11 @@ function uuid(n: number) {
   return `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 }
 
-function entradaReserva(quantidade: number, idempotencyKey: string, misto = false) {
+function entradaReserva(quantidade: number, idempotencyKey: string, misto = false, semBuyer = false) {
   return {
     sessionId: uuid(1),
     seats: Array.from({ length: quantidade }, (_, index) => ({ seatId: uuid(100 + index), ticketTypeId: uuid(misto && index >= 6 ? 3 : 2), participantIndex: index })),
-    buyer: { name: "Ana", email: "a@b.com", phone: "11999999999" },
+    ...(semBuyer ? {} : { buyer: { name: "Ana", email: "a@b.com", phone: "11999999999" } }),
     idempotencyKey,
   };
 }
@@ -310,6 +379,8 @@ function criarBancoReserva(config: { quantidade: number; precoAdulto: number; pr
   const collisionOrder: any = { id: uuid(501), orderNumber: "COLISAO123456", eventId: event.id, sessionId: session.id, buyerEmail: config.colisao?.buyerEmail, totalCents: config.precoAdulto, expiresAt: new Date(Date.now() + 60_000) };
   const mutations = { value: 0 };
   const banco: any = {
+    order,
+    itemRows,
     mutations,
     colisao: { order: collisionOrder, insertAttempts: 0 },
     configuracaoAtual: config.offers,
@@ -357,6 +428,59 @@ function criarBancoReserva(config: { quantidade: number; precoAdulto: number; pr
     update: () => { mutations.value += 1; return { set: () => ({ where: () => ({ returning: async () => [{}] }) }) }; },
   };
   return banco;
+}
+
+function corridaIdempotenciaDb(config: { seatId: string }) {
+  const order = { id: "order-corrida", orderNumber: "ABC123DEF456", eventId: "event-1", sessionId: uuid(1), buyerName: null, buyerEmail: null, buyerPhone: null, totalCents: 1250, expiresAt: new Date(Date.now() + 60_000) };
+  let selects = 0;
+  const db: any = {
+    transaction: async () => { throw { code: "23505", constraint: "uq_evento_pedidos_idempotency_key" }; },
+    select: (table: any) => {
+      const value = selects++ === 0 ? [order] : selects === 2 ? [{ inventory: { seatId: config.seatId } }] : [{ item: { ticketTypeId: uuid(2), unitPriceCents: 1250, totalPriceCents: 1250 }, inventory: { seatId: config.seatId } }];
+      const chain: any = { from: () => chain, innerJoin: () => chain, where: async () => value };
+      return chain;
+    },
+  };
+  return db;
+}
+
+function entradaFinalizacao() {
+  return {
+    buyer: { name: "  Ana Maria  ", email: " ANA@EXAMPLE.COM ", phone: "+55 (11) 99999-9999" },
+    participants: [{ participantIndex: 0, fullName: "Participante", type: "CONVIDADO" as const }],
+    acceptances: ["PRIVACIDADE", "COMPRA", "CANCELAMENTO_REEMBOLSO", "ACESSIBILIDADE", "CONTATO"].map((type) => ({ type, version: 1 })),
+    idempotencyKey: "finalizacao-nova-123456",
+  };
+}
+
+function pedidoFinalizacaoDb() {
+  const order: any = { id: "order-1", orderNumber: "ABC123DEF456", eventId: "event-1", sessionId: "session-1", status: "INICIADO", totalCents: 1250, subtotalCents: 1250, discountCents: 0, expiresAt: new Date("2026-12-01T12:00:00Z") };
+  const event = { id: "event-1", status: "PUBLICADO", title: "Festival", slug: "festival-escola" };
+  const session = { id: "session-1", status: "PUBLICADA", startsAt: new Date("2026-12-01T10:00:00Z"), endsAt: new Date("2026-12-07T12:00:00Z") };
+  const policies = ["PRIVACIDADE", "COMPRA", "CANCELAMENTO_REEMBOLSO", "ACESSIBILIDADE", "CONTATO"].map((type) => ({ id: `policy-${type}`, type, version: 1 }));
+  const item = { id: "item-1", orderId: order.id, ticketTypeId: "ticket-1", pricingEvidence: { participantIndex: 0 }, unitPriceCents: 1250, totalPriceCents: 1250 };
+  const db: any = { order, acceptances: [], tokens: [], participants: [], transaction: async (fn: any) => fn(db), selectCalls: 0 };
+  db.select = () => {
+    const call = db.selectCalls++;
+    const value = call === 0 ? [{ order, event, session }] : call === 1 ? [] : call === 2 ? policies : call === 3 ? [item] : [{ item, inventory: { seatId: "seat-1" }, seat: { rowLabel: "A", seatNumber: "12" }, ticket: { name: "Inteira" } }];
+    const chain: any = { from: () => chain, innerJoin: () => chain, where: async () => value };
+    return chain;
+  };
+  db.insert = (table: any) => {
+    const operation: any = { values: (payload: any) => { if (table === eventoAceites) db.acceptances.push(payload); if (table === eventoTokensConsulta) db.tokens.push(payload); if (table === eventoParticipantes) db.participants.push(payload); return operation; }, returning: async () => [{ id: "participant-1" }] };
+    return operation;
+  };
+  db.update = () => ({ set: (payload: any) => { Object.assign(order, payload); return { where: async () => [] }; } });
+  return db;
+}
+
+function pedidoConsultaDb() {
+  const order: any = { id: "order-1", orderNumber: "ABC123DEF456", eventId: "event-1", sessionId: "session-1", status: "RESERVADO", totalCents: 1250, subtotalCents: 1250, discountCents: 0, expiresAt: new Date("2026-12-01T12:00:00Z") };
+  const event = { id: "event-1", status: "PUBLICADO", title: "Festival", slug: "festival-escola" };
+  const session = { id: "session-1", status: "PUBLICADA", startsAt: new Date("2026-12-01T10:00:00Z"), endsAt: new Date("2026-12-07T12:00:00Z") };
+  let call = 0;
+  const db: any = { order, select: () => { const value = call++ === 0 ? [{ order, event, session }] : [{ item: { ticketTypeId: "ticket-1", unitPriceCents: 1250, totalPriceCents: 1250 }, inventory: { seatId: "seat-1" }, seat: { rowLabel: "A", seatNumber: "12" }, ticket: { name: "Inteira" } }]; const chain: any = { from: () => chain, innerJoin: () => chain, where: async () => value }; return chain; } };
+  return db;
 }
 
 function vendaDb(data: any) {
