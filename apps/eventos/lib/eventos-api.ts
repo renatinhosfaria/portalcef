@@ -1,7 +1,7 @@
 import type { CheckoutPublicoInput, FinalizarPedidoInput, ReservaPublicaInput } from "@essencia/shared/schemas";
 import type {
   ConsultaPedidoPublica,
-  PedidoPublicoResult,
+  FinalizacaoPublicaResult,
   PoliticaPublica,
   PublicEventCard,
   PublicEventDetail,
@@ -114,10 +114,10 @@ export async function reservarAssentos(input: ReservaAssentosInput): Promise<Res
   }
 }
 
-export async function finalizarPedido(orderNumber: string, input: FinalizarPedidoPublicoInput): Promise<PedidoPublicoResult> {
+export async function finalizarPedido(orderNumber: string, input: FinalizarPedidoPublicoInput): Promise<FinalizacaoPublicaResult> {
   const idempotencyKey = chavePersistida(input.idempotencyKey, "finalizacao", orderNumber);
-  const result = await enviarJson<PedidoPublicoResult>(`/eventos/public/pedidos/${encodeURIComponent(orderNumber)}/finalizar`, { ...input, idempotencyKey }, idempotencyKey);
-  publicOrderState.orderNumber = result.orderNumber;
+  const result = await enviarJson<FinalizacaoPublicaResult>(`/eventos/public/pedidos/${encodeURIComponent(orderNumber)}/finalizar`, { ...input, idempotencyKey }, idempotencyKey);
+  publicOrderState.orderNumber = result.pedido.orderNumber;
   return result;
 }
 

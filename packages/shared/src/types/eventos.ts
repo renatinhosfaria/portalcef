@@ -12,8 +12,16 @@ export interface PublicSeat { id: string; sessionId: string; rowLabel: string; s
 export interface PublicMap { sessionId: string; mapId: string; seats: PublicSeat[]; layout?: PublicMapLayout | null; }
 export interface PoliticaPublica { type: "PRIVACIDADE" | "COMPRA" | "CANCELAMENTO_REEMBOLSO" | "ACESSIBILIDADE" | "CONTATO"; version: number; content: string; }
 export interface ReservaPublicaResult { reservationId: string; orderNumber: string; expiresAt: Date; subtotalCents: number; discountCents: number; totalCents: number; appliedOffer: OfertaPrecoPublica | null; items: Array<{ seatId: string; ticketTypeId: string; unitPriceCents: number; totalPriceCents: number }>; }
-export interface PedidoPublicoResult { orderNumber: string; status: string; eventTitle: string; session: { startsAt: Date; endsAt: Date }; subtotalCents: number; discountCents: number; totalCents: number; appliedOffer: OfertaPrecoPublica | null; items: Array<{ seatId: string; ticketTypeId: string; unitPriceCents: number; totalPriceCents: number }>; tickets?: unknown[]; }
+export interface PedidoPublicoResult { orderNumber: string; status: string; eventTitle: string; eventSlug: string; sessionId: string; expiresAt: Date | null; session: { startsAt: Date; endsAt: Date }; subtotalCents: number; discountCents: number; totalCents: number; appliedOffer: OfertaPrecoPublica | null; items: ItemPedidoPublico[]; }
 export type ConsultaPedidoPublica = PedidoPublicoResult;
+
+export interface PedidoComIngressos extends PedidoPublicoResult {
+  buyerName: string | null;
+  event: { title: string; slug: string; imageUrl: string | null; locationName: string | null };
+  tickets: IngressoPublico[];
+}
+
+export interface FinalizacaoPublicaResult { pedido: PedidoPublicoResult; acesso: string; }
 
 export type ProntidaoState = "BLOQUEADOR" | "AVISO" | "OK";
 export interface ProntidaoItem { key: string; label: string; state: ProntidaoState; href?: string; message?: string; }

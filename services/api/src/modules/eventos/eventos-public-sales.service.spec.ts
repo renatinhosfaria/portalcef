@@ -139,10 +139,12 @@ describe("EventosPublicSalesService - contratos públicos", () => {
         const chain: any = { from: () => chain, innerJoin: () => chain, where: async () => values[call] ?? [] };
         return chain;
       },
+      insert: () => ({ values: async () => [] }),
       selectCalls: 0,
     };
 
     await expect(new EventosPublicSalesService({ db } as any).finalizarPedidoConvidado("ABC123DEF456", {
+      buyer: { name: "Ana", email: "ana@example.com", phone: "11999999999" },
       participants: [{ participantIndex: 0, fullName: "Ana", type: "CONVIDADO" }],
       acceptances: [
         { type: "PRIVACIDADE", version: 1 },
@@ -153,11 +155,14 @@ describe("EventosPublicSalesService - contratos públicos", () => {
       ],
       idempotencyKey: "final-123456",
     })).resolves.toMatchObject({
-      orderNumber: "ABC123DEF456",
-      status: "EXPIRADO",
-      eventTitle: "Evento",
-      totalCents: 1250,
-      items: [{ seatId: "seat-1", ticketTypeId: "ticket-1", totalPriceCents: 1250 }],
+      pedido: {
+        orderNumber: "ABC123DEF456",
+        status: "EXPIRADO",
+        eventTitle: "Evento",
+        totalCents: 1250,
+        items: [{ seatId: "seat-1", ticketTypeId: "ticket-1", totalPriceCents: 1250 }],
+      },
+      acesso: expect.any(String),
     });
   });
 
@@ -211,8 +216,8 @@ describe("EventosPublicSalesService - contratos públicos", () => {
     expect(segunda.appliedOffer).toMatchObject({ id: oferta.id, version: 3 });
   });
 
-  it("rejeita a corrida de idempotência quando a reserva encontrada pertence a outro comprador", async () => {
-    const existing = { id: "order-outro-comprador", orderNumber: "ABC123DEF456", buyerEmail: "outro@example.com", totalCents: 1250, expiresAt: new Date(Date.now() + 60_000) };
+  it("rejeita a corrida de idempotência quando a reserva encontrada pertence a outra sessão", async () => {
+    const existing = { id: "order-outra-sessao", orderNumber: "ABC123DEF456", sessionId: uuid(99), buyerEmail: null, totalCents: 1250, expiresAt: new Date(Date.now() + 60_000) };
     let selectCalls = 0;
     const db: any = {
       transaction: async () => { throw { code: "23505", constraint: "uq_evento_pedidos_idempotency_key" }; },
@@ -222,13 +227,13 @@ describe("EventosPublicSalesService - contratos públicos", () => {
       },
     };
 
-    await expect(new EventosPublicSalesService({ db } as any).reservarAssentos(entradaReserva(1, "corrida-email-123456"))).rejects.toMatchObject({
+    await expect(new EventosPublicSalesService({ db } as any).reservarAssentos(entradaReserva(1, "corrida-sessao-123456"))).rejects.toMatchObject({
       response: { code: "IDEMPOTENCY_CONFLICT" },
     });
   });
 
-  it("preserva o replay da corrida de idempotência para o mesmo comprador", async () => {
-    const existing = { id: "order-proprio", orderNumber: "ABC123DEF456", buyerEmail: "A@B.COM", totalCents: 1250, expiresAt: new Date(Date.now() + 60_000) };
+  it("recusa a corrida quando não consegue comprovar os mesmos assentos", async () => {
+    const existing = { id: "order-sem-itens", orderNumber: "ABC123DEF456", buyerEmail: null, totalCents: 1250, expiresAt: new Date(Date.now() + 60_000) };
     let selectCalls = 0;
     const db: any = {
       transaction: async () => { throw { code: "23505", constraint: "uq_evento_pedidos_idempotency_key" }; },
@@ -238,13 +243,10 @@ describe("EventosPublicSalesService - contratos públicos", () => {
       },
     };
 
-    await expect(new EventosPublicSalesService({ db } as any).reservarAssentos(entradaReserva(1, "corrida-email-proprio"))).resolves.toMatchObject({
-      reservationId: existing.id,
-      orderNumber: existing.orderNumber,
-    });
+    await expect(new EventosPublicSalesService({ db } as any).reservarAssentos(entradaReserva(1, "corrida-sem-itens"))).rejects.toMatchObject({ response: { code: "IDEMPOTENCY_CONFLICT" } });
   });
 
-  it("trata a colisão do INSERT interno com comprador diferente fora da transação abortada", async () => {
+  it("trata a colisão do INSERT interno sem a mesma sessão fora da transação abortada", async () => {
     const banco = criarBancoReservaComColisao("outro@example.com");
 
     await expect(new EventosPublicSalesService({ db: banco } as any).reservarAssentos(entradaReserva(1, "colisao-interna-outro-123456"))).rejects.toMatchObject({
@@ -253,13 +255,10 @@ describe("EventosPublicSalesService - contratos públicos", () => {
     expect(banco.colisao.insertAttempts).toBe(1);
   });
 
-  it("repete o snapshot quando a colisão do INSERT interno pertence ao mesmo comprador", async () => {
+  it("recusa a colisão do INSERT interno quando não há prova dos mesmos assentos", async () => {
     const banco = criarBancoReservaComColisao("A@B.COM");
 
-    await expect(new EventosPublicSalesService({ db: banco } as any).reservarAssentos(entradaReserva(1, "colisao-interna-proprio-123456"))).resolves.toMatchObject({
-      reservationId: banco.colisao.order.id,
-      orderNumber: banco.colisao.order.orderNumber,
-    });
+    await expect(new EventosPublicSalesService({ db: banco } as any).reservarAssentos(entradaReserva(1, "colisao-interna-proprio-123456"))).rejects.toMatchObject({ response: { code: "IDEMPOTENCY_CONFLICT" } });
     expect(banco.colisao.insertAttempts).toBe(1);
   });
 

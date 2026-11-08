@@ -1,10 +1,11 @@
 import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException, ServiceUnavailableException, forwardRef } from "@nestjs/common";
-import { and, desc, eq, eventoAceites, eventoInventarioAssentos, eventoItensPedido, eventoOfertas, eventoPagamentos, eventoParticipantes, eventoPedidos, eventoPoliticas, eventoReservas, eventoSessoes, eventoTiposIngresso, eventos, inArray, lte, type Database } from "@essencia/db";
+import { and, desc, eq, eventoAceites, eventoInventarioAssentos, eventoItensPedido, eventoMapaAssentos, eventoOfertas, eventoPagamentos, eventoParticipantes, eventoPedidos, eventoPoliticas, eventoReservas, eventoSessoes, eventoTiposIngresso, eventoTokensConsulta, eventos, inArray, lte, type Database } from "@essencia/db";
 import { checkoutPublicoSchema, finalizarPedidoSchema, reservaPublicaSchema, type CheckoutPublicoInput, type FinalizarPedidoInput, type ReservaPublicaInput } from "@essencia/shared/schemas";
 import { calcularPrecoPedido, type OfertaPreco } from "@essencia/shared/eventos/precos";
-import type { ConsultaPedidoPublica, PedidoPublicoResult, PoliticaPublica, ReservaPublicaResult } from "@essencia/shared/types";
+import type { ConsultaPedidoPublica, FinalizacaoPublicaResult, PedidoPublicoResult, PoliticaPublica, ReservaPublicaResult } from "@essencia/shared/types";
 import { DatabaseService } from "../../common/database/database.service";
 import { PaymentsService } from "../payments/payments.service";
+import { gerarTokenAcesso, validadeAcesso } from "./acesso-pedido";
 
 const fail = (code: string, message: string) => new BadRequestException({ code, message });
 const validated = <T>(schema: { safeParse(value: unknown): { success: boolean; data?: T } }, value: unknown): T => { const result = schema.safeParse(value); if (!result.success) throw fail("VALIDATION_ERROR", "Dados inválidos"); return result.data as T; };
@@ -33,12 +34,10 @@ export class EventosPublicSalesService {
     ) {
       throw fail("VALIDATION_ERROR", "Participantes devem corresponder aos assentos");
     }
-    const buyerEmail = input.buyer.email.trim().toLowerCase();
-
     const executar = async (tx: any) => {
       const existing = await this.first<any>(tx.select().from(eventoPedidos).where(eq(eventoPedidos.idempotencyKey, input.idempotencyKey)));
       if (existing) {
-        if (existing.buyerEmail.trim().toLowerCase() !== buyerEmail) {
+        if (!(await this.reservaIdempotenteCompativel(tx, existing, input.sessionId, assentos))) {
           throw new ConflictException({ code: "IDEMPOTENCY_CONFLICT", message: "Chave de idempotência já utilizada" });
         }
         return this.reservaResult(tx, existing);
@@ -124,9 +123,9 @@ export class EventosPublicSalesService {
         eventId: event.id,
         sessionId: input.sessionId,
         orderNumber: this.orderNumber(),
-        buyerName: input.buyer.name.trim(),
-        buyerEmail,
-        buyerPhone: this.normalizePhone(input.buyer.phone),
+        buyerName: null,
+        buyerEmail: null,
+        buyerPhone: null,
         status: "INICIADO",
         subtotalCents: preco.subtotalCents,
         discountCents: preco.discountCents,
@@ -155,7 +154,7 @@ export class EventosPublicSalesService {
       if (error?.code === "23505" || error?.constraint?.includes("idempotency")) {
         const existing = await this.first<any>(this.db.select().from(eventoPedidos).where(eq(eventoPedidos.idempotencyKey, input.idempotencyKey)));
         if (existing) {
-          if (existing.buyerEmail.trim().toLowerCase() !== buyerEmail) {
+          if (!(await this.reservaIdempotenteCompativel(this.db, existing, input.sessionId, assentos))) {
             throw new ConflictException({ code: "IDEMPOTENCY_CONFLICT", message: "Chave de idempotência já utilizada" });
           }
           return this.reservaResult(this.db, existing);
@@ -163,6 +162,14 @@ export class EventosPublicSalesService {
       }
       throw error;
     }) : executar(this.db);
+  }
+
+  private async reservaIdempotenteCompativel(db: any, order: any, sessionId: string, seatIds: string[]): Promise<boolean> {
+    if (order.sessionId && order.sessionId !== sessionId) return false;
+    const rows = await db.select({ inventory: eventoInventarioAssentos }).from(eventoItensPedido).innerJoin(eventoInventarioAssentos, eq(eventoInventarioAssentos.id, eventoItensPedido.inventorySeatId)).where(eq(eventoItensPedido.orderId, order.id));
+    if (!rows.length) return false;
+    const persisted = rows.map((row: any) => row.inventory?.seatId).filter(Boolean).sort();
+    return persisted.length === seatIds.length && persisted.every((seatId: string, index: number) => seatId === [...seatIds].sort()[index]);
   }
 
   private async reservaResult(db: any, order: any): Promise<ReservaPublicaResult> {
@@ -180,7 +187,7 @@ export class EventosPublicSalesService {
     };
   }
 
-  async finalizarPedidoConvidado(orderNumber: string, raw: unknown): Promise<PedidoPublicoResult> {
+  async finalizarPedidoConvidado(orderNumber: string, raw: unknown): Promise<FinalizacaoPublicaResult> {
     const input = validated<FinalizarPedidoInput>(finalizarPedidoSchema, raw);
     const types = ["PRIVACIDADE", "COMPRA", "CANCELAMENTO_REEMBOLSO", "ACESSIBILIDADE", "CONTATO"];
     if (new Set(input.acceptances.map((a) => a.type)).size !== 5 || types.some((type) => !input.acceptances.some((a) => a.type === type))) throw fail("VALIDATION_ERROR", "Aceites completos obrigatórios");
@@ -189,17 +196,27 @@ export class EventosPublicSalesService {
     return this.db.transaction(async (tx: any) => {
       const order = await this.getOrder(orderNumber, tx);
       const prior = await this.first<any>(tx.select().from(eventoPedidos).where(eq(eventoPedidos.finalizationIdempotencyKey, input.idempotencyKey)));
-      if (prior) { if (prior.id !== order.id) throw new ConflictException({ code: "IDEMPOTENCY_CONFLICT", message: "Chave de idempotência já utilizada" }); return this.pedidoResult(order, tx); }
+      if (prior) { if (prior.id !== order.id) throw new ConflictException({ code: "IDEMPOTENCY_CONFLICT", message: "Chave de idempotência já utilizada" }); return this.finalizacaoResult(order, tx); }
       if (!["INICIADO", "RESERVADO"].includes(order.status) || (order.expiresAt && order.expiresAt <= new Date())) throw fail("ORDER_NOT_AVAILABLE", "Pedido expirado ou indisponível");
       if (order.finalizationIdempotencyKey && order.finalizationIdempotencyKey !== input.idempotencyKey) throw new ConflictException({ code: "IDEMPOTENCY_CONFLICT", message: "Pedido já finalizado com outra chave" });
+      const buyer = { name: input.buyer.name.trim(), email: input.buyer.email.trim().toLowerCase(), phone: this.normalizePhone(input.buyer.phone) };
       const policies = await tx.select().from(eventoPoliticas).where(and(eq(eventoPoliticas.eventId, order.eventId), eq(eventoPoliticas.active, true)));
-      for (const acceptance of input.acceptances) { const policy = policies.find((p: any) => p.type === acceptance.type && p.version === acceptance.version); if (!policy) throw fail("POLICY_VERSION_MISMATCH", "Versão de política inválida"); await tx.insert(eventoAceites).values({ orderId: order.id, type: acceptance.type, policyId: policy.id, policyVersion: policy.version, acceptedByName: order.buyerName, acceptedByEmail: order.buyerEmail }); }
+      for (const acceptance of input.acceptances) { const policy = policies.find((p: any) => p.type === acceptance.type && p.version === acceptance.version); if (!policy) throw fail("POLICY_VERSION_MISMATCH", "Versão de política inválida"); await tx.insert(eventoAceites).values({ orderId: order.id, type: acceptance.type, policyId: policy.id, policyVersion: policy.version, acceptedByName: buyer.name, acceptedByEmail: buyer.email }); }
       const items = await tx.select().from(eventoItensPedido).where(eq(eventoItensPedido.orderId, order.id));
       if (items.length !== input.participants.length) throw fail("VALIDATION_ERROR", "Participantes devem corresponder aos itens");
       for (const participant of input.participants) { const [created] = await tx.insert(eventoParticipantes).values({ eventId: order.eventId, orderId: order.id, type: participant.type, fullName: participant.fullName, email: participant.email ?? null, phone: participant.phone ?? null }).returning(); const item = items.find((candidate: any) => candidate.pricingEvidence?.participantIndex === participant.participantIndex); if (!item) throw fail("VALIDATION_ERROR", "Participante sem item correspondente"); if (created) await tx.update(eventoItensPedido).set({ participantId: created.id, updatedAt: new Date() }).where(eq(eventoItensPedido.id, item.id)); }
-      await tx.update(eventoPedidos).set({ status: "RESERVADO", finalizationIdempotencyKey: input.idempotencyKey, updatedAt: new Date() }).where(eq(eventoPedidos.id, order.id));
-      return this.consultarPedido(orderNumber, tx);
-    }).catch(async (error: any) => { if (error?.code === "23505" || error?.constraint?.includes("finalization")) { const existing = await this.first<any>(this.db.select().from(eventoPedidos).where(eq(eventoPedidos.finalizationIdempotencyKey, input.idempotencyKey))); const ownOrder = await this.getOrder(orderNumber, this.db); if (existing?.id === ownOrder.id) return this.pedidoResult(ownOrder, this.db); throw new ConflictException({ code: "IDEMPOTENCY_CONFLICT", message: "Chave de idempotência já utilizada" }); } throw error; });
+      await tx.update(eventoPedidos).set({ buyerName: buyer.name, buyerEmail: buyer.email, buyerPhone: buyer.phone, status: "RESERVADO", finalizationIdempotencyKey: input.idempotencyKey, updatedAt: new Date() }).where(eq(eventoPedidos.id, order.id));
+      const finalizado = { ...order, ...buyer, buyerName: buyer.name, buyerEmail: buyer.email, buyerPhone: buyer.phone, status: "RESERVADO", finalizationIdempotencyKey: input.idempotencyKey };
+      return this.finalizacaoResult(finalizado, tx);
+    }).catch(async (error: any) => { if (error?.code === "23505" || error?.constraint?.includes("finalization")) { const existing = await this.first<any>(this.db.select().from(eventoPedidos).where(eq(eventoPedidos.finalizationIdempotencyKey, input.idempotencyKey))); const ownOrder = await this.getOrder(orderNumber, this.db); if (existing?.id === ownOrder.id) return this.finalizacaoResult(ownOrder, this.db); throw new ConflictException({ code: "IDEMPOTENCY_CONFLICT", message: "Chave de idempotência já utilizada" }); } throw error; });
+  }
+
+  private async finalizacaoResult(order: any, db: any): Promise<FinalizacaoPublicaResult> {
+    const pedido = await this.pedidoResult(order, db);
+    const { token, hash } = gerarTokenAcesso();
+    const expiresAt = validadeAcesso(order.session?.endsAt ?? order.session?.startsAt);
+    await db.insert(eventoTokensConsulta).values({ orderId: order.id, email: order.buyerEmail, tokenHash: hash, expiresAt });
+    return { pedido, acesso: token };
   }
 
   async iniciarCheckout(orderNumber: string, raw: unknown) {
@@ -257,7 +274,7 @@ export class EventosPublicSalesService {
     if (url.protocol !== "https:" || url.origin !== origin.origin) throw fail("CHECKOUT_URL_NOT_ALLOWED", "URL de checkout não permitida");
   }
   async consultarPedido(orderNumber: string, db: any = this.db): Promise<ConsultaPedidoPublica> { const order = await this.getOrder(orderNumber, db); if (order.expiresAt && order.expiresAt <= new Date() && !["CONFIRMADO", "USADO"].includes(order.status)) throw new NotFoundException({ code: "ORDER_NOT_FOUND", message: "Pedido não encontrado" }); return this.pedidoResult(order, db); }
-  private async pedidoResult(order: any, db: any): Promise<PedidoPublicoResult> { if (order.event?.status !== "PUBLICADO" || order.session?.status !== "PUBLICADA") throw new NotFoundException({ code: "ORDER_NOT_FOUND", message: "Pedido não encontrado" }); const rows = await db.select({ item: eventoItensPedido, inventory: eventoInventarioAssentos }).from(eventoItensPedido).innerJoin(eventoInventarioAssentos, eq(eventoInventarioAssentos.id, eventoItensPedido.inventorySeatId)).where(eq(eventoItensPedido.orderId, order.id)); const snapshot = order.appliedOffer ?? rows.find((row: any) => row.item?.pricingEvidence?.offerSnapshot)?.item?.pricingEvidence?.offerSnapshot ?? null; return { orderNumber: order.orderNumber, status: order.status, eventTitle: order.event?.title ?? "", session: { startsAt: order.session?.startsAt, endsAt: order.session?.endsAt }, subtotalCents: order.subtotalCents ?? order.totalCents, discountCents: order.discountCents ?? 0, totalCents: order.totalCents, appliedOffer: snapshot, items: rows.map((row: any) => ({ seatId: row.inventory?.seatId, ticketTypeId: row.item?.ticketTypeId, unitPriceCents: row.item?.unitPriceCents, totalPriceCents: row.item?.totalPriceCents })) }; }
+  private async pedidoResult(order: any, db: any): Promise<PedidoPublicoResult> { if (order.event?.status !== "PUBLICADO" || order.session?.status !== "PUBLICADA") throw new NotFoundException({ code: "ORDER_NOT_FOUND", message: "Pedido não encontrado" }); const rows = await db.select({ item: eventoItensPedido, inventory: eventoInventarioAssentos, seat: eventoMapaAssentos, ticket: eventoTiposIngresso }).from(eventoItensPedido).innerJoin(eventoInventarioAssentos, eq(eventoInventarioAssentos.id, eventoItensPedido.inventorySeatId)).innerJoin(eventoMapaAssentos, eq(eventoMapaAssentos.id, eventoInventarioAssentos.seatId)).innerJoin(eventoTiposIngresso, eq(eventoTiposIngresso.id, eventoItensPedido.ticketTypeId)).where(eq(eventoItensPedido.orderId, order.id)); const snapshot = order.appliedOffer ?? rows.find((row: any) => row.item?.pricingEvidence?.offerSnapshot)?.item?.pricingEvidence?.offerSnapshot ?? null; return { orderNumber: order.orderNumber, status: order.status, eventTitle: order.event?.title ?? "", eventSlug: order.event?.slug ?? "", sessionId: order.session?.id ?? order.sessionId, expiresAt: order.expiresAt ?? null, session: { startsAt: order.session?.startsAt, endsAt: order.session?.endsAt }, subtotalCents: order.subtotalCents ?? order.totalCents, discountCents: order.discountCents ?? 0, totalCents: order.totalCents, appliedOffer: snapshot, items: rows.map((row: any) => ({ seatId: row.inventory?.seatId, ticketTypeId: row.item?.ticketTypeId, unitPriceCents: row.item?.unitPriceCents, totalPriceCents: row.item?.totalPriceCents, rowLabel: row.seat?.rowLabel ?? row.inventory?.rowLabel ?? "", seatNumber: row.seat?.seatNumber ?? row.inventory?.seatNumber ?? "", ticketTypeName: row.ticket?.name ?? row.item?.ticketTypeName ?? "" })) }; }
   private async getOrder(orderNumber: string, db: any): Promise<any> { const result = await this.first<any>(db.select({ order: eventoPedidos, event: eventos, session: eventoSessoes }).from(eventoPedidos).innerJoin(eventos, eq(eventos.id, eventoPedidos.eventId)).innerJoin(eventoSessoes, eq(eventoSessoes.id, eventoPedidos.sessionId)).where(eq(eventoPedidos.orderNumber, orderNumber))); if (!result) throw new NotFoundException({ code: "ORDER_NOT_FOUND", message: "Pedido não encontrado" }); return result.order ? { ...result.order, event: result.event, session: result.session } : result; }
   async liberarReservasExpiradas(now = new Date()) {
     return this.db.transaction(async (tx: any) => {

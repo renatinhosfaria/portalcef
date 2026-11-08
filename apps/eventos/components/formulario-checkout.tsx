@@ -68,11 +68,11 @@ export function FormularioCheckout({ seatIds, ticketTypeIds = [], sessionId, pol
     try {
       const reservationKey = reservationKeyRef.current ?? gerarChaveIdempotenciaPublica("reserva");
       reservationKeyRef.current = reservationKey;
-      const reservation = await reservarAssentos({ sessionId, idempotencyKey: reservationKey, seats: seatIds.map((seatId, index) => ({ seatId, ticketTypeId: tiposPorAssento[index] || "", participantIndex: index })), buyer });
+      const reservation = await reservarAssentos({ sessionId, idempotencyKey: reservationKey, seats: seatIds.map((seatId, index) => ({ seatId, ticketTypeId: tiposPorAssento[index] || "", participantIndex: index })) });
       etapa = "finalizacao";
-      const pedido = await finalizarPedido(reservation.orderNumber, { participants, acceptances: politicas.map((policy) => ({ type: policy.type, version: policy.version })) });
+      const finalizacao = await finalizarPedido(reservation.orderNumber, { buyer, participants, acceptances: politicas.map((policy) => ({ type: policy.type, version: policy.version })) });
       setPending(true);
-      onComplete?.(pedido);
+      onComplete?.(finalizacao.pedido);
       etapa = "checkout";
       const checkout = await iniciarCheckout(reservation.orderNumber, { successUrl: `${origemPublicaEventos()}/pedido/${encodeURIComponent(reservation.orderNumber)}?retorno=sucesso`, cancelUrl: `${origemPublicaEventos()}/pedido/${encodeURIComponent(reservation.orderNumber)}?retorno=cancelado` });
       if (typeof window !== "undefined") window.location.assign(checkout.checkoutUrl);

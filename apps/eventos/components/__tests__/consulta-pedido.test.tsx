@@ -14,7 +14,7 @@ describe("consulta pública de pedido", () => {
   });
 
   it("mostra pagamento pendente enquanto aguarda o webhook", () => {
-    const html = renderToStaticMarkup(<ConsultaPedido initialOrderNumber="ABC123DEF456" initialResult={{ orderNumber: "ABC123DEF456", status: "AGUARDANDO_PAGAMENTO", eventTitle: "Festival", session: { startsAt: new Date("2026-01-01T10:00:00Z"), endsAt: new Date("2026-01-01T12:00:00Z") }, subtotalCents: 1000, discountCents: 0, totalCents: 1000, appliedOffer: null, items: [] }} />);
+    const html = renderToStaticMarkup(<ConsultaPedido initialOrderNumber="ABC123DEF456" initialResult={{ orderNumber: "ABC123DEF456", status: "AGUARDANDO_PAGAMENTO", eventTitle: "Festival", eventSlug: "festival", sessionId: "sessao-1", expiresAt: null, session: { startsAt: new Date("2026-01-01T10:00:00Z"), endsAt: new Date("2026-01-01T12:00:00Z") }, subtotalCents: 1000, discountCents: 0, totalCents: 1000, appliedOffer: null, items: [] }} />);
     expect(html).toContain("Pagamento pendente");
   });
 
