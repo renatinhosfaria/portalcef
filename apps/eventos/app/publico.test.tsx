@@ -49,9 +49,10 @@ describe("vitrine pública de Eventos", () => {
     expect(layout).not.toContain("Shell");
     expect(layout).not.toContain("/api/auth/me");
     const page = readFileSync(new URL("./page.tsx", import.meta.url), "utf8");
-    expect(page).toContain("Eventos disponíveis");
+    expect(page).toContain("Eventos do Colégio Essência Feliz");
+    expect(page).toContain("listarEventosPublicosServidor");
     const catalog = readFileSync(new URL("../components/catalogo-eventos.tsx", import.meta.url), "utf8");
-    expect(catalog).toContain("/evento/");
+    expect(catalog).toContain("EventoDestaque");
   });
 
   it("integra a vitrine ao shell compartilhado e à consulta pública", () => {
@@ -142,5 +143,12 @@ describe("comportamento da vitrine", () => {
     expect(erro).not.toContain("Nenhum evento disponível");
     expect(vazio).toContain("Nenhum evento disponível");
     expect(vazio).not.toContain('role="alert"');
+  });
+
+  it("not-found oferece voltar à página inicial", async () => {
+    const notFound = await import("./not-found");
+    const html = renderToStaticMarkup(notFound.default());
+    expect(html).toContain("Não encontramos esta página");
+    expect(html).toContain('href="/"');
   });
 });
