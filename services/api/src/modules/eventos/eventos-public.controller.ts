@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post } from "@nestjs/common";
+import { Body, Controller, Get, Param, Post, Query } from "@nestjs/common";
 import { Throttle } from "@nestjs/throttler";
 import { Public } from "../../common/decorators/public.decorator";
 import { EventosService } from "./eventos.service";
@@ -38,4 +38,10 @@ export class EventosPublicController {
   @Get("pedidos/:orderNumber")
   @Throttle({ strict: { limit: 60, ttl: 60000 } })
   consultarPedido(@Param("orderNumber") orderNumber: string) { return this.sales.consultarPedido(orderNumber); }
+  @Get("pedidos/:orderNumber/ingressos")
+  @Throttle({ strict: { limit: 60, ttl: 60000 } })
+  obterIngressos(@Param("orderNumber") orderNumber: string, @Query("acesso") acesso: string) { return this.sales.obterIngressos(orderNumber, acesso); }
+  @Post("meus-ingressos")
+  @Throttle({ strict: { limit: 10, ttl: 60000 } })
+  buscarMeusIngressos(@Body() input: unknown) { return this.sales.buscarMeusIngressos(input); }
 }

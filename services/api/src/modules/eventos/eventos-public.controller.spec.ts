@@ -9,7 +9,30 @@ describe("EventosPublicController", () => {
     expect(typeof proto.finalizar).toBe("function");
     expect(typeof proto.checkout).toBe("function");
     expect(typeof proto.consultarPedido).toBe("function");
+    expect(typeof proto.obterIngressos).toBe("function");
+    expect(typeof proto.buscarMeusIngressos).toBe("function");
     expect(typeof proto.liberar).toBe("function");
+  });
+
+  it("protege ingressos por acesso e aplica throttle de 60 por minuto", async () => {
+    const sales = { obterIngressos: jest.fn().mockResolvedValue({ tickets: [] }) };
+    const controller = new EventosPublicController({} as any, sales as any);
+
+    await expect(controller.obterIngressos("ABC123DEF456", "token-seguro")).resolves.toEqual({ tickets: [] });
+    expect(sales.obterIngressos).toHaveBeenCalledWith("ABC123DEF456", "token-seguro");
+    expect(Reflect.getMetadata("THROTTLER:LIMITstrict", EventosPublicController.prototype.obterIngressos)).toBe(60);
+    expect(Reflect.getMetadata("THROTTLER:TTLstrict", EventosPublicController.prototype.obterIngressos)).toBe(60000);
+  });
+
+  it("busca meus ingressos e aplica throttle de 10 por minuto", async () => {
+    const sales = { buscarMeusIngressos: jest.fn().mockResolvedValue({ pedidos: [] }) };
+    const controller = new EventosPublicController({} as any, sales as any);
+    const input = { email: "ana@example.com", phone: "11999999999" };
+
+    await expect(controller.buscarMeusIngressos(input)).resolves.toEqual({ pedidos: [] });
+    expect(sales.buscarMeusIngressos).toHaveBeenCalledWith(input);
+    expect(Reflect.getMetadata("THROTTLER:LIMITstrict", EventosPublicController.prototype.buscarMeusIngressos)).toBe(10);
+    expect(Reflect.getMetadata("THROTTLER:TTLstrict", EventosPublicController.prototype.buscarMeusIngressos)).toBe(60000);
   });
 
   it("expõe a rota de liberação com throttle estrito de 20 por minuto", async () => {

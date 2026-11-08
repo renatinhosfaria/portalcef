@@ -1,11 +1,11 @@
 import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException, ServiceUnavailableException, forwardRef } from "@nestjs/common";
-import { and, desc, eq, eventoAceites, eventoInventarioAssentos, eventoItensPedido, eventoMapaAssentos, eventoOfertas, eventoPagamentos, eventoParticipantes, eventoPedidos, eventoPoliticas, eventoReservas, eventoSessoes, eventoTiposIngresso, eventoTokensConsulta, eventos, inArray, lte, type Database } from "@essencia/db";
-import { finalizarPedidoSchema, pagamentoEmbutidoSchema, reservaPublicaSchema, type FinalizarPedidoInput, type PagamentoEmbutidoInput, type ReservaPublicaInput } from "@essencia/shared/schemas";
+import { and, desc, eq, eventoAceites, eventoIngressos, eventoInventarioAssentos, eventoItensPedido, eventoMapaAssentos, eventoOfertas, eventoPagamentos, eventoParticipantes, eventoPedidos, eventoPoliticas, eventoReservas, eventoSessoes, eventoTiposIngresso, eventoTokensConsulta, eventos, inArray, lte, type Database } from "@essencia/db";
+import { finalizarPedidoSchema, meusIngressosSchema, pagamentoEmbutidoSchema, reservaPublicaSchema, type FinalizarPedidoInput, type MeusIngressosInput, type PagamentoEmbutidoInput, type ReservaPublicaInput } from "@essencia/shared/schemas";
 import { calcularPrecoPedido, type OfertaPreco } from "@essencia/shared/eventos/precos";
-import type { ConsultaPedidoPublica, FinalizacaoPublicaResult, PagamentoEmbutidoResult, PedidoPublicoResult, PoliticaPublica, ReservaPublicaResult } from "@essencia/shared/types";
+import type { ConsultaPedidoPublica, FinalizacaoPublicaResult, MeusIngressosResult, PagamentoEmbutidoResult, PedidoComIngressos, PedidoPublicoResult, PoliticaPublica, ReservaPublicaResult } from "@essencia/shared/types";
 import { DatabaseService } from "../../common/database/database.service";
 import { PaymentsService } from "../payments/payments.service";
-import { gerarTokenAcesso, validadeAcesso } from "./acesso-pedido";
+import { gerarTokenAcesso, hashTokenAcesso, validadeAcesso } from "./acesso-pedido";
 
 const fail = (code: string, message: string) => new BadRequestException({ code, message });
 const validated = <T>(schema: { safeParse(value: unknown): { success: boolean; data?: T } }, value: unknown): T => { const result = schema.safeParse(value); if (!result.success) throw fail("VALIDATION_ERROR", "Dados inválidos"); return result.data as T; };
@@ -284,6 +284,69 @@ export class EventosPublicSalesService {
     try { url = new URL(value); origin = new URL(configured); } catch { throw fail("CHECKOUT_URL_NOT_ALLOWED", "URL de checkout não permitida"); }
     if (url.protocol !== "https:" || url.origin !== origin.origin) throw fail("CHECKOUT_URL_NOT_ALLOWED", "URL de checkout não permitida");
   }
+
+  async obterIngressos(orderNumber: string, acesso: string): Promise<PedidoComIngressos> {
+    const order = await this.getOrder(orderNumber, this.db);
+    const tokenHash = hashTokenAcesso(acesso);
+    const tokenHashColumn = (eventoTokensConsulta as any)?.tokenHash;
+    const tokenRows = await this.db.select().from(eventoTokensConsulta).where(tokenHashColumn ? eq(tokenHashColumn, tokenHash) : undefined);
+    const token = (tokenRows as any[]).find((candidate) => candidate.tokenHash === tokenHash);
+    if (!token || token.orderId !== order.id || (token.expiresAt && token.expiresAt <= new Date())) {
+      throw new NotFoundException({ code: "ORDER_NOT_FOUND", message: "Pedido não encontrado" });
+    }
+
+    const pedido = await this.pedidoResult(order, this.db);
+    const tickets = ["CONFIRMADO", "USADO"].includes(order.status)
+      ? (await this.db.select({ ticket: eventoIngressos, item: eventoItensPedido, inventory: eventoInventarioAssentos, seat: eventoMapaAssentos, ticketType: eventoTiposIngresso, participant: eventoParticipantes }).from(eventoIngressos).innerJoin(eventoItensPedido, eq(eventoItensPedido.id, eventoIngressos.itemId)).innerJoin(eventoInventarioAssentos, eq(eventoInventarioAssentos.id, eventoIngressos.inventorySeatId)).innerJoin(eventoMapaAssentos, eq(eventoMapaAssentos.id, eventoInventarioAssentos.seatId)).innerJoin(eventoTiposIngresso, eq(eventoTiposIngresso.id, eventoItensPedido.ticketTypeId)).innerJoin(eventoParticipantes, eq(eventoParticipantes.id, eventoIngressos.participantId)).where(eq(eventoIngressos.orderId, order.id))).map((row: any) => ({
+        numero: row.ticket?.numero,
+        qrPayload: row.ticket?.qrPayload,
+        rowLabel: row.seat?.rowLabel ?? row.inventory?.rowLabel ?? "",
+        seatNumber: row.seat?.seatNumber ?? row.inventory?.seatNumber ?? "",
+        ticketTypeName: row.ticketType?.name ?? row.item?.ticketTypeName ?? "",
+        participantName: row.participant?.fullName ?? "",
+        status: row.ticket?.status,
+      }))
+      : [];
+
+    return {
+      ...pedido,
+      buyerName: order.buyerName ?? null,
+      event: {
+        title: order.event?.title ?? "",
+        slug: order.event?.slug ?? "",
+        imageUrl: order.event?.imageUrl ?? null,
+        locationName: order.event?.locationName ?? order.session?.locationName ?? null,
+      },
+      tickets,
+    };
+  }
+
+  async buscarMeusIngressos(raw: unknown): Promise<MeusIngressosResult> {
+    const input = validated<MeusIngressosInput>(meusIngressosSchema, raw);
+    const email = input.email.trim().toLowerCase();
+    const phone = "phone" in input ? this.normalizePhone(input.phone) : null;
+    const orderNumber = "orderNumber" in input ? input.orderNumber.trim() : null;
+    const rows = await this.db.select({ order: eventoPedidos, event: eventos, session: eventoSessoes }).from(eventoPedidos).innerJoin(eventos, eq(eventos.id, eventoPedidos.eventId)).innerJoin(eventoSessoes, eq(eventoSessoes.id, eventoPedidos.sessionId)).where(orderNumber ? eq(eventoPedidos.orderNumber, orderNumber) : undefined);
+    const encontrados = rows.filter((row: any) => {
+      const order = row.order ?? row;
+      const sameEmail = String(order.buyerEmail ?? "").trim().toLowerCase() === email;
+      const sameOrder = !orderNumber || order.orderNumber === orderNumber;
+      const samePhone = !phone || this.normalizePhone(String(order.buyerPhone ?? "")) === phone;
+      return sameEmail && sameOrder && samePhone && ["CONFIRMADO", "USADO"].includes(order.status);
+    });
+    if (!encontrados.length) throw new NotFoundException({ code: "ORDER_NOT_FOUND", message: "Não encontramos um pedido com esses dados" });
+
+    const pedidos: MeusIngressosResult["pedidos"] = [];
+    for (const row of encontrados) {
+      const order = row.order ?? row;
+      const session = row.session ?? {};
+      const { token, hash } = gerarTokenAcesso();
+      await this.db.insert(eventoTokensConsulta).values({ orderId: order.id, email: order.buyerEmail, tokenHash: hash, expiresAt: validadeAcesso(session.endsAt) });
+      pedidos.push({ orderNumber: order.orderNumber, eventTitle: row.event?.title ?? "", sessionStartsAt: session.startsAt, acesso: token });
+    }
+    return { pedidos };
+  }
+
   async consultarPedido(orderNumber: string, db: any = this.db): Promise<ConsultaPedidoPublica> { const order = await this.getOrder(orderNumber, db); if (order.expiresAt && order.expiresAt <= new Date() && !["CONFIRMADO", "USADO"].includes(order.status)) throw new NotFoundException({ code: "ORDER_NOT_FOUND", message: "Pedido não encontrado" }); return this.pedidoResult(order, db); }
   private async pedidoResult(order: any, db: any): Promise<PedidoPublicoResult> { if (order.event?.status !== "PUBLICADO" || order.session?.status !== "PUBLICADA") throw new NotFoundException({ code: "ORDER_NOT_FOUND", message: "Pedido não encontrado" }); const rows = await db.select({ item: eventoItensPedido, inventory: eventoInventarioAssentos, seat: eventoMapaAssentos, ticket: eventoTiposIngresso }).from(eventoItensPedido).innerJoin(eventoInventarioAssentos, eq(eventoInventarioAssentos.id, eventoItensPedido.inventorySeatId)).innerJoin(eventoMapaAssentos, eq(eventoMapaAssentos.id, eventoInventarioAssentos.seatId)).innerJoin(eventoTiposIngresso, eq(eventoTiposIngresso.id, eventoItensPedido.ticketTypeId)).where(eq(eventoItensPedido.orderId, order.id)); const snapshot = order.appliedOffer ?? rows.find((row: any) => row.item?.pricingEvidence?.offerSnapshot)?.item?.pricingEvidence?.offerSnapshot ?? null; return { orderNumber: order.orderNumber, status: order.status, eventTitle: order.event?.title ?? "", eventSlug: order.event?.slug ?? "", sessionId: order.session?.id ?? order.sessionId, expiresAt: order.expiresAt ?? null, session: { startsAt: order.session?.startsAt, endsAt: order.session?.endsAt }, subtotalCents: order.subtotalCents ?? order.totalCents, discountCents: order.discountCents ?? 0, totalCents: order.totalCents, appliedOffer: snapshot, items: rows.map((row: any) => ({ seatId: row.inventory?.seatId, ticketTypeId: row.item?.ticketTypeId, unitPriceCents: row.item?.unitPriceCents, totalPriceCents: row.item?.totalPriceCents, rowLabel: row.seat?.rowLabel ?? row.inventory?.rowLabel ?? "", seatNumber: row.seat?.seatNumber ?? row.inventory?.seatNumber ?? "", ticketTypeName: row.ticket?.name ?? row.item?.ticketTypeName ?? "" })) }; }
   private async getOrder(orderNumber: string, db: any, lock = false): Promise<any> { const query = db.select({ order: eventoPedidos, event: eventos, session: eventoSessoes }).from(eventoPedidos).innerJoin(eventos, eq(eventos.id, eventoPedidos.eventId)).innerJoin(eventoSessoes, eq(eventoSessoes.id, eventoPedidos.sessionId)).where(eq(eventoPedidos.orderNumber, orderNumber)); const result = await this.first<any>(lock ? await this.lockRows(query) : query); if (!result) throw new NotFoundException({ code: "ORDER_NOT_FOUND", message: "Pedido não encontrado" }); return result.order ? { ...result.order, event: result.event, session: result.session } : result; }

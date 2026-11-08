@@ -1,5 +1,5 @@
 import { EventosPublicSalesService } from "./eventos-public-sales.service";
-import { eventoAceites, eventoInventarioAssentos, eventoPagamentos, eventoPedidos, eventoParticipantes, eventoReservas, eventoTokensConsulta } from "@essencia/db";
+import { eventoAceites, eventoIngressos, eventoInventarioAssentos, eventoItensPedido, eventoPagamentos, eventoPedidos, eventoParticipantes, eventoReservas, eventoTokensConsulta } from "@essencia/db";
 import { hashTokenAcesso } from "./acesso-pedido";
 
 describe("EventosPublicSalesService - contratos públicos", () => {
@@ -215,6 +215,55 @@ describe("EventosPublicSalesService - contratos públicos", () => {
 
     expect(result).toMatchObject({ eventSlug: "festival-escola", sessionId: "session-1", expiresAt: db.order.expiresAt, items: [{ rowLabel: "A", seatNumber: "12", ticketTypeName: "Inteira" }] });
     expect(result).not.toHaveProperty("tickets");
+    expect(JSON.stringify(result)).not.toContain("qrPayload");
+    expect(JSON.stringify(result)).not.toContain("numero");
+  });
+
+  it("token válido devolve QR, número, lugar, tipo e participante", async () => {
+    const db = ingressosPublicosDb({ token: "acesso-valido", status: "CONFIRMADO" });
+    const result = await new EventosPublicSalesService({ db } as any).obterIngressos("ABC123DEF456", "acesso-valido");
+
+    expect(result).toMatchObject({ buyerName: "Ana", event: { title: "Festival", slug: "festival-escola", imageUrl: "https://cdn.test/festival.png", locationName: "Auditório" }, tickets: [{ numero: "ABCD2345", qrPayload: "evento:ABCD2345", rowLabel: "A", seatNumber: "12", ticketTypeName: "Inteira", participantName: "Participante", status: "EMITIDO" }] });
+  });
+
+  it.each([
+    ["token de outro pedido", "outro-pedido", { orderId: "order-outro" }],
+    ["token vencido", "token-vencido", { orderId: "order-1", expiresAt: new Date(Date.now() - 1_000) }],
+    ["token vazio", "", null],
+  ])("%s não revela nada", async (_descricao, acesso, token) => {
+    const db = ingressosPublicosDb({ token: "acesso-valido", tokenRow: token, status: "CONFIRMADO" });
+
+    await expect(new EventosPublicSalesService({ db } as any).obterIngressos("ABC123DEF456", acesso)).rejects.toMatchObject({ response: { code: "ORDER_NOT_FOUND", message: "Pedido não encontrado" } });
+  });
+
+  it("pedido aguardando pagamento devolve tickets vazios", async () => {
+    const db = ingressosPublicosDb({ token: "acesso-valido", status: "AGUARDANDO_PAGAMENTO" });
+    const result = await new EventosPublicSalesService({ db } as any).obterIngressos("ABC123DEF456", "acesso-valido");
+
+    expect(result.tickets).toEqual([]);
+  });
+
+  it("meus ingressos por número e e-mail ignora maiúsculas", async () => {
+    const db = meusIngressosDb([{ orderNumber: "ABC123DEF456", buyerEmail: "ana@example.com", status: "CONFIRMADO" }]);
+    const result = await new EventosPublicSalesService({ db } as any).buscarMeusIngressos({ orderNumber: "ABC123DEF456", email: "ANA@EXAMPLE.COM" });
+
+    expect(result.pedidos).toHaveLength(1);
+    expect(result.pedidos[0]).toMatchObject({ orderNumber: "ABC123DEF456", acesso: expect.any(String) });
+    expect(db.tokens[0]).toMatchObject({ orderId: "order-1", email: "ana@example.com" });
+  });
+
+  it("meus ingressos por e-mail e celular compara só dígitos", async () => {
+    const db = meusIngressosDb([{ orderNumber: "XYZ987654321", buyerEmail: "ana@example.com", buyerPhone: "5511999999999", status: "USADO" }]);
+    const result = await new EventosPublicSalesService({ db } as any).buscarMeusIngressos({ email: "ana@example.com", phone: "+55 (11) 99999-9999" });
+
+    expect(result.pedidos).toHaveLength(1);
+    expect(result.pedidos[0]?.orderNumber).toBe("XYZ987654321");
+  });
+
+  it("meus ingressos não encontrado usa a mensagem genérica", async () => {
+    const db = meusIngressosDb([]);
+
+    await expect(new EventosPublicSalesService({ db } as any).buscarMeusIngressos({ orderNumber: "ABC123DEF456", email: "nao@example.com" })).rejects.toMatchObject({ response: { code: "ORDER_NOT_FOUND", message: "Não encontramos um pedido com esses dados" } });
   });
 
   it("recusa assento duplicado antes de mutar pedido ou inventário", async () => {
@@ -633,6 +682,42 @@ function checkoutDb(order: any, rows: any[], payment: any = null) {
     insert: (_table: any) => ({ values: (payload: any) => { db.paymentPayload = payload; return Promise.resolve([]); } }),
     update: () => ({ set: (payload: any) => ({ where: async () => { if (payload.expectedAmountCents !== undefined) db.paymentPayload = payload; return []; } }) }),
   };
+  return db;
+}
+
+function ingressosPublicosDb(config: { token: string; tokenRow?: any; status: string }) {
+  const order: any = { id: "order-1", orderNumber: "ABC123DEF456", eventId: "event-1", sessionId: "session-1", buyerName: "Ana", buyerEmail: "ana@example.com", status: config.status, totalCents: 1250, subtotalCents: 1250, discountCents: 0, expiresAt: new Date("2026-12-01T12:00:00Z") };
+  const event = { id: "event-1", status: "PUBLICADO", title: "Festival", slug: "festival-escola", imageUrl: "https://cdn.test/festival.png", locationName: "Auditório" };
+  const session = { id: "session-1", status: "PUBLICADA", startsAt: new Date("2026-12-01T10:00:00Z"), endsAt: new Date("2026-12-07T12:00:00Z") };
+  const tokenRow = config.tokenRow === undefined ? { orderId: order.id, tokenHash: hashTokenAcesso(config.token), expiresAt: new Date(Date.now() + 60_000) } : config.tokenRow;
+  const db: any = { order, tokens: [], selectCalls: 0 };
+  db.select = () => {
+    const chain: any = {
+      from: (table: any) => { chain.table = table; return chain; },
+      innerJoin: () => chain,
+      leftJoin: () => chain,
+      where: async () => {
+        if (chain.table === eventoTokensConsulta) return tokenRow ? [tokenRow] : [];
+        if (chain.table === eventoPedidos) return [{ order, event, session }];
+        if (chain.table === eventoIngressos) return [{ ticket: { numero: "ABCD2345", qrPayload: "evento:ABCD2345", status: "EMITIDO" }, item: { ticketTypeId: "ticket-1", inventorySeatId: "inventory-1" }, seat: { rowLabel: "A", seatNumber: "12" }, ticketType: { name: "Inteira" }, participant: { fullName: "Participante" } }];
+        if (chain.table === eventoItensPedido) return [{ item: { ticketTypeId: "ticket-1", unitPriceCents: 1250, totalPriceCents: 1250 }, inventory: { seatId: "seat-1" }, seat: { rowLabel: "A", seatNumber: "12" }, ticket: { name: "Inteira" } }];
+        return [];
+      },
+    };
+    return chain;
+  };
+  db.insert = (table: any) => ({ values: (payload: any) => { if (table === eventoTokensConsulta) db.tokens.push(payload); return Promise.resolve([]); } });
+  return db;
+}
+
+function meusIngressosDb(orders: Array<{ orderNumber: string; buyerEmail: string; buyerPhone?: string; status: string }>) {
+  const rows = orders.map((input, index) => ({ order: { id: `order-${index + 1}`, orderNumber: input.orderNumber, buyerEmail: input.buyerEmail, buyerPhone: input.buyerPhone ?? "5511888888888", status: input.status }, event: { title: "Festival" }, session: { startsAt: new Date("2026-12-01T10:00:00Z"), endsAt: new Date("2026-12-07T12:00:00Z") } }));
+  const db: any = { tokens: [] };
+  db.select = () => {
+    const chain: any = { from: () => chain, innerJoin: () => chain, where: async () => rows };
+    return chain;
+  };
+  db.insert = (table: any) => ({ values: (payload: any) => { if (table === eventoTokensConsulta) db.tokens.push(payload); return Promise.resolve([]); } });
   return db;
 }
 
