@@ -461,6 +461,44 @@ describe('EventosService contratos de workspace', () => {
     expect(ofertas.listarPublicas).toHaveBeenCalledWith("e1");
   });
 
+  it("devolve palco, entradas e letras só das fileiras com assento", async () => {
+    const db = fakeDb({
+      selects: [
+        [{ id: "s1", eventId: "e1", mapId: "mapa-1", status: "PUBLICADA" }],
+        [event({ status: "PUBLICADO" })],
+        [{ id: "mapa-1", status: "CONFIRMADO", layout: { versao: 1, largura: 800, altura: 600, rotulos: [{ fileira: "A", x: 10, y: 20 }, { fileira: "X", x: 30, y: 40 }], elementos: [{ tipo: "PALCO", texto: "Palco", x: 100, y: 50 }, { tipo: "ENTRADA", texto: "Entrada", x: 200, y: 50 }] } }],
+        [{ seat: { id: "seat-1", rowLabel: "A", seatNumber: "1", x: 10, y: 20, width: 50, height: 50, category: "COMUM", accessible: false, metadata: { rotacao: 90 } }, inventory: { status: "DISPONIVEL" } }, { seat: { id: "seat-2", rowLabel: "A", seatNumber: "2", x: 70, y: 20, width: 50, height: 50, category: "COMUM", accessible: false, metadata: {} }, inventory: { status: "DISPONIVEL" } }],
+      ],
+    });
+
+    await expect(service(db).getPublicMap("s1")).resolves.toEqual({
+      sessionId: "s1",
+      mapId: "mapa-1",
+      seats: [
+        expect.objectContaining({ id: "seat-1", rowLabel: "A", rotacao: 90 }),
+        expect.objectContaining({ id: "seat-2", rowLabel: "A", rotacao: 0 }),
+      ],
+      layout: { largura: 800, altura: 600, rotulos: [{ fileira: "A", x: 10, y: 20 }], elementos: [{ tipo: "PALCO", texto: "Palco", x: 100, y: 50 }, { tipo: "ENTRADA", texto: "Entrada", x: 200, y: 50 }] },
+    });
+  });
+
+  it("devolve layout nulo quando o mapa não tem desenho", async () => {
+    const db = fakeDb({ selects: [[{ id: "s1", eventId: "e1", mapId: "mapa-1", status: "PUBLICADA" }], [event({ status: "PUBLICADO" })], [{ id: "mapa-1", status: "CONFIRMADO", layout: null }], []] });
+
+    await expect(service(db).getPublicMap("s1")).resolves.toMatchObject({ sessionId: "s1", mapId: "mapa-1", seats: [], layout: null });
+  });
+
+  it("usa a rotação gravada em metadata e zero quando falta", async () => {
+    const db = fakeDb({
+      selects: [[{ id: "s1", eventId: "e1", mapId: "mapa-1", status: "PUBLICADA" }], [event({ status: "PUBLICADO" })], [{ id: "mapa-1", status: "CONFIRMADO", layout: null }], [
+        { seat: { id: "seat-1", rowLabel: "A", seatNumber: "1", x: 10, y: 20, width: 50, height: 50, category: null, accessible: false, metadata: { rotacao: "12.5" } }, inventory: { status: "DISPONIVEL" } },
+        { seat: { id: "seat-2", rowLabel: "A", seatNumber: "2", x: 70, y: 20, width: 50, height: 50, category: null, accessible: false, metadata: { rotacao: "invalida" } }, inventory: { status: "DISPONIVEL" } },
+      ]],
+    });
+
+    await expect(service(db).getPublicMap("s1")).resolves.toMatchObject({ seats: [expect.objectContaining({ rotacao: 12.5 }), expect.objectContaining({ rotacao: 0 })] });
+  });
+
 });
 
 function service(db: any, storage?: any, mapas?: any) { return new EventosService({ db } as any, { validarPublicacao: jest.fn() } as any, storage, mapas); }
@@ -469,7 +507,14 @@ function fakeDb(options: { selects?: unknown[][]; lockCalls?: string[]; insert?:
   let selectIndex = 0;
   const selects = options.selects ?? [];
   const db: any = { updated: false };
-  db.select = () => ({ from: () => ({ where: () => { const rows = selects[selectIndex++] ?? []; const promise: any = Promise.resolve(rows); promise.limit = async () => rows; promise.for = (mode: string) => { options.lockCalls?.push(mode); return promise; }; return promise; } }) });
+  db.select = () => {
+    const builder: any = {};
+    builder.from = () => builder;
+    builder.innerJoin = () => builder;
+    builder.leftJoin = () => builder;
+    builder.where = () => { const rows = selects[selectIndex++] ?? []; const promise: any = Promise.resolve(rows); promise.limit = async () => rows; promise.for = (mode: string) => { options.lockCalls?.push(mode); return promise; }; return promise; };
+    return builder;
+  };
   db.insert = (table: any) => ({ values: (values: any) => ({ returning: async () => options.insert ? options.insert(values) : [] }) });
   db.update = () => ({ set: () => ({ where: () => ({ returning: async () => { db.updated = true; return options.update ? options.update() : []; } }) }) });
   db.delete = (table: unknown) => options.delete ? options.delete(table) : ({ where: async () => undefined });
