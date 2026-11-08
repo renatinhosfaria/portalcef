@@ -1,8 +1,8 @@
 import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException, ServiceUnavailableException, forwardRef } from "@nestjs/common";
 import { and, desc, eq, eventoAceites, eventoInventarioAssentos, eventoItensPedido, eventoMapaAssentos, eventoOfertas, eventoPagamentos, eventoParticipantes, eventoPedidos, eventoPoliticas, eventoReservas, eventoSessoes, eventoTiposIngresso, eventoTokensConsulta, eventos, inArray, lte, type Database } from "@essencia/db";
-import { checkoutPublicoSchema, finalizarPedidoSchema, reservaPublicaSchema, type CheckoutPublicoInput, type FinalizarPedidoInput, type ReservaPublicaInput } from "@essencia/shared/schemas";
+import { finalizarPedidoSchema, pagamentoEmbutidoSchema, reservaPublicaSchema, type FinalizarPedidoInput, type PagamentoEmbutidoInput, type ReservaPublicaInput } from "@essencia/shared/schemas";
 import { calcularPrecoPedido, type OfertaPreco } from "@essencia/shared/eventos/precos";
-import type { ConsultaPedidoPublica, FinalizacaoPublicaResult, PedidoPublicoResult, PoliticaPublica, ReservaPublicaResult } from "@essencia/shared/types";
+import type { ConsultaPedidoPublica, FinalizacaoPublicaResult, PagamentoEmbutidoResult, PedidoPublicoResult, PoliticaPublica, ReservaPublicaResult } from "@essencia/shared/types";
 import { DatabaseService } from "../../common/database/database.service";
 import { PaymentsService } from "../payments/payments.service";
 import { gerarTokenAcesso, validadeAcesso } from "./acesso-pedido";
@@ -219,13 +219,13 @@ export class EventosPublicSalesService {
     return { pedido, acesso: token };
   }
 
-  async iniciarCheckout(orderNumber: string, raw: unknown) {
-    const input = validated<CheckoutPublicoInput>(checkoutPublicoSchema, raw);
+  async iniciarCheckout(orderNumber: string, raw: unknown): Promise<PagamentoEmbutidoResult> {
+    const input = validated<PagamentoEmbutidoInput>(pagamentoEmbutidoSchema, raw);
     if (!this.paymentsService) throw new ServiceUnavailableException({ code: "CHECKOUT_UNAVAILABLE", message: "Checkout ainda indisponível" });
-    this.validarUrlCheckout(input.successUrl);
-    this.validarUrlCheckout(input.cancelUrl);
+    this.validarUrlCheckout(input.returnUrl);
     const order = await this.getOrder(orderNumber, this.db);
     if (!["RESERVADO", "AGUARDANDO_PAGAMENTO"].includes(order.status)) throw fail("ORDER_NOT_AVAILABLE", "Pedido indisponível para checkout");
+    if (!order.buyerEmail?.trim()) throw fail("ORDER_NOT_FINALIZED", "Pedido ainda não foi finalizado");
     if (order.expiresAt && order.expiresAt <= new Date()) throw fail("ORDER_NOT_AVAILABLE", "Pedido expirado ou indisponível");
     const minimumCheckoutExpiry = new Date(Date.now() + 30 * 60_000);
     const checkoutExpiresAt = order.expiresAt && order.expiresAt > minimumCheckoutExpiry ? order.expiresAt : minimumCheckoutExpiry;
@@ -241,7 +241,17 @@ export class EventosPublicSalesService {
     });
     const linesTotalCents = items.reduce((total: number, item: { unitAmount: number; quantity: number }) => total + item.unitAmount * item.quantity, 0);
     if (linesTotalCents !== order.totalCents) throw fail("CHECKOUT_AMOUNT_MISMATCH", "Linhas do checkout não fecham o total do pedido");
-    const checkout = await this.paymentsService.createCheckoutSession({
+
+    const existing = await this.first<any>(this.db.select().from(eventoPagamentos).where(eq(eventoPagamentos.orderId, order.id)));
+    if (existing?.status === "PENDENTE" && existing.stripeCheckoutSessionId) {
+      const clientSecret = await this.paymentsService.obterClientSecretSeAberta(existing.stripeCheckoutSessionId);
+      if (clientSecret) {
+        await this.estenderCheckout(order.id, checkoutExpiresAt);
+        return { clientSecret, expiresAt: checkoutExpiresAt, orderNumber: order.orderNumber };
+      }
+    }
+
+    const checkout = await this.paymentsService.createEmbeddedCheckoutSession({
       orderId: order.id,
       orderNumber: order.orderNumber,
       totalAmount: order.totalCents,
@@ -250,21 +260,22 @@ export class EventosPublicSalesService {
       customerEmail: order.buyerEmail,
       expiresAt: checkoutExpiresAt,
       items,
-      successUrl: input.successUrl,
-      cancelUrl: input.cancelUrl,
-      idempotencyKey: `evento-checkout:${order.id}`,
+      returnUrl: input.returnUrl,
+      idempotencyKey: `evento-checkout:${order.id}:${input.idempotencyKey}`,
       eventOrderId: order.id,
     });
-    const existing = await this.first<any>(this.db.select().from(eventoPagamentos).where(eq(eventoPagamentos.orderId, order.id)));
     if (existing) {
       await this.db.update(eventoPagamentos).set({ stripeCheckoutSessionId: checkout.checkoutSessionId, stripePaymentIntentId: checkout.paymentIntentId ?? null, expectedAmountCents: linesTotalCents, status: "PENDENTE", updatedAt: new Date() }).where(eq(eventoPagamentos.id, existing.id));
     } else {
       await this.db.insert(eventoPagamentos).values({ orderId: order.id, stripeCheckoutSessionId: checkout.checkoutSessionId, stripePaymentIntentId: checkout.paymentIntentId ?? null, method: "card", expectedAmountCents: linesTotalCents, receivedAmountCents: null, currency: "BRL", status: "PENDENTE" });
     }
-    await this.db.update(eventoPedidos).set({ status: "AGUARDANDO_PAGAMENTO", expiresAt: checkoutExpiresAt, updatedAt: new Date() }).where(and(eq(eventoPedidos.id, order.id), inArray(eventoPedidos.status, ["RESERVADO", "INICIADO"] as any)));
-    await this.db.update(eventoReservas).set({ expiresAt: checkoutExpiresAt, updatedAt: new Date() }).where(and(eq(eventoReservas.orderId, order.id), eq(eventoReservas.status, "ATIVA")));
-    await this.db.update(eventoInventarioAssentos).set({ reservationExpiresAt: checkoutExpiresAt, updatedAt: new Date() }).where(and(eq(eventoInventarioAssentos.reservedByOrderId, order.id), eq(eventoInventarioAssentos.status, "RESERVADO")));
-    return { checkoutUrl: checkout.checkoutUrl, expiresAt: checkoutExpiresAt, orderNumber: order.orderNumber };
+    await this.estenderCheckout(order.id, checkoutExpiresAt);
+    return { clientSecret: checkout.clientSecret, expiresAt: checkoutExpiresAt, orderNumber: order.orderNumber };
+  }
+  private async estenderCheckout(orderId: string, checkoutExpiresAt: Date) {
+    await this.db.update(eventoPedidos).set({ status: "AGUARDANDO_PAGAMENTO", expiresAt: checkoutExpiresAt, updatedAt: new Date() }).where(and(eq(eventoPedidos.id, orderId), inArray(eventoPedidos.status, ["RESERVADO", "INICIADO", "AGUARDANDO_PAGAMENTO"] as any)));
+    await this.db.update(eventoReservas).set({ expiresAt: checkoutExpiresAt, updatedAt: new Date() }).where(and(eq(eventoReservas.orderId, orderId), eq(eventoReservas.status, "ATIVA")));
+    await this.db.update(eventoInventarioAssentos).set({ reservationExpiresAt: checkoutExpiresAt, updatedAt: new Date() }).where(and(eq(eventoInventarioAssentos.reservedByOrderId, orderId), eq(eventoInventarioAssentos.status, "RESERVADO")));
   }
   private validarUrlCheckout(value: string) {
     const configured = (process.env.EVENTOS_PUBLIC_URL || "https://eventos.portalcef.com.br").replace(/\/$/, "");

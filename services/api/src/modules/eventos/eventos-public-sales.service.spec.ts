@@ -14,7 +14,7 @@ describe("EventosPublicSalesService - contratos públicos", () => {
   });
 
   it("falha fechado no checkout e nunca devolve URL do cliente", async () => {
-    await expect(service().iniciarCheckout("ABC123DEF456", { successUrl: "https://ok.example/sucesso", cancelUrl: "https://ok.example/cancelar", idempotencyKey: "checkout-123456" })).rejects.toMatchObject({ response: { code: "CHECKOUT_UNAVAILABLE" } });
+    await expect(service().iniciarCheckout("ABC123DEF456", { returnUrl: "https://eventos.portalcef.com.br/pagamento/retorno", idempotencyKey: "checkout-123456" })).rejects.toMatchObject({ response: { code: "CHECKOUT_UNAVAILABLE" } });
   });
 
   it("libera assentos, reservas, pagamento e cancela o pedido", async () => {
@@ -86,29 +86,58 @@ describe("EventosPublicSalesService - contratos públicos", () => {
   });
 
   it("envia ao Stripe as linhas persistidas do pedido com desconto e fecha em R$ 382,50", async () => {
-    const createCheckoutSession = jest.fn().mockResolvedValue({ checkoutSessionId: "cs-38250", checkoutUrl: "https://checkout.example/cs-38250", paymentIntentId: "pi-38250" });
+    const createEmbeddedCheckoutSession = jest.fn().mockResolvedValue({ checkoutSessionId: "cs-38250", clientSecret: "cs_secret_38250", paymentIntentId: "pi-38250" });
     const order = { id: "order-38250", orderNumber: "ABC123DEF456", status: "RESERVADO", totalCents: 38250, buyerName: "Ana", buyerEmail: "a@b.com", buyerPhone: "11999999999", expiresAt: new Date(Date.now() + 60_000), eventId: "event-1", sessionId: "session-1" };
     const rows = Array.from({ length: 10 }, (_, index) => ({ item: { id: `item-${index}`, orderId: order.id, ticketTypeId: "ticket-adulto", unitPriceCents: 3825, totalPriceCents: 3825, quantity: 1 }, ticket: { name: "Adulto" } }));
     const db = checkoutDb(order, rows);
-    const result = await new EventosPublicSalesService({ db } as any, { createCheckoutSession } as any).iniciarCheckout("ABC123DEF456", { successUrl: "https://eventos.portalcef.com.br/sucesso", cancelUrl: "https://eventos.portalcef.com.br/cancelar", idempotencyKey: "checkout-38250" });
+    const result = await new EventosPublicSalesService({ db } as any, { createEmbeddedCheckoutSession } as any).iniciarCheckout("ABC123DEF456", { returnUrl: "https://eventos.portalcef.com.br/pagamento/retorno", idempotencyKey: "checkout-38250" });
 
-    expect(result).toMatchObject({ checkoutUrl: "https://checkout.example/cs-38250", orderNumber: order.orderNumber });
-    expect(createCheckoutSession).toHaveBeenCalledWith(expect.objectContaining({ orderId: order.id, orderNumber: order.orderNumber, eventOrderId: order.id, totalAmount: 38250, items: expect.any(Array) }));
-    const checkoutInput = createCheckoutSession.mock.calls[0][0];
+    expect(result).toMatchObject({ clientSecret: "cs_secret_38250", orderNumber: order.orderNumber });
+    expect(createEmbeddedCheckoutSession).toHaveBeenCalledWith(expect.objectContaining({ orderId: order.id, orderNumber: order.orderNumber, eventOrderId: order.id, totalAmount: 38250, items: expect.any(Array), returnUrl: "https://eventos.portalcef.com.br/pagamento/retorno", idempotencyKey: `evento-checkout:${order.id}:checkout-38250` }));
+    const checkoutInput = createEmbeddedCheckoutSession.mock.calls[0][0];
     expect(checkoutInput.items).toHaveLength(10);
     expect(checkoutInput.items.reduce((sum: number, item: { unitAmount: number; quantity: number }) => sum + item.unitAmount * item.quantity, 0)).toBe(38250);
     expect(db.paymentPayload.expectedAmountCents).toBe(38250);
   });
 
   it("recusa linhas que não fecham o total persistido antes de chamar o Stripe", async () => {
-    const createCheckoutSession = jest.fn();
+    const createEmbeddedCheckoutSession = jest.fn();
     const order = { id: "order-divergente", orderNumber: "ABC123DEF456", status: "RESERVADO", totalCents: 38250, buyerName: "Ana", buyerEmail: "a@b.com", buyerPhone: "11999999999", expiresAt: new Date(Date.now() + 60_000), eventId: "event-1", sessionId: "session-1" };
     const rows = [{ item: { id: "item-1", orderId: order.id, ticketTypeId: "ticket-adulto", unitPriceCents: 4000, totalPriceCents: 4000, quantity: 10 }, ticket: { name: "Adulto" } }];
     const db = checkoutDb(order, rows);
 
-    await expect(new EventosPublicSalesService({ db } as any, { createCheckoutSession } as any).iniciarCheckout("ABC123DEF456", { successUrl: "https://eventos.portalcef.com.br/sucesso", cancelUrl: "https://eventos.portalcef.com.br/cancelar", idempotencyKey: "checkout-divergente" })).rejects.toMatchObject({ response: { code: "CHECKOUT_AMOUNT_MISMATCH" } });
-    expect(createCheckoutSession).not.toHaveBeenCalled();
+    await expect(new EventosPublicSalesService({ db } as any, { createEmbeddedCheckoutSession } as any).iniciarCheckout("ABC123DEF456", { returnUrl: "https://eventos.portalcef.com.br/pagamento/retorno", idempotencyKey: "checkout-divergente" })).rejects.toMatchObject({ response: { code: "CHECKOUT_AMOUNT_MISMATCH" } });
+    expect(createEmbeddedCheckoutSession).not.toHaveBeenCalled();
     expect(db.paymentPayload).toBeNull();
+  });
+
+  it("recusa returnUrl de outra origem com CHECKOUT_URL_NOT_ALLOWED", async () => {
+    const createEmbeddedCheckoutSession = jest.fn();
+    const order = { id: "order-url", orderNumber: "ABC123DEF456", status: "RESERVADO", totalCents: 1250, buyerName: "Ana", buyerEmail: "a@b.com", buyerPhone: "11999999999", expiresAt: new Date(Date.now() + 60_000), eventId: "event-1", sessionId: "session-1" };
+    const db = checkoutDb(order, [{ item: { ticketTypeId: "ticket-adulto", unitPriceCents: 1250, quantity: 1 }, ticket: { name: "Adulto" } }]);
+
+    await expect(new EventosPublicSalesService({ db } as any, { createEmbeddedCheckoutSession } as any).iniciarCheckout("ABC123DEF456", { returnUrl: "https://evil.example/pagamento/retorno", idempotencyKey: "checkout-url-123456" })).rejects.toMatchObject({ response: { code: "CHECKOUT_URL_NOT_ALLOWED" } });
+    expect(createEmbeddedCheckoutSession).not.toHaveBeenCalled();
+  });
+
+  it("recusa pedido não finalizado sem e-mail do comprador", async () => {
+    const createEmbeddedCheckoutSession = jest.fn();
+    const order = { id: "order-sem-email", orderNumber: "ABC123DEF456", status: "RESERVADO", totalCents: 1250, buyerName: "Ana", buyerEmail: null, buyerPhone: "11999999999", expiresAt: new Date(Date.now() + 60_000), eventId: "event-1", sessionId: "session-1" };
+    const db = checkoutDb(order, []);
+
+    await expect(new EventosPublicSalesService({ db } as any, { createEmbeddedCheckoutSession } as any).iniciarCheckout("ABC123DEF456", { returnUrl: "https://eventos.portalcef.com.br/pagamento/retorno", idempotencyKey: "checkout-email-123456" })).rejects.toMatchObject({ response: { code: "ORDER_NOT_FINALIZED" } });
+    expect(createEmbeddedCheckoutSession).not.toHaveBeenCalled();
+  });
+
+  it("reaproveita a sessão aberta sem criar outra", async () => {
+    const createEmbeddedCheckoutSession = jest.fn();
+    const obterClientSecretSeAberta = jest.fn().mockResolvedValue("cs_secret_existente");
+    const order = { id: "order-reuso", orderNumber: "ABC123DEF456", status: "AGUARDANDO_PAGAMENTO", totalCents: 1250, buyerName: "Ana", buyerEmail: "a@b.com", buyerPhone: "11999999999", expiresAt: new Date(Date.now() + 60_000), eventId: "event-1", sessionId: "session-1" };
+    const db = checkoutDb(order, [{ item: { ticketTypeId: "ticket-adulto", unitPriceCents: 1250, quantity: 1 }, ticket: { name: "Adulto" } }], { id: "payment-existente", orderId: order.id, status: "PENDENTE", stripeCheckoutSessionId: "cs_existente" });
+
+    await expect(new EventosPublicSalesService({ db } as any, { createEmbeddedCheckoutSession, obterClientSecretSeAberta } as any).iniciarCheckout("ABC123DEF456", { returnUrl: "https://eventos.portalcef.com.br/pagamento/retorno", idempotencyKey: "checkout-reuso-123456" })).resolves.toMatchObject({ clientSecret: "cs_secret_existente", orderNumber: order.orderNumber });
+    expect(obterClientSecretSeAberta).toHaveBeenCalledWith("cs_existente");
+    expect(createEmbeddedCheckoutSession).not.toHaveBeenCalled();
   });
 
   it("usa o preço persistido do ingresso e retorna itens da reserva", async () => {
@@ -585,12 +614,19 @@ function vendaDbComIngressos(data: any) {
   return db;
 }
 
-function checkoutDb(order: any, rows: any[]) {
+function checkoutDb(order: any, rows: any[], payment: any = null) {
   let selects = 0;
   const db: any = {
     paymentPayload: null,
     select: () => {
-      const value = selects++ === 0 ? [{ order, event: { id: order.eventId, status: "PUBLICADO", title: "Evento" }, session: { id: order.sessionId, status: "PUBLICADA" } }] : selects === 2 ? rows : [];
+      const current = selects++;
+      const value = current === 0
+        ? [{ order, event: { id: order.eventId, status: "PUBLICADO", title: "Evento" }, session: { id: order.sessionId, status: "PUBLICADA" } }]
+        : current === 1
+          ? rows
+          : current === 2 && payment
+            ? [payment]
+            : [];
       const chain: any = { from: () => chain, innerJoin: () => chain, where: async () => value };
       return chain;
     },

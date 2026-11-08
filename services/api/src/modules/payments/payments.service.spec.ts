@@ -42,6 +42,20 @@ describe("PaymentsService.encerrarCheckoutSessionSeAberta", () => {
   });
 });
 
+describe("PaymentsService.obterClientSecretSeAberta", () => {
+  it("devolve o segredo só de sessão aberta", async () => {
+    const service = new PaymentsService({ get: () => "sk_test_x" } as any);
+    const retrieve = jest.fn();
+    (service as any).stripe = { checkout: { sessions: { retrieve } } };
+
+    retrieve.mockResolvedValueOnce({ status: "open", client_secret: "cs_secret_aberta" });
+    await expect(service.obterClientSecretSeAberta("cs_aberta")).resolves.toBe("cs_secret_aberta");
+
+    retrieve.mockResolvedValueOnce({ status: "complete", client_secret: "cs_secret_paga" });
+    await expect(service.obterClientSecretSeAberta("cs_paga")).resolves.toBeNull();
+  });
+});
+
 describe("PaymentsService checkout sessions", () => {
   const inputBase = {
     orderId: "order-123",

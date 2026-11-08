@@ -343,6 +343,11 @@ export class PaymentsService {
     }
   }
 
+  async obterClientSecretSeAberta(id: string): Promise<string | null> {
+    const session = await this.stripe.checkout.sessions.retrieve(id);
+    return session.status === "open" ? session.client_secret ?? null : null;
+  }
+
   private montarParametrosCheckout(
     input: CreateCheckoutSessionInput,
   ): Stripe.Checkout.SessionCreateParams {
