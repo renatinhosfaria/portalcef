@@ -1,11 +1,13 @@
 import { Body, Controller, Get, Param, Post, Query } from "@nestjs/common";
 import { Throttle } from "@nestjs/throttler";
 import { Public } from "../../common/decorators/public.decorator";
+import { UsarIpRealDoProxy } from "../../common/guards/throttler-ip-real.guard";
 import { EventosService } from "./eventos.service";
 import { EventosPublicSalesService } from "./eventos-public-sales.service";
 
 @Controller("eventos/public")
 @Public()
+@UsarIpRealDoProxy()
 export class EventosPublicController {
   constructor(private readonly service: EventosService, private readonly sales: EventosPublicSalesService) {}
   @Get()

@@ -1,6 +1,11 @@
 import { EventosPublicController } from "./eventos-public.controller";
+import { IP_REAL_DO_PROXY } from "../../common/guards/throttler-ip-real.guard";
 
 describe("EventosPublicController", () => {
+  it("tem metadata para usar o IP real do proxy nas rotas públicas", () => {
+    expect(Reflect.getMetadata(IP_REAL_DO_PROXY, EventosPublicController)).toBe(true);
+  });
+
   it("expõe as rotas públicas de políticas e vendas", () => {
     const proto = EventosPublicController.prototype as any;
     expect(typeof proto.sessions).toBe("function");

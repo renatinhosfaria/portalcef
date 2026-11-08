@@ -2,7 +2,7 @@ import { MiddlewareConsumer, Module, NestModule } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import { EventEmitterModule } from "@nestjs/event-emitter";
 import { ScheduleModule } from "@nestjs/schedule";
-import { ThrottlerModule, ThrottlerGuard } from "@nestjs/throttler";
+import { ThrottlerModule } from "@nestjs/throttler";
 import { APP_GUARD } from "@nestjs/core";
 
 import { CorrelationIdMiddleware } from "./common/middleware/correlation-id.middleware";
@@ -35,6 +35,7 @@ import { EventoInscricoesModule } from "./modules/evento-inscricoes/evento-inscr
 import { EventosModule } from "./modules/eventos/eventos.module";
 import { SemestreRelatorioModule } from "./modules/semestre-relatorio/semestre-relatorio.module";
 import { RelatorioModule } from "./modules/relatorio/relatorio.module";
+import { ThrottlerIpRealGuard } from "./common/guards/throttler-ip-real.guard";
 
 @Module({
   imports: [
@@ -113,7 +114,7 @@ import { RelatorioModule } from "./modules/relatorio/relatorio.module";
   providers: [
     {
       provide: APP_GUARD,
-      useClass: ThrottlerGuard,
+      useClass: ThrottlerIpRealGuard,
     },
   ],
 })
