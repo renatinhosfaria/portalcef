@@ -73,7 +73,7 @@ describe("vitrine pública de Eventos", () => {
     expect(layout).toContain('import "@essencia/ui/globals.css"');
     expect(layout).toContain('import "./globals.css"');
     expect(cabecalho).toContain('href="/pedido/consulta"');
-    expect(consulta).toContain("ConsultaPedido");
+    expect(consulta).toContain("MeusIngressos");
     expect(catalog).toContain("<EventoCard");
     expect(card).toContain("event.imageUrl");
     expect(card).toContain("/evento/${event.slug}");

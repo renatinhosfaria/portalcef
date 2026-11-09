@@ -1,5 +1,15 @@
-import { ConsultaPedido } from "../../../components/consulta-pedido";
+import { MeusIngressos } from "../../../components/ingressos/meus-ingressos";
 
-export default function Page() {
-  return <><h1 className="mb-6 text-2xl font-bold">Consultar pedido</h1><ConsultaPedido /></>;
+type ParametrosConsulta = { pedido?: string };
+
+export default async function Page({ searchParams }: { searchParams?: Promise<ParametrosConsulta> }): Promise<React.JSX.Element> {
+  const query = searchParams ? await searchParams : {};
+  return (
+    <section className="content-width py-12 md:py-16">
+      <p className="text-sm font-semibold uppercase tracking-[0.2em] text-[var(--brand-green-dark)]">Acesso seguro</p>
+      <h1 className="mt-3 font-display text-4xl font-semibold tracking-tight text-[var(--tinta)] md:text-5xl">Meus ingressos</h1>
+      <p className="mt-4 mb-10 max-w-2xl text-lg text-[var(--tinta-2)]">Encontre seus pedidos para acessar os ingressos do evento.</p>
+      <MeusIngressos numeroInicial={query.pedido ?? ""} />
+    </section>
+  );
 }

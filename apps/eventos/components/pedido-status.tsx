@@ -58,7 +58,7 @@ type Props = {
   onResult?: (result: ConsultaPedidoPublica) => void;
 };
 
-export function ConsultaPedido({ initialOrderNumber = "", initialResult = null, autoAtualizar = false, retorno, onResult }: Props): React.JSX.Element {
+export function PedidoConsultaStatus({ initialOrderNumber = "", initialResult = null, autoAtualizar = false, retorno, onResult }: Props): React.JSX.Element {
   const [number, setNumber] = useState(initialOrderNumber);
   const [result, setResult] = useState<ConsultaPedidoPublica | null>(initialResult);
   const [error, setError] = useState<string | null>(null);
