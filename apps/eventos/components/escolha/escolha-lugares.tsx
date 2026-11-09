@@ -1,16 +1,17 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Sheet } from "@essencia/ui/components/sheet";
 import type { PublicEventDetail, PublicEventSession, PublicMap } from "@essencia/shared/types";
-import { EventosApiError, obterMapaSessao, reservarAssentos } from "../../lib/eventos-api";
+import { EventosApiError, reservarAssentos } from "../../lib/eventos-api";
 import { calcularPrecoSelecao, serializarSelecaoAssentos, type AssentoSelecionado } from "../../lib/selecao-lugares";
 import { EtapasCompra } from "../base/etapas-compra";
 import { MapaPublico } from "../mapa/mapa-publico";
 import { FaixaEvento } from "./faixa-evento";
 import { ListaLugares } from "./lista-lugares";
 import { faltaTipoIngresso, ResumoLugares } from "./resumo-lugares";
+import { lugaresPerdidos, useDisponibilidadeAoVivo } from "./use-disponibilidade-ao-vivo";
 
 const LIMITE_LUGARES = 20;
 
@@ -30,7 +31,7 @@ function normalizarSelecao(map: PublicMap, initial: AssentoSelecionado[], unavai
 
 export function EscolhaLugares({ evento, sessao, map: mapaInicial, initialSelection = [], unavailableSeatIds: indisponiveisIniciais = [], initialSelectionInvalid = false }: { evento: PublicEventDetail; sessao: PublicEventSession; map: PublicMap; initialSelection?: AssentoSelecionado[]; unavailableSeatIds?: string[]; initialSelectionInvalid?: boolean }): React.JSX.Element {
   const router = useRouter();
-  const [map, setMap] = useState(mapaInicial);
+  const { mapa: map, atualizarAgora } = useDisponibilidadeAoVivo(sessao.id, mapaInicial);
   const [selection, setSelection] = useState(() => normalizarSelecao(mapaInicial, initialSelection, indisponiveisIniciais));
   const [unavailableSeatIds, setUnavailableSeatIds] = useState<string[]>(indisponiveisIniciais);
   const [selectionInvalid, setSelectionInvalid] = useState(initialSelectionInvalid);
@@ -45,6 +46,21 @@ export function EscolhaLugares({ evento, sessao, map: mapaInicial, initialSelect
   const tiposCompletos = selection.length > 0 && !faltaTipoIngresso(selection, sessao.ticketTypes);
   const preco = useMemo(() => calcularPrecoSelecao(selection, sessao.ticketTypes, sessao.offers).totalCents, [selection, sessao.ticketTypes, sessao.offers]);
   const resumo = <ResumoLugares selection={selection} ticketTypes={sessao.ticketTypes} offers={sessao.offers} onChangeTicketType={(seatId, ticketTypeId) => { setSelectionInvalid(false); setSelection((current) => current.map((item) => item.seatId === seatId ? { ...item, ticketTypeId } : item)); }} />;
+
+  useEffect(() => {
+    const perdidos = lugaresPerdidos(selection, map);
+    const assentosNoMapa = new Set(map.seats.map((seat) => seat.id));
+    const idsPerdidos = new Set([...perdidos.map((seat) => seat.id), ...selection.filter((item) => !assentosNoMapa.has(item.seatId)).map((item) => item.seatId)]);
+    if (!idsPerdidos.size) return;
+    const perdidosPorId = new Map(perdidos.map((seat) => [seat.id, seat]));
+    const mensagens = selection.filter((item) => idsPerdidos.has(item.seatId)).map((item) => {
+      const seat = perdidosPorId.get(item.seatId);
+      return `O lugar ${item.label ?? `${seat?.rowLabel ?? ""}${seat?.seatNumber ?? item.seatId}`} acabou de ser escolhido por outra pessoa`;
+    });
+    setUnavailableSeatIds((current) => [...new Set([...current, ...idsPerdidos])]);
+    setSelection((current) => current.filter((item) => !idsPerdidos.has(item.seatId)));
+    setConflictMessages(mensagens);
+  }, [map, selection]);
 
   function vibrarAoMarcar(): void { if (podeVibrar()) navigator.vibrate?.(10); }
 
@@ -72,13 +88,7 @@ export function EscolhaLugares({ evento, sessao, map: mapaInicial, initialSelect
     } catch (error) {
       if (error instanceof EventosApiError && error.status === 409 && error.code === "SEAT_UNAVAILABLE") {
         try {
-          const atualizado = await obterMapaSessao(sessao.id);
-          const livres = new Set(atualizado.seats.filter((seat) => seat.state === "available").map((seat) => seat.id));
-          const perdidos = selection.filter((item) => !livres.has(item.seatId));
-          setMap(atualizado);
-          setUnavailableSeatIds((current) => [...new Set([...current, ...perdidos.map((item) => item.seatId)])]);
-          setSelection((current) => current.filter((item) => livres.has(item.seatId)));
-          setConflictMessages(perdidos.map((item) => `O lugar ${item.label ?? item.seatId} acabou de ser escolhido por outra pessoa`));
+          await atualizarAgora();
         } catch {
           setReservationError("Não foi possível atualizar a disponibilidade dos lugares. Tente novamente.");
         }
