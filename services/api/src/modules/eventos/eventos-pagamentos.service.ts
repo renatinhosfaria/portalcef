@@ -164,11 +164,12 @@ export class EventosPagamentosService {
       const items = typeof tx.select === "function"
         ? await tx.select().from(eventoItensPedido).where(eq(eventoItensPedido.orderId, order.id))
         : [];
+      const itensOrdenados = [...items].sort((left: any, right: any) => String(left.inventorySeatId).localeCompare(String(right.inventorySeatId)) || String(left.id).localeCompare(String(right.id)));
 
       // A confirmação segue a mesma ordem da liberação: pedido, inventário,
       // reserva e só então pagamento. Os SELECT ... FOR UPDATE ficam mantidos
       // até o fim da transação e impedem deadlocks cruzados.
-      for (const item of items) {
+      for (const item of itensOrdenados) {
         const inventoryQuery = tx
           .select()
           .from(eventoInventarioAssentos)
@@ -196,7 +197,7 @@ export class EventosPagamentosService {
         throw new ConflictException({ code: "PAYMENT_IN_PROGRESS", message: "Pagamento de Evento em processamento" });
       }
 
-      for (const item of items) {
+      for (const item of itensOrdenados) {
         const existingTicket = typeof tx.select === "function"
           ? await this.first<any>(tx.select().from(eventoIngressos).where(eq(eventoIngressos.itemId, item.id)))
           : undefined;
@@ -270,7 +271,8 @@ export class EventosPagamentosService {
       const reservations = typeof tx.select === "function"
         ? await tx.select().from(eventoReservas).where(and(eq(eventoReservas.orderId, order.id), eq(eventoReservas.status, "ATIVA")))
         : [];
-      for (const reservation of reservations) {
+      const reservasOrdenadas = [...reservations].sort((left: any, right: any) => String(left.inventorySeatId).localeCompare(String(right.inventorySeatId)) || String(left.id).localeCompare(String(right.id)));
+      for (const reservation of reservasOrdenadas) {
         await this.first(this.lockRows(tx.select().from(eventoInventarioAssentos).where(eq(eventoInventarioAssentos.id, reservation.inventorySeatId))));
         await this.first(this.lockRows(tx.select().from(eventoReservas).where(eq(eventoReservas.id, reservation.id))));
       }
@@ -278,7 +280,7 @@ export class EventosPagamentosService {
         ? await this.first(this.lockRows(tx.select().from(eventoPagamentos).where(eq(eventoPagamentos.id, payment.id))))
         : undefined;
       const paymentToUpdate = lockedPayment ?? payment;
-      for (const reservation of reservations) {
+      for (const reservation of reservasOrdenadas) {
         const released = await tx.update(eventoInventarioAssentos).set({ status: "DISPONIVEL", reservationExpiresAt: null, reservedByOrderId: null, updatedAt: new Date() }).where(and(eq(eventoInventarioAssentos.id, reservation.inventorySeatId), eq(eventoInventarioAssentos.status, "RESERVADO"), eq(eventoInventarioAssentos.reservedByOrderId, order.id))).returning();
         if (!this.changed(released)) throw new ConflictException({ code: "SEAT_STATE_CHANGED", message: "Estado do assento mudou durante a falha" });
         const releasedReservation = await tx.update(eventoReservas).set({ status: "LIBERADA", releasedAt: new Date(), updatedAt: new Date() }).where(and(eq(eventoReservas.id, reservation.id), eq(eventoReservas.status, "ATIVA"))).returning();

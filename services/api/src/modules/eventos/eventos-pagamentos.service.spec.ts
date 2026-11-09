@@ -83,6 +83,30 @@ describe("EventosPagamentosService", () => {
     ]);
   });
 
+  it("ordena locks dos itens pelo inventário mesmo quando a consulta retorna invertida", async () => {
+    const db = new FakeEventosDb();
+    db.state.items = [
+      { ...db.state.item, id: "item-2", inventorySeatId: "inventory-2" },
+      { ...db.state.item, id: "item-1", inventorySeatId: "inventory-1" },
+    ];
+    db.state.inventories = [
+      { ...db.state.inventory, id: "inventory-2" },
+      { ...db.state.inventory, id: "inventory-1" },
+    ];
+    db.state.reservations = [
+      { ...db.state.reservation, id: "reservation-2", inventorySeatId: "inventory-2" },
+      { ...db.state.reservation, id: "reservation-1", inventorySeatId: "inventory-1" },
+    ];
+    const service = new EventosPagamentosService({ db } as any);
+
+    await service.confirmarCheckout({ checkoutSessionId: "cs-1", amountCents: 1_000 });
+
+    expect(db.lockSequence.filter((value) => value.startsWith("inventário:"))).toEqual([
+      "inventário:inventory-1",
+      "inventário:inventory-2",
+    ]);
+  });
+
   it("rejeita PROCESSANDO ativo e recupera PROCESSANDO stale", async () => {
     const db = new FakeEventosDb();
     db.state.payment.status = "PROCESSANDO";
@@ -264,20 +288,20 @@ class FakeEventosDb {
           const joined = { eventoPagamentos: this.state.payment, eventoPedidos: this.state.order };
           value = this.matches(predicate, joined) ? [{ payment: this.state.payment, order: this.state.order }] : [];
         } else if (chain.table === eventoPedidos) value = this.matches(predicate, this.state.order, chain.table) ? [this.state.order] : [];
-        else if (chain.table === eventoItensPedido) value = this.matches(predicate, this.state.item, chain.table) ? [this.state.item] : [];
-        else if (chain.table === eventoReservas) value = this.state.reservation.status === "ATIVA" && this.matches(predicate, this.state.reservation, chain.table) ? [this.state.reservation] : [];
-        else if (chain.table === eventoInventarioAssentos) value = this.matches(predicate, this.state.inventory, chain.table) ? [this.state.inventory] : [];
+        else if (chain.table === eventoItensPedido) value = (this.state.items ?? [this.state.item]).filter((item: any) => this.matches(predicate, item, chain.table));
+        else if (chain.table === eventoReservas) value = (this.state.reservations ?? [this.state.reservation]).filter((reservation: any) => reservation.status === "ATIVA" && this.matches(predicate, reservation, chain.table));
+        else if (chain.table === eventoInventarioAssentos) value = (this.state.inventories ?? [this.state.inventory]).filter((inventory: any) => this.matches(predicate, inventory, chain.table));
         else if (chain.table === eventoIngressos) value = this.state.tickets.filter((ticket: any) => this.matches(predicate, ticket, chain.table));
         else value = [];
         const promise: any = Promise.resolve(value);
-        promise.for = () => { this.lockSequence.push(this.tableName(chain.table)!); return promise; };
+        promise.for = () => { const name = this.tableName(chain.table)!; if (chain.table === eventoInventarioAssentos) value.forEach((row: any) => this.lockSequence.push(`inventário:${row.id}`)); else this.lockSequence.push(name); return promise; };
         return promise;
       },
     };
     return chain;
   }
   update(table: any) {
-    const operation: any = { values: undefined, predicate: undefined, set: (values: any) => { operation.values = values; return operation; }, where: (predicate: any) => { operation.predicate = predicate; return operation; }, returning: async () => { const entity = table === eventoPagamentos ? this.state.payment : table === eventoInventarioAssentos ? this.state.inventory : table === eventoReservas ? this.state.reservation : this.state.order; if (operation.predicate && !this.matches(operation.predicate, entity, table)) return []; Object.assign(entity, operation.values); return [entity]; } };
+    const operation: any = { values: undefined, predicate: undefined, set: (values: any) => { operation.values = values; return operation; }, where: (predicate: any) => { operation.predicate = predicate; return operation; }, returning: async () => { const entities = table === eventoInventarioAssentos ? (this.state.inventories ?? [this.state.inventory]) : table === eventoReservas ? (this.state.reservations ?? [this.state.reservation]) : table === eventoItensPedido ? (this.state.items ?? [this.state.item]) : [table === eventoPagamentos ? this.state.payment : this.state.order]; const entity = entities.find((candidate: any) => !operation.predicate || this.matches(operation.predicate, candidate, table)); if (!entity) return []; Object.assign(entity, operation.values); return [entity]; } };
     operation.then = (resolve: (value: unknown) => unknown, reject: (reason: unknown) => unknown) => operation.returning().then(resolve, reject);
     return operation;
   }

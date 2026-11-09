@@ -259,8 +259,9 @@ export class EventosPublicSalesService {
       const policies = await tx.select().from(eventoPoliticas).where(and(eq(eventoPoliticas.eventId, order.eventId), eq(eventoPoliticas.active, true)));
       for (const acceptance of input.acceptances) { const policy = policies.find((p: any) => p.type === acceptance.type && p.version === acceptance.version); if (!policy) throw fail("POLICY_VERSION_MISMATCH", "Versão de política inválida"); await tx.insert(eventoAceites).values({ orderId: order.id, type: acceptance.type, policyId: policy.id, policyVersion: policy.version, acceptedByName: buyer.name, acceptedByEmail: buyer.email }); }
       const items = await tx.select().from(eventoItensPedido).where(eq(eventoItensPedido.orderId, order.id));
-      if (items.length !== input.participants.length) throw fail("VALIDATION_ERROR", "Participantes devem corresponder aos itens");
-      for (const item of items) {
+      const itensOrdenados = [...items].sort((left: any, right: any) => String(left.inventorySeatId).localeCompare(String(right.inventorySeatId)) || String(left.id).localeCompare(String(right.id)));
+      if (itensOrdenados.length !== input.participants.length) throw fail("VALIDATION_ERROR", "Participantes devem corresponder aos itens");
+      for (const item of itensOrdenados) {
         const inventoryQuery = tx.select().from(eventoInventarioAssentos).where(eq(eventoInventarioAssentos.id, item.inventorySeatId));
         const inventory = await this.first<any>(this.lockRows(inventoryQuery));
         const reservationQuery = tx.select().from(eventoReservas).where(and(eq(eventoReservas.orderId, order.id), eq(eventoReservas.inventorySeatId, item.inventorySeatId), eq(eventoReservas.status, "ATIVA")));
@@ -269,7 +270,7 @@ export class EventosPublicSalesService {
           throw fail("ORDER_NOT_AVAILABLE", "A reserva expirou ou não está mais disponível");
         }
       }
-      for (const participant of input.participants) { const [created] = await tx.insert(eventoParticipantes).values({ eventId: order.eventId, orderId: order.id, type: participant.type, fullName: participant.fullName, email: participant.email ?? null, phone: participant.phone ?? null }).returning(); const item = items.find((candidate: any) => candidate.pricingEvidence?.participantIndex === participant.participantIndex); if (!item) throw fail("VALIDATION_ERROR", "Participante sem item correspondente"); if (created) await tx.update(eventoItensPedido).set({ participantId: created.id, updatedAt: new Date() }).where(eq(eventoItensPedido.id, item.id)); }
+      for (const participant of input.participants) { const [created] = await tx.insert(eventoParticipantes).values({ eventId: order.eventId, orderId: order.id, type: participant.type, fullName: participant.fullName, email: participant.email ?? null, phone: participant.phone ?? null }).returning(); const item = itensOrdenados.find((candidate: any) => candidate.pricingEvidence?.participantIndex === participant.participantIndex); if (!item) throw fail("VALIDATION_ERROR", "Participante sem item correspondente"); if (created) await tx.update(eventoItensPedido).set({ participantId: created.id, updatedAt: new Date() }).where(eq(eventoItensPedido.id, item.id)); }
       await tx.update(eventoPedidos).set({ buyerName: buyer.name, buyerEmail: buyer.email, buyerPhone: buyer.phone, status: "RESERVADO", finalizationIdempotencyKey: input.idempotencyKey, updatedAt: new Date() }).where(eq(eventoPedidos.id, order.id));
       const finalizado = { ...order, ...buyer, buyerName: buyer.name, buyerEmail: buyer.email, buyerPhone: buyer.phone, status: "RESERVADO", finalizationIdempotencyKey: input.idempotencyKey };
       return this.finalizacaoResult(finalizado, tx);
@@ -511,8 +512,9 @@ export class EventosPublicSalesService {
   async liberarReservasExpiradas(now = new Date()) {
     return this.db.transaction(async (tx: any) => {
       const expired = await tx.select().from(eventoReservas).where(and(eq(eventoReservas.status, "ATIVA"), lte(eventoReservas.expiresAt, now)));
+      const reservasExpiradasOrdenadas = [...expired].sort((left: any, right: any) => String(left.orderId).localeCompare(String(right.orderId)) || String(left.inventorySeatId).localeCompare(String(right.inventorySeatId)) || String(left.id).localeCompare(String(right.id)));
       let released = 0;
-      for (const reservation of expired) {
+      for (const reservation of reservasExpiradasOrdenadas) {
         // O job usa a mesma ordem de confirmação/falha: pedido, inventário,
         // reserva e, por fim, pagamento. Assim não segura inventário esperando
         // por uma transação que já bloqueou o pedido.
