@@ -33,6 +33,7 @@ export function FluxoCheckout({ pedido, evento, sessao, politicas, publishableKe
   const finalizacaoKeyRef = useRef<string | null>(null);
   const pagamentoKeyRef = useRef<string | null>(null);
   const liberacaoPromiseRef = useRef<Promise<void> | null>(null);
+  const expiracaoInicialTratadaRef = useRef<string | null>(null);
 
   const acessoGuardado = useCallback(() => typeof window === "undefined" ? null : window.sessionStorage.getItem(`eventos:acesso:${pedido.orderNumber}`), [pedido.orderNumber]);
   const irParaIngressos = useCallback(() => {
@@ -91,8 +92,7 @@ export function FluxoCheckout({ pedido, evento, sessao, politicas, publishableKe
       setEtapa(3);
     } catch (cause) {
       if (cause instanceof EventosApiError && cause.code === "ORDER_NOT_AVAILABLE") {
-        if (acessoGuardado()) irParaIngressos();
-        else marcarEsgotado();
+        marcarEsgotado();
       }
       else setErro(cause instanceof Error ? cause.message : "Não foi possível iniciar o pagamento.");
     }
@@ -120,6 +120,13 @@ export function FluxoCheckout({ pedido, evento, sessao, politicas, publishableKe
       });
     return () => { ativo = false; };
   }, [acessoGuardado, marcarEsgotado, pedido.orderNumber, pedido.status]);
+
+  useEffect(() => {
+    if (!expirado || expiracaoInicialTratadaRef.current === pedido.orderNumber) return;
+    if (pedido.status === "AGUARDANDO_PAGAMENTO" && acessoGuardado()) return;
+    expiracaoInicialTratadaRef.current = pedido.orderNumber;
+    void tratarExpiracao();
+  }, [acessoGuardado, expirado, pedido.orderNumber, pedido.status, tratarExpiracao]);
 
   if (!ESTADOS_ATIVOS.has(pedido.status)) return <section role="alert" className="rounded-2xl border border-[#e6e9e1] bg-white p-6"><p>Este pedido não está mais disponível para pagamento.</p><Link className="mt-4 inline-flex font-semibold text-[#3f6f12] underline" href="/pedido/consulta">Meus ingressos</Link></section>;
   if (expirado || !expiraEm) return <TempoEsgotado href={retornoMapaDisponibilidade} />;

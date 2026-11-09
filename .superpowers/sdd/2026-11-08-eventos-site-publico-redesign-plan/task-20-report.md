@@ -124,3 +124,53 @@ pnpm turbo lint && pnpm turbo typecheck
 - `PAYMENT_ALREADY_COMPLETED`, `ORDER_NOT_AVAILABLE`, `RESERVATION_EXPIRED` e `RESERVATION_CANCELLED` têm destinos explícitos.
 
 Atualizado em: 2026-11-08
+
+## Fix round 2 — liberação em ORDER_NOT_AVAILABLE e expiração inicial
+
+### Causa e correções
+
+- O retorno `ORDER_NOT_AVAILABLE` durante `iniciarPagamento` podia seguir diretamente para os ingressos quando havia acesso salvo, sem liberar a reserva. O caminho agora sempre passa por `marcarEsgotado`, que usa `tratarExpiracao` e a promessa compartilhada de `liberarPedido` antes de decidir o destino.
+- Pedidos já expirados no primeiro render exibiam `TempoEsgotado` sem chamar a liberação. Um efeito idempotente por número do pedido agora chama a mesma rotina ao carregar; a retomada de `AGUARDANDO_PAGAMENTO` com acesso salvo permanece prioritária para concluir o pagamento embutido.
+- Foram adicionados testes para expiração inicial e para `ORDER_NOT_AVAILABLE` retornado ao iniciar o pagamento, verificando liberação única e ausência de navegação direta para o pedido expirado.
+
+### RED
+
+Antes da correção, o foco falhou nos dois cenários novos:
+
+```text
+pnpm --filter @essencia/eventos exec vitest run --environment jsdom components/__tests__/checkout.test.tsx
+13 testes, 2 falhas
+- tempo esgotado no primeiro render não chamou liberarPedido (chamadas: 0)
+- ORDER_NOT_AVAILABLE ao iniciar pagamento não chamou liberarPedido (chamadas: 0)
+```
+
+### GREEN
+
+Após a correção:
+
+```text
+pnpm --filter @essencia/eventos exec vitest run --environment jsdom components/__tests__/checkout.test.tsx
+1 arquivo, 13 testes aprovados
+
+pnpm --filter @essencia/eventos test
+19 arquivos, 125 testes aprovados
+
+pnpm --filter @essencia/api test -- eventos-public-sales eventos-public.controller
+2 suítes, 55 testes aprovados
+
+pnpm turbo lint && pnpm turbo typecheck
+22 tarefas de lint e 22 tarefas de typecheck concluídas com exit 0
+
+git diff --check
+exit 0
+```
+
+O lint mantém somente o aviso preexistente sobre `<img>` em `resumo-pedido.tsx`, sem erros.
+
+### Self-review
+
+- `liberarUmaVez` continua compartilhando a mesma promessa entre relógio, expiração inicial, erro da API e alteração de lugares, evitando chamadas duplicadas.
+- O caminho `ORDER_NOT_AVAILABLE` não decide ingressos antes da liberação; apenas `PAYMENT_ALREADY_COMPLETED` tratado pela rotina de expiração pode levar aos ingressos.
+- O efeito inicial é limitado ao pedido atual e não interfere na retomada de pagamento já iniciada com acesso persistido.
+
+Atualizado em: 2026-11-08

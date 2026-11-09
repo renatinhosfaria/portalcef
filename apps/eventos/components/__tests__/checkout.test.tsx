@@ -108,12 +108,28 @@ describe("FluxoCheckout", () => {
     await waitFor(() => expect(routerPush).toHaveBeenCalledWith(`/pedido/${pedido.orderNumber}?acesso=acesso-seguro`));
   });
 
-  it("tempo esgotado troca a tela e não envia", () => {
+  it("tempo esgotado troca a tela, libera e não envia", async () => {
     const expirado = { ...pedido, expiresAt: new Date(Date.now() - 1000) };
     render(<FluxoCheckout pedido={expirado} evento={evento} sessao={sessao} politicas={politicas} publishableKey={null} />);
     expect(screen.getByText("O tempo acabou e os lugares foram liberados")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Escolher lugares de novo" }).getAttribute("href")).toContain("conflito=disponibilidade");
     expect(screen.queryByRole("button", { name: "Ir para o pagamento" })).toBeNull();
+    await waitFor(() => expect(eventosApi.liberarPedido).toHaveBeenCalledTimes(1));
+  });
+
+  it("libera antes de decidir o destino quando iniciar pagamento retorna ORDER_NOT_AVAILABLE", async () => {
+    vi.mocked(eventosApi.iniciarPagamento).mockRejectedValueOnce(new EventosApiError("Pedido indisponível", 409, "ORDER_NOT_AVAILABLE"));
+    render(<FluxoCheckout pedido={pedido} evento={evento} sessao={sessao} politicas={politicas} publishableKey="pk_test" />);
+    fireEvent.change(screen.getByLabelText("Nome completo"), { target: { value: "Ana Silva" } });
+    fireEvent.change(screen.getByLabelText("E-mail"), { target: { value: "ana@example.com" } });
+    fireEvent.change(screen.getByLabelText("Celular (WhatsApp)"), { target: { value: "34999999999" } });
+    fireEvent.change(screen.getByLabelText("Nome de quem vai sentar no lugar G19"), { target: { value: "Ana Silva" } });
+    fireEvent.change(screen.getByLabelText("Nome de quem vai sentar no lugar G20"), { target: { value: "Bia Silva" } });
+    fireEvent.click(screen.getByRole("checkbox", { name: "Li e aceito as políticas do evento" }));
+    fireEvent.click(screen.getByRole("button", { name: "Ir para o pagamento" }));
+    await waitFor(() => expect(eventosApi.liberarPedido).toHaveBeenCalledTimes(1));
+    expect(routerPush).not.toHaveBeenCalledWith(`/pedido/${pedido.orderNumber}?acesso=acesso-seguro`);
+    expect(screen.getByText("O tempo acabou e os lugares foram liberados")).toBeTruthy();
   });
 
   it("libera o pedido uma vez quando o relógio zera", async () => {
