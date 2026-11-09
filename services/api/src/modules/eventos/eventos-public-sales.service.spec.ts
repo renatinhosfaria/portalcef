@@ -277,12 +277,25 @@ describe("EventosPublicSalesService - contratos públicos", () => {
     db.order.buyerEmail = "ana@example.com";
     db.order.buyerPhone = "5511999999999";
 
-    const result = await new EventosPublicSalesService({ db } as any).finalizarPedidoConvidado("ABC123DEF456", entradaFinalizacao());
+    const result = await new EventosPublicSalesService({ db } as any).finalizarPedidoConvidado("ABC123DEF456", { ...entradaFinalizacao(), idempotencyKey: "finalizacao-original-123456" });
 
     expect(result.acesso).toMatch(/^[A-Za-z0-9_-]{43}$/);
     expect(db.acceptances).toHaveLength(0);
     expect(db.participants).toHaveLength(0);
     expect(db.tokens).toHaveLength(1);
+  });
+
+  it.each(["RESERVADO", "AGUARDANDO_PAGAMENTO"])("rejeita chave diferente após finalização no estado %s", async (status) => {
+    const db = pedidoFinalizacaoDb();
+    db.order.status = status;
+    db.order.finalizationIdempotencyKey = "finalizacao-original-123456";
+    db.order.buyerName = "Ana Maria";
+    db.order.buyerEmail = "ana@example.com";
+    db.order.buyerPhone = "5511999999999";
+
+    await expect(new EventosPublicSalesService({ db } as any).finalizarPedidoConvidado("ABC123DEF456", entradaFinalizacao())).rejects.toMatchObject({ response: { code: "IDEMPOTENCY_CONFLICT" } });
+    expect(db.acceptances).toHaveLength(0);
+    expect(db.participants).toHaveLength(0);
   });
 
   it("serializa finalizações concorrentes e rejeita a segunda chave", async () => {

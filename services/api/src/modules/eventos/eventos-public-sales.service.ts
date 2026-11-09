@@ -252,11 +252,10 @@ export class EventosPublicSalesService {
       const prior = await this.first<any>(tx.select().from(eventoPedidos).where(eq(eventoPedidos.finalizationIdempotencyKey, input.idempotencyKey)));
       if (prior) { if (prior.id !== order.id) throw new ConflictException({ code: "IDEMPOTENCY_CONFLICT", message: "Chave de idempotência já utilizada" }); return this.finalizacaoResult(order, tx); }
       if (order.finalizationIdempotencyKey) {
-        if (["RESERVADO", "AGUARDANDO_PAGAMENTO"].includes(order.status)) return this.finalizacaoResult(order, tx);
+        if (order.finalizationIdempotencyKey === input.idempotencyKey) return this.finalizacaoResult(order, tx);
         throw new ConflictException({ code: "IDEMPOTENCY_CONFLICT", message: "Pedido já finalizado com outra chave" });
       }
       if (!["INICIADO", "RESERVADO"].includes(order.status) || (order.expiresAt && order.expiresAt <= new Date())) throw fail("ORDER_NOT_AVAILABLE", "Pedido expirado ou indisponível");
-      if (order.finalizationIdempotencyKey && order.finalizationIdempotencyKey !== input.idempotencyKey) throw new ConflictException({ code: "IDEMPOTENCY_CONFLICT", message: "Pedido já finalizado com outra chave" });
       const buyer = { name: input.buyer.name.trim(), email: input.buyer.email.trim().toLowerCase(), phone: this.normalizePhone(input.buyer.phone) };
       const policies = await tx.select().from(eventoPoliticas).where(and(eq(eventoPoliticas.eventId, order.eventId), eq(eventoPoliticas.active, true)));
       for (const acceptance of input.acceptances) { const policy = policies.find((p: any) => p.type === acceptance.type && p.version === acceptance.version); if (!policy) throw fail("POLICY_VERSION_MISMATCH", "Versão de política inválida"); await tx.insert(eventoAceites).values({ orderId: order.id, type: acceptance.type, policyId: policy.id, policyVersion: policy.version, acceptedByName: buyer.name, acceptedByEmail: buyer.email }); }
