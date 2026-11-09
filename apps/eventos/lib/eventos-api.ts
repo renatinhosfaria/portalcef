@@ -35,6 +35,45 @@ export class EventosApiError extends Error {
 const publicOrderState: { reservationId?: string; orderNumber?: string } = {};
 const stableIdempotencyKeys = new Map<string, string>();
 
+function chaveStorage(prefixo: string, identity: string): string {
+  return `eventos:idempotencia:${prefixo}:${encodeURIComponent(identity)}`;
+}
+
+function lerChavePersistida(prefixo: string, identity: string): string | undefined {
+  const key = `${prefixo}:${identity}`;
+  const emMemoria = stableIdempotencyKeys.get(key);
+  if (emMemoria) return emMemoria;
+  try {
+    const valor = typeof window !== "undefined" ? window.sessionStorage.getItem(chaveStorage(prefixo, identity)) : null;
+    if (valor) {
+      stableIdempotencyKeys.set(key, valor);
+      return valor;
+    }
+  } catch {
+    // Alguns navegadores bloqueiam sessionStorage; a memória da aba continua
+    // protegendo retries enquanto a página estiver aberta.
+  }
+  return undefined;
+}
+
+function salvarChavePersistida(prefixo: string, identity: string, value: string): void {
+  stableIdempotencyKeys.set(`${prefixo}:${identity}`, value);
+  try {
+    if (typeof window !== "undefined") window.sessionStorage.setItem(chaveStorage(prefixo, identity), value);
+  } catch {
+    // A API ainda recebe uma chave estável mesmo sem armazenamento persistente.
+  }
+}
+
+function removerChavePersistida(prefixo: string, identity: string): void {
+  stableIdempotencyKeys.delete(`${prefixo}:${identity}`);
+  try {
+    if (typeof window !== "undefined") window.sessionStorage.removeItem(chaveStorage(prefixo, identity));
+  } catch {
+    // Sem armazenamento disponível, não há estado adicional para remover.
+  }
+}
+
 export function obterPedidoEmMemoria() {
   return { ...publicOrderState };
 }
@@ -46,12 +85,19 @@ export function gerarChaveIdempotenciaPublica(prefixo: string) {
 
 function chavePersistida(input: string | undefined, prefixo: string, identity: string) {
   if (input?.trim()) return input.trim();
-  const key = `${prefixo}:${identity}`;
-  const current = stableIdempotencyKeys.get(key);
+  const current = lerChavePersistida(prefixo, identity);
   if (current) return current;
   const generated = gerarChaveIdempotenciaPublica(prefixo);
-  stableIdempotencyKeys.set(key, generated);
+  salvarChavePersistida(prefixo, identity, generated);
   return generated;
+}
+
+function identidadeReserva(input: Omit<ReservaAssentosInput, "idempotencyKey">): string {
+  const assentos = input.seats
+    .map((seat) => `${seat.seatId}:${seat.ticketTypeId}:${seat.participantIndex}`)
+    .sort()
+    .join(",");
+  return `${input.sessionId}|${assentos}`;
 }
 
 function persistirPedidoNaUrl(result: { orderNumber: string; reservationId?: string }) {
@@ -100,7 +146,8 @@ async function enviarJson<T>(path: string, body: Record<string, unknown>, idempo
 }
 
 export async function reservarAssentos(input: ReservaAssentosInput): Promise<ReservaPublicaResult> {
-  const idempotencyKey = input.idempotencyKey?.trim() || gerarChaveIdempotenciaPublica("reserva");
+  const identity = identidadeReserva(input);
+  const idempotencyKey = chavePersistida(input.idempotencyKey, "reserva", identity);
   const { buyer, ...inputSemBuyer } = input;
   const body = buyer === undefined ? { ...inputSemBuyer, idempotencyKey } : { ...inputSemBuyer, buyer, idempotencyKey };
   try {
@@ -113,6 +160,7 @@ export async function reservarAssentos(input: ReservaAssentosInput): Promise<Res
     if (error instanceof EventosApiError && error.status === 409) {
       error.selection = input.seats;
       if (error.code === "SEAT_UNAVAILABLE") error.message = "Um dos assentos selecionados ficou indisponível. Escolha novamente.";
+      removerChavePersistida("reserva", identity);
     }
     throw error;
   }

@@ -388,17 +388,18 @@ export class PaymentsWebhookController {
   /**
    * payment_intent.payment_failed
    *
-   * Pagamento falhou -> Liberar reserva
+   * Pagamento falhou -> Eventos publicos aguardam retry; demais pedidos liberam a reserva
    */
   private async handlePaymentFailed(
     paymentIntent: Stripe.PaymentIntent,
   ): Promise<void> {
     if (paymentIntent.metadata.eventOrderId) {
-      await this.getEventosPagamentosService().falharCheckout({
-        paymentIntentId: paymentIntent.id,
-        reason: `Pagamento falhou: ${paymentIntent.last_payment_error?.message || "Erro desconhecido"}`,
-        eventOrderId: paymentIntent.metadata.eventOrderId,
-      });
+      // `payment_intent.payment_failed` e uma falha transitoria no Checkout
+      // embutido. A Stripe mantem a sessao aberta para nova tentativa;
+      // liberar a reserva aqui faria o retry disputar o proprio assento.
+      this.logger.warn(
+        `Pagamento de Evento recusado, aguardando retry: ${paymentIntent.id} | Pedido: ${paymentIntent.metadata.eventOrderId}`,
+      );
       return;
     }
     const orderId = paymentIntent.metadata.orderId;

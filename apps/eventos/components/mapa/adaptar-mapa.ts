@@ -92,19 +92,17 @@ export function rotulosDoMapa(map: PublicMap): RotuloFileira[] {
     });
   }
 
-  return map.layout.rotulos.flatMap((rotulo) => {
-    const assentos = assentosPorFileira.get(rotulo.fileira);
+  const rotulosPorFileira = new Map<string, RotuloFileira[]>();
+  for (const rotulo of map.layout.rotulos) {
+    const rotulos = rotulosPorFileira.get(rotulo.fileira) ?? [];
+    rotulos.push(rotulo);
+    rotulosPorFileira.set(rotulo.fileira, rotulos);
+  }
+  return [...rotulosPorFileira.entries()].flatMap(([fileira, rotulos]) => {
+    const assentos = assentosPorFileira.get(fileira);
     if (!assentos?.length) return [];
-    const ordenados = [...assentos].sort((a, b) => a.x - b.x);
-    const larguraEsquerda = ordenados[0]?.width ?? 0;
-    const larguraDireita = ordenados.at(-1)?.width ?? larguraEsquerda;
-    const centroEsquerda = (ordenados[0]?.x ?? 0) + (ordenados[0]?.width ?? 0) / 2;
-    const centroDireita = (ordenados.at(-1)?.x ?? 0) + (ordenados.at(-1)?.width ?? 0) / 2;
-    return [
-      { fileira: rotulo.fileira, x: centroEsquerda - 1.2 * larguraEsquerda, y: rotulo.y },
-      rotulo,
-      { fileira: rotulo.fileira, x: centroDireita + 1.2 * larguraDireita, y: rotulo.y },
-    ];
+    const pontas = criarPontas(fileira, assentos, rotulos[0]!.y);
+    return [pontas[0]!, ...rotulos, pontas[1]!];
   });
 }
 

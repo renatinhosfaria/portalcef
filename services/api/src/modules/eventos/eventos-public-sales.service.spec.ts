@@ -1,5 +1,5 @@
 import { EventosPublicSalesService } from "./eventos-public-sales.service";
-import { eventoAceites, eventoIngressos, eventoInventarioAssentos, eventoItensPedido, eventoPagamentos, eventoPedidos, eventoParticipantes, eventoReservas, eventoTokensConsulta, schema } from "@essencia/db";
+import { eventoAceites, eventoIngressos, eventoInventarioAssentos, eventoItensPedido, eventoOfertas, eventoPagamentos, eventoPedidos, eventoParticipantes, eventoPoliticas, eventoReservas, eventoTiposIngresso, eventoTokensConsulta, eventos, schema } from "@essencia/db";
 import { hashTokenAcesso } from "./acesso-pedido";
 
 describe("EventosPublicSalesService - contratos públicos", () => {
@@ -140,6 +140,26 @@ describe("EventosPublicSalesService - contratos públicos", () => {
     expect(createEmbeddedCheckoutSession).not.toHaveBeenCalled();
   });
 
+  it("serializa duas abas de checkout e cria uma única sessão Stripe", async () => {
+    const createEmbeddedCheckoutSession = jest.fn().mockImplementation(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      return { checkoutSessionId: "cs-unica", clientSecret: "cs_secret_unica", paymentIntentId: "pi-unico" };
+    });
+    const order = { id: "order-concorrente", orderNumber: "ABC123DEF456", status: "RESERVADO", totalCents: 1250, buyerName: "Ana", buyerEmail: "a@b.com", buyerPhone: "11999999999", expiresAt: new Date(Date.now() + 60_000), eventId: "event-1", sessionId: "session-1" };
+    const db = checkoutConcorrenteDb(order);
+    const service = new EventosPublicSalesService({ db } as any, { createEmbeddedCheckoutSession, obterClientSecretSeAberta: jest.fn().mockResolvedValue("cs_secret_unica") } as any);
+
+    const results = await Promise.all([
+      service.iniciarCheckout(order.orderNumber, { returnUrl: "https://eventos.portalcef.com.br/pagamento/retorno", idempotencyKey: "checkout-aba-um-123456" }),
+      service.iniciarCheckout(order.orderNumber, { returnUrl: "https://eventos.portalcef.com.br/pagamento/retorno", idempotencyKey: "checkout-aba-dois-123456" }),
+    ]);
+
+    expect(results[0]).toMatchObject({ clientSecret: "cs_secret_unica" });
+    expect(results[1]).toMatchObject({ clientSecret: "cs_secret_unica" });
+    expect(createEmbeddedCheckoutSession).toHaveBeenCalledTimes(1);
+    expect(db.payments).toHaveLength(1);
+  });
+
   it("usa o preço persistido do ingresso e retorna itens da reserva", async () => {
     const db = vendaDb({ event: { id: "e1", status: "PUBLICADO" }, session: { id: "s1", status: "PUBLICADA" }, inventory: { id: "i1", status: "DISPONIVEL", seatId: "seat-1" }, ticket: { id: "t1", priceCents: 1250, maxPerOrder: 1, version: 1 } });
     const result = await new EventosPublicSalesService({ db } as any).reservarAssentos({ sessionId: "00000000-0000-4000-8000-000000000001", seats: [{ seatId: "00000000-0000-4000-8000-000000000002", ticketTypeId: "00000000-0000-4000-8000-000000000003", participantIndex: 0 }], buyer: { name: "Ana", email: "a@b.com", phone: "11999999999" }, idempotencyKey: "price-123456" });
@@ -168,12 +188,35 @@ describe("EventosPublicSalesService - contratos públicos", () => {
     expect(db.order).toMatchObject({ buyerName: null, buyerEmail: null, buyerPhone: null });
   });
 
+  it("libera a reserva antiga e expira o pedido ao tomar assento vencido", async () => {
+    const db = criarBancoReserva({ quantidade: 1, precoAdulto: 1250, offers: [], takeover: true });
+
+    await new EventosPublicSalesService({ db } as any).reservarAssentos(entradaReserva(1, "takeover-123456", false, true));
+
+    expect(db.oldReservation).toMatchObject({ status: "LIBERADA", releasedAt: expect.any(Date) });
+    expect(db.oldOrder).toMatchObject({ status: "EXPIRADO" });
+  });
+
   it("recusa repetição idempotente com outros assentos na mesma sessão", async () => {
     const db = criarBancoReserva({ quantidade: 1, precoAdulto: 1250, offers: [], repetir: true });
     const service = new EventosPublicSalesService({ db } as any);
     await service.reservarAssentos(entradaReserva(1, "idempotencia-assento-123456"));
     const repeticao = entradaReserva(1, "idempotencia-assento-123456");
     repeticao.seats[0]!.seatId = uuid(999);
+
+    await expect(service.reservarAssentos(repeticao)).rejects.toMatchObject({ response: { code: "IDEMPOTENCY_CONFLICT" } });
+  });
+
+  it("recusa repetição idempotente quando tipo ou participantIndex mudam", async () => {
+    const db = criarBancoReserva({ quantidade: 2, precoAdulto: 1250, precoCrianca: 900, offers: [], repetir: true });
+    const service = new EventosPublicSalesService({ db } as any);
+    const original = entradaReserva(2, "idempotencia-carga-123456", true);
+    await service.reservarAssentos(original);
+
+    const repeticao = entradaReserva(2, "idempotencia-carga-123456", true);
+    repeticao.seats[0]!.ticketTypeId = uuid(3);
+    repeticao.seats[0]!.participantIndex = 1;
+    repeticao.seats[1]!.participantIndex = 0;
 
     await expect(service.reservarAssentos(repeticao)).rejects.toMatchObject({ response: { code: "IDEMPOTENCY_CONFLICT" } });
   });
@@ -208,6 +251,37 @@ describe("EventosPublicSalesService - contratos públicos", () => {
     expect(token.tokenHash).toBe(hashTokenAcesso(result.acesso));
   });
 
+  it("reaproveita uma finalização existente após reload sem duplicar aceites ou participantes", async () => {
+    const db = pedidoFinalizacaoDb();
+    db.order.status = "RESERVADO";
+    db.order.finalizationIdempotencyKey = "finalizacao-original-123456";
+    db.order.buyerName = "Ana Maria";
+    db.order.buyerEmail = "ana@example.com";
+    db.order.buyerPhone = "5511999999999";
+
+    const result = await new EventosPublicSalesService({ db } as any).finalizarPedidoConvidado("ABC123DEF456", entradaFinalizacao());
+
+    expect(result.acesso).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(db.acceptances).toHaveLength(0);
+    expect(db.participants).toHaveLength(0);
+    expect(db.tokens).toHaveLength(1);
+  });
+
+  it("serializa finalizações concorrentes e rejeita a segunda chave", async () => {
+    const db = pedidoFinalizacaoConcorrenteDb();
+    const service = new EventosPublicSalesService({ db } as any);
+
+    const results = await Promise.allSettled([
+      service.finalizarPedidoConvidado("ABC123DEF456", entradaFinalizacao()),
+      service.finalizarPedidoConvidado("ABC123DEF456", { ...entradaFinalizacao(), idempotencyKey: "finalizacao-outra-123456" }),
+    ]);
+
+    expect(results.filter((item) => item.status === "fulfilled")).toHaveLength(1);
+    expect(results.find((item) => item.status === "rejected")).toMatchObject({ reason: { response: { code: "IDEMPOTENCY_CONFLICT" } } });
+    expect(db.acceptances).toHaveLength(5);
+    expect(db.participants).toHaveLength(1);
+  });
+
   it("consulta devolve rótulo do lugar, nome do tipo, slug, sessão e expiresAt", async () => {
     const db = pedidoConsultaDb();
 
@@ -217,6 +291,16 @@ describe("EventosPublicSalesService - contratos públicos", () => {
     expect(result).not.toHaveProperty("tickets");
     expect(JSON.stringify(result)).not.toContain("qrPayload");
     expect(JSON.stringify(result)).not.toContain("numero");
+  });
+
+  it("ordena itens pelo participantIndex e expõe o índice persistido", async () => {
+    const db = pedidoConsultaOrdenadaDb();
+
+    const result = await new EventosPublicSalesService({ db } as any).consultarPedido("ABC123DEF456");
+
+    expect(result.items.map((item) => item.participantIndex)).toEqual([0, 1]);
+    expect(result.items.map((item) => item.seatNumber)).toEqual(["10", "11"]);
+    expect(db.orderByCalled).toBe(true);
   });
 
   it("token válido devolve QR, número, lugar, tipo e participante", async () => {
@@ -298,6 +382,17 @@ describe("EventosPublicSalesService - contratos públicos", () => {
       idempotencyKey: "duplicate-seat-123456",
     })).rejects.toMatchObject({ response: { code: "DUPLICATE_SEAT" } });
     expect(db.mutations.value).toBe(0);
+  });
+
+  it("adquire locks de inventário em ordem de assento, preservando a ordem do participante", async () => {
+    const banco = criarBancoReserva({ quantidade: 2, precoAdulto: 1250, offers: [] });
+    const input = entradaReserva(2, "locks-assentos-123456");
+    input.seats.reverse();
+
+    const resultado = await new EventosPublicSalesService({ db: banco } as any).reservarAssentos(input);
+
+    expect(banco.lockSequence).toEqual([uuid(100), uuid(101)]);
+    expect(resultado.items.map((item) => item.seatId)).toEqual(input.seats.map((seat) => seat.seatId));
   });
 
   it("rejeita excesso por tipo de ingresso antes de mutar inventário ou pedido", async () => {
@@ -414,7 +509,7 @@ describe("EventosPublicSalesService - contratos públicos", () => {
     expect(vinte.resultado.items).toHaveLength(20);
   });
 
-  it("calcula o desconto sobre tipos mistos e preserva preço fixo legado como total da faixa", async () => {
+  it("calcula o desconto sobre tipos mistos e recusa oferta fixa na compra pública", async () => {
     const ofertaPercentual = { id: uuid(91), version: 1, name: "Volume", pricingType: "PERCENTUAL", minQuantity: 10, maxQuantity: null, discountPercent: 15, priceCents: null, active: true };
     const misto = criarBancoReserva({ quantidade: 10, precoAdulto: 4500, precoCrianca: 2250, offers: [ofertaPercentual], tiposMistos: true });
     const resultadoMisto = await new EventosPublicSalesService({ db: misto } as any).reservarAssentos(entradaReserva(10, "misto-6-4-123456", true));
@@ -423,8 +518,24 @@ describe("EventosPublicSalesService - contratos públicos", () => {
 
     const ofertaFixa = { id: uuid(92), version: 4, name: "Faixa legada", pricingType: "VALOR_FIXO", minQuantity: 10, maxQuantity: null, discountPercent: null, priceCents: 30000, active: true };
     const fixo = criarBancoReserva({ quantidade: 10, precoAdulto: 4500, offers: [ofertaFixa] });
-    const resultadoFixo = await new EventosPublicSalesService({ db: fixo } as any).reservarAssentos(entradaReserva(10, "fixo-10-123456"));
-    expect(resultadoFixo).toMatchObject({ subtotalCents: 45000, discountCents: 15000, totalCents: 30000 });
+    await expect(new EventosPublicSalesService({ db: fixo } as any).reservarAssentos(entradaReserva(10, "fixo-10-123456"))).rejects.toMatchObject({ response: { code: "OFFER_NOT_SUPPORTED_PUBLIC" } });
+  });
+
+  it("não aplica oferta VALOR_FIXO que não aparece no contrato público", async () => {
+    const ofertaFixa = { id: uuid(96), version: 1, name: "Faixa fixa", pricingType: "VALOR_FIXO", minQuantity: 1, maxQuantity: null, discountPercent: null, priceCents: 100, active: true };
+    const banco = criarBancoReserva({ quantidade: 1, precoAdulto: 4500, offers: [ofertaFixa] });
+
+    await expect(new EventosPublicSalesService({ db: banco } as any).reservarAssentos(entradaReserva(1, "fixo-publico-123456"))).rejects.toMatchObject({ response: { code: "OFFER_NOT_SUPPORTED_PUBLIC" } });
+  });
+
+  it("recusa checkout quando todas as reservas perderam a posse dos assentos", async () => {
+    const order = { id: "order-sem-posse", orderNumber: "ABC123DEF456", status: "RESERVADO", totalCents: 1250, buyerName: "Ana", buyerEmail: "a@b.com", buyerPhone: "11999999999", expiresAt: new Date(Date.now() + 60_000), eventId: "event-1", sessionId: "session-1" };
+    const db = checkoutDb(order, [{ item: { id: "item-1", ticketTypeId: "ticket-adulto", inventorySeatId: "inventory-1", unitPriceCents: 1250, quantity: 1 }, ticket: { name: "Adulto" } }]);
+    db.reservations = [{ id: "reservation-1", orderId: order.id, inventorySeatId: "inventory-1", status: "ATIVA", expiresAt: order.expiresAt }];
+    db.inventories = [];
+    const createEmbeddedCheckoutSession = jest.fn();
+    await expect(new EventosPublicSalesService({ db } as any, { createEmbeddedCheckoutSession } as any).iniciarCheckout(order.orderNumber, { returnUrl: "https://eventos.portalcef.com.br/pagamento/retorno", idempotencyKey: "checkout-sem-posse-123456" })).rejects.toMatchObject({ response: { code: "ORDER_NOT_AVAILABLE" } });
+    expect(createEmbeddedCheckoutSession).not.toHaveBeenCalled();
   });
 
   it("recusa total final inferior a R$ 1,00 antes de qualquer mutação", async () => {
@@ -521,17 +632,21 @@ function criarBancoReservaComColisao(buyerEmail: string) {
   return criarBancoReserva({ quantidade: 1, precoAdulto: 1250, offers: [], colisao: { buyerEmail } });
 }
 
-function criarBancoReserva(config: { quantidade: number; precoAdulto: number; precoCrianca?: number; offers: any[]; tiposMistos?: boolean; repetir?: boolean; colisao?: { buyerEmail: string } }) {
+function criarBancoReserva(config: { quantidade: number; precoAdulto: number; precoCrianca?: number; offers: any[]; tiposMistos?: boolean; repetir?: boolean; colisao?: { buyerEmail: string }; takeover?: boolean }) {
   const event = { id: uuid(10), status: "PUBLICADO" };
   const session = { id: uuid(1), status: "PUBLICADA" };
   const tickets = [
     { id: uuid(2), eventId: event.id, priceCents: config.precoAdulto, maxPerOrder: null, version: 1, active: true },
     { id: uuid(3), eventId: event.id, priceCents: config.precoCrianca ?? config.precoAdulto, maxPerOrder: null, version: 1, active: true },
   ];
-  const inventories = Array.from({ length: config.quantidade }, (_, index) => ({ id: uuid(200 + index), sessionId: session.id, seatId: uuid(100 + index), status: "DISPONIVEL" }));
+  const oldOrder: any = { id: uuid(499), orderNumber: "OLD123456789", eventId: event.id, sessionId: session.id, status: "RESERVADO", expiresAt: new Date(Date.now() - 60_000) };
+  const oldReservation: any = { id: uuid(498), orderId: oldOrder.id, inventorySeatId: uuid(200), status: "ATIVA", expiresAt: new Date(Date.now() - 60_000) };
+  const inventories = Array.from({ length: config.quantidade }, (_, index) => ({ id: uuid(200 + index), sessionId: session.id, seatId: uuid(100 + index), status: config.takeover && index === 0 ? "RESERVADO" : "DISPONIVEL", reservedByOrderId: config.takeover && index === 0 ? oldOrder.id : null, reservationExpiresAt: config.takeover && index === 0 ? new Date(Date.now() - 60_000) : null }));
   const order: any = { id: uuid(500), orderNumber: "ABC123DEF456", eventId: event.id, sessionId: session.id, buyerEmail: "a@b.com", expiresAt: new Date(Date.now() + 60_000) };
   const itemRows: any[] = [];
   let selectCalls = 0;
+  let ticketReads = 0;
+  let inventoryReads = 0;
   let insertCalls = 0;
   let inTransaction = false;
   let transactionAborted = false;
@@ -540,8 +655,11 @@ function criarBancoReserva(config: { quantidade: number; precoAdulto: number; pr
   const mutations = { value: 0 };
   const banco: any = {
     order,
+    oldOrder,
+    oldReservation,
     itemRows,
     mutations,
+    lockSequence: [] as string[],
     colisao: { order: collisionOrder, insertAttempts: 0 },
     configuracaoAtual: config.offers,
     transaction: async (fn: any) => {
@@ -555,20 +673,50 @@ function criarBancoReserva(config: { quantidade: number; precoAdulto: number; pr
     },
     select: () => {
       if (inTransaction && transactionAborted) throw { code: "25P02", message: "current transaction is aborted" };
-      const index = selectCalls++;
-      let value: any[] = [];
-      if (config.colisao && !inTransaction && !externalCollisionLookupDone) {
-        externalCollisionLookupDone = true;
-        value = [collisionOrder];
-      } else if (config.repetir && banco.jaCriado && index >= 7) {
-        value = index === 7 ? [order] : itemRows.map((item) => ({ item, inventory: inventories.find((inventory) => inventory.id === item.inventorySeatId) }));
-      } else if (index === 0) value = [];
-      else if (index === 1) value = [{ event, session }];
-      else if (index >= 2 && index < 2 + (config.tiposMistos ? 2 : 1)) value = [tickets[index - 2]];
-      else if (index >= 2 + (config.tiposMistos ? 2 : 1) && index < 2 + (config.tiposMistos ? 2 : 1) + config.quantidade) value = [inventories[index - (2 + (config.tiposMistos ? 2 : 1))]];
-      else if (index === 2 + (config.tiposMistos ? 2 : 1) + config.quantidade) value = banco.configuracaoAtual;
-      else value = itemRows.map((item) => ({ item, inventory: inventories.find((inventory) => inventory.id === item.inventorySeatId) }));
-      const chain: any = { from: () => chain, innerJoin: () => chain, where: async () => value, orderBy: async () => value };
+        selectCalls += 1;
+      let table: any;
+      let resolved: any[] | undefined;
+      const resolveValue = () => {
+        if (resolved) return resolved;
+        let value: any[] = [];
+        if (config.colisao && !inTransaction && !externalCollisionLookupDone) {
+          externalCollisionLookupDone = true;
+          value = [collisionOrder];
+          } else if (config.repetir && banco.jaCriado && table === eventoPedidos) {
+          value = [order];
+        } else if (config.repetir && banco.jaCriado && table === eventoItensPedido) {
+          value = itemRows.map((item) => ({ item, inventory: inventories.find((inventory) => inventory.id === item.inventorySeatId) }));
+          } else if (table === eventos) value = [{ event, session }];
+          else if (table === eventoTiposIngresso) value = [tickets[Math.min(ticketReads++, tickets.length - 1)]];
+          else if (table === eventoInventarioAssentos) {
+            const read = inventoryReads++;
+            const inventoryIndex = read < config.quantidade ? read : read - config.quantidade;
+            value = [inventories[Math.min(inventoryIndex, inventories.length - 1)]];
+          }
+          else if (table === eventoOfertas) value = banco.configuracaoAtual;
+          else if (table === eventoReservas) value = config.takeover ? [oldReservation] : [];
+          else if (table === eventoItensPedido) value = itemRows.map((item) => ({ item, inventory: inventories.find((inventory) => inventory.id === item.inventorySeatId) }));
+          else if (table === eventoPedidos) value = [];
+        resolved = value;
+        return value;
+      };
+      const chain: any = {
+        from: (selected: any) => { table = selected; return chain; },
+        innerJoin: () => chain,
+        where: () => {
+          const promise: any = Promise.resolve(resolveValue());
+          promise.for = () => {
+            if (table === eventoInventarioAssentos) {
+              const inventory = resolveValue()[0];
+              if (inventory?.seatId) banco.lockSequence.push(inventory.seatId);
+            }
+            return promise;
+          };
+          return promise;
+        },
+        orderBy: async () => resolveValue(),
+        for: () => chain,
+      };
       return chain;
     },
     insert: () => {
@@ -581,11 +729,11 @@ function criarBancoReserva(config: { quantidade: number; precoAdulto: number; pr
           throw { code: "23505", constraint: "uq_evento_pedidos_idempotency_key" };
         }
         if (insertCalls === 1) { Object.assign(order, payload); banco.jaCriado = true; return { returning: async () => [order] }; }
-        if (insertCalls >= 3 && payload.ticketTypeId) itemRows.push(payload);
+        if (payload.ticketTypeId) itemRows.push(payload);
         return Promise.resolve([]);
       } };
     },
-    update: () => { mutations.value += 1; return { set: () => ({ where: () => ({ returning: async () => [{}] }) }) }; },
+    update: (table: any) => { mutations.value += 1; return { set: (payload: any) => { const operation: any = { where: (predicate: any) => { if (config.takeover && table === eventoReservas && payload.status === "LIBERADA") Object.assign(oldReservation, payload); if (config.takeover && table === eventoPedidos && payload.status === "EXPIRADO") Object.assign(oldOrder, payload); return operation; }, returning: async () => [{}] }; operation.then = (resolve: any, reject: any) => operation.returning().then(resolve, reject); return operation; } }; },
   };
   return banco;
 }
@@ -619,11 +767,30 @@ function pedidoFinalizacaoDb() {
   const session = { id: "session-1", status: "PUBLICADA", startsAt: new Date("2026-12-01T10:00:00Z"), endsAt: new Date("2026-12-07T12:00:00Z") };
   const policies = ["PRIVACIDADE", "COMPRA", "CANCELAMENTO_REEMBOLSO", "ACESSIBILIDADE", "CONTATO"].map((type) => ({ id: `policy-${type}`, type, version: 1 }));
   const item = { id: "item-1", orderId: order.id, ticketTypeId: "ticket-1", pricingEvidence: { participantIndex: 0 }, unitPriceCents: 1250, totalPriceCents: 1250 };
+  const reservation = { id: "reservation-1", orderId: order.id, inventorySeatId: "inventory-1", status: "ATIVA", expiresAt: order.expiresAt };
+  const inventory = { id: "inventory-1", reservedByOrderId: order.id, status: "RESERVADO", reservationExpiresAt: order.expiresAt };
+  const itemResult = { item, inventory: { seatId: "seat-1" }, seat: { rowLabel: "A", seatNumber: "12" }, ticket: { name: "Inteira" } };
   const db: any = { order, acceptances: [], tokens: [], participants: [], transaction: async (fn: any) => fn(db), selectCalls: 0 };
   db.select = () => {
     const call = db.selectCalls++;
-    const value = call === 0 ? [{ order, event, session }] : call === 1 ? [] : call === 2 ? policies : call === 3 ? [item] : [{ item, inventory: { seatId: "seat-1" }, seat: { rowLabel: "A", seatNumber: "12" }, ticket: { name: "Inteira" } }];
-    const chain: any = { from: () => chain, innerJoin: () => chain, where: async () => value };
+    let table: any;
+    const chain: any = {
+      from: (selected: any) => { table = selected; return chain; },
+      innerJoin: () => chain,
+      where: () => {
+        const value = table === eventoPedidos
+          ? (call === 1 ? [] : [{ order, event, session }])
+          : table === eventoPoliticas ? policies
+            : table === eventoItensPedido ? (call === 3 ? [item] : [itemResult])
+              : table === eventoReservas ? [reservation]
+                : table === eventoInventarioAssentos ? [inventory]
+                  : [];
+        const promise: any = Promise.resolve(value);
+        promise.for = () => promise;
+        return promise;
+      },
+      for: () => chain,
+    };
     return chain;
   };
   db.insert = (table: any) => {
@@ -631,6 +798,57 @@ function pedidoFinalizacaoDb() {
     return operation;
   };
   db.update = () => ({ set: (payload: any) => { Object.assign(order, payload); return { where: async () => [] }; } });
+  return db;
+}
+
+function pedidoFinalizacaoConcorrenteDb() {
+  const db = pedidoFinalizacaoDb();
+  let firstRead = true;
+  const originalSelect = db.select;
+  db.select = () => {
+    const chain: any = originalSelect();
+    const originalWhere = chain.where;
+    chain.where = (...args: any[]) => {
+      const wrapped: any = Promise.resolve(originalWhere(...args)).then(async (value) => {
+        if (firstRead) {
+          firstRead = false;
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        }
+        return value;
+      });
+      wrapped.for = () => wrapped;
+      return wrapped;
+    };
+    chain.for = () => chain;
+    return chain;
+  };
+  return db;
+}
+
+function checkoutConcorrenteDb(order: any) {
+  const rows = [{ item: { id: "item-1", orderId: order.id, ticketTypeId: "ticket-1", unitPriceCents: 1250, totalPriceCents: 1250, quantity: 1 }, ticket: { name: "Adulto" } }];
+  const reservations = [{ id: "reservation-1", orderId: order.id, inventorySeatId: "inventory-1", status: "ATIVA", expiresAt: order.expiresAt }];
+  const inventories = [{ id: "inventory-1", reservedByOrderId: order.id, status: "RESERVADO", reservationExpiresAt: order.expiresAt }];
+  const db: any = { order, payments: [], selectCalls: 0 };
+  db.transaction = async (fn: any) => fn(db);
+  db.select = () => {
+    const chain: any = {
+      from: (table: any) => { chain.table = table; return chain; },
+      innerJoin: () => chain,
+      where: async () => {
+        if (chain.table === eventoPedidos) return [{ order, event: { id: order.eventId, status: "PUBLICADO", title: "Evento" }, session: { id: order.sessionId, status: "PUBLICADA" } }];
+        if (chain.table === eventoItensPedido) return rows;
+        if (chain.table === eventoReservas) return reservations;
+        if (chain.table === eventoInventarioAssentos) return inventories;
+        if (chain.table === eventoPagamentos) return db.payments;
+        return [];
+      },
+      for: () => chain,
+    };
+    return chain;
+  };
+  db.insert = (table: any) => ({ values: (payload: any) => { if (table === eventoPagamentos) db.payments.push({ id: "payment-1", ...payload }); return Promise.resolve([]); } });
+  db.update = () => ({ set: (payload: any) => ({ where: async () => { Object.assign(order, payload); return []; } }) });
   return db;
 }
 
@@ -643,10 +861,37 @@ function pedidoConsultaDb() {
   return db;
 }
 
+function pedidoConsultaOrdenadaDb() {
+  const order: any = { id: "order-1", orderNumber: "ABC123DEF456", eventId: "event-1", sessionId: "session-1", status: "RESERVADO", totalCents: 2500, subtotalCents: 2500, discountCents: 0, expiresAt: new Date("2026-12-01T12:00:00Z") };
+  const event = { id: "event-1", status: "PUBLICADO", title: "Festival", slug: "festival-escola" };
+  const session = { id: "session-1", status: "PUBLICADA", startsAt: new Date("2026-12-01T10:00:00Z"), endsAt: new Date("2026-12-07T12:00:00Z") };
+  const rows = [
+    { item: { ticketTypeId: "ticket-2", unitPriceCents: 1250, totalPriceCents: 1250, pricingEvidence: { participantIndex: 1 } }, inventory: { seatId: "seat-2" }, seat: { rowLabel: "A", seatNumber: "11" }, ticket: { name: "Inteira" } },
+    { item: { ticketTypeId: "ticket-1", unitPriceCents: 1250, totalPriceCents: 1250, pricingEvidence: { participantIndex: 0 } }, inventory: { seatId: "seat-1" }, seat: { rowLabel: "A", seatNumber: "10" }, ticket: { name: "Inteira" } },
+  ];
+  const db: any = { order, orderByCalled: false, selectCalls: 0 };
+  db.select = () => {
+    const call = db.selectCalls++;
+    const chain: any = {
+      from: () => chain,
+      innerJoin: () => chain,
+      where: () => {
+        const value: any = call === 0 ? [{ order, event, session }] : rows;
+        const promise: any = Promise.resolve(value);
+        promise.orderBy = () => { db.orderByCalled = true; return Promise.resolve([...rows].sort((a, b) => a.item.pricingEvidence.participantIndex - b.item.pricingEvidence.participantIndex)); };
+        return promise;
+      },
+      orderBy: () => { db.orderByCalled = true; return Promise.resolve([...rows].sort((a, b) => a.item.pricingEvidence.participantIndex - b.item.pricingEvidence.participantIndex)); },
+    };
+    return chain;
+  };
+  return db;
+}
+
 function vendaDb(data: any) {
   let selects = 0;
   const order = { id: "order-1", orderNumber: "ABC123DEF456", totalCents: data.ticket?.priceCents ?? 0, expiresAt: new Date(Date.now() + 60_000), buyerEmail: "a@b.com" };
-  const rows = [[], data.session ? [{ event: data.event, session: data.session }] : [], data.ticket ? [data.ticket] : [], data.inventory ? [data.inventory] : [], [], [{ item: { ticketTypeId: data.ticket?.id, unitPriceCents: data.ticket?.priceCents, totalPriceCents: data.ticket?.priceCents }, inventory: data.inventory }]];
+  const rows = [[], data.session ? [{ event: data.event, session: data.session }] : [], data.ticket ? [data.ticket] : [], data.inventory ? [data.inventory] : [], data.inventory ? [data.inventory] : [], [], [{ item: { ticketTypeId: data.ticket?.id, unitPriceCents: data.ticket?.priceCents, totalPriceCents: data.ticket?.priceCents }, inventory: data.inventory }]];
   const db: any = { transaction: async (fn: any) => fn(db), select: () => { const value = rows[selects++] ?? []; const chain: any = { from: () => chain, innerJoin: () => chain, where: async () => value, orderBy: async () => value }; return chain; }, insert: () => ({ values: () => ({ returning: async () => [order] }) }), update: () => ({ set: () => ({ where: () => ({ returning: async () => [{}] }) }) }) };
   return db;
 }
@@ -659,7 +904,7 @@ function vendaDbComIngressos(data: any) {
     [],
     [{ event: data.event, session: data.session }],
     [data.ticket],
-    ...(data.inventories ?? []).map((inventory: any) => [inventory]),
+    ...(data.inventories ?? []).flatMap((inventory: any) => [[inventory], [inventory]]),
     [],
     [{ item: { ticketTypeId: data.ticket.id, unitPriceCents: data.ticket.priceCents, totalPriceCents: data.ticket.priceCents }, inventory: data.inventories?.[0] }],
   ];
@@ -678,19 +923,21 @@ function vendaDbComIngressos(data: any) {
 }
 
 function checkoutDb(order: any, rows: any[], payment: any = null) {
-  let selects = 0;
+  const reservations = rows.map((row: any, index: number) => ({ id: `reservation-${index}`, orderId: order.id, inventorySeatId: row.item?.inventorySeatId ?? `inventory-${index}`, status: "ATIVA", expiresAt: order.expiresAt }));
+  const inventories = rows.map((row: any, index: number) => ({ id: row.item?.inventorySeatId ?? `inventory-${index}`, reservedByOrderId: order.id, status: "RESERVADO", reservationExpiresAt: order.expiresAt }));
   const db: any = {
     paymentPayload: null,
+    reservations,
+    inventories,
     select: () => {
-      const current = selects++;
-      const value = current === 0
-        ? [{ order, event: { id: order.eventId, status: "PUBLICADO", title: "Evento" }, session: { id: order.sessionId, status: "PUBLICADA" } }]
-        : current === 1
-          ? rows
-          : current === 2 && payment
-            ? [payment]
-            : [];
-      const chain: any = { from: () => chain, innerJoin: () => chain, where: async () => value };
+      const chain: any = { table: undefined, from: (table: any) => { chain.table = table; return chain; }, innerJoin: () => chain, where: async () => {
+        if (chain.table === eventoPedidos) return [{ order, event: { id: order.eventId, status: "PUBLICADO", title: "Evento" }, session: { id: order.sessionId, status: "PUBLICADA" } }];
+        if (chain.table === eventoItensPedido) return rows;
+        if (chain.table === eventoReservas) return db.reservations;
+        if (chain.table === eventoInventarioAssentos) return db.inventories;
+        if (chain.table === eventoPagamentos) return payment ? [payment] : [];
+        return [];
+      }, for: () => chain };
       return chain;
     },
     insert: (_table: any) => ({ values: (payload: any) => { db.paymentPayload = payload; return Promise.resolve([]); } }),

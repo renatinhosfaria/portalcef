@@ -44,7 +44,7 @@ describe("PaymentsWebhookController - Eventos", () => {
     expect(eventosPagamentos.confirmarCheckout).toHaveBeenCalledWith(expect.objectContaining({ paymentIntentId: "pi_novo", eventOrderId: "pedido-evento-1" }));
   });
 
-  it("encaminha falha e cancelamento de PaymentIntent sem referência persistida", async () => {
+  it("mantém a reserva em falha transitória e só encerra no cancelamento terminal", async () => {
     const eventosPagamentos = { falharCheckout: jest.fn().mockResolvedValue(undefined) };
     const controller = new PaymentsWebhookController(
       { get: jest.fn().mockReturnValue("whsec_test") } as any,
@@ -54,9 +54,30 @@ describe("PaymentsWebhookController - Eventos", () => {
     );
     const paymentIntent = { id: "pi-falha", metadata: { eventOrderId: "pedido-evento-1" }, last_payment_error: { message: "recusado" } };
     await (controller as any).handlePaymentFailed(paymentIntent);
+    expect(eventosPagamentos.falharCheckout).not.toHaveBeenCalled();
     await (controller as any).handlePaymentCanceled(paymentIntent);
-    expect(eventosPagamentos.falharCheckout).toHaveBeenNthCalledWith(1, expect.objectContaining({ paymentIntentId: "pi-falha", eventOrderId: "pedido-evento-1" }));
-    expect(eventosPagamentos.falharCheckout).toHaveBeenNthCalledWith(2, expect.objectContaining({ paymentIntentId: "pi-falha", eventOrderId: "pedido-evento-1" }));
+    expect(eventosPagamentos.falharCheckout).toHaveBeenCalledTimes(1);
+    expect(eventosPagamentos.falharCheckout).toHaveBeenCalledWith(expect.objectContaining({ paymentIntentId: "pi-falha", eventOrderId: "pedido-evento-1" }));
+  });
+
+  it("permite retry do mesmo pedido após payment_intent.payment_failed", async () => {
+    const eventosPagamentos = {
+      falharCheckout: jest.fn(),
+      confirmarCheckout: jest.fn().mockResolvedValue(undefined),
+    };
+    const controller = new PaymentsWebhookController(
+      { get: jest.fn().mockReturnValue("whsec_test") } as any,
+      { getStripeClient: jest.fn() } as any,
+      { failStripePayment: jest.fn() } as any,
+      eventosPagamentos as any,
+    );
+    const paymentIntent = { id: "pi-retry", amount: 1_000, metadata: { eventOrderId: "pedido-evento-1" }, last_payment_error: { message: "recusado" }, payment_method_types: ["card"] };
+
+    await (controller as any).handlePaymentFailed(paymentIntent);
+    await (controller as any).handlePaymentSucceeded({ ...paymentIntent, id: "pi-retry-2" });
+
+    expect(eventosPagamentos.falharCheckout).not.toHaveBeenCalled();
+    expect(eventosPagamentos.confirmarCheckout).toHaveBeenCalledWith(expect.objectContaining({ eventOrderId: "pedido-evento-1", amountCents: 1_000 }));
   });
 
   it("falha explicitamente se o provider obrigatório estiver ausente", async () => {

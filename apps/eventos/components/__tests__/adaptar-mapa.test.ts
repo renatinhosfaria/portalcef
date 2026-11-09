@@ -50,6 +50,17 @@ describe("adaptação do mapa público", () => {
     ]);
   });
 
+  it("cria uma única dupla de pontas quando o layout tem dois rótulos na mesma fileira", () => {
+    const mapa: PublicMap = {
+      ...mapaBase,
+      layout: { largura: 200, altura: 150, rotulos: [{ fileira: "G", x: 100, y: 30 }, { fileira: "G", x: 100, y: 50 }], elementos: [] },
+    };
+    const rotulos = rotulosDoMapa(mapa);
+    expect(rotulos.filter((rotulo) => rotulo.fileira === "G")).toHaveLength(4);
+    expect(rotulos.filter((rotulo) => rotulo.fileira === "G" && (rotulo.x === -11 || rotulo.x === 101))).toHaveLength(2);
+    expect(rotulos).toEqual(expect.arrayContaining([{ fileira: "G", x: 100, y: 30 }, { fileira: "G", x: 100, y: 50 }]));
+  });
+
   it("sem layout usa a caixa dos assentos e não desenha palco", () => {
     const semLayout: PublicMap = { ...mapaBase, layout: null };
     expect(dimensoesDoMapa(semLayout)).toEqual({ largura: 73.5, altura: 84 });

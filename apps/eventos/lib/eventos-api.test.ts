@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buscarApiPublica,
   buscarMeusIngressos,
@@ -15,6 +15,11 @@ import {
 } from "./eventos-api";
 
 describe("API pública de eventos", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  });
   it("usa /api também quando consulta a API interna no servidor", async () => {
     vi.stubGlobal("window", undefined);
     vi.stubEnv("API_INTERNAL_URL", "http://api:3002");
@@ -56,21 +61,30 @@ describe("API pública de eventos", () => {
     vi.restoreAllMocks();
   });
 
-  it("gera uma chave nova para cada tentativa de reserva, mas repete a chave explícita", async () => {
+  it("reutiliza a chave persistida para retry de rede e troca só após conflito conhecido", async () => {
     vi.stubGlobal("window", {});
     const result = { reservationId: "reservation-1", orderNumber: "ABC123DEF456", expiresAt: new Date().toISOString(), totalCents: 1000, items: [] };
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response(JSON.stringify(result), { status: 200 }));
+    let tentativa = 0;
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
+      tentativa += 1;
+      if (tentativa === 1) throw new TypeError("falha de rede");
+      if (tentativa === 3) return new Response(JSON.stringify({ code: "SEAT_UNAVAILABLE", message: "Assento indisponível" }), { status: 409 });
+      return new Response(JSON.stringify(result), { status: 200 });
+    });
     const input = { sessionId: "00000000-0000-4000-8000-000000000001", seats: [{ seatId: "00000000-0000-4000-8000-000000000002", ticketTypeId: "00000000-0000-4000-8000-000000000003", participantIndex: 0 }], buyer: { name: "Ana", email: "ana@example.com", phone: "11999999999" } };
-    await reservarAssentos(input);
+    await expect(reservarAssentos(input)).rejects.toThrow("falha de rede");
     await reservarAssentos(input);
     const firstKey = (fetchMock.mock.calls[0]?.[1]?.headers as Record<string, string>)["Idempotency-Key"];
     const secondKey = (fetchMock.mock.calls[1]?.[1]?.headers as Record<string, string>)["Idempotency-Key"];
-    expect(firstKey).not.toBe(secondKey);
+    expect(firstKey).toBe(secondKey);
+    await expect(reservarAssentos(input)).rejects.toMatchObject({ code: "SEAT_UNAVAILABLE" });
+    await reservarAssentos(input);
+    const fourthKey = (fetchMock.mock.calls[3]?.[1]?.headers as Record<string, string>)["Idempotency-Key"];
+    expect(fourthKey).not.toBe(secondKey);
     await reservarAssentos({ ...input, idempotencyKey: "reserva-explicita-123456" });
     await reservarAssentos({ ...input, idempotencyKey: "reserva-explicita-123456" });
-    expect((fetchMock.mock.calls[2]?.[1]?.headers as Record<string, string>)["Idempotency-Key"]).toBe("reserva-explicita-123456");
-    expect((fetchMock.mock.calls[3]?.[1]?.headers as Record<string, string>)["Idempotency-Key"]).toBe("reserva-explicita-123456");
-    vi.restoreAllMocks();
+    expect((fetchMock.mock.calls[4]?.[1]?.headers as Record<string, string>)["Idempotency-Key"]).toBe("reserva-explicita-123456");
+    expect((fetchMock.mock.calls[5]?.[1]?.headers as Record<string, string>)["Idempotency-Key"]).toBe("reserva-explicita-123456");
   });
 
   it("não envia buyer quando a reserva não o informa", async () => {

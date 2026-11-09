@@ -132,7 +132,7 @@ export function PedidoConsultaStatus({ initialOrderNumber = "", initialResult = 
     <form onSubmit={consultar} className="max-w-md space-y-3" aria-describedby={error ? "consulta-error" : undefined}>
       <label className="block">Número do pedido<input required name="orderNumber" value={number} onChange={(event) => { setNumber(event.target.value); if (autoAtualizar) setNumeroEditado(true); }} className="mt-1 w-full rounded border p-2" placeholder="Ex.: ABC123DEF456" autoComplete="off" /></label>
       {error && <p id="consulta-error" role="alert" className="rounded border border-red-300 bg-red-50 p-3 text-red-800">{error}</p>}
-      <button disabled={loading} className="rounded bg-blue-700 px-4 py-2 text-white disabled:bg-slate-400">{loading ? "Consultando…" : "Consultar pedido"}</button>
+      <button disabled={loading} className="rounded bg-[#3f6f12] px-4 py-2 text-white hover:bg-[#355e0f] disabled:bg-[#c9cdc6]">{loading ? "Consultando…" : "Consultar pedido"}</button>
     </form>
     {!result && <PedidoRetorno retorno={retorno} />}
     {result && <PedidoPublicoStatus result={result} retorno={retorno} />}

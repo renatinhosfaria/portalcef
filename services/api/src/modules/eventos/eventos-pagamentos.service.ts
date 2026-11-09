@@ -50,6 +50,12 @@ export class EventosPagamentosService {
     return rows?.[0];
   }
 
+  private lockRows<T>(query: T): T {
+    return typeof (query as any)?.for === "function"
+      ? (query as any).for("update")
+      : query;
+  }
+
   private paymentWhere(checkoutSessionId?: string, paymentIntentId?: string) {
     const predicates = [
       checkoutSessionId
@@ -136,9 +142,14 @@ export class EventosPagamentosService {
     this.assertAmount(reference.payment, reference.order, input.amountCents);
 
     await this.db.transaction(async (tx: any) => {
+      const orderQuery = tx
+        .select()
+        .from(eventoPedidos)
+        .where(eq(eventoPedidos.id, reference.order.id));
+      const lockedOrder = await this.first<any>(this.lockRows(orderQuery));
       const current =
         (await this.findPayment(tx, input.checkoutSessionId, input.paymentIntentId, input.eventOrderId)) ??
-        reference;
+        { ...reference, order: lockedOrder ?? reference.order };
       const payment = current.payment;
       const order = current.order;
       this.assertAmount(payment, order, input.amountCents);
@@ -150,6 +161,31 @@ export class EventosPagamentosService {
         throw new BadRequestException({ code: "EVENT_ORDER_NOT_PAYABLE", message: "Pedido de Evento não pode ser confirmado" });
       }
 
+      const items = typeof tx.select === "function"
+        ? await tx.select().from(eventoItensPedido).where(eq(eventoItensPedido.orderId, order.id))
+        : [];
+
+      // A confirmação segue a mesma ordem da liberação: pedido, inventário,
+      // reserva e só então pagamento. Os SELECT ... FOR UPDATE ficam mantidos
+      // até o fim da transação e impedem deadlocks cruzados.
+      for (const item of items) {
+        const inventoryQuery = tx
+          .select()
+          .from(eventoInventarioAssentos)
+          .where(eq(eventoInventarioAssentos.id, item.inventorySeatId));
+        await this.first<any>(this.lockRows(inventoryQuery));
+        const reservationQuery = tx
+          .select()
+          .from(eventoReservas)
+          .where(and(eq(eventoReservas.orderId, order.id), eq(eventoReservas.inventorySeatId, item.inventorySeatId), eq(eventoReservas.status, "ATIVA")));
+        await this.first<any>(this.lockRows(reservationQuery));
+      }
+      const paymentQuery = tx
+        .select()
+        .from(eventoPagamentos)
+        .where(eq(eventoPagamentos.id, payment.id));
+      await this.first<any>(this.lockRows(paymentQuery));
+
       const staleAt = new Date(Date.now() - 5 * 60_000);
       const transition = typeof tx.update === "function"
         ? await tx.update(eventoPagamentos).set({ status: "PROCESSANDO", updatedAt: new Date() }).where(and(eq(eventoPagamentos.id, payment.id), or(eq(eventoPagamentos.status, "PENDENTE"), and(eq(eventoPagamentos.status, "PROCESSANDO"), lte(eventoPagamentos.updatedAt, staleAt))))).returning()
@@ -159,10 +195,6 @@ export class EventosPagamentosService {
         if (["CONFIRMADO", "USADO"].includes(latest.order.status) || latest.payment.status === "APROVADO") return;
         throw new ConflictException({ code: "PAYMENT_IN_PROGRESS", message: "Pagamento de Evento em processamento" });
       }
-
-      const items = typeof tx.select === "function"
-        ? await tx.select().from(eventoItensPedido).where(eq(eventoItensPedido.orderId, order.id))
-        : [];
 
       for (const item of items) {
         const existingTicket = typeof tx.select === "function"
@@ -229,12 +261,23 @@ export class EventosPagamentosService {
     await this.db.transaction(async (tx: any) => {
       const current = (await this.findPayment(tx, input.checkoutSessionId, input.paymentIntentId, input.eventOrderId)) ?? reference;
       const payment = current.payment;
-      const order = current.order;
+      const lockedOrder = typeof tx.select === "function"
+        ? await this.first(this.lockRows(tx.select().from(eventoPedidos).where(eq(eventoPedidos.id, current.order.id))))
+        : undefined;
+      const order = lockedOrder ?? current.order;
       if (["CONFIRMADO", "USADO"].includes(order.status) || payment.status === "APROVADO") return;
 
       const reservations = typeof tx.select === "function"
         ? await tx.select().from(eventoReservas).where(and(eq(eventoReservas.orderId, order.id), eq(eventoReservas.status, "ATIVA")))
         : [];
+      for (const reservation of reservations) {
+        await this.first(this.lockRows(tx.select().from(eventoInventarioAssentos).where(eq(eventoInventarioAssentos.id, reservation.inventorySeatId))));
+        await this.first(this.lockRows(tx.select().from(eventoReservas).where(eq(eventoReservas.id, reservation.id))));
+      }
+      const lockedPayment = typeof tx.select === "function"
+        ? await this.first(this.lockRows(tx.select().from(eventoPagamentos).where(eq(eventoPagamentos.id, payment.id))))
+        : undefined;
+      const paymentToUpdate = lockedPayment ?? payment;
       for (const reservation of reservations) {
         const released = await tx.update(eventoInventarioAssentos).set({ status: "DISPONIVEL", reservationExpiresAt: null, reservedByOrderId: null, updatedAt: new Date() }).where(and(eq(eventoInventarioAssentos.id, reservation.inventorySeatId), eq(eventoInventarioAssentos.status, "RESERVADO"), eq(eventoInventarioAssentos.reservedByOrderId, order.id))).returning();
         if (!this.changed(released)) throw new ConflictException({ code: "SEAT_STATE_CHANGED", message: "Estado do assento mudou durante a falha" });
@@ -242,7 +285,7 @@ export class EventosPagamentosService {
         if (!this.changed(releasedReservation)) throw new ConflictException({ code: "RESERVATION_STATE_CHANGED", message: "Estado da reserva mudou durante a falha" });
       }
       if (typeof tx.update === "function") {
-        await tx.update(eventoPagamentos).set({ status: input.reason.toLowerCase().includes("expir") ? "EXPIRADO" : "RECUSADO", processedAt: new Date(), updatedAt: new Date() }).where(eq(eventoPagamentos.id, payment.id)).returning();
+        await tx.update(eventoPagamentos).set({ status: input.reason.toLowerCase().includes("expir") ? "EXPIRADO" : "RECUSADO", processedAt: new Date(), updatedAt: new Date() }).where(eq(eventoPagamentos.id, paymentToUpdate.id)).returning();
         await tx.update(eventoPedidos).set({ status: "CANCELADO", cancelledAt: new Date(), cancellationReason: input.reason, updatedAt: new Date() }).where(and(eq(eventoPedidos.id, order.id), eq(eventoPedidos.status, order.status))).returning();
       }
       if (typeof tx.insert === "function" && order.eventId && payment.id) {

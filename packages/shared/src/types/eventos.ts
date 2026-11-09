@@ -37,6 +37,7 @@ export interface PublicMapLayout {
 export interface ItemPedidoPublico {
   seatId: string;
   ticketTypeId: string;
+  participantIndex?: number;
   unitPriceCents: number;
   totalPriceCents: number;
   rowLabel: string;

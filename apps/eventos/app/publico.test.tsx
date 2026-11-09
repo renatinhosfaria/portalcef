@@ -73,6 +73,17 @@ describe("vitrine pública de Eventos", () => {
     expect(catalog).toContain("EventoDestaque");
   });
 
+  it("não mantém classes azuis legadas na consulta pública de pedido", () => {
+    const status = readFileSync(new URL("../components/pedido-status.tsx", import.meta.url), "utf8");
+    expect(status).not.toContain("bg-blue-");
+  });
+
+  it("interrompe o checkout quando as políticas públicas não carregam", () => {
+    const checkout = readFileSync(new URL("./checkout/page.tsx", import.meta.url), "utf8");
+    expect(checkout).toContain("politicasResult.indisponivel");
+    expect(checkout).toContain("Não foi possível carregar as políticas do evento");
+  });
+
   it("integra a vitrine ao shell compartilhado e à consulta pública", () => {
     const layout = readFileSync(new URL("./layout.tsx", import.meta.url), "utf8");
     const cabecalho = readFileSync(new URL("../components/base/cabecalho.tsx", import.meta.url), "utf8");
