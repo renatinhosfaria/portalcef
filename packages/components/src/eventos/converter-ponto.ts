@@ -36,9 +36,9 @@ export function converterPontoTela(entrada: {
 }
 
 /** Transformação de zoom que enquadra a caixa, com 20% de margem, no centro do mapa. */
-export function transformParaFoco(caixa: CaixaFoco, largura: number, altura: number): TransformacaoZoom {
-  const larguraComMargem = Math.max(caixa.largura, 1) * (1 + MARGEM_FOCO);
-  const alturaComMargem = Math.max(caixa.altura, 1) * (1 + MARGEM_FOCO);
+export function transformParaFoco(caixa: CaixaFoco, largura: number, altura: number, margem = MARGEM_FOCO): TransformacaoZoom {
+  const larguraComMargem = Math.max(caixa.largura, 1) * (1 + margem);
+  const alturaComMargem = Math.max(caixa.altura, 1) * (1 + margem);
   const k = Math.min(ESCALA_MAXIMA, Math.max(ESCALA_MINIMA, Math.min(largura / larguraComMargem, altura / alturaComMargem)));
   const centroX = caixa.x + caixa.largura / 2;
   const centroY = caixa.y + caixa.altura / 2;

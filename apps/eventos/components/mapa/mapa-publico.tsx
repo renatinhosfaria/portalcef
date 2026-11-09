@@ -32,8 +32,7 @@ function rotuloTooltip(lugar: LugarPublico): string {
 
 export function calcularFocoMobile(lugares: LugarPublico[], elementos: ElementoPlanta[], rotulos: RotuloFileira[], dimensoes?: { largura: number; altura: number }): { x: number; y: number; largura: number; altura: number } | null {
   if (!lugares.length) return null;
-  const alturaMedia = lugares.reduce((total, lugar) => total + lugar.altura, 0) / lugares.length;
-  const pontosEstruturais = [...elementos, ...rotulos];
+  const pontosEstruturais = [...elementos, ...rotulos].filter((ponto) => !dimensoes || (ponto.x >= 0 && ponto.x <= dimensoes.largura && ponto.y >= 0 && ponto.y <= dimensoes.altura));
   const limites = lugares.reduce(
     (caixa, lugar) => ({
       minX: Math.min(caixa.minX, lugar.x - lugar.largura / 2),
@@ -107,6 +106,7 @@ export function MapaPublico({ map, selecionados, indisponiveis = new Set(), onAl
           rotulos={rotulos}
           elementos={elementos}
           foco={ehMobile ? focoMobile : null}
+          margemFoco={ehMobile && !map.layout ? 0 : undefined}
           rotuloAcessivel="Mapa público de assentos"
           selecionados={selecionados}
           coresDoLugar={(lugar, selecionado) => coresPublicas(lugarPorId.get(lugar.id) ?? (lugar as LugarPublico), selecionado)}

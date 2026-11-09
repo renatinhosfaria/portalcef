@@ -45,6 +45,7 @@ export interface MapaEstiloBProps {
   selecionados?: ReadonlySet<string>;
   destacados?: ReadonlySet<string>;
   foco?: { x: number; y: number; largura: number; altura: number } | null;
+  margemFoco?: number;
   /** Colocado num foreignObject dentro do grupo com zoom, sob os lugares. */
   fundo?: React.ReactNode;
   opacidadeFundo?: number;
@@ -116,6 +117,7 @@ export function MapaEstiloB({
   selecionados,
   destacados,
   foco,
+  margemFoco,
   fundo,
   opacidadeFundo = 0.4,
   coresDoLugar: obterCoresDoLugar,
@@ -192,11 +194,11 @@ export function MapaEstiloB({
         const svg = svgRef.current;
         const comportamento = zoomRef.current;
         if (!svg || !comportamento) return;
-        const transformacao = transformParaFoco(caixa, largura, altura);
+        const transformacao = transformParaFoco(caixa, largura, altura, margemFoco);
         select(svg).call(comportamento.transform, zoomIdentity.translate(transformacao.x, transformacao.y).scale(transformacao.k));
       },
     }),
-    [controleRef, largura, altura],
+    [controleRef, largura, altura, margemFoco],
   );
 
   // Depende dos valores do foco, e não da identidade do objeto: um `foco` inline
@@ -212,10 +214,10 @@ export function MapaEstiloB({
     const alvo =
       focoX === undefined || focoY === undefined || focoLargura === undefined || focoAltura === undefined
         ? null
-        : transformParaFoco({ x: focoX, y: focoY, largura: focoLargura, altura: focoAltura }, largura, altura);
+        : transformParaFoco({ x: focoX, y: focoY, largura: focoLargura, altura: focoAltura }, largura, altura, margemFoco);
     const transformacao = alvo ? zoomIdentity.translate(alvo.x, alvo.y).scale(alvo.k) : zoomIdentity;
     select(svg).call(comportamento.transform, transformacao);
-  }, [focoX, focoY, focoLargura, focoAltura, largura, altura]);
+  }, [focoX, focoY, focoLargura, focoAltura, largura, altura, margemFoco]);
 
   const caixaLugares = useMemo(() => {
     if (lugares.length === 0) return { minX: 0, maxX: largura, minY: 0, maxY: altura };

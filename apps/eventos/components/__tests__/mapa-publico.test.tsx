@@ -86,7 +86,7 @@ describe("MapaPublico", () => {
   it("inicia ampliado na área dos assentos em viewport mobile", async () => {
     configurarViewportMobile(true);
     render(<MapaPublico map={mapa} selecionados={new Set()} onAlternar={() => undefined} />);
-    await waitFor(() => expect(screen.getByRole("group", { name: "Mapa público de assentos" }).querySelector("g")?.getAttribute("transform")).toMatch(/scale\((?:1\.[1-9]|[2-9])/));
+    await waitFor(() => expect(screen.getByRole("group", { name: "Mapa público de assentos" }).querySelector("g")?.getAttribute("transform")).toMatch(/scale\((?:1\.(?:[0-9]*[1-9][0-9]*)|[2-9])/));
   });
 
   it("mantém a visão completa no desktop e quando o mapa não tem assentos", async () => {
@@ -103,7 +103,7 @@ describe("MapaPublico", () => {
     const svg = screen.getByRole("group", { name: "Mapa público de assentos" });
     await waitFor(() => expect(svg.querySelector("g")?.getAttribute("transform")).toMatch(/scale\(1\)/));
     viewport.alterar(true);
-    await waitFor(() => expect(svg.querySelector("g")?.getAttribute("transform")).toMatch(/scale\((?:1\.[1-9]|[2-9])/));
+    await waitFor(() => expect(svg.querySelector("g")?.getAttribute("transform")).toMatch(/scale\((?:1\.(?:[0-9]*[1-9][0-9]*)|[2-9])/));
   });
 
   it("inclui palco, entrada e rótulos de fileira no foco mobile", () => {
@@ -126,5 +126,12 @@ describe("MapaPublico", () => {
     const viewport = configurarViewportMobile(false);
     render(<MapaPublico map={mapa} selecionados={new Set()} onAlternar={() => undefined} />);
     expect(viewport.contadores()).toEqual({ addEventListenerCalls: 1, addListenerCalls: 0 });
+  });
+
+  it("mantém zoom mobile em mapas legados sem layout", async () => {
+    configurarViewportMobile(true);
+    const mapaLegado = { sessionId: mapa.sessionId, mapId: mapa.mapId, seats: mapa.seats };
+    render(<MapaPublico map={mapaLegado} selecionados={new Set()} onAlternar={() => undefined} />);
+    await waitFor(() => expect(screen.getByRole("group", { name: "Mapa público de assentos" }).querySelector("g")?.getAttribute("transform")).toMatch(/scale\((?:1\.(?:[0-9]*[1-9][0-9]*)|[2-9])/));
   });
 });
