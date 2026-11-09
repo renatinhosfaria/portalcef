@@ -1,4 +1,4 @@
-import type { PublicEventCard, PublicEventSession } from "@essencia/shared/types";
+import type { PublicEventCard, PublicEventSession, PublicEventTicketType } from "@essencia/shared/types";
 
 const FUSO_HORARIO = "America/Sao_Paulo";
 const DIAS_LONGOS = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"] as const;
@@ -51,7 +51,13 @@ export function rotuloCurto(seat: { rowLabel: string; seatNumber: string }): str
 
 export function formatarPrecoPublico(cents: number | null): string {
   if (cents == null) return "Consulte";
-  return `A partir de ${formatarMoeda(cents)}`;
+  return formatarMoeda(cents);
+}
+
+export function precoPrincipalPublico(tipos: Pick<PublicEventTicketType, "name" | "priceCents">[]): number | null {
+  const padroes = tipos.filter((tipo) => !tipo.name.normalize("NFKD").replace(/\p{Diacritic}/gu, "").toLowerCase().includes("meia"));
+  const precos = (padroes.length ? padroes : tipos).map((tipo) => tipo.priceCents);
+  return precos.length ? Math.min(...precos) : null;
 }
 
 export function formatarDataPublica(value: Date | string | null, options: Intl.DateTimeFormatOptions = {}): string {

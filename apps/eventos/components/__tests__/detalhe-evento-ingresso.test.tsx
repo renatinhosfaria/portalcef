@@ -126,6 +126,7 @@ describe("caminho público de ingresso", () => {
     expect(html).not.toContain("Escolha o tipo de ingresso");
     expect(html).toContain("Adulto");
     expect(html).toContain("R$ 10,00");
+    expect(html).not.toContain("A partir de R$ 10,00");
     expect(html).toContain("R$ 5,00");
     expect(html).toContain("Acesso à programação completa");
     expect(html).toContain("Elegibilidade: Estudante");

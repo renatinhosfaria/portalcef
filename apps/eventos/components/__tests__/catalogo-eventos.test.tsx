@@ -7,7 +7,7 @@ import { CatalogoEstados } from "../catalogo-estados";
 import { CatalogoEventos } from "../catalogo-eventos";
 import { EventoDestaque } from "../catalogo/evento-destaque";
 import { ImagemPublicaEvento } from "../imagem-publica-evento";
-import { formatarDataHoraExtenso, formatarDataCurta, formatarMoeda, formatarDataPublica, formatarPrecoPublico, rotuloDisponibilidade, rotuloCurto } from "../../lib/eventos-formatters";
+import { formatarDataHoraExtenso, formatarDataCurta, formatarMoeda, formatarDataPublica, formatarPrecoPublico, precoPrincipalPublico, rotuloDisponibilidade, rotuloCurto } from "../../lib/eventos-formatters";
 
 const evento: PublicEventCard = {
   id: "evento-1", slug: "festa-junina", title: "Festa Junina", summary: "Uma tarde especial para a comunidade.",
@@ -25,8 +25,9 @@ describe("formatadores públicos de eventos", () => {
     expect(rotuloCurto({ rowLabel: "G", seatNumber: "21" })).toBe("G21");
   });
   it("formata preço em reais e usa fallback", () => {
-    expect(formatarPrecoPublico(1250)).toBe("A partir de R$ 12,50");
+    expect(formatarPrecoPublico(1250)).toBe("R$ 12,50");
     expect(formatarPrecoPublico(null)).toBe("Consulte");
+    expect(precoPrincipalPublico([{ name: "Inteira", priceCents: 4500 }, { name: "Meia-entrada", priceCents: 2250 }])).toBe(4500);
   });
   it("formata data no fuso de São Paulo", () => {
     expect(formatarDataPublica("2026-06-20T02:00:00.000Z")).toContain("19/06/2026");
@@ -44,7 +45,7 @@ describe("catálogo público", () => {
     expect(html).toContain('data-testid="evento-destaque"');
     expect(html).toContain("object-contain");
     expect(html).toContain("Festa Junina");
-    expect(html).toContain("a partir de R$ 12,50");
+    expect(html).toContain("R$ 12,50");
     expect(html).toContain("Escolher assentos");
     expect(html).toContain('href="/evento/festa-junina"');
   });
@@ -78,7 +79,7 @@ describe("catálogo público", () => {
     expect(html).toContain("festa.jpg");
     expect(html).toContain('alt="Festa Junina"');
     expect(html).toContain('href="/evento/festa-junina"');
-    for (const text of ["Uma tarde especial", "Cultura", "Pátio central", "Sex, 19 jun · 23h", "A partir de R$ 12,50", "Disponível"]) expect(html).toContain(text);
+    for (const text of ["Uma tarde especial", "Cultura", "Pátio central", "Sex, 19 jun · 23h", "R$ 12,50", "Disponível"]) expect(html).toContain(text);
   });
   it("usa fallback quando não há imagem e evita compra em estados indisponíveis", () => {
     for (const availability of ["sold_out", "unavailable"] as const) {

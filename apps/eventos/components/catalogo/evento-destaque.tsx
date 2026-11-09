@@ -1,7 +1,7 @@
 import React from "react";
 import Link from "next/link";
 import type { PublicEventCard } from "@essencia/shared/types";
-import { formatarDataHoraExtenso, formatarMoeda, rotuloDisponibilidade } from "../../lib/eventos-formatters";
+import { formatarDataHoraExtenso, formatarPrecoPublico, rotuloDisponibilidade } from "../../lib/eventos-formatters";
 import { ImagemPublicaEvento } from "../imagem-publica-evento";
 
 export function EventoDestaque({ event }: { event: PublicEventCard }): React.JSX.Element {
@@ -19,7 +19,7 @@ export function EventoDestaque({ event }: { event: PublicEventCard }): React.JSX
         <div><dt className="font-semibold text-[var(--ink)]">Quando</dt><dd>{formatarDataHoraExtenso(event.startsAt ?? "")}</dd></div>
         <div><dt className="font-semibold text-[var(--ink)]">Onde</dt><dd>{event.locationName ?? "Local a confirmar"}</dd></div>
       </dl>
-      <p className="mt-7 text-lg font-semibold">{event.fromPriceCents == null ? "Consulte" : <>a partir de {formatarMoeda(event.fromPriceCents)}</>}</p>
+      <p className="mt-7 text-lg font-semibold">{formatarPrecoPublico(event.fromPriceCents)}</p>
       <div className="mt-6">{disponivel ? <Link href={`/evento/${event.slug}`} className="inline-flex min-h-11 items-center justify-center rounded-lg bg-[var(--acao)] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[var(--acao-hover)]">Escolher assentos</Link> : <span className="text-sm font-semibold text-[var(--ink-muted)]">{rotuloDisponibilidade(event.availability)}</span>}</div>
     </div>
   </article>;
