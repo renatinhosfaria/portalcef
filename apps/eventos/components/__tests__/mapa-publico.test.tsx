@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import React from "react";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { PublicMap } from "@essencia/shared/types";
-import { coresPublicas, MapaPublico, rotuloAcessivelPublico } from "../mapa/mapa-publico";
+import { calcularFocoMobile, coresPublicas, MapaPublico, rotuloAcessivelPublico } from "../mapa/mapa-publico";
 import { paraLugaresPublicos } from "../mapa/adaptar-mapa";
 import { Minimapa } from "../mapa/minimapa";
 
@@ -12,6 +12,7 @@ afterEach(cleanup);
 const mapa: PublicMap = {
   sessionId: "sessao",
   mapId: "mapa",
+  layout: { largura: 120, altura: 120, rotulos: [], elementos: [] },
   seats: [
     { id: "livre", sessionId: "sessao", rowLabel: "G", seatNumber: "21", x: 10, y: 20, width: 30, height: 20, category: "COMUM", accessible: false, state: "available" },
     { id: "ocupado", sessionId: "sessao", rowLabel: "G", seatNumber: "22", x: 50, y: 20, width: 30, height: 20, category: "COMUM", accessible: false, state: "sold" },
@@ -20,6 +21,31 @@ const mapa: PublicMap = {
 };
 
 describe("MapaPublico", () => {
+  function configurarViewportMobile(inicial: boolean) {
+    let atual = inicial;
+    const listeners = new Set<(evento: MediaQueryListEvent) => void>();
+    let addEventListenerCalls = 0;
+    let addListenerCalls = 0;
+    const mediaQuery = {
+      get matches() { return atual; },
+      media: "(max-width: 767px)",
+      addEventListener: (_tipo: string, listener: (evento: MediaQueryListEvent) => void) => { addEventListenerCalls += 1; listeners.add(listener); },
+      removeEventListener: (_tipo: string, listener: (evento: MediaQueryListEvent) => void) => listeners.delete(listener),
+      addListener: (listener: (evento: MediaQueryListEvent) => void) => { addListenerCalls += 1; listeners.add(listener); },
+      removeListener: (listener: (evento: MediaQueryListEvent) => void) => listeners.delete(listener),
+      onchange: null,
+      dispatchEvent: () => true,
+    } as unknown as MediaQueryList;
+    vi.stubGlobal("matchMedia", vi.fn(() => mediaQuery));
+    return {
+      alterar(valor: boolean) {
+        atual = valor;
+        listeners.forEach((listener) => listener({ matches: valor, media: mediaQuery.media } as MediaQueryListEvent));
+      },
+      contadores() { return { addEventListenerCalls, addListenerCalls }; },
+    };
+  }
+
   it("usa a tabela pública de cores para livre, seu lugar, ocupado e acessível", () => {
     const lugares = paraLugaresPublicos(mapa);
     expect(coresPublicas(lugares[0]!, false)).toEqual({ preenchimento: "#ffffff", contorno: "#9fb08a", numero: "#1f2a24" });
@@ -55,5 +81,50 @@ describe("MapaPublico", () => {
     expect(container.querySelector("[data-minimapa-viewport]")).toBeNull();
     rerender(<Minimapa largura={100} altura={100} lugares={lugares} transformacao={{ x: 0, y: 0, k: 1.51 }} />);
     expect(container.querySelector("[data-minimapa-viewport]")).not.toBeNull();
+  });
+
+  it("inicia ampliado na área dos assentos em viewport mobile", async () => {
+    configurarViewportMobile(true);
+    render(<MapaPublico map={mapa} selecionados={new Set()} onAlternar={() => undefined} />);
+    await waitFor(() => expect(screen.getByRole("group", { name: "Mapa público de assentos" }).querySelector("g")?.getAttribute("transform")).toMatch(/scale\((?:1\.[1-9]|[2-9])/));
+  });
+
+  it("mantém a visão completa no desktop e quando o mapa não tem assentos", async () => {
+    configurarViewportMobile(false);
+    const { rerender } = render(<MapaPublico map={mapa} selecionados={new Set()} onAlternar={() => undefined} />);
+    await waitFor(() => expect(screen.getByRole("group", { name: "Mapa público de assentos" }).querySelector("g")?.getAttribute("transform")).toMatch(/scale\(1\)/));
+    rerender(<MapaPublico map={{ ...mapa, seats: [] }} selecionados={new Set()} onAlternar={() => undefined} />);
+    await waitFor(() => expect(screen.getByRole("group", { name: "Mapa público de assentos" }).querySelector("g")?.getAttribute("transform")).toMatch(/scale\(1\)/));
+  });
+
+  it("atualiza o enquadramento ao trocar a viewport", async () => {
+    const viewport = configurarViewportMobile(false);
+    render(<MapaPublico map={mapa} selecionados={new Set()} onAlternar={() => undefined} />);
+    const svg = screen.getByRole("group", { name: "Mapa público de assentos" });
+    await waitFor(() => expect(svg.querySelector("g")?.getAttribute("transform")).toMatch(/scale\(1\)/));
+    viewport.alterar(true);
+    await waitFor(() => expect(svg.querySelector("g")?.getAttribute("transform")).toMatch(/scale\((?:1\.[1-9]|[2-9])/));
+  });
+
+  it("inclui palco, entrada e rótulos de fileira no foco mobile", () => {
+    const foco = calcularFocoMobile(
+      paraLugaresPublicos(mapa),
+      [{ tipo: "PALCO", texto: "PALCO", x: 60, y: 1 }, { tipo: "ENTRADA", texto: "ENTRADA", x: 60, y: 119 }],
+      [{ fileira: "G", x: 1, y: 20 }, { fileira: "H", x: 119, y: 80 }],
+      { largura: 120, altura: 120 },
+    );
+    expect(foco).not.toBeNull();
+    expect(foco!.x).toBeLessThan(2);
+    expect(foco!.y).toBeLessThan(2);
+    expect(foco!.x + foco!.largura).toBeGreaterThan(119);
+    expect(foco!.y + foco!.altura).toBeGreaterThan(119);
+    expect(foco!.largura).toBeLessThan(120);
+    expect(foco!.altura).toBeLessThan(120);
+  });
+
+  it("prefere o listener moderno de media query quando disponível", () => {
+    const viewport = configurarViewportMobile(false);
+    render(<MapaPublico map={mapa} selecionados={new Set()} onAlternar={() => undefined} />);
+    expect(viewport.contadores()).toEqual({ addEventListenerCalls: 1, addListenerCalls: 0 });
   });
 });
