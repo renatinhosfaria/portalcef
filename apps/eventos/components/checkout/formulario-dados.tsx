@@ -38,12 +38,12 @@ export function FormularioDados({ items, politicas, onEnviar, bloqueado = false 
 
   return <form onSubmit={enviar} noValidate className="space-y-6 rounded-2xl border border-[#e6e9e1] bg-white p-5 shadow-sm">
     <fieldset className="space-y-4"><legend className="font-display text-xl font-semibold text-[#1f2a24]">Seus dados</legend><p className="text-sm text-[#647066]">Usamos para identificar seu pedido e falar com você, se precisar.</p>
-      <label className="block text-sm font-semibold">Nome completo<input name="buyerName" autoComplete="name" className="mt-1 min-h-11 w-full rounded-lg border border-[#d9ddcf] p-3 font-normal" /></label>
-      <label className="block text-sm font-semibold">E-mail<input name="buyerEmail" type="email" autoComplete="email" className="mt-1 min-h-11 w-full rounded-lg border border-[#d9ddcf] p-3 font-normal" /></label>
-      <label className="block text-sm font-semibold">Celular (WhatsApp)<input name="buyerPhone" type="tel" inputMode="tel" autoComplete="tel" className="mt-1 min-h-11 w-full rounded-lg border border-[#d9ddcf] p-3 font-normal" /></label>
+      <label className="block text-sm font-semibold">Nome completo<input required name="buyerName" autoComplete="name" className="mt-1 min-h-11 w-full rounded-lg border border-[#d9ddcf] p-3 font-normal" /></label>
+      <label className="block text-sm font-semibold">E-mail<input required name="buyerEmail" type="email" autoComplete="email" className="mt-1 min-h-11 w-full rounded-lg border border-[#d9ddcf] p-3 font-normal" /></label>
+      <label className="block text-sm font-semibold">Celular (WhatsApp)<input required name="buyerPhone" type="tel" inputMode="tel" autoComplete="tel" className="mt-1 min-h-11 w-full rounded-lg border border-[#d9ddcf] p-3 font-normal" /></label>
     </fieldset>
     <fieldset className="space-y-4"><legend className="font-display text-xl font-semibold text-[#1f2a24]">Quem vai sentar em cada lugar</legend>
-      {items.map((item, index) => { const rotulo = `${item.rowLabel}${item.seatNumber}`; return <div key={`${item.seatId}-${index}`}><label className="block text-sm font-semibold">Nome de quem vai sentar no lugar {rotulo}<input name={`participant-${index}`} className="mt-1 min-h-11 w-full rounded-lg border border-[#d9ddcf] p-3 font-normal" /></label>{/meia/i.test(item.ticketTypeName) && <p className="mt-1 text-xs text-[#647066]">Leve o documento que dá direito ao desconto.</p>}</div>; })}
+      {items.map((item, index) => { const rotulo = `${item.rowLabel}${item.seatNumber}`; return <div key={`${item.seatId}-${index}`}><label className="block text-sm font-semibold">Nome de quem vai sentar no lugar {rotulo}<input required name={`participant-${index}`} className="mt-1 min-h-11 w-full rounded-lg border border-[#d9ddcf] p-3 font-normal" /></label>{/meia/i.test(item.ticketTypeName) && <p className="mt-1 text-xs text-[#647066]">Leve o documento que dá direito ao desconto.</p>}</div>; })}
     </fieldset>
     <PoliticasAceite politicas={politicas} aceito={aceito} onAceitar={setAceito} />
     <button type="submit" disabled={enviando} className="min-h-12 rounded-xl bg-[#3f6f12] px-5 py-3 font-semibold text-white disabled:cursor-wait disabled:opacity-60">{enviando ? "Preparando pagamento…" : "Ir para o pagamento"}</button>

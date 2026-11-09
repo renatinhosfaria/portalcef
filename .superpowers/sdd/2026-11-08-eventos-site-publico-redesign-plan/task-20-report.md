@@ -86,3 +86,41 @@ O lint mantém avisos históricos do monorepo e um aviso de `img` no resumo, sem
 - A suíte global de API não foi repetida; o foco de vendas públicas e controller passou integralmente.
 
 Atualizado em: 2026-11-08
+
+## Fix round 1 — expiração, idempotência e retomada
+
+### Correções
+
+- O timeout chama `liberarPedido` uma única vez, inclusive quando o relógio zera ou a API retorna `ORDER_NOT_AVAILABLE`. Erros de pagamento já concluído levam aos ingressos; pedidos já expirados retornam ao mapa com a seleção.
+- As chaves de finalização e pagamento ficam em `useRef` por pedido, portanto novas tentativas reutilizam a mesma idempotência.
+- Uma finalização que resolve depois da expiração é tratada como resultado autoritativo: o acesso é salvo antes de qualquer continuação e o fluxo segue para iniciar o pagamento. O resultado não é descartado.
+- Pedidos `AGUARDANDO_PAGAMENTO` com acesso salvo retomam a sessão embutida no carregamento, sem chamar `finalizarPedido` novamente.
+- Campos do comprador, participantes e aceite receberam `required` para manter a semântica de acessibilidade.
+
+### Testes RED/GREEN
+
+RED do foco antes das correções: 3 testes falharam — liberação não chamada, chave diferente no retry e finalização tardia descartada.
+
+GREEN:
+
+```text
+pnpm --filter @essencia/eventos exec vitest run --environment jsdom components/__tests__/checkout.test.tsx
+1 arquivo, 12 testes aprovados
+
+pnpm --filter @essencia/eventos test
+19 arquivos, 124 testes aprovados
+
+pnpm --filter @essencia/api test -- eventos-public-sales eventos-public.controller
+2 suítes, 55 testes aprovados
+
+pnpm turbo lint && pnpm turbo typecheck
+22 tarefas de lint e 22 tarefas de typecheck concluídas com exit 0
+```
+
+### Self-review
+
+- A liberação é compartilhada por uma promessa em `liberacaoPromiseRef`, evitando corrida entre o relógio e "Alterar lugares".
+- O acesso é persistido antes de iniciar o pagamento e também permite retomar `AGUARDANDO_PAGAMENTO` após recarregar a página.
+- `PAYMENT_ALREADY_COMPLETED`, `ORDER_NOT_AVAILABLE`, `RESERVATION_EXPIRED` e `RESERVATION_CANCELLED` têm destinos explícitos.
+
+Atualizado em: 2026-11-08

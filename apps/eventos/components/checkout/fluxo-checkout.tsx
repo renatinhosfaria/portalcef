@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PedidoPublicoResult, PoliticaPublica, PublicEventDetail, PublicEventSession } from "@essencia/shared/types";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -30,40 +30,96 @@ export function FluxoCheckout({ pedido, evento, sessao, politicas, publishableKe
   const [alterando, setAlterando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const expiradoRef = useRef(expirado);
+  const finalizacaoKeyRef = useRef<string | null>(null);
+  const pagamentoKeyRef = useRef<string | null>(null);
+  const liberacaoPromiseRef = useRef<Promise<void> | null>(null);
 
-  const marcarEsgotado = useCallback(() => { expiradoRef.current = true; setExpirado(true); }, []);
+  const acessoGuardado = useCallback(() => typeof window === "undefined" ? null : window.sessionStorage.getItem(`eventos:acesso:${pedido.orderNumber}`), [pedido.orderNumber]);
+  const irParaIngressos = useCallback(() => {
+    const acesso = acessoGuardado();
+    router.push(acesso ? `/pedido/${encodeURIComponent(pedido.orderNumber)}?acesso=${encodeURIComponent(acesso)}` : `/pedido/consulta?pedido=${encodeURIComponent(pedido.orderNumber)}`);
+  }, [acessoGuardado, pedido.orderNumber, router]);
+  const liberarUmaVez = useCallback(() => {
+    if (!liberacaoPromiseRef.current) liberacaoPromiseRef.current = liberarPedido(pedido.orderNumber);
+    return liberacaoPromiseRef.current;
+  }, [pedido.orderNumber]);
+
+  const tratarExpiracao = useCallback(async () => {
+    try {
+      await liberarUmaVez();
+    } catch (cause) {
+      if (cause instanceof EventosApiError && cause.code === "PAYMENT_ALREADY_COMPLETED") irParaIngressos();
+      else if (cause instanceof EventosApiError && ["ORDER_NOT_AVAILABLE", "RESERVATION_EXPIRED", "RESERVATION_CANCELLED"].includes(cause.code ?? "")) router.push(retornoMapaDisponibilidade);
+      else setErro(cause instanceof Error ? cause.message : "Não foi possível liberar os lugares.");
+    }
+  }, [irParaIngressos, liberarUmaVez, retornoMapaDisponibilidade, router]);
+
+  const marcarEsgotado = useCallback(() => {
+    expiradoRef.current = true;
+    setExpirado(true);
+    void tratarExpiracao();
+  }, [tratarExpiracao]);
   const alterarLugares = useCallback(async () => {
     setErro(null);
     setAlterando(true);
     try {
-      await liberarPedido(pedido.orderNumber);
+      await liberarUmaVez();
       router.push(retornoMapa);
     } catch (cause) {
-      if (cause instanceof EventosApiError && cause.code === "PAYMENT_ALREADY_COMPLETED") {
-        const acesso = typeof window === "undefined" ? null : window.sessionStorage.getItem(`eventos:acesso:${pedido.orderNumber}`);
-        router.push(acesso ? `/pedido/${encodeURIComponent(pedido.orderNumber)}?acesso=${encodeURIComponent(acesso)}` : `/pedido/consulta?pedido=${encodeURIComponent(pedido.orderNumber)}`);
-      } else if (cause instanceof EventosApiError && cause.code === "ORDER_NOT_AVAILABLE") marcarEsgotado();
+      if (cause instanceof EventosApiError && cause.code === "PAYMENT_ALREADY_COMPLETED") irParaIngressos();
+      else if (cause instanceof EventosApiError && ["ORDER_NOT_AVAILABLE", "RESERVATION_EXPIRED", "RESERVATION_CANCELLED"].includes(cause.code ?? "")) router.push(retornoMapaDisponibilidade);
       else setErro(cause instanceof Error ? cause.message : "Não foi possível alterar os lugares.");
     } finally { setAlterando(false); }
-  }, [marcarEsgotado, pedido.orderNumber, retornoMapa, router]);
+  }, [irParaIngressos, liberarUmaVez, retornoMapa, retornoMapaDisponibilidade, router]);
 
   async function enviar(dados: DadosCheckout) {
     setErro(null);
     if (expiradoRef.current) return;
     try {
-      const finalizacao = await finalizarPedido(pedido.orderNumber, { buyer: dados.buyer, participants: dados.participants, acceptances: politicas.map(({ type, version }) => ({ type, version })), idempotencyKey: gerarChaveIdempotenciaPublica("finalizacao") });
-      if (expiradoRef.current) return;
-      setExpiraEm(finalizacao.pedido.expiresAt ?? expiraEm);
+      if (!finalizacaoKeyRef.current) finalizacaoKeyRef.current = gerarChaveIdempotenciaPublica("finalizacao");
+      const finalizacao = await finalizarPedido(pedido.orderNumber, { buyer: dados.buyer, participants: dados.participants, acceptances: politicas.map(({ type, version }) => ({ type, version })), idempotencyKey: finalizacaoKeyRef.current });
       if (typeof window !== "undefined") window.sessionStorage.setItem(`eventos:acesso:${pedido.orderNumber}`, finalizacao.acesso);
-      const pagamento = await iniciarPagamento(pedido.orderNumber, { returnUrl: montarUrlRetornoPagamento(pedido.orderNumber, finalizacao.acesso), idempotencyKey: gerarChaveIdempotenciaPublica("pagamento") });
+      if (finalizacao.pedido.expiresAt) setExpiraEm(finalizacao.pedido.expiresAt);
+      expiradoRef.current = false;
+      setExpirado(false);
+      if (!pagamentoKeyRef.current) pagamentoKeyRef.current = gerarChaveIdempotenciaPublica("pagamento");
+      const pagamento = await iniciarPagamento(pedido.orderNumber, { returnUrl: montarUrlRetornoPagamento(pedido.orderNumber, finalizacao.acesso), idempotencyKey: pagamentoKeyRef.current });
       setExpiraEm(pagamento.expiresAt);
+      expiradoRef.current = false;
+      setExpirado(false);
       setClientSecret(pagamento.clientSecret);
       setEtapa(3);
     } catch (cause) {
-      if (cause instanceof EventosApiError && cause.code === "ORDER_NOT_AVAILABLE") marcarEsgotado();
+      if (cause instanceof EventosApiError && cause.code === "ORDER_NOT_AVAILABLE") {
+        if (acessoGuardado()) irParaIngressos();
+        else marcarEsgotado();
+      }
       else setErro(cause instanceof Error ? cause.message : "Não foi possível iniciar o pagamento.");
     }
   }
+
+  useEffect(() => {
+    if (pedido.status !== "AGUARDANDO_PAGAMENTO") return undefined;
+    const acesso = acessoGuardado();
+    if (!acesso) return undefined;
+    let ativo = true;
+    if (!pagamentoKeyRef.current) pagamentoKeyRef.current = gerarChaveIdempotenciaPublica("pagamento");
+    void iniciarPagamento(pedido.orderNumber, { returnUrl: montarUrlRetornoPagamento(pedido.orderNumber, acesso), idempotencyKey: pagamentoKeyRef.current })
+      .then((pagamento) => {
+        if (!ativo) return;
+        setExpiraEm(pagamento.expiresAt);
+        expiradoRef.current = false;
+        setExpirado(false);
+        setClientSecret(pagamento.clientSecret);
+        setEtapa(3);
+      })
+      .catch((cause: unknown) => {
+        if (!ativo) return;
+        if (cause instanceof EventosApiError && cause.code === "ORDER_NOT_AVAILABLE") marcarEsgotado();
+        else setErro(cause instanceof Error ? cause.message : "Não foi possível retomar o pagamento.");
+      });
+    return () => { ativo = false; };
+  }, [acessoGuardado, marcarEsgotado, pedido.orderNumber, pedido.status]);
 
   if (!ESTADOS_ATIVOS.has(pedido.status)) return <section role="alert" className="rounded-2xl border border-[#e6e9e1] bg-white p-6"><p>Este pedido não está mais disponível para pagamento.</p><Link className="mt-4 inline-flex font-semibold text-[#3f6f12] underline" href="/pedido/consulta">Meus ingressos</Link></section>;
   if (expirado || !expiraEm) return <TempoEsgotado href={retornoMapaDisponibilidade} />;

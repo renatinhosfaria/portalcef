@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import React from "react";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PedidoPublicoResult, PoliticaPublica, PublicEventDetail, PublicEventSession } from "@essencia/shared/types";
 import { EventosApiError } from "../../lib/eventos-api";
@@ -114,5 +114,77 @@ describe("FluxoCheckout", () => {
     expect(screen.getByText("O tempo acabou e os lugares foram liberados")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Escolher lugares de novo" }).getAttribute("href")).toContain("conflito=disponibilidade");
     expect(screen.queryByRole("button", { name: "Ir para o pagamento" })).toBeNull();
+  });
+
+  it("libera o pedido uma vez quando o relógio zera", async () => {
+    vi.useFakeTimers();
+    try {
+      const agora = Date.now();
+      vi.setSystemTime(agora);
+      render(<FluxoCheckout pedido={{ ...pedido, expiresAt: new Date(agora + 1000) }} evento={evento} sessao={sessao} politicas={politicas} publishableKey={null} />);
+      vi.advanceTimersByTime(1100);
+      await Promise.resolve();
+      expect(eventosApi.liberarPedido).toHaveBeenCalledTimes(1);
+      vi.advanceTimersByTime(3000);
+      expect(eventosApi.liberarPedido).toHaveBeenCalledTimes(1);
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("reutiliza a chave de idempotência ao repetir uma tentativa", async () => {
+    vi.mocked(eventosApi.finalizarPedido)
+      .mockRejectedValueOnce(new Error("resposta perdida"))
+      .mockResolvedValueOnce({ pedido, acesso: "acesso-seguro" });
+    render(<FluxoCheckout pedido={pedido} evento={evento} sessao={sessao} politicas={politicas} publishableKey="pk_test" />);
+    fireEvent.change(screen.getByLabelText("Nome completo"), { target: { value: "Ana Silva" } });
+    fireEvent.change(screen.getByLabelText("E-mail"), { target: { value: "ana@example.com" } });
+    fireEvent.change(screen.getByLabelText("Celular (WhatsApp)"), { target: { value: "34999999999" } });
+    fireEvent.change(screen.getByLabelText("Nome de quem vai sentar no lugar G19"), { target: { value: "Ana Silva" } });
+    fireEvent.change(screen.getByLabelText("Nome de quem vai sentar no lugar G20"), { target: { value: "Bia Silva" } });
+    fireEvent.click(screen.getByRole("checkbox", { name: "Li e aceito as políticas do evento" }));
+    const enviar = screen.getByRole("button", { name: "Ir para o pagamento" });
+    fireEvent.click(enviar);
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("resposta perdida"));
+    fireEvent.click(enviar);
+    await waitFor(() => expect(eventosApi.iniciarPagamento).toHaveBeenCalled());
+    const primeiraChave = vi.mocked(eventosApi.finalizarPedido).mock.calls[0]?.[1].idempotencyKey;
+    const segundaChave = vi.mocked(eventosApi.finalizarPedido).mock.calls[1]?.[1].idempotencyKey;
+    expect(primeiraChave).toBeTruthy();
+    expect(segundaChave).toBe(primeiraChave);
+  });
+
+  it("preserva a finalização que resolve depois da expiração e segue para pagamento", async () => {
+    vi.useFakeTimers();
+    try {
+      const agora = Date.now();
+      vi.setSystemTime(agora);
+      let resolver!: (value: { pedido: PedidoPublicoResult; acesso: string }) => void;
+      vi.mocked(eventosApi.finalizarPedido).mockReturnValueOnce(new Promise((resolve) => { resolver = resolve; }));
+      render(<FluxoCheckout pedido={{ ...pedido, expiresAt: new Date(agora + 1000) }} evento={evento} sessao={sessao} politicas={politicas} publishableKey="pk_test" />);
+      fireEvent.change(screen.getByLabelText("Nome completo"), { target: { value: "Ana Silva" } });
+      fireEvent.change(screen.getByLabelText("E-mail"), { target: { value: "ana@example.com" } });
+      fireEvent.change(screen.getByLabelText("Celular (WhatsApp)"), { target: { value: "34999999999" } });
+      fireEvent.change(screen.getByLabelText("Nome de quem vai sentar no lugar G19"), { target: { value: "Ana Silva" } });
+      fireEvent.change(screen.getByLabelText("Nome de quem vai sentar no lugar G20"), { target: { value: "Bia Silva" } });
+      fireEvent.click(screen.getByRole("checkbox", { name: "Li e aceito as políticas do evento" }));
+      fireEvent.click(screen.getByRole("button", { name: "Ir para o pagamento" }));
+      vi.advanceTimersByTime(1100);
+      await Promise.resolve();
+      await act(async () => {
+        resolver({ pedido: { ...pedido, expiresAt: new Date(agora + 30 * 60_000) }, acesso: "acesso-tardio" });
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(eventosApi.iniciarPagamento).toHaveBeenCalled();
+      expect(sessionStorage.getItem(`eventos:acesso:${pedido.orderNumber}`)).toBe("acesso-tardio");
+      expect(screen.getByTestId("pagamento-embutido")).toBeTruthy();
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("retoma pagamento pendente após recarregar sem finalizar novamente", async () => {
+    sessionStorage.setItem(`eventos:acesso:${pedido.orderNumber}`, "acesso-pendente");
+    render(<FluxoCheckout pedido={{ ...pedido, status: "AGUARDANDO_PAGAMENTO" }} evento={evento} sessao={sessao} politicas={politicas} publishableKey="pk_test" />);
+    await waitFor(() => expect(eventosApi.iniciarPagamento).toHaveBeenCalledWith(pedido.orderNumber, expect.objectContaining({ returnUrl: expect.stringContaining("acesso-pendente") })));
+    expect(eventosApi.finalizarPedido).not.toHaveBeenCalled();
+    expect(screen.getByTestId("pagamento-embutido")).toBeTruthy();
   });
 });
