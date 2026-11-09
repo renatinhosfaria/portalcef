@@ -3,12 +3,15 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { PublicEventSession, PublicMap } from "@essencia/shared/types";
 
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
+
 const api = vi.hoisted(() => ({
-  listarSessoesPublicas: vi.fn(),
-  obterMapaSessao: vi.fn(),
+  obterEventoPublicoServidor: vi.fn(),
+  listarSessoesPublicasServidor: vi.fn(),
+  obterMapaSessaoServidor: vi.fn(),
 }));
 
-vi.mock("../lib/eventos-api", () => api);
+vi.mock("../lib/eventos-api-servidor", () => api);
 
 import Page from "./evento/[slug]/sessao/[sessionId]/page";
 
@@ -37,22 +40,31 @@ async function renderizar(searchParams: Record<string, string> = {}) {
 
 describe("página de assentos da sessão", () => {
   beforeEach(() => {
-    api.listarSessoesPublicas.mockResolvedValue([sessao]);
-    api.obterMapaSessao.mockResolvedValue(mapa);
+    api.obterEventoPublicoServidor.mockResolvedValue({ id: "evento", slug: "ballet", title: "Ballet", summary: null, description: null, imageUrl: null, category: null, startsAt: sessao.startsAt, locationName: null, fromPriceCents: 4500, availability: "available", contactEmail: null, contactPhone: null, cancellationPolicy: null });
+    api.listarSessoesPublicasServidor.mockResolvedValue([sessao]);
+    api.obterMapaSessaoServidor.mockResolvedValue(mapa);
   });
 
   it("abre o mapa direto quando a sessão tem vários tipos e nenhum foi escolhido", async () => {
     const html = await renderizar();
 
-    expect(html).toContain("Escolha seus assentos");
-    expect(html).toContain('data-seat-id="s-1"');
+    expect(html).toContain("Escolha seus lugares");
+    expect(html).toContain('data-lugar-id="s-1"');
     expect(html).not.toContain("Escolha o tipo de ingresso");
   });
 
   it("continua abrindo o mapa a partir de links antigos com tipo na URL", async () => {
     const html = await renderizar({ ticketTypeId: "meia" });
 
-    expect(html).toContain("Escolha seus assentos");
-    expect(html).toContain('data-seat-id="s-1"');
+    expect(html).toContain("Escolha seus lugares");
+    expect(html).toContain('data-lugar-id="s-1"');
+  });
+
+  it("sessão sem venda mostra cartão com volta ao evento", async () => {
+    api.listarSessoesPublicasServidor.mockResolvedValue([{ ...sessao, availability: "sold_out" }]);
+    const html = await renderizar();
+    expect(html).toContain("Não há ingressos disponíveis para esta sessão");
+    expect(html).toContain('href="/evento/ballet"');
+    expect(html).not.toContain('role="alert"');
   });
 });

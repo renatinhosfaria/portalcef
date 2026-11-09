@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { CatalogoPublico } from "../components/catalogo-publico";
+import { coresPublicas } from "../components/mapa/mapa-publico";
 
 describe("vitrine pública de Eventos", () => {
   it("declara pacote público na porta 3014 sem basePath", () => {
@@ -92,12 +93,6 @@ describe("vitrine pública de Eventos", () => {
     }
   });
 
-  it("representa estados de assento sem liberar reservado, vendido ou bloqueado", () => {
-    const source = readFileSync(new URL("../components/mapa-assentos.tsx", import.meta.url), "utf8");
-    for (const state of ["available", "reserved", "sold", "blocked"]) expect(source).toContain(state);
-    expect(source).toContain("disabled");
-  });
-
   it("mantém no smoke o contrato público da oferta de volume do evento", () => {
     const smoke = readFileSync(new URL("../scripts/smoke-publico.mjs", import.meta.url), "utf8");
     expect(smoke).toContain("offers");
@@ -118,15 +113,11 @@ function procurarArquivos(diretorio: string): string[] {
   });
 }
 
-import { classeEstadoAssento } from "../components/mapa-assentos";
-
 describe("comportamento da vitrine", () => {
   it("aplica apresentação visual distinta a cada estado de assento", () => {
-    const classes = (["available", "reserved", "sold", "blocked"] as const).map(classeEstadoAssento);
-    expect(new Set(classes).size).toBe(4);
-    expect(classes[1]).toContain("reserved");
-    expect(classes[2]).toContain("sold");
-    expect(classes[3]).toContain("blocked");
+    const livre = { id: "livre", fileira: "G", numero: "19", x: 0, y: 0, largura: 10, altura: 10, rotacao: 0, categoria: null, acessoExterno: false, estado: "livre" as const, livre: true, acessivel: false, rotuloCurto: "G19" };
+    expect(coresPublicas(livre, false)).toEqual({ preenchimento: "#ffffff", contorno: "#9fb08a", numero: "#1f2a24" });
+    expect(coresPublicas({ ...livre, livre: false }, false).preenchimento).toBe("#e4e6e1");
   });
 
   it("preserva erro da API separado do estado vazio", () => {

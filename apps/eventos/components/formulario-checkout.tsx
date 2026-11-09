@@ -4,7 +4,7 @@ import React, { useMemo, useRef, useState } from "react";
 import type { OfertaPrecoPublica, PoliticaPublica, PedidoPublicoResult, PublicEventSession } from "@essencia/shared/types";
 import { EventosApiError, finalizarPedido, gerarChaveIdempotenciaPublica, iniciarCheckout, origemPublicaEventos, reservarAssentos } from "../lib/eventos-api";
 import { formatarDataPublica, formatarPrecoPublico } from "../lib/eventos-formatters";
-import { calcularPrecoSelecao } from "./resumo-assentos";
+import { calcularPrecoSelecao } from "../lib/selecao-lugares";
 
 const TIPOS_POLITICA: PoliticaPublica["type"][] = ["PRIVACIDADE", "COMPRA", "CANCELAMENTO_REEMBOLSO", "ACESSIBILIDADE", "CONTATO"];
 const CODIGOS_PEDIDO_ENCERRADO = new Set(["ORDER_NOT_AVAILABLE", "ORDER_NOT_FOUND", "RESERVATION_EXPIRED", "RESERVATION_CANCELLED"]);
