@@ -77,7 +77,7 @@ describe("EventosPagamentosService", () => {
 
     expect(db.lockSequence).toEqual([
       "eventoPedidos",
-      "eventoInventarioAssentos",
+      "inventário:inventory-1",
       "eventoReservas",
       "eventoPagamentos",
     ]);
@@ -159,7 +159,7 @@ describe("EventosPagamentosService", () => {
 
     expect(db.lockSequence).toEqual([
       "eventoPedidos",
-      "eventoInventarioAssentos",
+      "inventário:inventory-1",
       "eventoReservas",
       "eventoPagamentos",
     ]);
@@ -233,7 +233,7 @@ describe("EventosExpirationJob", () => {
     const service = new EventosPublicSalesService({ db } as any);
     await service.liberarReservasExpiradas(new Date("2026-10-28T12:00:00Z"));
 
-    expect(db.lockSequence.slice(0, 3)).toEqual(["eventoPedidos", "eventoInventarioAssentos", "eventoReservas"]);
+    expect(db.lockSequence.slice(0, 3)).toEqual(["eventoPedidos", "inventário:inventory-1", "eventoReservas"]);
   });
 });
 
