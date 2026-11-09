@@ -14,8 +14,9 @@ export function faltaTipoIngresso(selection: AssentoSelecionado[], ticketTypes: 
 
 export function ResumoLugares({ selection, ticketTypes, offers = [], onChangeTicketType }: { selection: AssentoSelecionado[]; ticketTypes: PublicEventTicketType[]; offers?: OfertaPrecoPublica[]; onChangeTicketType: (seatId: string, ticketTypeId: string) => void }): React.JSX.Element {
   const preco = calcularPrecoSelecao(selection, ticketTypes, offers);
-  const oferta = offers.find((item) => selection.length < item.minQuantity);
-  const progresso = oferta ? Math.min(100, (selection.length / oferta.minQuantity) * 100) : 100;
+  const ofertaAplicada = offers.find((item) => selection.length >= item.minQuantity && (item.maxQuantity == null || selection.length <= item.maxQuantity));
+  const oferta = ofertaAplicada ?? offers.find((item) => selection.length < item.minQuantity);
+  const progresso = ofertaAplicada ? 100 : oferta ? Math.min(100, (selection.length / oferta.minQuantity) * 100) : 0;
   return <section id="resumo-lugares" aria-label="Resumo dos lugares" className="rounded-2xl border border-[#e6e9e1] bg-white p-5 shadow-sm">
     <div className="flex items-center justify-between gap-3"><h2 className="font-display text-xl font-semibold text-[#1f2a24]">Seus lugares</h2><span className="rounded-full bg-[#eff4e8] px-2.5 py-1 text-xs font-semibold text-[#3f6f12]">{selection.length}</span></div>
     {!selection.length ? <p className="mt-4 text-sm text-[#647066]">Escolha um lugar no mapa para continuar.</p> : <>
@@ -29,7 +30,7 @@ export function ResumoLugares({ selection, ticketTypes, offers = [], onChangeTic
       </ul>
       {faltaTipoIngresso(selection, ticketTypes) && <p className="mt-3 text-sm font-semibold text-[#9a6700]">Escolha Inteira ou Meia-entrada em cada lugar</p>}
     </>}
-    {offers.length > 0 && <div className="mt-5 rounded-xl bg-[#f5f7f1] p-3"><div className="flex justify-between gap-3 text-xs font-semibold text-[#647066]"><span>{oferta ? `Oferta a partir de ${oferta.minQuantity} lugares` : "Oferta aplicada"}</span><span>{selection.length}/{oferta?.minQuantity ?? selection.length}</span></div><div className="mt-2 h-2 overflow-hidden rounded-full bg-[#dfe5d8]"><div className="h-full rounded-full bg-[#a3d154] transition-all" style={{ width: `${progresso}%` }} /></div></div>}
+    {offers.length > 0 && <div className="mt-5 rounded-xl bg-[#f5f7f1] p-3"><div className="flex justify-between gap-3 text-xs font-semibold text-[#647066]"><span>{ofertaAplicada ? "Oferta aplicada" : oferta ? `Oferta a partir de ${oferta.minQuantity} lugares` : "Nenhuma oferta para esta quantidade"}</span><span>{ofertaAplicada ? `${selection.length} lugares` : `${selection.length}/${oferta?.minQuantity ?? selection.length}`}</span></div><div className="mt-2 h-2 overflow-hidden rounded-full bg-[#dfe5d8]"><div className="h-full rounded-full bg-[#a3d154] transition-all" style={{ width: `${progresso}%` }} /></div></div>}
     <motion.div layout className="mt-5 border-t border-[#e6e9e1] pt-4" aria-live="polite"><div className="flex justify-between text-sm text-[#647066]"><span>Subtotal</span><span>{formatarPreco(preco.subtotalCents)}</span></div><div className="mt-1 flex justify-between text-sm text-[#647066]"><span>Desconto</span><span>{formatarPreco(preco.discountCents)}</span></div><div className="mt-2 flex justify-between text-lg font-semibold text-[#1f2a24]"><span>Total</span><span>{formatarPreco(preco.totalCents)}</span></div></motion.div>
   </section>;
 }

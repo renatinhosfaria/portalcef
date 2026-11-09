@@ -24,4 +24,10 @@ describe("seleção de lugares", () => {
     expect(calcularPrecoSelecao(nove, [inteira], [oferta])).toMatchObject({ subtotalCents: 40500, discountCents: 0, totalCents: 40500 });
     expect(calcularPrecoSelecao(dez, [inteira], [oferta])).toMatchObject({ subtotalCents: 45000, discountCents: 6750, totalCents: 38250 });
   });
+
+  it("não aplica oferta fora da quantidade máxima", () => {
+    const limitada = { ...oferta, maxQuantity: 10 };
+    const vinte = Array.from({ length: 20 }, (_, i) => ({ seatId: `s-${i}`, ticketTypeId: "inteira" }));
+    expect(calcularPrecoSelecao(vinte, [inteira], [limitada])).toMatchObject({ subtotalCents: 90000, discountCents: 0, totalCents: 90000, appliedOffer: null });
+  });
 });

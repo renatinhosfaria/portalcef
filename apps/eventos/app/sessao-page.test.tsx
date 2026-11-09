@@ -67,4 +67,11 @@ describe("página de assentos da sessão", () => {
     expect(html).toContain('href="/evento/ballet"');
     expect(html).not.toContain('role="alert"');
   });
+
+  it("rehidrata conflito da URL e anuncia cada lugar perdido", async () => {
+    api.obterMapaSessaoServidor.mockResolvedValue({ ...mapa, seats: [{ ...mapa.seats[0]!, state: "sold" as const }] });
+    const html = await renderizar({ assentos: "s-1", ticketTypeIds: "inteira", conflito: "disponibilidade" });
+    expect(html).toContain("O lugar A1 acabou de ser escolhido por outra pessoa");
+    expect(html).toContain('aria-live="polite"');
+  });
 });

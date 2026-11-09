@@ -20,9 +20,10 @@ export function ListaLugares({ map, selecionados, indisponiveis = new Set(), onA
           {assentos.map((seat) => {
             const indisponivel = seat.state !== "available" || indisponiveis.has(seat.id);
             const selecionado = selecionados.has(seat.id);
+            const descricao = `${rotuloCurto(seat)}${seat.category ? ` · categoria ${seat.category}` : ""}${seat.accessible ? " · acessível" : ""}`;
             return <li key={seat.id}>
-              <button type="button" disabled={indisponivel} aria-pressed={selecionado} aria-label={`${indisponivel ? "Indisponível" : "Selecionar"} ${rotuloCurto(seat)}`} onClick={() => onAlternar(seat.id)} className={`min-h-11 w-full rounded-xl border px-3 py-2 text-left text-sm font-semibold ${selecionado ? "border-[#3f6f12] bg-[#3f6f12] text-white" : indisponivel ? "cursor-not-allowed border-[#e6e9e1] bg-[#f1f3ed] text-[#929b92]" : "border-[#d9ddcf] bg-white text-[#1f2a24] hover:border-[#3f6f12]"}`}>
-                {rotuloCurto(seat)} {indisponivel ? "· indisponível" : selecionado ? "· selecionado" : "· livre"}
+              <button type="button" disabled={indisponivel} aria-pressed={selecionado} aria-label={`${indisponivel ? "Indisponível" : "Selecionar"} ${descricao}`} onClick={() => onAlternar(seat.id)} className={`min-h-11 w-full rounded-xl border px-3 py-2 text-left text-sm font-semibold ${selecionado ? "border-[#3f6f12] bg-[#3f6f12] text-white" : indisponivel ? "cursor-not-allowed border-[#e6e9e1] bg-[#f1f3ed] text-[#929b92]" : "border-[#d9ddcf] bg-white text-[#1f2a24] hover:border-[#3f6f12]"}`}>
+                {descricao} {indisponivel ? "· indisponível" : selecionado ? "· selecionado" : "· livre"}
               </button>
             </li>;
           })}

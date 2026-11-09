@@ -45,3 +45,14 @@
 - A alteração adicional em `packages/ui/src/components/sheet.tsx` é pequena e corrige a referência JSX de React que aparecia ao testar o `Sheet` em jsdom.
 
 Atualizado em: 2026-11-08
+
+## Fix round 1
+
+- Mantido o contrato `/checkout?pedido=...` para a Tarefa 20, que será responsável por hidratar a reserva no checkout.
+- A barra mobile passou a usar `calcularPrecoSelecao(...).totalCents`, refletindo ofertas e limites de quantidade; a oferta visual também respeita `maxQuantity`.
+- Erros de reserva genéricos, 4xx/5xx e conflitos de idempotência agora aparecem em `role="alert"` com ações de tentar novamente e voltar aos lugares.
+- Conflitos 409 recarregam o mapa e anunciam os rótulos curtos removidos, inclusive quando a seleção chega pela URL; cliques são bloqueados enquanto a reserva está em andamento.
+- A lista informa categoria/acessibilidade no nome acessível e mantém ocupados não selecionáveis; o resumo desktop ficou sticky.
+- Cobertura adicionada para sucesso/navegação, erro genérico, oferta em 10 lugares, faixa máxima, conflito 409, conflito reidratado, reduced-motion, acessibilidade e ocupado.
+
+Validação fix round 1: `pnpm --filter @essencia/eventos test` — **17 arquivos, 113 testes aprovados**; `pnpm --filter @essencia/eventos lint` e `pnpm --filter @essencia/eventos typecheck` — aprovados.
