@@ -55,7 +55,8 @@ export function EscolhaLugares({ evento, sessao, map: mapaInicial, initialSelect
     const perdidosPorId = new Map(perdidos.map((seat) => [seat.id, seat]));
     const mensagens = selection.filter((item) => idsPerdidos.has(item.seatId)).map((item) => {
       const seat = perdidosPorId.get(item.seatId);
-      return `O lugar ${item.label ?? `${seat?.rowLabel ?? ""}${seat?.seatNumber ?? item.seatId}`} acabou de ser escolhido por outra pessoa`;
+      const rotulo = seat ? `${seat.rowLabel}${seat.seatNumber}` : item.label ?? item.seatId;
+      return `O lugar ${rotulo} acabou de ser escolhido por outra pessoa`;
     });
     setUnavailableSeatIds((current) => [...new Set([...current, ...idsPerdidos])]);
     setSelection((current) => current.filter((item) => !idsPerdidos.has(item.seatId)));

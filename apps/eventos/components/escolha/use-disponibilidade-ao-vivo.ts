@@ -17,22 +17,29 @@ export function useDisponibilidadeAoVivo(sessionId: string, mapaInicial: PublicM
   const buscar = opcoes.buscar ?? obterMapaSessao;
   const [mapa, setMapa] = useState(mapaInicial);
   const mapaRef = useRef(mapaInicial);
+  const buscarRef = useRef(buscar);
+  const sequenciaRef = useRef(0);
+  buscarRef.current = buscar;
 
   useEffect(() => {
     mapaRef.current = mapa;
   }, [mapa]);
 
   useEffect(() => {
+    sequenciaRef.current += 1;
     mapaRef.current = mapaInicial;
     setMapa(mapaInicial);
   }, [sessionId, mapaInicial]);
 
   const atualizarAgora = useCallback(async (): Promise<PublicMap> => {
-    const atualizado = await buscar(sessionId);
+    const sequencia = sequenciaRef.current + 1;
+    sequenciaRef.current = sequencia;
+    const atualizado = await buscarRef.current(sessionId);
+    if (sequencia !== sequenciaRef.current) return mapaRef.current;
     mapaRef.current = atualizado;
     setMapa(atualizado);
     return atualizado;
-  }, [buscar, sessionId]);
+  }, [sessionId]);
 
   useEffect(() => {
     const consultarSeVisivel = (): void => {
