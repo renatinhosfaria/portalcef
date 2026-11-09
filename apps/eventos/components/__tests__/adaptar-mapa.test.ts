@@ -61,6 +61,22 @@ describe("adaptação do mapa público", () => {
     expect(rotulos).toEqual(expect.arrayContaining([{ fileira: "G", x: 100, y: 30 }, { fileira: "G", x: 100, y: 50 }]));
   });
 
+  it("acompanha a inclinação da fileira nas letras das pontas", () => {
+    const mapa: PublicMap = {
+      ...mapaBase,
+      seats: [
+        { ...mapaBase.seats[0]!, x: 10, y: 20 },
+        { ...mapaBase.seats[1]!, x: 50, y: 40 },
+      ],
+      layout: { largura: 200, altura: 150, rotulos: [{ fileira: "G", x: 100, y: 30 }], elementos: [] },
+    };
+    expect(rotulosDoMapa(mapa)).toEqual([
+      { fileira: "G", x: -11, y: 30 },
+      { fileira: "G", x: 100, y: 30 },
+      { fileira: "G", x: 101, y: 50 },
+    ]);
+  });
+
   it("sem layout usa a caixa dos assentos e não desenha palco", () => {
     const semLayout: PublicMap = { ...mapaBase, layout: null };
     expect(dimensoesDoMapa(semLayout)).toEqual({ largura: 73.5, altura: 84 });

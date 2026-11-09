@@ -71,25 +71,23 @@ export function rotulosDoMapa(map: PublicMap): RotuloFileira[] {
     assentosPorFileira.set(seat.rowLabel, assentos);
   }
 
-  const criarPontas = (fileira: string, assentos: PublicSeat[], y: number): RotuloFileira[] => {
+  const criarPontas = (fileira: string, assentos: PublicSeat[]): RotuloFileira[] => {
     const ordenados = [...assentos].sort((a, b) => a.x - b.x);
     const larguraEsquerda = ordenados[0]?.width ?? 0;
     const larguraDireita = ordenados.at(-1)?.width ?? larguraEsquerda;
     const deslocamento = deslocamentoSemLayout(map);
     const centroEsquerda = (ordenados[0]?.x ?? 0) + (ordenados[0]?.width ?? 0) / 2 + deslocamento.x;
     const centroDireita = (ordenados.at(-1)?.x ?? 0) + (ordenados.at(-1)?.width ?? 0) / 2 + deslocamento.x;
-    const centroY = y + deslocamento.y;
+    const centroYEsquerda = (ordenados[0]?.y ?? 0) + (ordenados[0]?.height ?? 0) / 2 + deslocamento.y;
+    const centroYDireita = (ordenados.at(-1)?.y ?? 0) + (ordenados.at(-1)?.height ?? 0) / 2 + deslocamento.y;
     return [
-      { fileira, x: centroEsquerda - 1.2 * larguraEsquerda, y: centroY },
-      { fileira, x: centroDireita + 1.2 * larguraDireita, y: centroY },
+      { fileira, x: centroEsquerda - 1.2 * larguraEsquerda, y: centroYEsquerda },
+      { fileira, x: centroDireita + 1.2 * larguraDireita, y: centroYDireita },
     ];
   };
 
   if (!map.layout) {
-    return [...assentosPorFileira.entries()].flatMap(([fileira, assentos]) => {
-      const y = assentos.reduce((total, assento) => total + assento.y + assento.height / 2, 0) / assentos.length;
-      return criarPontas(fileira, assentos, y);
-    });
+    return [...assentosPorFileira.entries()].flatMap(([fileira, assentos]) => criarPontas(fileira, assentos));
   }
 
   const rotulosPorFileira = new Map<string, RotuloFileira[]>();
@@ -101,7 +99,7 @@ export function rotulosDoMapa(map: PublicMap): RotuloFileira[] {
   return [...rotulosPorFileira.entries()].flatMap(([fileira, rotulos]) => {
     const assentos = assentosPorFileira.get(fileira);
     if (!assentos?.length) return [];
-    const pontas = criarPontas(fileira, assentos, rotulos[0]!.y);
+    const pontas = criarPontas(fileira, assentos);
     return [pontas[0]!, ...rotulos, pontas[1]!];
   });
 }
