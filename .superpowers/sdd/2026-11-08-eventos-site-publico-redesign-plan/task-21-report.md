@@ -59,3 +59,27 @@
 - O lint global continua exibindo avisos históricos do monorepo e o aviso de lockfile adicional do worktree.
 
 Atualizado em: 2026-11-09
+
+## Fix round 1
+
+### Achados tratados
+
+- As abas agora usam `aria-controls`, IDs estáveis de `tabpanel`, `aria-labelledby`, `tabIndex` roving e navegação por `ArrowLeft`, `ArrowRight`, `ArrowUp`, `ArrowDown`, `Home` e `End`, movendo o foco para a aba ativa. Os dois painéis permanecem relacionados no DOM e o inativo é ocultado.
+- A página `/pedido/consulta` aceita `pedido` como `string | string[]` e normaliza o primeiro valor. Foi criado teste de página com query repetida e sem query.
+- Buscas pendentes recebem um identificador de versão; trocar de aba ou desmontar invalida a resposta tardia, evitando navegação ou atualização de estado obsoleta.
+
+### RED/GREEN
+
+- **RED:** os testes de semântica/teclado e de `Page({ searchParams })` falharam: não havia `aria-controls`/`tabpanel`, as setas não alteravam a aba e a página não aceitava query repetida (além de `React` ausente no SSR).
+- **GREEN:** após a correção, o foco passou com **2 arquivos e 11 testes**; a suíte do app passou com **19 arquivos e 125 testes**.
+
+### Verificações do round
+
+- `pnpm --filter @essencia/eventos exec vitest run --environment jsdom components/__tests__/meus-ingressos.test.tsx app/pedido/consulta/page.test.tsx` — **11/11**.
+- `pnpm --filter @essencia/eventos test -- --maxWorkers=1` — **19 arquivos, 125 testes**.
+- `pnpm --filter @essencia/eventos lint` — **exit 0**, somente avisos preexistentes.
+- `pnpm --filter @essencia/eventos typecheck` — **exit 0**.
+- `pnpm turbo lint && pnpm turbo typecheck` — **21/21 lint** e **22/22 typecheck**.
+- `git diff --check` — **exit 0**.
+
+Atualizado em: 2026-11-09

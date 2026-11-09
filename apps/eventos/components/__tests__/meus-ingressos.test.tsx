@@ -79,3 +79,36 @@ describe("Meus ingressos", () => {
     expect((screen.getByLabelText("Número do pedido") as HTMLInputElement).value).toBe("URL987654");
   });
 });
+
+it("expõe relação completa entre abas e painéis", () => {
+  render(<MeusIngressos />);
+  expect(screen.getByRole("tab", { name: "Tenho o número do pedido" }).getAttribute("aria-controls")).toBe("meus-ingressos-painel-numero");
+  expect(screen.getByRole("tab", { name: "Não tenho o número" }).getAttribute("aria-controls")).toBe("meus-ingressos-painel-dados");
+  expect(screen.getByRole("tabpanel").getAttribute("aria-labelledby")).toBe("meus-ingressos-aba-numero");
+});
+
+it("troca de aba com setas mantém seleção e foco", () => {
+  render(<MeusIngressos />);
+  const numero = screen.getByRole("tab", { name: "Tenho o número do pedido" });
+  const dados = screen.getByRole("tab", { name: "Não tenho o número" });
+  fireEvent.keyDown(numero, { key: "ArrowRight" });
+  expect(dados.getAttribute("aria-selected")).toBe("true");
+  expect(document.activeElement).toBe(dados);
+  fireEvent.keyDown(dados, { key: "ArrowLeft" });
+  expect(numero.getAttribute("aria-selected")).toBe("true");
+  expect(document.activeElement).toBe(numero);
+});
+
+it("ignora resposta de uma busca que ficou desatualizada ao trocar de aba", async () => {
+  let resolver!: (resultado: { pedidos: typeof pedidos }) => void;
+  vi.mocked(eventosApi.buscarMeusIngressos).mockReturnValueOnce(new Promise((resolve) => { resolver = resolve; }));
+  render(<MeusIngressos />);
+  fireEvent.change(screen.getByLabelText("Número do pedido"), { target: { value: "ABC123456" } });
+  fireEvent.change(screen.getByLabelText("E-mail"), { target: { value: "ana@example.com" } });
+  fireEvent.click(screen.getByRole("button", { name: "Buscar ingressos" }));
+  fireEvent.click(screen.getByRole("tab", { name: "Não tenho o número" }));
+  resolver({ pedidos: [pedidos[0]!] });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(routerPush).toHaveBeenCalledTimes(0);
+  expect(screen.queryByText("Festival da Família")).toBeNull();
+});
