@@ -174,3 +174,48 @@ O lint mantém somente o aviso preexistente sobre `<img>` em `resumo-pedido.tsx`
 - O efeito inicial é limitado ao pedido atual e não interfere na retomada de pagamento já iniciada com acesso persistido.
 
 Atualizado em: 2026-11-08
+
+## Fix round 3 — estados encerrados não liberam pedidos
+
+### Causa e correção
+
+- O efeito de expiração inicial verificava apenas a data e podia chamar `liberarPedido` para pedidos encerrados, como `CONFIRMADO`, `USADO` ou `REEMBOLSADO`, inclusive quando `expiresAt` era nulo.
+- A guarda agora exige que o status esteja em `ESTADOS_ATIVOS` antes de tratar a expiração. Pedidos encerrados permanecem na mensagem de indisponibilidade com o link para consulta de ingressos.
+
+### RED
+
+O teste novo reproduziu a liberação indevida:
+
+```text
+pnpm --filter @essencia/eventos exec vitest run --environment jsdom components/__tests__/checkout.test.tsx
+14 testes, 1 falha
+- não libera pedido encerrado mesmo com expiração no passado: liberarPedido foi chamado 1 vez
+```
+
+### GREEN
+
+Após restringir o efeito aos estados ativos:
+
+```text
+pnpm --filter @essencia/eventos exec vitest run --environment jsdom components/__tests__/checkout.test.tsx
+1 arquivo, 14 testes aprovados
+
+pnpm --filter @essencia/eventos lint
+exit 0; apenas o aviso preexistente de <img> em resumo-pedido.tsx
+
+pnpm --filter @essencia/eventos typecheck
+exit 0
+
+pnpm turbo lint && pnpm turbo typecheck
+22 tarefas de lint e 22 tarefas de typecheck concluídas com exit 0
+
+git diff --check
+exit 0
+```
+
+### Self-review
+
+- `AGUARDANDO_PAGAMENTO` continua elegível para a retomada com acesso salvo e os demais estados ativos continuam liberando ao expirar.
+- Estados encerrados não fazem chamadas de liberação nem redirecionamentos automáticos no efeito inicial.
+
+Atualizado em: 2026-11-08

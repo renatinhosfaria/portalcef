@@ -122,7 +122,7 @@ export function FluxoCheckout({ pedido, evento, sessao, politicas, publishableKe
   }, [acessoGuardado, marcarEsgotado, pedido.orderNumber, pedido.status]);
 
   useEffect(() => {
-    if (!expirado || expiracaoInicialTratadaRef.current === pedido.orderNumber) return;
+    if (!ESTADOS_ATIVOS.has(pedido.status) || !expirado || expiracaoInicialTratadaRef.current === pedido.orderNumber) return;
     if (pedido.status === "AGUARDANDO_PAGAMENTO" && acessoGuardado()) return;
     expiracaoInicialTratadaRef.current = pedido.orderNumber;
     void tratarExpiracao();

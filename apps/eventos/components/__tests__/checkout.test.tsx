@@ -117,6 +117,14 @@ describe("FluxoCheckout", () => {
     await waitFor(() => expect(eventosApi.liberarPedido).toHaveBeenCalledTimes(1));
   });
 
+  it("não libera pedido encerrado mesmo com expiração no passado", async () => {
+    const encerrado = { ...pedido, status: "CONFIRMADO" as const, expiresAt: null };
+    render(<FluxoCheckout pedido={encerrado} evento={evento} sessao={sessao} politicas={politicas} publishableKey={null} />);
+    expect(screen.getByText("Este pedido não está mais disponível para pagamento.")).toBeTruthy();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(eventosApi.liberarPedido).not.toHaveBeenCalled();
+  });
+
   it("libera antes de decidir o destino quando iniciar pagamento retorna ORDER_NOT_AVAILABLE", async () => {
     vi.mocked(eventosApi.iniciarPagamento).mockRejectedValueOnce(new EventosApiError("Pedido indisponível", 409, "ORDER_NOT_AVAILABLE"));
     render(<FluxoCheckout pedido={pedido} evento={evento} sessao={sessao} politicas={politicas} publishableKey="pk_test" />);
