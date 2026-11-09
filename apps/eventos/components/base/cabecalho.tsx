@@ -6,7 +6,7 @@ import { classeBotaoAcao } from "./botao-acao";
 
 export function Cabecalho(): React.JSX.Element {
   return (
-    <header className="border-b border-[var(--linha)] bg-[var(--cartao)]">
+    <header className="site-cabecalho border-b border-[var(--linha)] bg-[var(--cartao)]">
       <div className="content-width flex min-h-20 items-center justify-between gap-4 py-4">
         <Link href="/" aria-label="Ir para eventos" className="flex items-center gap-3">
           <Image src="/logo.png" alt="Essência Feliz" width={192} height={48} className="h-10 w-auto md:h-12" priority />
