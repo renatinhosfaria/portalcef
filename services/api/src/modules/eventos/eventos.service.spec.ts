@@ -12,6 +12,19 @@ const event = (extra: Record<string, unknown> = {}) => ({
 });
 
 describe('EventosService contratos de workspace', () => {
+  it('usa o ingresso padrão no preço público em vez da meia-entrada', async () => {
+    const db = fakeDb({
+      selects: [[
+        { event: event({ status: 'PUBLICADO', publishedAt: null, slug: 'ballet' }), session: { id: 's1', eventId: 'e1', status: 'PUBLICADA', startsAt: new Date('2026-12-07T19:00:00Z'), salesStartsAt: null, salesEndsAt: null }, location: { name: 'Teatro Municipal' }, ticket: { name: 'Ingresso', priceCents: 4500, active: true }, inventory: { status: 'DISPONIVEL' } },
+        { event: event({ status: 'PUBLICADO', publishedAt: null, slug: 'ballet' }), session: { id: 's1', eventId: 'e1', status: 'PUBLICADA', startsAt: new Date('2026-12-07T19:00:00Z'), salesStartsAt: null, salesEndsAt: null }, location: { name: 'Teatro Municipal' }, ticket: { name: 'Meia-entrada', priceCents: 2250, active: true }, inventory: { status: 'DISPONIVEL' } },
+      ]],
+    });
+
+    await expect(service(db).listarPublicados(new Date('2026-11-09T12:00:00Z'))).resolves.toEqual([
+      expect.objectContaining({ fromPriceCents: 4500 }),
+    ]);
+  });
+
   it.each(['mapa-v2', null])('publicar recusa sessão legada com mapId %s mesmo se as regras já tiverem passado', async (mapId) => {
     const db = fakeDb({
       selects: [

@@ -10,6 +10,10 @@ import { EventosOfertasService } from "./eventos-ofertas.service";
 
 type DbTransaction = Parameters<Database["transaction"]>[0] extends (tx: infer T) => unknown ? T : never;
 
+function ehMeiaEntrada(nome: string | null | undefined): boolean {
+  return (nome ?? "").normalize("NFKD").replace(/\p{Diacritic}/gu, "").toLowerCase().includes("meia");
+}
+
 function montarLayoutPublico(layout: unknown, fileirasComAssento: Set<string>): PublicMapLayout | null {
   if (!layout || typeof layout !== "object") return null;
   const value = layout as Record<string, unknown>;
@@ -268,14 +272,20 @@ export class EventosService {
   async listarPublicados(now: Date): Promise<PublicEventCard[]> {
     const rows = await this.db.select({ event: eventos, session: eventoSessoes, location: eventoLocais, ticket: eventoTiposIngresso, inventory: eventoInventarioAssentos }).from(eventos).innerJoin(eventoSessoes, and(eq(eventoSessoes.eventId, eventos.id), eq(eventoSessoes.status, "PUBLICADA"))).leftJoin(eventoLocais, eq(eventoLocais.id, eventoSessoes.locationId)).leftJoin(eventoTiposIngresso, and(eq(eventoTiposIngresso.eventId, eventos.id), eq(eventoTiposIngresso.active, true))).leftJoin(eventoInventarioAssentos, eq(eventoInventarioAssentos.sessionId, eventoSessoes.id)).where(eq(eventos.status, "PUBLICADO"));
     const byId = new Map<string, PublicEventCard>();
+    const menorPrecoPadrao = new Map<string, number>();
+    const menorPrecoQualquer = new Map<string, number>();
     for (const row of rows) {
       if (row.event.publishedAt && row.event.publishedAt > now) continue;
       const prior = byId.get(row.event.id);
       const available = this.salesAvailability(row.session, now) === "available" && (row.inventory?.status === "DISPONIVEL" || row.inventory?.status === "LIBERADO");
       const price = row.ticket?.priceCents ?? null;
-      byId.set(row.event.id, { id: row.event.id, slug: row.event.slug, title: row.event.title, summary: row.event.summary, imageUrl: row.event.imageUrl, category: row.event.category, startsAt: prior?.startsAt ?? row.session.startsAt, locationName: prior?.locationName ?? row.location?.name ?? null, fromPriceCents: prior?.fromPriceCents == null ? price : price == null ? prior.fromPriceCents : Math.min(prior.fromPriceCents, price), availability: prior?.availability === "available" || available ? "available" : "sold_out" });
+      if (price != null) {
+        menorPrecoQualquer.set(row.event.id, Math.min(menorPrecoQualquer.get(row.event.id) ?? price, price));
+        if (!ehMeiaEntrada(row.ticket?.name)) menorPrecoPadrao.set(row.event.id, Math.min(menorPrecoPadrao.get(row.event.id) ?? price, price));
+      }
+      byId.set(row.event.id, { id: row.event.id, slug: row.event.slug, title: row.event.title, summary: row.event.summary, imageUrl: row.event.imageUrl, category: row.event.category, startsAt: prior?.startsAt ?? row.session.startsAt, locationName: prior?.locationName ?? row.location?.name ?? null, fromPriceCents: null, availability: prior?.availability === "available" || available ? "available" : "sold_out" });
     }
-    return [...byId.values()].sort((a, b) => (a.startsAt?.getTime() ?? 0) - (b.startsAt?.getTime() ?? 0));
+    return [...byId.values()].map((item) => ({ ...item, fromPriceCents: menorPrecoPadrao.get(item.id) ?? menorPrecoQualquer.get(item.id) ?? null })).sort((a, b) => (a.startsAt?.getTime() ?? 0) - (b.startsAt?.getTime() ?? 0));
   }
 
   async getPublicBySlug(slug: string, now = new Date()): Promise<PublicEventDetail> {
