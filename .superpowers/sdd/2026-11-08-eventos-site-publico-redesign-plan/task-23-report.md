@@ -44,3 +44,13 @@
 - O alias CSS removido foi `--brand-orange`, único alias sem referências no app. Os demais aliases continuam em uso por componentes legados e foram preservados.
 - A alteração em `packages/shared/src/eventos/ingresso.ts` é necessária para o bundle cliente da página de ingressos; a implementação usa Web Crypto quando disponível e fallback de `Math.random` apenas em runtimes sem Web Crypto.
 - Não houve deploy nem push.
+
+## Round 1 — correções da revisão
+
+- O diagnóstico de overflow horizontal, margem mínima de 16 px e console/rede agora é executado também imediatamente depois da navegação para `/checkout` causada pelo botão `Continuar`, antes de validar o relógio e o formulário.
+- O mapa passou a usar `expect(...).toBeVisible()` para `PALCO` e a letra `A`, e `expect(...).toHaveCount(0)` para garantir que o rótulo órfão `X` não existe no DOM renderizado.
+- Verificações após a revisão:
+  - `node apps/eventos/scripts/smoke-publico.mjs` — **PASS** em 390×844 e 1440×900.
+  - `pnpm --filter @essencia/eventos test` — **PASS**, 21 arquivos/142 testes.
+  - `pnpm --filter @essencia/eventos lint` — **PASS** com o warning preexistente de `<img>` em `components/checkout/resumo-pedido.tsx`.
+  - `pnpm --filter @essencia/eventos typecheck` — **PASS**.

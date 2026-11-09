@@ -1,4 +1,4 @@
-import { chromium } from "@playwright/test";
+import { chromium, expect } from "@playwright/test";
 import { spawn } from "node:child_process";
 import { createServer } from "node:http";
 
@@ -156,18 +156,22 @@ async function exercitarViewport(browser, nome, viewport, apiPort, baseUrl) {
   pagina.on("pageerror", (erro) => errosConsole.push(erro.message));
   pagina.on("response", (response) => { if (response.status() >= 400) respostasErro.push(`${response.status()} ${response.url()}`); });
 
-  async function acessar(url) {
-    await pagina.goto(`${baseUrl}${url}`, { waitUntil: "networkidle", timeout: 30000 });
-    await pagina.waitForTimeout(50);
+  async function verificarPagina(rotulo) {
     const diagnostico = await pagina.evaluate(() => {
       const main = document.querySelector("main");
       const conteudo = main?.querySelector(".content-width, .content-narrow") ?? main;
       const caixa = conteudo?.getBoundingClientRect();
       return { overflow: document.documentElement.scrollWidth > window.innerWidth, mainLeft: caixa?.left ?? 0, contentClass: conteudo?.className ?? "", text: conteudo?.textContent?.slice(0, 80) ?? "" };
     });
-    if (diagnostico.overflow) throw new Error(`${nome}: rolagem horizontal em ${url}`);
-    if (diagnostico.mainLeft < 16) throw new Error(`${nome}: conteúdo principal encostado na borda em ${url} (${diagnostico.mainLeft}px; ${diagnostico.contentClass}; ${diagnostico.text})`);
-    if (errosConsole.length || respostasErro.length) throw new Error(`${nome}: erros em ${url} (console=${errosConsole.join(" | ")}; rede=${respostasErro.join(" | ")})`);
+    if (diagnostico.overflow) throw new Error(`${nome}: rolagem horizontal em ${rotulo}`);
+    if (diagnostico.mainLeft < 16) throw new Error(`${nome}: conteúdo principal encostado na borda em ${rotulo} (${diagnostico.mainLeft}px; ${diagnostico.contentClass}; ${diagnostico.text})`);
+    if (errosConsole.length || respostasErro.length) throw new Error(`${nome}: erros em ${rotulo} (console=${errosConsole.join(" | ")}; rede=${respostasErro.join(" | ")})`);
+  }
+
+  async function acessar(url) {
+    await pagina.goto(`${baseUrl}${url}`, { waitUntil: "networkidle", timeout: 30000 });
+    await pagina.waitForTimeout(50);
+    await verificarPagina(url);
   }
 
   await acessar("/");
@@ -178,8 +182,10 @@ async function exercitarViewport(browser, nome, viewport, apiPort, baseUrl) {
   if (!await arte.count() || !(await arte.getAttribute("class"))?.includes("object-contain")) throw new Error(`${nome}: arte do evento não usa object-fit contain`);
 
   await acessar("/evento/ballet/sessao/sessao-1");
-  if (!await pagina.getByText("PALCO", { exact: true }).count() || !await pagina.getByText("A", { exact: true }).count()) throw new Error(`${nome}: mapa sem PALCO ou letra A`);
-  if (await pagina.getByText("X", { exact: true }).count()) throw new Error(`${nome}: rótulo órfão X foi exibido`);
+  const mapaPublico = pagina.locator('[data-testid="mapa-publico"]');
+  await expect(mapaPublico.getByText("PALCO", { exact: true })).toBeVisible();
+  await expect(mapaPublico.getByText("A", { exact: true }).first()).toBeVisible();
+  await expect(mapaPublico.getByText("X", { exact: true })).toHaveCount(0);
   const assento1 = pagina.getByRole("button", { name: /Fileira A, assento 1, livre/ });
   const assento2 = pagina.getByRole("button", { name: /Fileira A, assento 2, livre/ });
   if (!await assento1.count() || !await assento2.count()) throw new Error(`${nome}: dois lugares livres ausentes`);
@@ -189,6 +195,7 @@ async function exercitarViewport(browser, nome, viewport, apiPort, baseUrl) {
   await pagina.getByRole("button", { name: "Continuar", exact: true }).first().click();
   await pagina.waitForTimeout(5000);
   if (!/\/checkout\?/.test(pagina.url())) throw new Error(`${nome}: reserva não navegou (url=${pagina.url()} alert=${await pagina.locator('[role="alert"]').allTextContents()} continuar=${await pagina.getByRole("button", { name: "Continuar", exact: true }).evaluateAll((els) => els.map((el) => ({ disabled: el.disabled, text: el.textContent })))})`);
+  await verificarPagina("/checkout (após Continuar)");
 
   if (!await pagina.getByRole("status").filter({ hasText: "Seus lugares estão guardados por" }).count()) throw new Error(`${nome}: relógio da reserva ausente`);
   await pagina.getByLabel("Nome completo").fill("Ana Souza");
