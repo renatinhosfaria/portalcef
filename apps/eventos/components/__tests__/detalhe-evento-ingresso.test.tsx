@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { DetalheEvento } from "../detalhe-evento";
+import { CaixaCompra } from "../evento/caixa-compra";
 import { SessoesEvento, agruparSessoesPorDia } from "../sessoes-evento";
 import type { OfertaPrecoPublica, PoliticaPublica, PublicEventDetail, PublicEventSession } from "@essencia/shared/types";
 
@@ -162,6 +163,11 @@ describe("caminho público de ingresso", () => {
     expect(html).toContain("Grupo a partir de 5 lugares.");
     expect(html).toContain('href="/evento/festival/sessao/sessao"');
     expect(html).toContain("Pagamento seguro · cartão ou Pix");
+  });
+
+  it("exibe o preço do ingresso uma única vez na caixa de compra", () => {
+    const html = renderToStaticMarkup(<CaixaCompra event={evento} sessions={[criarSessao({ ticketTypes: [{ id: "inteira", name: "Inteira", description: null, priceCents: 1000, maxPerOrder: null, eligibility: null }] })]} />);
+    expect(html.match(/R\$ 10,00/g)).toHaveLength(1);
   });
 
   it("permite trocar a sessão no seletor da caixa de compra", () => {
