@@ -197,6 +197,24 @@ describe("EventosPublicSalesService - contratos públicos", () => {
     expect(db.oldOrder).toMatchObject({ status: "EXPIRADO" });
   });
 
+  it("libera todos os assentos do pedido antigo no takeover multiassento", async () => {
+    const db = criarBancoReserva({ quantidade: 2, precoAdulto: 1250, offers: [], takeover: true, takeoverMultiassento: true });
+
+    await new EventosPublicSalesService({ db } as any).reservarAssentos(entradaReserva(1, "takeover-multi-123456", false, true));
+
+    expect(db.inventariosAntigos).toHaveLength(2);
+    expect(db.inventariosAntigos.every((inventory: any) => inventory.status === "DISPONIVEL" && inventory.reservedByOrderId === null)).toBe(true);
+    expect(db.reservasAntigas.every((reservation: any) => reservation.status === "LIBERADA")).toBe(true);
+    expect(db.oldOrder).toMatchObject({ status: "EXPIRADO" });
+    expect(db.pagamentoAntigo).toMatchObject({ status: "EXPIRADO" });
+  });
+
+  it("trata inventário LIBERADO como disponível para nova reserva", async () => {
+    const db = criarBancoReserva({ quantidade: 1, precoAdulto: 1250, offers: [], statusInicial: "LIBERADO" });
+
+    await expect(new EventosPublicSalesService({ db } as any).reservarAssentos(entradaReserva(1, "liberado-disponivel-123456"))).resolves.toMatchObject({ reservationId: db.order.id });
+  });
+
   it("recusa repetição idempotente com outros assentos na mesma sessão", async () => {
     const db = criarBancoReserva({ quantidade: 1, precoAdulto: 1250, offers: [], repetir: true });
     const service = new EventosPublicSalesService({ db } as any);
@@ -632,7 +650,7 @@ function criarBancoReservaComColisao(buyerEmail: string) {
   return criarBancoReserva({ quantidade: 1, precoAdulto: 1250, offers: [], colisao: { buyerEmail } });
 }
 
-function criarBancoReserva(config: { quantidade: number; precoAdulto: number; precoCrianca?: number; offers: any[]; tiposMistos?: boolean; repetir?: boolean; colisao?: { buyerEmail: string }; takeover?: boolean }) {
+function criarBancoReserva(config: { quantidade: number; precoAdulto: number; precoCrianca?: number; offers: any[]; tiposMistos?: boolean; repetir?: boolean; colisao?: { buyerEmail: string }; takeover?: boolean; takeoverMultiassento?: boolean; statusInicial?: string }) {
   const event = { id: uuid(10), status: "PUBLICADO" };
   const session = { id: uuid(1), status: "PUBLICADA" };
   const tickets = [
@@ -640,14 +658,18 @@ function criarBancoReserva(config: { quantidade: number; precoAdulto: number; pr
     { id: uuid(3), eventId: event.id, priceCents: config.precoCrianca ?? config.precoAdulto, maxPerOrder: null, version: 1, active: true },
   ];
   const oldOrder: any = { id: uuid(499), orderNumber: "OLD123456789", eventId: event.id, sessionId: session.id, status: "RESERVADO", expiresAt: new Date(Date.now() - 60_000) };
-  const oldReservation: any = { id: uuid(498), orderId: oldOrder.id, inventorySeatId: uuid(200), status: "ATIVA", expiresAt: new Date(Date.now() - 60_000) };
-  const inventories = Array.from({ length: config.quantidade }, (_, index) => ({ id: uuid(200 + index), sessionId: session.id, seatId: uuid(100 + index), status: config.takeover && index === 0 ? "RESERVADO" : "DISPONIVEL", reservedByOrderId: config.takeover && index === 0 ? oldOrder.id : null, reservationExpiresAt: config.takeover && index === 0 ? new Date(Date.now() - 60_000) : null }));
+  const oldReservations: any[] = [];
+  const inventories = Array.from({ length: config.quantidade }, (_, index) => ({ id: uuid(200 + index), sessionId: session.id, seatId: uuid(100 + index), status: config.statusInicial ?? (config.takeover && (index === 0 || config.takeoverMultiassento) ? "RESERVADO" : "DISPONIVEL"), reservedByOrderId: config.takeover && (index === 0 || config.takeoverMultiassento) ? oldOrder.id : null, reservationExpiresAt: config.takeover && (index === 0 || config.takeoverMultiassento) ? new Date(Date.now() - 60_000) : null }));
+  for (const [index, inventory] of inventories.entries()) oldReservations.push({ id: uuid(498 + index), orderId: oldOrder.id, inventorySeatId: inventory.id, status: "ATIVA", expiresAt: new Date(Date.now() - 60_000) });
+  const oldReservation: any = oldReservations[0];
   const order: any = { id: uuid(500), orderNumber: "ABC123DEF456", eventId: event.id, sessionId: session.id, buyerEmail: "a@b.com", expiresAt: new Date(Date.now() + 60_000) };
   const itemRows: any[] = [];
   let selectCalls = 0;
   let ticketReads = 0;
   let inventoryReads = 0;
   let insertCalls = 0;
+  let takeoverInventoryUpdates = 0;
+  let takeoverReservationUpdates = 0;
   let inTransaction = false;
   let transactionAborted = false;
   let externalCollisionLookupDone = false;
@@ -657,6 +679,9 @@ function criarBancoReserva(config: { quantidade: number; precoAdulto: number; pr
     order,
     oldOrder,
     oldReservation,
+    reservasAntigas: oldReservations,
+    inventariosAntigos: inventories,
+    pagamentoAntigo: { id: "payment-old", orderId: oldOrder.id, status: "PENDENTE" },
     itemRows,
     mutations,
     lockSequence: [] as string[],
@@ -694,7 +719,7 @@ function criarBancoReserva(config: { quantidade: number; precoAdulto: number; pr
             value = [inventories[Math.min(inventoryIndex, inventories.length - 1)]];
           }
           else if (table === eventoOfertas) value = banco.configuracaoAtual;
-          else if (table === eventoReservas) value = config.takeover ? [oldReservation] : [];
+          else if (table === eventoReservas) value = config.takeover ? oldReservations : [];
           else if (table === eventoItensPedido) value = itemRows.map((item) => ({ item, inventory: inventories.find((inventory) => inventory.id === item.inventorySeatId) }));
           else if (table === eventoPedidos) value = [];
         resolved = value;
@@ -733,7 +758,7 @@ function criarBancoReserva(config: { quantidade: number; precoAdulto: number; pr
         return Promise.resolve([]);
       } };
     },
-    update: (table: any) => { mutations.value += 1; return { set: (payload: any) => { const operation: any = { where: (predicate: any) => { if (config.takeover && table === eventoReservas && payload.status === "LIBERADA") Object.assign(oldReservation, payload); if (config.takeover && table === eventoPedidos && payload.status === "EXPIRADO") Object.assign(oldOrder, payload); return operation; }, returning: async () => [{}] }; operation.then = (resolve: any, reject: any) => operation.returning().then(resolve, reject); return operation; } }; },
+    update: (table: any) => { mutations.value += 1; return { set: (payload: any) => { const operation: any = { where: (predicate: any) => { if (config.takeover && table === eventoReservas && payload.status === "LIBERADA") { const target = config.takeoverMultiassento ? oldReservations[takeoverReservationUpdates++] : oldReservation; if (target) Object.assign(target, payload); } if (config.takeover && table === eventoInventarioAssentos && payload.status === "DISPONIVEL") { const target = config.takeoverMultiassento ? inventories[takeoverInventoryUpdates++] : inventories[0]; if (target) Object.assign(target, payload); } if (config.takeover && table === eventoPedidos && payload.status === "EXPIRADO") Object.assign(oldOrder, payload); if (config.takeover && table === eventoPagamentos && payload.status === "EXPIRADO") Object.assign(banco.pagamentoAntigo, payload); return operation; }, returning: async () => [{}] }; operation.then = (resolve: any, reject: any) => operation.returning().then(resolve, reject); return operation; } }; },
   };
   return banco;
 }

@@ -146,23 +146,25 @@ export class EventosPublicSalesService {
       if (preco.totalCents < 100) throw fail("INVALID_AMOUNT", "Valor mínimo para pagamento: R$ 1,00");
 
       const expiresAt = new Date(now.getTime() + 15 * 60_000);
-      // Só depois de todas as validações e do cálculo final liberamos reservas expiradas.
-      for (const item of selected) {
-        if (item.inventory.status === "RESERVADO") {
-          const oldOrderId = item.inventory.reservedByOrderId;
-          const released = await tx.update(eventoInventarioAssentos).set({ status: "DISPONIVEL", reservationExpiresAt: null, reservedByOrderId: null, updatedAt: now }).where(and(eq(eventoInventarioAssentos.id, item.inventory.id), eq(eventoInventarioAssentos.status, "RESERVADO"), lte(eventoInventarioAssentos.reservationExpiresAt, now))).returning();
-          if (!this.updatedExactlyOne(released)) {
-            const currentInventory = await this.first<any>(tx.select().from(eventoInventarioAssentos).where(eq(eventoInventarioAssentos.id, item.inventory.id)));
-            if (!currentInventory || currentInventory.status !== "DISPONIVEL" || currentInventory.reservedByOrderId) {
-              throw new ConflictException({ code: "SEAT_UNAVAILABLE", message: "Assento indisponível" });
-            }
+      // O takeover invalida o pedido antigo inteiro, mas só libera inventários
+      // que ainda pertencem a ele. Assim, os demais assentos do pedido não
+      // ficam órfãos e um assento já retomado por outro pedido não é tocado.
+      for (const staleOrderId of staleOrderIds) {
+        const oldReservationsQuery = tx.select().from(eventoReservas).where(and(eq(eventoReservas.orderId, staleOrderId), eq(eventoReservas.status, "ATIVA")));
+        const oldReservations = [...(await oldReservationsQuery)].sort((left: any, right: any) => String(left.inventorySeatId).localeCompare(String(right.inventorySeatId)) || String(left.id).localeCompare(String(right.id)));
+        for (const oldReservation of oldReservations) {
+          const oldInventory = await this.first<any>(this.lockRows(tx.select().from(eventoInventarioAssentos).where(eq(eventoInventarioAssentos.id, oldReservation.inventorySeatId))));
+          const ownsInventory = oldInventory?.status === "RESERVADO" && oldInventory.reservedByOrderId === staleOrderId;
+          if (ownsInventory) {
+            await tx.update(eventoInventarioAssentos).set({ status: "DISPONIVEL", reservationExpiresAt: null, reservedByOrderId: null, updatedAt: now }).where(and(eq(eventoInventarioAssentos.id, oldInventory.id), eq(eventoInventarioAssentos.status, "RESERVADO"), eq(eventoInventarioAssentos.reservedByOrderId, staleOrderId))).returning();
           }
-          if (oldOrderId) {
-            await tx.update(eventoReservas).set({ status: "LIBERADA", releasedAt: now, updatedAt: now }).where(and(eq(eventoReservas.orderId, oldOrderId), eq(eventoReservas.inventorySeatId, item.inventory.id), eq(eventoReservas.status, "ATIVA"), lte(eventoReservas.expiresAt, now))).returning();
-            await tx.update(eventoPedidos).set({ status: "EXPIRADO", cancelledAt: now, cancellationReason: "Reserva de Evento expirada", updatedAt: now }).where(and(eq(eventoPedidos.id, oldOrderId), inArray(eventoPedidos.status, ["INICIADO", "RESERVADO", "AGUARDANDO_PAGAMENTO"] as any))).returning();
-            await tx.update(eventoPagamentos).set({ status: "EXPIRADO", processedAt: now, updatedAt: now }).where(and(eq(eventoPagamentos.orderId, oldOrderId), eq(eventoPagamentos.status, "PENDENTE"))).returning();
-          }
+          // A reserva antiga também precisa sair de ATIVA mesmo se o inventário
+          // já tiver sido vendido/bloqueado por outra operação; a proteção acima
+          // garante que nunca alteramos esse inventário alheio.
+          await tx.update(eventoReservas).set({ status: "LIBERADA", releasedAt: now, updatedAt: now }).where(and(eq(eventoReservas.id, oldReservation.id), eq(eventoReservas.status, "ATIVA"))).returning();
         }
+        await tx.update(eventoPedidos).set({ status: "EXPIRADO", cancelledAt: now, cancellationReason: "Reserva de Evento expirada", updatedAt: now }).where(and(eq(eventoPedidos.id, staleOrderId), inArray(eventoPedidos.status, ["INICIADO", "RESERVADO", "AGUARDANDO_PAGAMENTO"] as any))).returning();
+        await tx.update(eventoPagamentos).set({ status: "EXPIRADO", processedAt: now, updatedAt: now }).where(and(eq(eventoPagamentos.orderId, staleOrderId), eq(eventoPagamentos.status, "PENDENTE"))).returning();
       }
 
       let order: any;
