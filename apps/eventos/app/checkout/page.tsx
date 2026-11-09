@@ -1,36 +1,21 @@
 import React from "react";
-import { FormularioCheckout } from "../../components/formulario-checkout";
-import { listarPoliticasPublicas, listarSessoesPublicas, obterEventoPublico } from "../../lib/eventos-api";
-import { lerListaQuery, montarHrefRetornoMapa, normalizarTiposPorAssento } from "../../lib/checkout-utils";
+import { FluxoCheckout } from "../../components/checkout/fluxo-checkout";
+import { listarPoliticasPublicasServidor, listarSessoesPublicasServidor, obterEventoPublicoServidor, consultarPedidoServidor } from "../../lib/eventos-api-servidor";
 
-type Params = Promise<{ assentos?: string; ticketTypeIds?: string; ticketTypeId?: string; sessionId?: string; slug?: string }>;
+export const dynamic = "force-dynamic";
 
-export default async function Page({ searchParams }: { searchParams: Params }) {
+type Params = Promise<{ pedido?: string; slug?: string; sessionId?: string }>;
+
+export default async function Page({ searchParams }: { searchParams: Params }): Promise<React.JSX.Element> {
   const query = await searchParams;
-  const assentosInformados = lerListaQuery(query.assentos);
-  const tiposInformados = lerListaQuery(query.ticketTypeIds);
-  const seatIds = assentosInformados.values;
-  const ticketTypeIdsInformados = tiposInformados.values;
-  if (!ticketTypeIdsInformados.length && query.ticketTypeId) ticketTypeIdsInformados.push(query.ticketTypeId);
-  let ticketTypeIds: string[] = [];
-  let erroSelecao: string | null = assentosInformados.invalid || tiposInformados.invalid
-    ? "Não foi possível interpretar a seleção de assentos informada."
-    : null;
-  if (!erroSelecao) {
-    try {
-      ticketTypeIds = normalizarTiposPorAssento(seatIds, ticketTypeIdsInformados);
-    } catch (error) {
-      erroSelecao = error instanceof Error ? error.message : "Não foi possível validar os tipos de ingresso selecionados.";
-    }
-  }
-  const [politicas, evento, sessoes] = query.slug ? await Promise.all([
-    listarPoliticasPublicas(query.slug).catch(() => []),
-    obterEventoPublico(query.slug).catch(() => null),
-    listarSessoesPublicas(query.slug).catch(() => []),
-  ]) : [[], null, []];
-  const sessao = query.sessionId ? sessoes.find((item) => item.id === query.sessionId) : undefined;
-  const mapHref = query.slug && query.sessionId
-    ? montarHrefRetornoMapa({ slug: query.slug, sessionId: query.sessionId, seatIds, ticketTypeIds, motivo: "disponibilidade" })
-    : undefined;
-  return <><h1 className="mb-6 text-2xl font-bold">Checkout</h1><p className="mb-5 text-slate-600">Você está reservando {seatIds.length} assento(s). O pagamento será concluído em ambiente seguro.</p>{erroSelecao ? <p role="alert" className="rounded border border-red-300 bg-red-50 p-4 text-red-800">{erroSelecao} Volte ao mapa e selecione os ingressos novamente.</p> : <FormularioCheckout seatIds={seatIds} ticketTypeIds={ticketTypeIds} sessionId={query.sessionId} mapHref={mapHref} event={evento ? { title: evento.title, startsAt: evento.startsAt, locationName: evento.locationName } : undefined} session={sessao} offers={sessao?.offers} politicas={politicas} />}</>;
+  if (!query.pedido || !query.slug || !query.sessionId) return <section role="alert" className="content-width py-8"><h1 className="mb-3 text-2xl font-semibold">Checkout indisponível</h1><p>Não foi possível identificar o pedido e a sessão.</p></section>;
+  const [pedido, evento, sessoes, politicas] = await Promise.all([
+    consultarPedidoServidor(query.pedido).catch(() => null),
+    obterEventoPublicoServidor(query.slug).catch(() => null),
+    listarSessoesPublicasServidor(query.slug).catch(() => []),
+    listarPoliticasPublicasServidor(query.slug).catch(() => []),
+  ]);
+  const sessao = sessoes.find((item) => item.id === query.sessionId) ?? sessoes.find((item) => item.id === pedido?.sessionId);
+  if (!pedido || !evento || !sessao) return <section role="alert" className="content-width py-8"><h1 className="mb-3 text-2xl font-semibold">Checkout indisponível</h1><p>Não foi possível carregar os dados da reserva.</p></section>;
+  return <FluxoCheckout pedido={pedido} evento={evento} sessao={sessao} politicas={politicas} publishableKey={process.env.STRIPE_PUBLISHABLE_KEY ?? null} />;
 }

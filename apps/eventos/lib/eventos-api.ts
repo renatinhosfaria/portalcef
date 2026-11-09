@@ -1,4 +1,4 @@
-import type { CheckoutPublicoInput, FinalizarPedidoInput, MeusIngressosInput, PagamentoEmbutidoInput, ReservaPublicaInput } from "@essencia/shared/schemas";
+import type { FinalizarPedidoInput, MeusIngressosInput, PagamentoEmbutidoInput, ReservaPublicaInput } from "@essencia/shared/schemas";
 import type {
   ConsultaPedidoPublica,
   FinalizacaoPublicaResult,
@@ -15,7 +15,6 @@ import type {
 
 export type ReservaAssentosInput = Omit<ReservaPublicaInput, "idempotencyKey"> & Partial<Pick<ReservaPublicaInput, "idempotencyKey">>;
 export type FinalizarPedidoPublicoInput = Omit<FinalizarPedidoInput, "idempotencyKey"> & Partial<Pick<FinalizarPedidoInput, "idempotencyKey">>;
-export type CheckoutPublicoInputApp = Omit<CheckoutPublicoInput, "idempotencyKey"> & Partial<Pick<CheckoutPublicoInput, "idempotencyKey">>;
 export type PagamentoEmbutidoInputApp = Omit<PagamentoEmbutidoInput, "idempotencyKey"> & Partial<Pick<PagamentoEmbutidoInput, "idempotencyKey">>;
 
 export class EventosApiError extends Error {
@@ -132,14 +131,6 @@ export async function iniciarPagamento(orderNumber: string, input: PagamentoEmbu
   if (!result.clientSecret?.trim()) throw new EventosApiError("A API não retornou um clientSecret de pagamento válido.", 502, "CHECKOUT_CLIENT_SECRET_INVALID");
   publicOrderState.orderNumber = result.orderNumber || orderNumber;
   return result;
-}
-
-export async function iniciarCheckout(orderNumber: string, input: CheckoutPublicoInputApp): Promise<{ checkoutUrl: string }> {
-  const idempotencyKey = chavePersistida(input.idempotencyKey, "checkout", orderNumber);
-  const result = await enviarJson<{ checkoutUrl: string; expiresAt?: string | Date; orderNumber?: string }>(`/eventos/public/pedidos/${encodeURIComponent(orderNumber)}/checkout`, { ...input, idempotencyKey }, idempotencyKey);
-  if (!result.checkoutUrl || !/^https:\/\//i.test(result.checkoutUrl)) throw new EventosApiError("A API não retornou uma URL de checkout válida.", 502, "CHECKOUT_URL_INVALID");
-  publicOrderState.orderNumber = result.orderNumber || orderNumber;
-  return { checkoutUrl: result.checkoutUrl };
 }
 
 export async function liberarPedido(orderNumber: string): Promise<void> {

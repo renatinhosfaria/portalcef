@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from "vitest";
 import {
   buscarApiPublica,
   buscarMeusIngressos,
-  iniciarCheckout,
   iniciarPagamento,
   liberarPedido,
   listarEventosPublicos,
@@ -54,14 +53,6 @@ describe("API pública de eventos", () => {
     const [, init] = fetchMock.mock.calls[0] ?? [];
     expect((init?.headers as Record<string, string>)?.["Idempotency-Key"]).toBeTruthy();
     expect(JSON.parse(String(init?.body))).toMatchObject(input);
-    vi.restoreAllMocks();
-  });
-
-  it("retorna a checkoutUrl da API sem montar URL Stripe no cliente", async () => {
-    vi.stubGlobal("window", {});
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ checkoutUrl: "https://checkout.stripe.com/c/pay/cs_test" }), { status: 200 }));
-    await expect(iniciarCheckout("ABC123DEF456", { successUrl: "https://eventos.portalcef.com.br/pedido/ABC123DEF456?retorno=sucesso", cancelUrl: "https://eventos.portalcef.com.br/checkout?retorno=cancelado" })).resolves.toEqual({ checkoutUrl: "https://checkout.stripe.com/c/pay/cs_test" });
-    expect(String(fetchMock.mock.calls[0]?.[0])).not.toContain("stripe.com");
     vi.restoreAllMocks();
   });
 

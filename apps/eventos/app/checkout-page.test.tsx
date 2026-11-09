@@ -4,12 +4,12 @@ import { describe, expect, it } from "vitest";
 import Page from "./checkout/page";
 
 describe("página de checkout", () => {
-  it("mantém o checkout bloqueado quando a lista da query tem percent-encoding inválido", async () => {
+  it("mantém o checkout bloqueado quando a query não identifica a reserva", async () => {
     const html = renderToStaticMarkup(await Page({
-      searchParams: Promise.resolve({ assentos: "%", ticketTypeIds: "inteira" }),
+      searchParams: Promise.resolve({ slug: "festival", sessionId: "sessao-1" }),
     }));
 
-    expect(html).toContain("Não foi possível interpretar a seleção de assentos informada.");
+    expect(html).toContain("Não foi possível identificar o pedido e a sessão.");
     expect(html).not.toContain('name="buyerName"');
   });
 });
