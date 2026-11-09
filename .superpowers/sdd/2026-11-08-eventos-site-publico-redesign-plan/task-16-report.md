@@ -54,3 +54,29 @@ Implementado o mapa público com adaptação do contrato da API para o `MapaEsti
 - O tooltip é posicionado no topo do mapa por ser compatível com SVG responsivo; o texto e a ativação por mouse são independentes da geometria do assento.
 
 Atualizado em: 2026-11-08
+
+## Fix round 1 — revisão visual e acessibilidade
+
+### Correções
+
+- As pílulas de `LetrasLaterais` agora usam `transform: translateY(-50%)`, mantendo o centro da etiqueta alinhado ao centro da fileira transformada.
+- A prop `largura` sem uso foi removida de `LetrasLaterais` e do ponto de chamada.
+- A legenda recebeu `role="group"` com `aria-label="Legenda do mapa"`.
+- Lugares interativos expõem `aria-pressed` no `MapaEstiloB`, incluindo o estado “Seu lugar”.
+- A adaptação passou a cobrir explicitamente rotação ausente (`0`), estado `reserved` e o fallback sem layout para elementos da planta.
+
+### Testes adicionados/ajustados
+
+- `letras-laterais.test.tsx`: verifica centralização vertical, classe de pílula e limiar `k < 3`.
+- `mapa-publico.test.tsx`: verifica legenda identificável, `aria-pressed` e limiar do minimapa (`k > 1.5`).
+- `adaptar-mapa.test.ts`: cobre rotação ausente, `reserved`/`sold`/`blocked`/indisponível e `elementosDoMapa` sem layout.
+
+### Verificação do fix round 1
+
+- `pnpm --filter @essencia/eventos test -- components/__tests__/adaptar-mapa.test.ts components/__tests__/mapa-publico.test.tsx components/__tests__/letras-laterais.test.tsx`: 3 arquivos, 11 testes aprovados.
+- `pnpm --filter @essencia/components test -- src/eventos/mapa-estilo-b.test.tsx`: 22 testes aprovados.
+- `pnpm --filter @essencia/eventos lint && pnpm --filter @essencia/eventos typecheck`: aprovados.
+- `pnpm --filter @essencia/components lint && pnpm --filter @essencia/components typecheck`: aprovados.
+- `git diff --check`: aprovado.
+
+Atualizado em: 2026-11-08

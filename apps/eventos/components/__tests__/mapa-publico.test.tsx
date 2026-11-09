@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { PublicMap } from "@essencia/shared/types";
 import { coresPublicas, MapaPublico, rotuloAcessivelPublico } from "../mapa/mapa-publico";
 import { paraLugaresPublicos } from "../mapa/adaptar-mapa";
+import { Minimapa } from "../mapa/minimapa";
 
 afterEach(cleanup);
 
@@ -44,5 +45,15 @@ describe("MapaPublico", () => {
     expect(screen.getByText("Seu lugar")).toBeTruthy();
     expect(screen.getByText("Ocupado")).toBeTruthy();
     expect(screen.getByText("Acessível")).toBeTruthy();
+    expect(screen.getByRole("group", { name: "Legenda do mapa" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Fileira G, assento 21/ }).getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("mostra a janela do minimapa somente acima de k=1.5", () => {
+    const lugares = paraLugaresPublicos(mapa);
+    const { container, rerender } = render(<Minimapa largura={100} altura={100} lugares={lugares} transformacao={{ x: 0, y: 0, k: 1.5 }} />);
+    expect(container.querySelector("[data-minimapa-viewport]")).toBeNull();
+    rerender(<Minimapa largura={100} altura={100} lugares={lugares} transformacao={{ x: 0, y: 0, k: 1.51 }} />);
+    expect(container.querySelector("[data-minimapa-viewport]")).not.toBeNull();
   });
 });

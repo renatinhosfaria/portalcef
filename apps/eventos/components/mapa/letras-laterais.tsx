@@ -7,11 +7,10 @@ import type { LugarMapa, TransformacaoZoom } from "@essencia/components/eventos/
 export interface LetrasLateraisProps {
   lugares: LugarMapa[];
   transformacao: TransformacaoZoom;
-  largura: number;
   altura: number;
 }
 
-export function LetrasLaterais({ lugares, transformacao, largura, altura }: LetrasLateraisProps): React.JSX.Element | null {
+export function LetrasLaterais({ lugares, transformacao, altura }: LetrasLateraisProps): React.JSX.Element | null {
   const fileiras = useMemo(() => {
     const porFileira = new Map<string, LugarMapa[]>();
     for (const lugar of lugares) porFileira.set(lugar.fileira, [...(porFileira.get(lugar.fileira) ?? []), lugar]);
@@ -30,12 +29,12 @@ export function LetrasLaterais({ lugares, transformacao, largura, altura }: Letr
     <>
       <div data-testid="letras-laterais" className="pointer-events-none absolute inset-y-0 left-0 z-10 flex w-8 flex-col items-start">
         {visiveis.map(({ fileira, centroY }) => (
-          <span key={`esquerda-${fileira}`} data-fileira={fileira} className="absolute rounded-full bg-[#1f2a24] px-2 py-1 text-xs font-semibold text-white" style={{ top: `${((centroY * transformacao.k + transformacao.y) / altura) * 100}%` }}>{fileira}</span>
+          <span key={`esquerda-${fileira}`} data-fileira={fileira} className="absolute rounded-full bg-[#1f2a24] px-2 py-1 text-xs font-semibold text-white" style={{ top: `${((centroY * transformacao.k + transformacao.y) / altura) * 100}%`, transform: "translateY(-50%)" }}>{fileira}</span>
         ))}
       </div>
       <div className="pointer-events-none absolute inset-y-0 right-0 z-10 flex w-8 flex-col items-end">
         {visiveis.map(({ fileira, centroY }) => (
-          <span key={`direita-${fileira}`} data-fileira={fileira} className="absolute rounded-full bg-[#1f2a24] px-2 py-1 text-xs font-semibold text-white" style={{ top: `${((centroY * transformacao.k + transformacao.y) / altura) * 100}%` }}>{fileira}</span>
+          <span key={`direita-${fileira}`} data-fileira={fileira} className="absolute rounded-full bg-[#1f2a24] px-2 py-1 text-xs font-semibold text-white" style={{ top: `${((centroY * transformacao.k + transformacao.y) / altura) * 100}%`, transform: "translateY(-50%)" }}>{fileira}</span>
         ))}
       </div>
     </>

@@ -60,7 +60,7 @@ export function MapaPublico({ map, selecionados, indisponiveis = new Set(), onAl
           <button type="button" aria-label="Reduzir zoom" onClick={() => controleRef.current?.afastar()} className="min-h-10 min-w-10 rounded-lg border border-[#d9ddcf] bg-white px-3 text-lg font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#3f6f12]">−</button>
           <button type="button" aria-label="Ver tudo" onClick={() => controleRef.current?.enquadrar()} className="min-h-10 rounded-lg border border-[#d9ddcf] bg-white px-3 text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#3f6f12]">Ver tudo</button>
         </div>
-        <div className="flex flex-wrap gap-2 text-xs" aria-label="Legenda do mapa">
+        <div className="flex flex-wrap gap-2 text-xs" role="group" aria-label="Legenda do mapa">
           <span className="inline-flex items-center gap-1"><i aria-hidden="true" className="h-3 w-3 rounded-sm border border-[#9fb08a] bg-white" />Livre</span>
           <span className="inline-flex items-center gap-1"><i aria-hidden="true" className="h-3 w-3 rounded-sm border border-[#2a4d0a] bg-[#3f6f12]" />Seu lugar</span>
           <span className="inline-flex items-center gap-1"><i aria-hidden="true" className="h-3 w-3 rounded-sm border border-[#c9cdc6] bg-[#e4e6e1]" />Ocupado</span>
@@ -86,7 +86,7 @@ export function MapaPublico({ map, selecionados, indisponiveis = new Set(), onAl
             if (lugarPorId.get(id)?.livre) onAlternar(id);
           }}
         />
-        <LetrasLaterais lugares={lugares} transformacao={transformacao} largura={dimensoes.largura} altura={dimensoes.altura} />
+        <LetrasLaterais lugares={lugares} transformacao={transformacao} altura={dimensoes.altura} />
         <Minimapa largura={dimensoes.largura} altura={dimensoes.altura} lugares={lugares} transformacao={transformacao} />
         {lugarHover ? <div role="tooltip" className="pointer-events-none absolute left-1/2 top-2 z-20 -translate-x-1/2 rounded-full bg-[#1f2a24] px-3 py-1.5 text-xs font-semibold text-white shadow">{rotuloTooltip(lugarHover)}</div> : null}
       </div>

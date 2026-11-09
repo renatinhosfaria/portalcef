@@ -424,6 +424,7 @@ export function MapaEstiloB({
               role={interativo ? "button" : "img"}
               tabIndex={desabilitado ? -1 : interativo ? 0 : undefined}
               aria-disabled={desabilitado ? "true" : undefined}
+              aria-pressed={interativo ? selecionados?.has(lugar.id) ?? false : undefined}
               aria-label={rotuloDoLugar?.(lugar) ?? rotuloAcessivelDoLugar(lugar)}
               style={podeInteragir ? { cursor: "pointer" } : undefined}
               onClick={podeInteragir ? (e) => onLugarClick?.(lugar.id, { shiftKey: e.shiftKey }) : undefined}
