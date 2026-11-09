@@ -1,8 +1,15 @@
-import { randomInt } from "node:crypto";
-
 export const ALFABETO_NUMERO_INGRESSO = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 
-export function gerarNumeroIngresso(sortear: (limite: number) => number = (limite) => randomInt(limite)): string {
+function sortearSeguro(limite: number): number {
+  const valores = new Uint32Array(1);
+  if (globalThis.crypto?.getRandomValues) {
+    globalThis.crypto.getRandomValues(valores);
+    return valores[0]! % limite;
+  }
+  return Math.floor(Math.random() * limite);
+}
+
+export function gerarNumeroIngresso(sortear: (limite: number) => number = sortearSeguro): string {
   return Array.from({ length: 8 }, () => ALFABETO_NUMERO_INGRESSO[sortear(ALFABETO_NUMERO_INGRESSO.length)]).join("");
 }
 

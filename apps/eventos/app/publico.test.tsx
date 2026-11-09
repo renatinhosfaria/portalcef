@@ -31,6 +31,17 @@ describe("vitrine pública de Eventos", () => {
     expect(eventos).toContain("STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY}");
   });
 
+  it("CSP do eventos libera o checkout embutido da Stripe", () => {
+    const nginx = readFileSync(new URL("../../../nginx.conf", import.meta.url), "utf8");
+    const inicio = nginx.indexOf("server_name eventos.portalcef.com.br;", nginx.indexOf("listen 443 ssl"));
+    const fim = nginx.indexOf("\n    }", inicio);
+    const blocoHttps = nginx.slice(inicio, fim);
+    const csp = blocoHttps.match(/Content-Security-Policy-Report-Only[^\n]+/u)?.[0] ?? "";
+
+    expect(csp).toContain("script-src 'self' 'unsafe-inline' https://js.stripe.com");
+    expect(csp).toContain("frame-src 'self' https://js.stripe.com https://*.stripe.com https://hooks.stripe.com");
+  });
+
   it("transpila a UI e permite imagens do storage público", () => {
     const config = readFileSync(new URL("../next.config.js", import.meta.url), "utf8");
     expect(config).toContain('"@essencia/ui"');
