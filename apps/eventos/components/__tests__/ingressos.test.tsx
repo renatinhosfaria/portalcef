@@ -38,8 +38,10 @@ const pedido: PedidoComIngressos = {
 
 afterEach(() => {
   cleanup();
+  vi.clearAllTimers();
   vi.useRealTimers();
 });
+beforeEach(() => vi.clearAllMocks());
 
 describe("cartões de ingressos", () => {
   it("mostra número formatado, fileira, assento, tipo e participante", () => {
@@ -67,6 +69,30 @@ describe("página de ingressos", () => {
     expect(screen.getByText("Confirmando seu pagamento…")).toBeTruthy();
     await act(async () => { vi.advanceTimersByTime(2000); await Promise.resolve(); await Promise.resolve(); });
     expect(eventosApi.obterIngressos).toHaveBeenCalledWith("G21", "segredo");
+  });
+
+  it.each(["INICIADO", "RESERVADO", "AGUARDANDO_PAGAMENTO"])("trata %s como estado pendente", async (status) => {
+    vi.useFakeTimers();
+    vi.mocked(eventosApi.obterIngressos).mockResolvedValueOnce({ ...pedido, status, tickets: [] });
+    render(<PaginaIngressos inicial={{ ...pedido, status, tickets: [] }} orderNumber="G21" acesso="segredo" />);
+    expect(screen.getByText("Confirmando seu pagamento…")).toBeTruthy();
+    await act(async () => { vi.advanceTimersByTime(2000); await Promise.resolve(); });
+    expect(eventosApi.obterIngressos).toHaveBeenCalledWith("G21", "segredo");
+  });
+
+  it("não sobrepõe consultas e ignora resposta de ciclo antigo", async () => {
+    vi.useFakeTimers();
+    let simultaneas = 0;
+    let maxSimultaneas = 0;
+    vi.mocked(eventosApi.obterIngressos).mockImplementation(() => {
+      simultaneas += 1;
+      maxSimultaneas = Math.max(maxSimultaneas, simultaneas);
+      return new Promise((resolve) => { window.setTimeout(() => { simultaneas -= 1; resolve(pedido); }, 10000); });
+    });
+    render(<PaginaIngressos inicial={{ ...pedido, status: "INICIADO", tickets: [] }} orderNumber="G21" acesso="segredo" />);
+    await act(async () => { vi.advanceTimersByTime(2000); });
+    await act(async () => { vi.advanceTimersByTime(6000); });
+    expect(maxSimultaneas).toBe(1);
   });
 
   it("não expõe QR ou número em pedido sem acesso", () => {

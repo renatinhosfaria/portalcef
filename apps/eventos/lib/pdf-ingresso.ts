@@ -76,7 +76,7 @@ export async function gerarPdfIngressos(pedido: PedidoComIngressos, ingressos: I
       // O número continua sendo uma alternativa válida se o QR falhar.
     }
     pdf.setFontSize(10);
-    pdf.text("Na entrada, mostre o QR ou informe o número.", 58, 132, { maxWidth: largura - 76 });
+    pdf.text("Na entrada, mostre o QR code ou informe o número.", 58, 132, { maxWidth: largura - 76 });
     pdf.setFontSize(16);
     pdf.text(formatarNumeroIngresso(ingresso.numero), 22, 150);
     pdf.setFontSize(9);

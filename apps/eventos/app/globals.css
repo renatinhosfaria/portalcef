@@ -59,6 +59,7 @@
 @media print {
   .site-cabecalho, footer, .print\:hidden, button { display: none !important; }
   body { background: #fff; }
-  .ingresso-cartao { break-after: page; box-shadow: none; }
-  .ingresso-cartao:last-child { break-after: auto; }
+  .ingresso-item { break-inside: avoid; }
+  .ingresso-item:not(:last-child) { break-after: page; }
+  .ingresso-cartao { box-shadow: none; }
 }
