@@ -235,6 +235,7 @@ services:
     environment:
       <<: *nextjs-env
       PORT: 3014
+      STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY}
     healthcheck:
       <<: *healthcheck
       test: [ "CMD", "curl", "-f", "http://localhost:3014/" ]

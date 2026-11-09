@@ -25,6 +25,12 @@ describe("vitrine pública de Eventos", () => {
     expect(tailwind).toContain("packages/ui");
   });
 
+  it("passa STRIPE_PUBLISHABLE_KEY ao serviço eventos", () => {
+    const compose = readFileSync(new URL("../../../docker-compose.prod.yml", import.meta.url), "utf8");
+    const eventos = compose.slice(compose.indexOf("\n  eventos:"), compose.indexOf("\n  eventos-admin:"));
+    expect(eventos).toContain("STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY}");
+  });
+
   it("transpila a UI e permite imagens do storage público", () => {
     const config = readFileSync(new URL("../next.config.js", import.meta.url), "utf8");
     expect(config).toContain('"@essencia/ui"');
