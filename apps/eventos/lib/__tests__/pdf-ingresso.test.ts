@@ -2,7 +2,7 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { PedidoComIngressos } from "@essencia/shared/types";
-import { compartilharOuBaixar, gerarPdfIngressos, nomeArquivoIngresso } from "../pdf-ingresso";
+import { compartilharOuBaixar, gerarPdfIngressos, mensagemWhatsAppIngresso, nomeArquivoIngresso, urlWhatsAppIngresso } from "../pdf-ingresso";
 
 const pedido: PedidoComIngressos = {
   orderNumber: "G21",
@@ -64,5 +64,23 @@ describe("compartilhamento", () => {
     const resultado = await compartilharOuBaixar(new File(["pdf"], "ingresso.pdf", { type: "application/pdf" }), navegador);
     expect(resultado).toBe("baixado");
     expect(click).toHaveBeenCalled();
+  });
+});
+
+describe("WhatsApp", () => {
+  it("monta uma mensagem com os dados do ingresso sem expor o QR payload", () => {
+    const mensagem = mensagemWhatsAppIngresso(pedido, pedido.tickets[0]!, "https://eventos.example/pedido/G21?acesso=segredo");
+
+    expect(mensagem).toContain("Festival da Família");
+    expect(mensagem).toContain("Fileira B · Assento 12");
+    expect(mensagem).toContain("K7Q4-82MX");
+    expect(mensagem).toContain("https://eventos.example/pedido/G21?acesso=segredo");
+    expect(mensagem).not.toContain("qr-1");
+  });
+
+  it("codifica a mensagem na URL direta do WhatsApp", () => {
+    const mensagem = mensagemWhatsAppIngresso(pedido, pedido.tickets[0]!, "https://eventos.example/pedido/G21?acesso=segredo");
+
+    expect(urlWhatsAppIngresso(pedido, pedido.tickets[0]!, "https://eventos.example/pedido/G21?acesso=segredo")).toBe(`https://wa.me/?text=${encodeURIComponent(mensagem)}`);
   });
 });
