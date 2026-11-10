@@ -1,9 +1,25 @@
 import { EventosPublicSalesService } from "./eventos-public-sales.service";
-import { eventoAceites, eventoIngressos, eventoInventarioAssentos, eventoItensPedido, eventoOfertas, eventoPagamentos, eventoPedidos, eventoParticipantes, eventoPoliticas, eventoReservas, eventoTiposIngresso, eventoTokensConsulta, eventos, schema } from "@essencia/db";
+import { eventoAceites, eventoIngressos, eventoInventarioAssentos, eventoItensPedido, eventoOfertas, eventoPagamentos, eventoPedidos, eventoParticipantes, eventoPoliticas, eventoReservas, eventoSessoes, eventoTiposIngresso, eventoTokensConsulta, eventos, schema } from "@essencia/db";
 import { hashTokenAcesso } from "./acesso-pedido";
 
 describe("EventosPublicSalesService - contratos públicos", () => {
   const service = () => new EventosPublicSalesService({ db: {} } as any);
+
+  it("bloqueia apenas pedido, evento e sessão ao ler pedido com local opcional", async () => {
+    const locks: Array<{ strength: string; config?: { of?: unknown[] } }> = [];
+    const query = {
+      for: async (strength: string, config?: { of?: unknown[] }) => {
+        locks.push({ strength, config });
+        return [];
+      },
+    };
+
+    await (service() as any).lockRows(query, [eventoPedidos, eventos, eventoSessoes]);
+
+    expect(locks).toHaveLength(1);
+    expect(locks[0]?.strength).toBe("update");
+    expect(locks[0]?.config?.of).toEqual(expect.arrayContaining([eventoPedidos, eventos, eventoSessoes]));
+  });
 
   it("rejeita campos extras, UUID inválido e chave curta em runtime", async () => {
     await expect(service().reservarAssentos({ sessionId: "s1", seats: [], buyer: { name: "Ana", email: "a@b.com", phone: "11999999999" }, idempotencyKey: "curta", schoolId: "attacker" })).rejects.toMatchObject({ response: { code: "VALIDATION_ERROR" } });
