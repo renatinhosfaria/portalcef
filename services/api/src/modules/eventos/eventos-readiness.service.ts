@@ -43,7 +43,9 @@ export class EventosReadinessService {
     let inventoryOk = sessions.length > 0;
     for (const session of sessions) {
       const inventory: any[] = await this.rows(eventoInventarioAssentos, eq(eventoInventarioAssentos.sessionId, session.id));
-      const sellable = inventory.filter((seat) => seat.status === 'DISPONIVEL' || seat.status === 'LIBERADO').length;
+      // Assento vendido, reservado ou dado como cortesia continua sendo lugar da sessão;
+      // só o bloqueado deixa de contar. Contar apenas os livres acusava falta a partir da primeira venda.
+      const sellable = inventory.filter((seat) => seat.status !== 'BLOQUEADO').length;
       if (sellable < session.capacity) inventoryOk = false;
     }
     items.push(inventoryOk ? { key: 'INVENTARIO_SESSOES', label: 'Inventário vendável', state: 'OK' } : { key: 'INVENTARIO_SESSOES', label: 'Inventário vendável', state: 'BLOQUEADOR', href: '#mapa', message: 'Gere ao menos um assento vendável por unidade de capacidade' });
