@@ -1,7 +1,7 @@
 # Ingressos de cortesia com assento marcado — Design
 
 **Data:** 2026-11-12
-**Status:** desenho aprovado pelo Renato em conversa em 2026-11-12; aguardando revisão desta spec
+**Status:** implementado em 2026-11-12 na branch `feat/eventos-cortesias`
 **Contexto:** pedido da escola para emitir ingressos sem custo, com o assento escolhido previamente pela própria escola.
 
 ## Intenção
