@@ -9,7 +9,7 @@ import { AcoesIngresso } from "../ingressos/acoes-ingresso";
 
 vi.mock("../../lib/pdf-ingresso", async () => {
   const atual = await vi.importActual<typeof import("../../lib/pdf-ingresso")>("../../lib/pdf-ingresso");
-  return { ...atual, gerarPdfIngressos: vi.fn() };
+  return { ...atual, compartilharOuBaixar: vi.fn(), gerarPdfIngressos: vi.fn() };
 });
 
 const ingresso: IngressoPublico = {
@@ -44,14 +44,15 @@ afterEach(() => cleanup());
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(pdfIngresso.gerarPdfIngressos).mockResolvedValue(new Blob(["pdf"], { type: "application/pdf" }));
+  vi.mocked(pdfIngresso.compartilharOuBaixar).mockResolvedValue("compartilhado");
 });
 
 describe("AcoesIngresso", () => {
-  it("mostra download individual e compartilhamento direto no WhatsApp", () => {
+  it("mostra download individual e compartilhamento do PDF", () => {
     render(<AcoesIngresso pedido={pedido} ingresso={ingresso} indice={0} total={1} />);
 
     expect(screen.getByRole("button", { name: "Baixar ingresso" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Compartilhar no WhatsApp" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Compartilhar PDF" })).toBeTruthy();
   });
 
   it("gera e baixa somente o ingresso selecionado", async () => {
@@ -64,12 +65,12 @@ describe("AcoesIngresso", () => {
     expect(click).toHaveBeenCalled();
   });
 
-  it("abre a URL direta do WhatsApp", async () => {
-    const abrir = vi.spyOn(window, "open").mockImplementation(() => null);
+  it("compartilha o arquivo PDF gerado", async () => {
     render(<AcoesIngresso pedido={pedido} ingresso={ingresso} indice={0} total={1} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Compartilhar no WhatsApp" }));
+    fireEvent.click(screen.getByRole("button", { name: "Compartilhar PDF" }));
 
-    await waitFor(() => expect(abrir).toHaveBeenCalledWith(expect.stringMatching(/^https:\/\/wa\.me\/\?text=/), "_blank", "noopener,noreferrer"));
+    await waitFor(() => expect(pdfIngresso.compartilharOuBaixar).toHaveBeenCalledWith(expect.any(File)));
+    expect(pdfIngresso.gerarPdfIngressos).toHaveBeenCalledWith(pedido, [ingresso]);
   });
 });

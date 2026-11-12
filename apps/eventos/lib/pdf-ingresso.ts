@@ -90,22 +90,6 @@ export function nomeArquivoIngresso(pedido: PedidoComIngressos, ingresso?: Ingre
   return ingresso ? `ingresso-${pedido.orderNumber}-${formatarNumeroIngresso(ingresso.numero)}.pdf` : `ingressos-${pedido.orderNumber}.pdf`;
 }
 
-export function mensagemWhatsAppIngresso(pedido: PedidoComIngressos, ingresso: IngressoPublico, urlPagina: string): string {
-  return [
-    `Ingresso: ${pedido.event.title}`,
-    `Data: ${formatarDataHoraExtenso(pedido.session.startsAt, pedido.session.endsAt)}`,
-    `Local: ${pedido.event.locationName ?? "Local a confirmar"}`,
-    `Fileira ${ingresso.rowLabel} · Assento ${ingresso.seatNumber}`,
-    `Tipo: ${ingresso.ticketTypeName}`,
-    `Número: ${formatarNumeroIngresso(ingresso.numero)}`,
-    `Acesse: ${urlPagina}`,
-  ].join("\n");
-}
-
-export function urlWhatsAppIngresso(pedido: PedidoComIngressos, ingresso: IngressoPublico, urlPagina: string): string {
-  return `https://wa.me/?text=${encodeURIComponent(mensagemWhatsAppIngresso(pedido, ingresso, urlPagina))}`;
-}
-
 export async function compartilharOuBaixar(arquivo: File, navegador?: Pick<Navigator, "canShare" | "share">): Promise<"compartilhado" | "baixado"> {
   const alvo = navegador ?? (typeof navigator !== "undefined" ? navigator : undefined);
   if (alvo?.canShare?.({ files: [arquivo] }) && alvo.share) {
