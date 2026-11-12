@@ -27,8 +27,11 @@ export const emitirCortesiasSchema = z.object({
     vistos.add(assento.inventorySeatId);
   });
 });
+const nomeAlunaSchema = z.string().trim().min(1).max(200);
+export const juntarAlunasSchema = z.object({ destino: nomeAlunaSchema, origens: z.array(nomeAlunaSchema).min(1).max(50) }).strict();
+export const separarAlunaSchema = z.object({ chave: nomeAlunaSchema }).strict();
 export const cancelarCortesiaSchema = z.object({ motivo: z.string().trim().min(3).max(500) }).strict();
-export const finalizarPedidoSchema = z.object({ buyer: compradorPublicoSchema, participants: z.array(z.object({ participantIndex: z.number().int().nonnegative(), fullName: z.string().trim().min(2).max(200), type: eventoParticipanteTipoSchema, email: z.string().email().optional(), phone: z.string().max(30).optional() })).min(1).max(20), acceptances: z.array(z.object({ type: politicaPublicaTipoSchema, version: z.number().int().positive() })).length(5), idempotencyKey: z.string().trim().min(8).max(180) }).strict();
+export const finalizarPedidoSchema = z.object({ buyer: compradorPublicoSchema, participants: z.array(z.object({ participantIndex: z.number().int().nonnegative(), fullName: z.string().trim().min(2).max(200), type: eventoParticipanteTipoSchema, studentName: z.preprocess(vazioParaUndefined, z.string().trim().max(200).optional()), email: z.string().email().optional(), phone: z.string().max(30).optional() })).min(1).max(20), acceptances: z.array(z.object({ type: politicaPublicaTipoSchema, version: z.number().int().positive() })).length(5), idempotencyKey: z.string().trim().min(8).max(180) }).strict();
 export const pagamentoEmbutidoSchema = z.object({ returnUrl: z.string().url().refine((v) => v.startsWith("https://")), idempotencyKey: z.string().trim().min(8).max(180) }).strict();
 export const meusIngressosSchema = z.union([
   z.object({ orderNumber: z.string().trim().min(6).max(32), email: z.string().trim().email() }).strict(),
@@ -101,3 +104,5 @@ export type MeusIngressosInput = z.infer<typeof meusIngressosSchema>;
 export type AtualizarOfertaInput = z.infer<typeof atualizarOfertaSchema>;
 export type EmitirCortesiasInput = z.infer<typeof emitirCortesiasSchema>;
 export type CancelarCortesiaInput = z.infer<typeof cancelarCortesiaSchema>;
+export type JuntarAlunasInput = z.infer<typeof juntarAlunasSchema>;
+export type SepararAlunaInput = z.infer<typeof separarAlunaSchema>;

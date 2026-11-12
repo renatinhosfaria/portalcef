@@ -89,6 +89,12 @@
       "require": "./dist/eventos/ingresso.js",
       "default": "./dist/eventos/ingresso.js"
     },
+    "./eventos/alunas": {
+      "types": "./dist/eventos/alunas.d.ts",
+      "import": "./src/eventos/alunas.ts",
+      "require": "./dist/eventos/alunas.js",
+      "default": "./dist/eventos/alunas.js"
+    },
     "./eventos/datas": {
       "types": "./dist/eventos/datas.d.ts",
       "import": "./src/eventos/datas.ts",

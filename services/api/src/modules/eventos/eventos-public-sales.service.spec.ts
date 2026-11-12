@@ -281,6 +281,17 @@ describe("EventosPublicSalesService - contratos públicos", () => {
     expect(db.acceptances.every((acceptance: any) => acceptance.acceptedByName === "Ana Maria" && acceptance.acceptedByEmail === "ana@example.com")).toBe(true);
   });
 
+  it("finalização grava a aluna que convidou no participante e aceita o campo vazio", async () => {
+    const comAluna = pedidoFinalizacaoDb();
+    const entrada = entradaFinalizacao();
+    await new EventosPublicSalesService({ db: comAluna } as any).finalizarPedidoConvidado("ABC123DEF456", { ...entrada, participants: [{ ...entrada.participants[0]!, studentName: "Beatriz Santos" }] });
+    expect(comAluna.participants).toEqual([expect.objectContaining({ fullName: "Participante", studentName: "Beatriz Santos" })]);
+
+    const semAluna = pedidoFinalizacaoDb();
+    await new EventosPublicSalesService({ db: semAluna } as any).finalizarPedidoConvidado("ABC123DEF456", entradaFinalizacao());
+    expect(semAluna.participants).toEqual([expect.objectContaining({ fullName: "Participante", studentName: null })]);
+  });
+
   it("finalização devolve acesso e guarda só o hash com validade de 30 dias após o fim da sessão", async () => {
     const db = pedidoFinalizacaoDb();
     const result = await new EventosPublicSalesService({ db } as any).finalizarPedidoConvidado("ABC123DEF456", entradaFinalizacao());

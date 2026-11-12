@@ -85,6 +85,47 @@ describe("FluxoCheckout", () => {
     expect(screen.getByText(/Pagamento/)).toBeTruthy();
   });
 
+  function preencherObrigatorios() {
+    fireEvent.change(screen.getByLabelText("Nome completo"), { target: { value: "Ana Silva" } });
+    fireEvent.change(screen.getByLabelText("E-mail"), { target: { value: "ana@example.com" } });
+    fireEvent.change(screen.getByLabelText("Celular (WhatsApp)"), { target: { value: "34999999999" } });
+    fireEvent.change(screen.getByLabelText("Nome de quem vai sentar no lugar G19"), { target: { value: "Ana Silva" } });
+    fireEvent.change(screen.getByLabelText("Nome de quem vai sentar no lugar G20"), { target: { value: "Bia Silva" } });
+    fireEvent.click(screen.getByRole("checkbox", { name: "Li e aceito as políticas do evento" }));
+  }
+
+  it("a aluna que convidou é opcional e não entra no envio quando fica em branco", async () => {
+    render(<FluxoCheckout pedido={pedido} evento={evento} sessao={sessao} politicas={politicas} publishableKey="pk_test" />);
+    expect((screen.getByLabelText("Aluna que convidou, lugar G19 (opcional)") as HTMLInputElement).required).toBe(false);
+    preencherObrigatorios();
+    fireEvent.click(screen.getByRole("button", { name: "Ir para o pagamento" }));
+
+    await waitFor(() => expect(eventosApi.finalizarPedido).toHaveBeenCalled());
+    const enviados = vi.mocked(eventosApi.finalizarPedido).mock.calls[0]![1].participants;
+    expect(enviados.every((participante) => !("studentName" in participante))).toBe(true);
+  });
+
+  it("sugere a aluna do primeiro lugar nos seguintes e envia a de cada ingresso", async () => {
+    render(<FluxoCheckout pedido={pedido} evento={evento} sessao={sessao} politicas={politicas} publishableKey="pk_test" />);
+    preencherObrigatorios();
+    const primeira = screen.getByLabelText("Aluna que convidou, lugar G19 (opcional)") as HTMLInputElement;
+    const segunda = screen.getByLabelText("Aluna que convidou, lugar G20 (opcional)") as HTMLInputElement;
+
+    fireEvent.change(primeira, { target: { value: "  Beatriz Santos " } });
+    expect(segunda.value).toBe("  Beatriz Santos ");
+
+    fireEvent.change(segunda, { target: { value: "Carla Lima" } });
+    fireEvent.change(primeira, { target: { value: "Beatriz Santos" } });
+    expect(segunda.value).toBe("Carla Lima");
+
+    fireEvent.click(screen.getByRole("button", { name: "Ir para o pagamento" }));
+    await waitFor(() => expect(eventosApi.finalizarPedido).toHaveBeenCalled());
+    expect(vi.mocked(eventosApi.finalizarPedido).mock.calls[0]![1].participants).toEqual([
+      { participantIndex: 0, fullName: "Ana Silva", type: "CONVIDADO", studentName: "Beatriz Santos" },
+      { participantIndex: 1, fullName: "Bia Silva", type: "CONVIDADO", studentName: "Carla Lima" },
+    ]);
+  });
+
   it("não mostra nomes internos de política nem promete e-mail", () => {
     render(<FluxoCheckout pedido={pedido} evento={evento} sessao={sessao} politicas={politicas} publishableKey={null} />);
     expect(screen.getByText("Cancelamento e reembolso")).toBeTruthy();

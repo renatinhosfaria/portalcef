@@ -16,6 +16,8 @@ import {
   eventoOfertas,
   eventoAuditoriaAcaoEnum,
   eventoPedidoOrigemEnum,
+  eventoParticipantes,
+  eventoJuncoesAluna,
   eventos,
 } from "./eventos.js";
 
@@ -116,4 +118,28 @@ test("cortesias: colunas e enums", () => {
   assert.equal(eventoTiposIngresso.internal.default, false);
   assert.ok(eventoAuditoriaAcaoEnum.includes("CORTESIA_EMITIDA"));
   assert.ok(eventoAuditoriaAcaoEnum.includes("CORTESIA_CANCELADA"));
+});
+
+test("aluna que convidou: coluna opcional no participante e junções únicas por evento", () => {
+  const coluna = getTableConfig(eventoParticipantes).columns.find((column) => column.name === "student_name");
+  assert.ok(coluna);
+  assert.equal(coluna?.notNull, false);
+
+  const juncoes = getTableConfig(eventoJuncoesAluna);
+  assert.equal(juncoes.name, "evento_juncoes_aluna");
+  assert.deepEqual(
+    juncoes.columns.filter((column) => column.notNull).map((column) => column.name).sort(),
+    ["created_at", "event_id", "id", "source_key", "target_key", "updated_at"],
+  );
+  const unico = juncoes.indexes.find((index) => index.config.name === "uq_evento_juncoes_aluna_event_source");
+  assert.equal(unico?.config.unique, true);
+});
+
+test("migration 0056 cria a coluna da aluna e a tabela de junções", () => {
+  const migration = readFileSync(join(__dirname, "../../drizzle/0056_eventos_aluna_convidou.sql"), "utf8");
+  assert.match(migration, /ALTER TABLE "evento_participantes" ADD COLUMN "student_name" varchar\(200\)/);
+  assert.match(migration, /CREATE TABLE "evento_juncoes_aluna"/);
+  assert.match(migration, /CREATE UNIQUE INDEX "uq_evento_juncoes_aluna_event_source"/);
+  const journal = JSON.parse(readFileSync(join(__dirname, "../../drizzle/meta/_journal.json"), "utf8"));
+  assert.equal(journal.entries.at(-1).tag, "0056_eventos_aluna_convidou");
 });

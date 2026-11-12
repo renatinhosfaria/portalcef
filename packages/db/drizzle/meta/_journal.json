@@ -393,6 +393,13 @@
       "when": 1794250000000,
       "tag": "0055_eventos_cortesias",
       "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1794500000000,
+      "tag": "0056_eventos_aluna_convidou",
+      "breakpoints": true
     }
   ]
 }

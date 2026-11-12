@@ -79,6 +79,34 @@ export interface CortesiaResumo {
   canceladaEm: Date | null;
 }
 
+export interface IngressoDaAluna {
+  numero: string;
+  participantName: string;
+  /** Nome da aluna como o comprador digitou. */
+  studentName: string;
+  buyerName: string;
+  orderNumber: string;
+  rowLabel: string;
+  seatNumber: string;
+  sessionStartsAt: Date;
+}
+
+export interface AlunaConvidados {
+  /** Nome normalizado; identifica a aluna nas ações de juntar e separar. */
+  chave: string;
+  nome: string;
+  total: number;
+  grafias: Array<{ chave: string; nome: string; total: number; juntada: boolean }>;
+  ingressos: IngressoDaAluna[];
+}
+
+export interface ConvidadosPorAluna {
+  alunas: AlunaConvidados[];
+  /** Ingressos pagos em que a aluna não foi informada. */
+  semAluna: number;
+  totalPagantes: number;
+}
+
 export interface ConflitoAssentoCortesia {
   inventorySeatId: string;
   rowLabel: string;

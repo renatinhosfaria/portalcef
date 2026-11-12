@@ -624,6 +624,8 @@ export const eventoParticipantes = pgTable(
     type: text("type", { enum: eventoParticipanteTipoEnum }).notNull(),
     fullName: varchar("full_name", { length: 200 }).notNull(),
     className: varchar("class_name", { length: 120 }),
+    // Aluna que convidou este participante, como o comprador digitou (opcional).
+    studentName: varchar("student_name", { length: 200 }),
     email: varchar("email", { length: 320 }),
     phone: varchar("phone", { length: 30 }),
     ...timestamps(),
@@ -636,6 +638,38 @@ export const eventoParticipantes = pgTable(
 );
 export type EventoParticipante = typeof eventoParticipantes.$inferSelect;
 export type NewEventoParticipante = typeof eventoParticipantes.$inferInsert;
+
+/**
+ * Junções feitas pela escola entre grafias do nome da mesma aluna. As chaves
+ * são os nomes normalizados; o texto digitado no participante nunca é alterado.
+ */
+export const eventoJuncoesAluna = pgTable(
+  "evento_juncoes_aluna",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    eventId: uuid("event_id")
+      .notNull()
+      .references(() => eventos.id, { onDelete: "cascade" }),
+    sourceKey: varchar("source_key", { length: 200 }).notNull(),
+    targetKey: varchar("target_key", { length: 200 }).notNull(),
+    createdBy: uuid("created_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    ...timestamps(),
+  },
+  (table) => ({
+    eventSourceUnique: uniqueIndex("uq_evento_juncoes_aluna_event_source").on(
+      table.eventId,
+      table.sourceKey,
+    ),
+    differentKeys: check(
+      "evento_juncoes_aluna_different_keys",
+      sql`${table.sourceKey} <> ${table.targetKey}`,
+    ),
+  }),
+);
+export type EventoJuncaoAluna = typeof eventoJuncoesAluna.$inferSelect;
+export type NewEventoJuncaoAluna = typeof eventoJuncoesAluna.$inferInsert;
 
 export const eventoReservas = pgTable(
   "evento_reservas",

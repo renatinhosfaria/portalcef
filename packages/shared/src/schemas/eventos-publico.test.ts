@@ -38,4 +38,19 @@ describe("schemas públicos de eventos", () => {
       idempotencyKey: "final-123456",
     }).success).toBe(false);
   });
+
+  it("aceita a aluna que convidou como texto opcional por participante", () => {
+    const base = {
+      buyer: { name: "Ana Maria", email: "ana@example.com", phone: "11999999999" },
+      acceptances: ["PRIVACIDADE", "COMPRA", "CANCELAMENTO_REEMBOLSO", "ACESSIBILIDADE", "CONTATO"].map((type) => ({ type, version: 1 })),
+      idempotencyKey: "final-123456",
+    };
+    const participante = (studentName?: unknown) => ({ participantIndex: 0, fullName: "Ana", type: "CONVIDADO", ...(studentName === undefined ? {} : { studentName }) });
+
+    const preenchido = finalizarPedidoSchema.parse({ ...base, participants: [participante("  Beatriz Santos ")] });
+    expect(preenchido.participants[0]?.studentName).toBe("Beatriz Santos");
+    expect(finalizarPedidoSchema.parse({ ...base, participants: [participante()] }).participants[0]?.studentName).toBeUndefined();
+    expect(finalizarPedidoSchema.parse({ ...base, participants: [participante("   ")] }).participants[0]?.studentName).toBeUndefined();
+    expect(finalizarPedidoSchema.safeParse({ ...base, participants: [participante("a".repeat(201))] }).success).toBe(false);
+  });
 });

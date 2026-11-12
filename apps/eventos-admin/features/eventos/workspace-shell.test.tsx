@@ -31,6 +31,8 @@ describe("WorkspaceShell de eventos", () => {
     expect(html).toContain("Políticas");
     expect(html).toContain("Cortesias");
     expect(html).toContain('href="/eventos/evt-1/cortesias"');
+    expect(html).toContain("Alunas convidadas");
+    expect(html).toContain('href="/eventos/evt-1/alunas"');
     expect(html).toContain("Revisar e publicar");
     expect(html).toContain("Salvo agora");
     expect(html).toContain("Adicione uma sessão");
@@ -84,7 +86,7 @@ describe("navegação e readiness do workspace", () => {
 
   it("mantém destinos mínimos para todas as etapas navegáveis", () => {
     const base = fileURLToPath(new URL("../../app/eventos/[id]", import.meta.url));
-    for (const etapa of ["informacoes", "ingressos", "politicas", "revisar"]) {
+    for (const etapa of ["informacoes", "ingressos", "politicas", "alunas", "revisar"]) {
       expect(existsSync(`${base}/${etapa}/page.tsx`)).toBe(true);
     }
   });
@@ -97,11 +99,13 @@ describe("itens do mapa e cortesias na navegação", () => {
   const rotulos = (html: string) => Array.from(html.matchAll(/<li>(.*?)<\/li>/g)).map((m) => m[1]);
   const textos = (li: string) => li.replace(/<[^>]+>/g, "|").split("|").filter(Boolean);
 
-  it("mostra Cortesias logo depois de Inventário, sem rótulo de estado", () => {
+  it("mostra Cortesias e Alunas convidadas logo depois de Inventário, sem rótulo de estado", () => {
     const itens = rotulos(renderizar(readiness.items));
     const nomes = itens.map((li) => textos(li)[0]);
     expect(nomes.indexOf("Cortesias")).toBe(nomes.indexOf("Inventário") + 1);
     expect(textos(itens[nomes.indexOf("Cortesias")])).toEqual(["Cortesias"]);
+    expect(nomes.indexOf("Alunas convidadas")).toBe(nomes.indexOf("Cortesias") + 1);
+    expect(textos(itens[nomes.indexOf("Alunas convidadas")])).toEqual(["Alunas convidadas"]);
   });
 
   it("Inventário também não mostra rótulo de estado do mapa", () => {
