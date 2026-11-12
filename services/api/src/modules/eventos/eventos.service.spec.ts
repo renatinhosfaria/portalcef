@@ -2,7 +2,7 @@ import { ConflictException, BadRequestException } from '@nestjs/common';
 import 'reflect-metadata';
 import { EventosService } from './eventos.service';
 import { MapasService } from './mapas/mapas.service';
-import { eventoSessoes, eventoTiposIngresso } from '@essencia/db';
+import { eventoPedidos, eventoSessoes, eventoTiposIngresso, eventos } from '@essencia/db';
 import { avaliarPredicado } from './avaliar-predicado.spec-helper';
 
 const actor = { userId: 'u1', role: 'diretora_geral', schoolId: 's1' };
@@ -592,7 +592,59 @@ describe('EventosService contratos de workspace', () => {
     });
   });
 
+  describe('cortesias não travam a edição do evento e da sessão', () => {
+    const cortesiaAtiva = { id: 'p-cortesia-1', eventId: 'e1', sessionId: 's1', origin: 'CORTESIA', status: 'CONFIRMADO' };
+    const cortesiaCancelada = { id: 'p-cortesia-2', eventId: 'e1', sessionId: 's1', origin: 'CORTESIA', status: 'CANCELADO' };
+    const venda = { id: 'p-venda', eventId: 'e1', sessionId: 's1', origin: 'VENDA', status: 'CONFIRMADO' };
+
+    it('atualizarEvento edita evento que só tem cortesias (ativa e cancelada)', async () => {
+      const db = pedidosDb({ event: event(), pedidos: [cortesiaAtiva, cortesiaCancelada] });
+      await expect(service(db).atualizarEvento('e1', { title: 'Novo Título' }, actor)).resolves.toMatchObject({ id: 'e1' });
+      expect(db.updated).toBe(true);
+    });
+
+    it('atualizarEvento continua bloqueado quando há pedido de venda', async () => {
+      const db = pedidosDb({ event: event(), pedidos: [cortesiaAtiva, venda] });
+      await expect(service(db).atualizarEvento('e1', { title: 'Novo Título' }, actor)).rejects.toMatchObject({ response: { code: 'EVENT_HAS_SALES' } });
+      expect(db.updated).toBe(false);
+    });
+
+    it('atualizarSessao edita sessão que só tem cortesias (ativa e cancelada)', async () => {
+      const db = pedidosDb({ event: event(), pedidos: [cortesiaAtiva, cortesiaCancelada] });
+      await expect(service(db).atualizarSessao('e1', 's1', { capacity: 12 }, actor)).resolves.toMatchObject({ id: 's1' });
+      expect(db.updated).toBe(true);
+    });
+
+    it('atualizarSessao continua bloqueado quando há pedido de venda', async () => {
+      const db = pedidosDb({ event: event(), pedidos: [cortesiaCancelada, venda] });
+      await expect(service(db).atualizarSessao('e1', 's1', { capacity: 12 }, actor)).rejects.toMatchObject({ response: { code: 'EVENT_HAS_SALES' } });
+      expect(db.updated).toBe(false);
+    });
+  });
+
 });
+
+/** Banco que filtra `eventoPedidos` pelos predicados da consulta, para provar o critério de bloqueio. */
+function pedidosDb(config: { event: any; pedidos: any[] }) {
+  const db: any = { updated: false };
+  const resposta = (linhas: any[]) => Object.assign(Promise.resolve(linhas), { limit: async (n: number) => linhas.slice(0, n), for: () => resposta(linhas) });
+  db.select = () => {
+    let tabela: unknown;
+    const builder: any = {};
+    builder.from = (alvo: unknown) => { tabela = alvo; return builder; };
+    builder.where = (predicado: any) => {
+      if (tabela === eventoPedidos) return resposta(config.pedidos.filter((pedido) => avaliarPredicado(predicado, pedido)));
+      if (tabela === eventoSessoes) return resposta([{ id: 's1', eventId: 'e1', mapId: null }]);
+      if (tabela === eventos) return resposta([config.event]);
+      return resposta([]);
+    };
+    return builder;
+  };
+  db.update = (tabela: unknown) => ({ set: (valores: any) => ({ where: () => ({ returning: async () => { db.updated = true; return tabela === eventoSessoes ? [{ id: 's1', eventId: 'e1', ...valores }] : [{ ...config.event, ...valores }]; } }) }) });
+  db.insert = () => ({ values: () => Object.assign(Promise.resolve(undefined), { returning: async () => [] }) });
+  db.transaction = async (callback: (tx: any) => Promise<unknown>) => callback(db);
+  return db;
+}
 
 function service(db: any, storage?: any, mapas?: any) { return new EventosService({ db } as any, { validarPublicacao: jest.fn() } as any, storage, mapas); }
 

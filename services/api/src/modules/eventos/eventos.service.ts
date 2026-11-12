@@ -102,7 +102,8 @@ export class EventosService {
       const [slugOwner] = await this.db.select({ id: eventos.id }).from(eventos).where(and(eq(eventos.schoolId, existing.schoolId), eq(eventos.slug, normalizedSlug), ne(eventos.id, id))).limit(1);
       if (slugOwner) throw new ConflictException({ code: "SLUG_ALREADY_EXISTS", message: "Este slug já está em uso nesta escola" });
     }
-    const [sales] = await this.db.select({ id: eventoPedidos.id }).from(eventoPedidos).where(eq(eventoPedidos.eventId, id)).limit(1);
+    // Só venda trava a edição: cortesias (ativas ou canceladas) não bloqueiam.
+    const [sales] = await this.db.select({ id: eventoPedidos.id }).from(eventoPedidos).where(and(eq(eventoPedidos.eventId, id), eq(eventoPedidos.origin, "VENDA"))).limit(1);
     if (sales) throw new BadRequestException({ code: "EVENT_HAS_SALES", message: "O evento possui vendas; crie uma nova versão antes de alterar sua configuração" });
     const titleSuggestion = input.title ? this.normalizeSlug(input.title) : undefined;
     const manualSlug = existing.slug !== this.normalizeSlug(existing.title);
@@ -196,7 +197,8 @@ export class EventosService {
     const [session] = await (typeof sessionQuery.for === "function" ? sessionQuery.for("update") : sessionQuery);
     if (!session) throw new NotFoundException({ code: "SESSION_NOT_FOUND", message: "Sessão não encontrada" });
     await this.validarReferenciasSessao(eventId, event, input, db);
-    const [sale] = await db.select({ id: eventoPedidos.id }).from(eventoPedidos).where(eq(eventoPedidos.sessionId, sessionId)).limit(1);
+    // Só venda trava a edição: cortesias (ativas ou canceladas) não bloqueiam.
+    const [sale] = await db.select({ id: eventoPedidos.id }).from(eventoPedidos).where(and(eq(eventoPedidos.sessionId, sessionId), eq(eventoPedidos.origin, "VENDA"))).limit(1);
     if (sale) throw new BadRequestException({ code: "EVENT_HAS_SALES", message: "A sessão possui vendas e não pode ser alterada" });
     if (input.status === "PUBLICADA") throw new BadRequestException({ code: "SESSION_PUBLICATION_REQUIRES_INVENTORY", message: "Publique a sessão pelo fluxo de publicação após inicializar o inventário" });
     const [updated] = await db.update(eventoSessoes).set({ ...input, updatedAt: new Date() }).where(eq(eventoSessoes.id, sessionId)).returning();
