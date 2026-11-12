@@ -13,7 +13,9 @@ import { GeradorMapaPdf } from "./mapas/gerador/gerador-mapa-pdf";
 import { EventosPublicSalesService } from "./eventos-public-sales.service";
 import { EventosPagamentosService } from "./eventos-pagamentos.service";
 import { EventosOfertasService } from "./eventos-ofertas.service";
+import { EventosCortesiasController } from "./eventos-cortesias.controller";
+import { EventosCortesiasService } from "./eventos-cortesias.service";
 import { EventosExpirationJob } from "./jobs/eventos-expiration.job";
 import { PaymentsModule } from "../payments/payments.module";
-@Module({ imports: [AuthModule, DatabaseModule, StorageModule.forRoot(), forwardRef(() => PaymentsModule)], controllers: [EventosAdminController, EventosPublicController, MapasController], providers: [EventosRulesService, EventosService, EventosReadinessService, EventosPublicSalesService, EventosPagamentosService, EventosOfertasService, EventosExpirationJob, MapasService, GeradorMapaPdf], exports: [EventosRulesService, EventosService, EventosPublicSalesService, EventosPagamentosService, EventosOfertasService, MapasService] })
+@Module({ imports: [AuthModule, DatabaseModule, StorageModule.forRoot(), forwardRef(() => PaymentsModule)], controllers: [EventosAdminController, EventosPublicController, MapasController, EventosCortesiasController], providers: [EventosRulesService, EventosService, EventosReadinessService, EventosPublicSalesService, EventosPagamentosService, EventosOfertasService, EventosCortesiasService, EventosExpirationJob, MapasService, GeradorMapaPdf], exports: [EventosRulesService, EventosService, EventosPublicSalesService, EventosPagamentosService, EventosOfertasService, MapasService] })
 export class EventosModule {}

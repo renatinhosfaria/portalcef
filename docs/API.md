@@ -921,6 +921,66 @@ Body:
 
 ---
 
+### Eventos (admin) - Cortesias
+
+Prefixo `/eventos/admin/:id` (`:id` e o evento). Todas as rotas exigem `AuthGuard -> RolesGuard`, com correspondencia exata de papel.
+
+**Roles:** `master`, `diretora_geral`, `gerente_unidade`, `auxiliar_administrativo`.
+
+A escola vem sempre da sessao. Evento de outra escola responde `400` com `code: "FORBIDDEN"` (comportamento do módulo de eventos). As respostas sao devolvidas diretamente, sem envelope `{ success, data }`. Payload invalido responde `400` com `{ code: "VALIDATION_ERROR", message: "Dados invalidos", details }`, onde `details` e o resultado de `flatten()` do Zod.
+
+#### GET `/eventos/admin/:id/cortesias`
+
+Lista as cortesias do evento, da mais recente para a mais antiga. Cada item traz `orderId`, `orderNumber`, sessao (`id`, `startsAt`), `rowLabel`, `seatNumber`, `participantName`, `grupo`, `motivo`, `numero` do ingresso, `situacao` (`ATIVA`, `USADA` ou `CANCELADA`), `emitidaPor`, `emitidaEm` e `canceladaEm`.
+
+Erros: `EVENT_NOT_FOUND` (404), `FORBIDDEN` (400).
+
+#### GET `/eventos/admin/:id/sessoes/:sessionId/mapa-admin`
+
+Mapa da sessao com o estado de cada assento, sem exigir evento publicado. Exige mapa `CONFIRMADO`.
+
+Erros: `EVENT_NOT_FOUND` (404), `SESSION_NOT_FOUND` (404), `MAP_NOT_CONFIRMED` (409), `FORBIDDEN` (400).
+
+#### POST `/eventos/admin/:id/cortesias`
+
+Emite um lote de cortesias em uma unica transacao.
+
+Corpo:
+
+```json
+{
+  "sessionId": "uuid",
+  "chave": "chave-de-idempotencia (8 a 100 caracteres)",
+  "grupo": "Professores",
+  "motivo": "Convidados da direcao",
+  "contatoEmail": "opcional@exemplo.com",
+  "contatoTelefone": "opcional",
+  "assentos": [{ "inventorySeatId": "uuid", "nome": "opcional" }]
+}
+```
+
+`grupo`: 2 a 200 caracteres. `motivo`: 3 a 500. `assentos`: de 1 a 50, sem repeticao. Campos desconhecidos sao recusados. Repetir a mesma `chave` nao duplica e devolve o resultado da emissao anterior.
+
+Resposta: lista das cortesias emitidas, no mesmo formato da listagem.
+
+Erros: `VALIDATION_ERROR` (400), `EVENT_NOT_FOUND` (404), `SESSION_NOT_FOUND` (404), `MAP_NOT_CONFIRMED` (409), `EVENTO_CANCELADO` (409), `ASSENTOS_INDISPONIVEIS` (409, traz a lista `{ inventorySeatId, rowLabel, seatNumber, motivo }`), `EVENTOS_QR_SECRET_MISSING` (500), `FORBIDDEN` (400).
+
+#### GET `/eventos/admin/:id/cortesias/:orderId/voucher`
+
+Dados do voucher da cortesia no formato `PedidoComIngressos`.
+
+Erros: `CORTESIA_NOT_FOUND` (404), `EVENT_NOT_FOUND` (404), `FORBIDDEN` (400).
+
+#### POST `/eventos/admin/:id/cortesias/:orderId/cancelar`
+
+Cancela uma cortesia e libera o assento. Se ja estiver cancelada, responde sucesso sem alterar nada.
+
+Corpo: `{ "motivo": "3 a 500 caracteres" }`. Campos desconhecidos sao recusados.
+
+Resposta: a cortesia cancelada, no formato da listagem.
+
+Erros: `VALIDATION_ERROR` (400), `CORTESIA_NOT_FOUND` (404), `CORTESIA_JA_UTILIZADA` (409), `EVENT_NOT_FOUND` (404), `FORBIDDEN` (400).
+
 ### Payments
 
 #### POST `/payments/webhook`
