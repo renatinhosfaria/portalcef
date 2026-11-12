@@ -1153,12 +1153,18 @@ importers:
       framer-motion:
         specifier: ^12.23.26
         version: 12.23.26(react-dom@19.0.4(react@19.0.4))(react@19.0.4)
+      jspdf:
+        specifier: ^3.0.1
+        version: 3.0.4
       lucide-react:
         specifier: ^0.469.0
         version: 0.469.0(react@19.0.4)
       next:
         specifier: ^15.5.25
         version: 15.5.25(@babel/core@7.28.5)(@playwright/test@1.57.0)(@types/node@22.19.3)(react-dom@19.0.4(react@19.0.4))(react@19.0.4)
+      qrcode:
+        specifier: ^1.5.4
+        version: 1.5.4
       react-hook-form:
         specifier: ^7.69.0
         version: 7.69.0(react@19.0.4)
@@ -1178,6 +1184,9 @@ importers:
       '@types/d3-zoom':
         specifier: ^3.0.8
         version: 3.0.9
+      '@types/qrcode':
+        specifier: ^1.5.5
+        version: 1.5.6
       '@types/react':
         specifier: ^19.0.2
         version: 19.2.7

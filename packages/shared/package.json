@@ -88,6 +88,12 @@
       "import": "./src/eventos/ingresso.ts",
       "require": "./dist/eventos/ingresso.js",
       "default": "./dist/eventos/ingresso.js"
+    },
+    "./eventos/datas": {
+      "types": "./dist/eventos/datas.d.ts",
+      "import": "./src/eventos/datas.ts",
+      "require": "./dist/eventos/datas.js",
+      "default": "./dist/eventos/datas.js"
     }
   },
   "scripts": {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { PublicMap } from "@essencia/shared/types";
-import { dimensoesDoMapa, elementosDoMapa, paraLugaresPublicos, rotulosDoMapa } from "../mapa/adaptar-mapa";
+import { dimensoesDoMapa, elementosDoMapa, paraLugaresPublicos, rotulosDoMapa } from "./adaptar-mapa";
 
 const mapaBase: PublicMap = {
   sessionId: "sessao",

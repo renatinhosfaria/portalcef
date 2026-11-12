@@ -2,7 +2,7 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { PedidoComIngressos } from "@essencia/shared/types";
-import { compartilharOuBaixar, gerarPdfIngressos, nomeArquivoIngresso } from "../pdf-ingresso";
+import { compartilharOuBaixar, gerarPdfIngressos, nomeArquivoIngresso } from "./pdf-ingresso";
 
 const pedido: PedidoComIngressos = {
   orderNumber: "G21",

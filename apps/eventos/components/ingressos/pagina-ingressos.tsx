@@ -4,7 +4,7 @@ import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type { PedidoComIngressos } from "@essencia/shared/types";
 import { EventosApiError, obterIngressos } from "../../lib/eventos-api";
-import { gerarPdfIngressos, nomeArquivoIngresso } from "../../lib/pdf-ingresso";
+import { carregarArtePublica, gerarPdfIngressos, nomeArquivoIngresso } from "../../lib/pdf-ingresso";
 import { MeusIngressos } from "./meus-ingressos";
 import { CartaoIngresso } from "./cartao-ingresso";
 import { classeBotaoAcao } from "../base/botao-acao";
@@ -54,7 +54,7 @@ export function PaginaIngressos({ inicial, orderNumber, acesso }: { inicial: Ped
   async function baixarTodos() {
     setBaixando(true);
     try {
-      const blob = await gerarPdfIngressos(pedidoConfirmado, pedidoConfirmado.tickets);
+      const blob = await gerarPdfIngressos(pedidoConfirmado, pedidoConfirmado.tickets, { carregarArte: carregarArtePublica });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a"); link.href = url; link.download = nomeArquivoIngresso(pedidoConfirmado); link.click(); URL.revokeObjectURL(url);
     } finally { setBaixando(false); }

@@ -15,7 +15,9 @@
     "./shell/module-config": "./src/shell/module-config.ts",
     "./tarefas": "./src/tarefas/index.ts",
     "./suporte": "./src/suporte/index.ts",
-    "./eventos/mapa-estilo-b": "./src/eventos/mapa-estilo-b.tsx"
+    "./eventos/mapa-estilo-b": "./src/eventos/mapa-estilo-b.tsx",
+    "./eventos/pdf-ingresso": "./src/eventos/pdf-ingresso.ts",
+    "./eventos/adaptar-mapa": "./src/eventos/adaptar-mapa.ts"
   },
   "scripts": {
     "lint": "eslint src/",
@@ -33,6 +35,8 @@
     "@hookform/resolvers": "^5.2.2",
     "date-fns": "^3.0.0",
     "framer-motion": "^12.23.26",
+    "jspdf": "^3.0.1",
+    "qrcode": "^1.5.4",
     "lucide-react": "^0.469.0",
     "next": "^15.5.25",
     "react-hook-form": "^7.69.0",
@@ -51,6 +55,7 @@
     "vitest": "^4.0.16",
     "jsdom": "^27.3.0",
     "@types/d3-zoom": "^3.0.8",
-    "@types/d3-selection": "^3.0.11"
+    "@types/d3-selection": "^3.0.11",
+    "@types/qrcode": "^1.5.5"
   }
 }
