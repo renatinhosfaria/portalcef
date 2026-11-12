@@ -58,7 +58,7 @@ export function paraLugaresPublicos(map: PublicMap, indisponiveis: ReadonlySet<s
       rotacao: seat.rotacao ?? 0,
       categoria,
       acessoExterno: false,
-      estado: "livre",
+      estado: livre ? "livre" : "bloqueado",
       livre,
       acessivel: seat.accessible || categoria === "CADEIRANTE" || categoria === "OPCIONAL_CADEIRANTE" || categoria === "OBESO",
       rotuloCurto: rotuloCurto(seat),
