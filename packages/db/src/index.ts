@@ -16,6 +16,7 @@ export {
   lte,
   ne,
   not,
+  notInArray,
   or,
   sql,
 } from "drizzle-orm";
