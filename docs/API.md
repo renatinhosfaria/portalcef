@@ -923,27 +923,27 @@ Body:
 
 ### Eventos (admin) - Cortesias
 
-Prefixo `/eventos/admin/:id` (`:id` e o evento). Todas as rotas exigem `AuthGuard -> RolesGuard`, com correspondencia exata de papel.
+Prefixo `/eventos/admin/:id` (`:id` é o evento). Todas as rotas exigem `AuthGuard -> RolesGuard`, com correspondência exata de papel.
 
 **Roles:** `master`, `diretora_geral`, `gerente_unidade`, `auxiliar_administrativo`.
 
-A escola vem sempre da sessao. Evento de outra escola responde `400` com `code: "FORBIDDEN"` (comportamento do módulo de eventos). As respostas sao devolvidas diretamente, sem envelope `{ success, data }`. Payload invalido responde `400` com `{ code: "VALIDATION_ERROR", message: "Dados invalidos", details }`, onde `details` e o resultado de `flatten()` do Zod.
+A escola vem sempre da sessão. Evento de outra escola responde `400` com `code: "FORBIDDEN"` (comportamento do módulo de eventos). As respostas são devolvidas diretamente, sem envelope `{ success, data }`. Payload inválido responde `400` com `{ code: "VALIDATION_ERROR", message: "Dados inválidos", details }`, onde `details` é o resultado de `flatten()` do Zod.
 
 #### GET `/eventos/admin/:id/cortesias`
 
-Lista as cortesias do evento, da mais recente para a mais antiga. Cada item traz `orderId`, `orderNumber`, sessao (`id`, `startsAt`), `rowLabel`, `seatNumber`, `participantName`, `grupo`, `motivo`, `numero` do ingresso, `situacao` (`ATIVA`, `USADA` ou `CANCELADA`), `emitidaPor`, `emitidaEm` e `canceladaEm`.
+Lista as cortesias do evento, da mais recente para a mais antiga. Cada item traz `orderId`, `orderNumber`, sessão (`id`, `startsAt`), `rowLabel`, `seatNumber`, `participantName`, `grupo`, `motivo`, `numero` do ingresso, `situacao` (`ATIVA`, `USADA` ou `CANCELADA`), `emitidaPor`, `emitidaEm` e `canceladaEm`.
 
 Erros: `EVENT_NOT_FOUND` (404), `FORBIDDEN` (400).
 
 #### GET `/eventos/admin/:id/sessoes/:sessionId/mapa-admin`
 
-Mapa da sessao com o estado de cada assento, sem exigir evento publicado. Exige mapa `CONFIRMADO`.
+Mapa da sessão com o estado de cada assento, sem exigir evento publicado. Exige mapa `CONFIRMADO`.
 
 Erros: `EVENT_NOT_FOUND` (404), `SESSION_NOT_FOUND` (404), `MAP_NOT_CONFIRMED` (409), `FORBIDDEN` (400).
 
 #### POST `/eventos/admin/:id/cortesias`
 
-Emite um lote de cortesias em uma unica transacao.
+Emite um lote de cortesias em uma única transação.
 
 Corpo:
 
@@ -952,14 +952,14 @@ Corpo:
   "sessionId": "uuid",
   "chave": "chave-de-idempotencia (8 a 100 caracteres)",
   "grupo": "Professores",
-  "motivo": "Convidados da direcao",
+  "motivo": "Convidados da direção",
   "contatoEmail": "opcional@exemplo.com",
   "contatoTelefone": "opcional",
   "assentos": [{ "inventorySeatId": "uuid", "nome": "opcional" }]
 }
 ```
 
-`grupo`: 2 a 200 caracteres. `motivo`: 3 a 500. `assentos`: de 1 a 50, sem repeticao. Campos desconhecidos sao recusados. Repetir a mesma `chave` nao duplica e devolve o resultado da emissao anterior.
+`grupo`: 2 a 200 caracteres. `motivo`: 3 a 500. `assentos`: de 1 a 50, sem repetição. Campos desconhecidos são recusados. Repetir a mesma `chave` não duplica e devolve o resultado da emissão anterior.
 
 Resposta: lista das cortesias emitidas, no mesmo formato da listagem.
 
@@ -973,9 +973,9 @@ Erros: `CORTESIA_NOT_FOUND` (404), `EVENT_NOT_FOUND` (404), `FORBIDDEN` (400).
 
 #### POST `/eventos/admin/:id/cortesias/:orderId/cancelar`
 
-Cancela uma cortesia e libera o assento. Se ja estiver cancelada, responde sucesso sem alterar nada.
+Cancela uma cortesia e libera o assento. Se já estiver cancelada, responde sucesso sem alterar nada.
 
-Corpo: `{ "motivo": "3 a 500 caracteres" }`. Campos desconhecidos sao recusados.
+Corpo: `{ "motivo": "3 a 500 caracteres" }`. Campos desconhecidos são recusados.
 
 Resposta: a cortesia cancelada, no formato da listagem.
 
