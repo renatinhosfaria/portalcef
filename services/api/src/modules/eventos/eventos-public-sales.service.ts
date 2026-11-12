@@ -7,6 +7,7 @@ import { DatabaseService } from "../../common/database/database.service";
 import { PaymentsService } from "../payments/payments.service";
 import { montarIngressosDoPedido } from "./montar-pedido-ingressos";
 import { gerarTokenAcesso, hashTokenAcesso, validadeAcesso } from "./acesso-pedido";
+import { violacaoDeUnico } from "../../common/database/violacao-unico";
 
 const fail = (code: string, message: string) => new BadRequestException({ code, message });
 const validated = <T>(schema: { safeParse(value: unknown): { success: boolean; data?: T } }, value: unknown): T => { const result = schema.safeParse(value); if (!result.success) throw fail("VALIDATION_ERROR", "Dados inválidos"); return result.data as T; };
@@ -205,7 +206,7 @@ export class EventosPublicSalesService {
     };
 
     return (this.db as any).transaction ? this.db.transaction(executar).catch(async (error: any) => {
-      if (error?.code === "23505" || error?.constraint?.includes("idempotency")) {
+      if (violacaoDeUnico(error) !== null) {
         const existing = await this.first<any>(this.db.select().from(eventoPedidos).where(eq(eventoPedidos.idempotencyKey, input.idempotencyKey)));
         if (existing) {
           if (!(await this.reservaIdempotenteCompativel(this.db, existing, input))) {
@@ -280,7 +281,7 @@ export class EventosPublicSalesService {
       await tx.update(eventoPedidos).set({ buyerName: buyer.name, buyerEmail: buyer.email, buyerPhone: buyer.phone, status: "RESERVADO", finalizationIdempotencyKey: input.idempotencyKey, updatedAt: new Date() }).where(eq(eventoPedidos.id, order.id));
       const finalizado = { ...order, ...buyer, buyerName: buyer.name, buyerEmail: buyer.email, buyerPhone: buyer.phone, status: "RESERVADO", finalizationIdempotencyKey: input.idempotencyKey };
       return this.finalizacaoResult(finalizado, tx);
-    }).catch(async (error: any) => { if (error?.code === "23505" || error?.constraint?.includes("finalization")) { const existing = await this.first<any>(this.db.select().from(eventoPedidos).where(eq(eventoPedidos.finalizationIdempotencyKey, input.idempotencyKey))); const ownOrder = await this.getOrder(orderNumber, this.db); if (existing?.id === ownOrder.id) return this.finalizacaoResult(ownOrder, this.db); throw new ConflictException({ code: "IDEMPOTENCY_CONFLICT", message: "Chave de idempotência já utilizada" }); } throw error; }));
+    }).catch(async (error: any) => { if (violacaoDeUnico(error) !== null) { const existing = await this.first<any>(this.db.select().from(eventoPedidos).where(eq(eventoPedidos.finalizationIdempotencyKey, input.idempotencyKey))); const ownOrder = await this.getOrder(orderNumber, this.db); if (existing?.id === ownOrder.id) return this.finalizacaoResult(ownOrder, this.db); throw new ConflictException({ code: "IDEMPOTENCY_CONFLICT", message: "Chave de idempotência já utilizada" }); } throw error; }));
   }
 
   private async finalizacaoResult(order: any, db: any): Promise<FinalizacaoPublicaResult> {

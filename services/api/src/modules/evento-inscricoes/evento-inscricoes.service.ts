@@ -30,6 +30,7 @@ import type {
   ListarInscricoesDto,
 } from "./dto/evento-inscricoes.dto";
 import { obterEventoConfig, type EventoConfig } from "./evento-config";
+import { violacaoDeUnico } from "../../common/database/violacao-unico";
 
 export interface InscricaoComFilhos {
   id: string;
@@ -278,22 +279,15 @@ export class EventoInscricoesService {
         filhosInseridos = resultado.filhosInseridos;
         break;
       } catch (err) {
-        const code = (err as { code?: string })?.code;
-        const constraint = (err as { constraint?: string })?.constraint;
-        if (
-          code === "23505" &&
-          constraint === "uq_evento_inscricoes_evento_numero"
-        ) {
+        const constraint = violacaoDeUnico(err);
+        if (constraint === "uq_evento_inscricoes_evento_numero") {
           ultimoErro = err;
           this.logger.warn(
             `Colisão de número de inscrição (tentativa ${tentativa}); gerando outro.`,
           );
           continue;
         }
-        if (
-          code === "23505" &&
-          constraint === "uq_evento_inscricoes_evento_cpf"
-        ) {
+        if (constraint === "uq_evento_inscricoes_evento_cpf") {
           throw new ConflictException(
             "Já existe uma inscrição para este CPF neste evento.",
           );
@@ -632,19 +626,14 @@ export class EventoInscricoesService {
           return this.montarSorteioEvento(sorteio, ganhadora);
         });
       } catch (err) {
-        const code = (err as { code?: string })?.code;
-        const constraint = (err as { constraint?: string })?.constraint;
+        const constraint = violacaoDeUnico(err);
         if (
-          code === "23505" &&
           constraint === "uq_evento_sorteios_evento_inscricao" &&
           tentativa < 3
         ) {
           continue;
         }
-        if (
-          code === "23505" &&
-          constraint === "uq_evento_sorteios_evento_brinde"
-        ) {
+        if (constraint === "uq_evento_sorteios_evento_brinde") {
           throw new ConflictException("Este brinde já foi sorteado.");
         }
         throw err;
