@@ -320,13 +320,25 @@ describe("EventosCortesiasService.cancelar", () => {
     expect(db.state.auditorias.at(-1)).toMatchObject({ action: "CORTESIA_CANCELADA", resourceType: "cortesia", resourceId: c!.orderId, sessionId: "session-1", actorId: "user-1", actorRole: "gerente_unidade", reason: "Convidado desistiu", metadata: { orderNumber: c!.orderNumber } });
   });
 
-  it("trava o pedido, depois o inventário, depois o ingresso", async () => {
+  it("trava evento e sessão (NO KEY UPDATE), depois pedido, inventário e ingresso", async () => {
     const [c] = await service.emitir("event-1", lote(["inv-1"]), ator);
     db.lockSequence = [];
 
     await service.cancelar("event-1", c!.orderId, { motivo: "Convidado desistiu" }, ator);
 
-    expect(db.lockSequence).toEqual([`update:${c!.orderId}`, "update:inv-1", `update:${db.state.ingressos[0]!.id}`]);
+    expect(db.lockSequence).toEqual(["no key update:event-1", "no key update:session-1", `update:${c!.orderId}`, "update:inv-1", `update:${db.state.ingressos[0]!.id}`]);
+  });
+
+  it("pedido inexistente ou de outro evento não trava sessão nem pedido", async () => {
+    const [c] = await service.emitir("event-1", lote(["inv-1"]), ator);
+    db.state.eventos.push({ id: "event-2", schoolId: "escola-1", status: "RASCUNHO" });
+    db.lockSequence = [];
+
+    await expect(service.cancelar("event-2", c!.orderId, { motivo: "Convidado desistiu" }, ator)).rejects.toMatchObject({ status: 404, response: { code: "CORTESIA_NOT_FOUND" } });
+    await expect(service.cancelar("event-1", "pedido-inexistente", { motivo: "Convidado desistiu" }, ator)).rejects.toMatchObject({ status: 404, response: { code: "CORTESIA_NOT_FOUND" } });
+
+    expect(db.lockSequence).toEqual(["no key update:event-2", "no key update:event-1"]);
+    expect(db.state.pedidos[0]!.status).toBe("CONFIRMADO");
   });
 
   it("o assento cancelado pode receber nova cortesia", async () => {

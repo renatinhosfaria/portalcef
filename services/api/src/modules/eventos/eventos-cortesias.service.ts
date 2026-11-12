@@ -111,12 +111,25 @@ export class EventosCortesiasService {
   }
 
   async cancelar(eventId: string, orderId: string, input: CancelarCortesiaInput, actor: EventoActor): Promise<CortesiaResumo> {
-    await this.carregarEvento(eventId, actor);
     return this.db.transaction(async (tx: any) => {
-      // Pedido → inventário → ingresso: a mesma ordem pedido → inventário da
-      // confirmação de pagamento. Evento e sessão não são travados aqui.
+      // Ordem: evento e sessão (NO KEY UPDATE), pedido, inventário, ingresso.
+      // Evento e sessão vêm primeiro, como na emissão e na reserva pública: a
+      // auditoria gravada no fim pede FOR KEY SHARE neles (FK), e a reserva
+      // trava evento e sessão antes do inventário. Sem travá-los aqui, o
+      // cancelamento seguraria o inventário esperando o evento enquanto a
+      // reserva seguraria o evento esperando o inventário (deadlock).
+      // NO KEY UPDATE não conflita com o FOR KEY SHARE da confirmação de
+      // pagamento, que trava pedido → inventário, na mesma ordem daqui.
+      const event = await this.first<any>(tx.select().from(eventos).where(eq(eventos.id, eventId)).for("no key update"));
+      if (!event) throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Evento não encontrado" });
+      assertSchoolScope(actor, event.schoolId);
+      const ehCortesiaDoEvento = (linha: any) => Boolean(linha) && linha.eventId === eventId && linha.origin === "CORTESIA";
+      // Leitura sem trava só para descobrir a sessão; o pedido é relido com trava depois.
+      const previa = await this.first<any>(tx.select().from(eventoPedidos).where(eq(eventoPedidos.id, orderId)));
+      if (!ehCortesiaDoEvento(previa)) throw cortesiaNaoEncontrada();
+      await tx.select().from(eventoSessoes).where(eq(eventoSessoes.id, previa.sessionId)).for("no key update");
       const pedido = await this.first<any>(tx.select().from(eventoPedidos).where(eq(eventoPedidos.id, orderId)).for("update"));
-      if (!pedido || pedido.eventId !== eventId || pedido.origin !== "CORTESIA") throw cortesiaNaoEncontrada();
+      if (!ehCortesiaDoEvento(pedido)) throw cortesiaNaoEncontrada();
       const porPedido = eq(eventoPedidos.id, orderId);
       if (pedido.status === "CANCELADO") return (await this.consultarResumos(tx, porPedido))[0]!;
 
