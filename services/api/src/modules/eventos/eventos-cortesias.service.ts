@@ -9,6 +9,7 @@ import {
   eventoIngressos,
   eventoInventarioAssentos,
   eventoItensPedido,
+  eventoLocais,
   eventoMapaAssentos,
   eventoMapas,
   eventoOperacoesAdministrativas,
@@ -24,10 +25,12 @@ import {
   type Database,
 } from "@essencia/db";
 import { gerarNumeroIngresso } from "@essencia/shared/eventos/ingresso";
-import type { EmitirCortesiasInput } from "@essencia/shared/schemas";
-import type { ConflitoAssentoCortesia, CortesiaResumo, EventoActor } from "@essencia/shared/types";
+import type { CancelarCortesiaInput, EmitirCortesiasInput } from "@essencia/shared/schemas";
+import type { ConflitoAssentoCortesia, CortesiaResumo, EventoActor, MapaAdminSessao, PedidoComIngressos } from "@essencia/shared/types";
 import { DatabaseService } from "../../common/database/database.service";
 import { assertSchoolScope } from "./eventos.service";
+import { montarAssentosDaSessao, montarLayoutPublico } from "./montar-mapa-sessao";
+import { montarIngressosDoPedido } from "./montar-pedido-ingressos";
 import { gerarTokenIngresso } from "./token-ingresso";
 
 const ALFABETO_PEDIDO = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -57,6 +60,10 @@ function motivoDoConflito(inventario: any, sessionId: string): ConflitoAssentoCo
 
 function assentosIndisponiveis(conflitos: ConflitoAssentoCortesia[]) {
   return new ConflictException({ code: "ASSENTOS_INDISPONIVEIS", message: "Um ou mais assentos não estão mais livres.", details: { conflitos } });
+}
+
+function cortesiaNaoEncontrada() {
+  return new NotFoundException({ code: "CORTESIA_NOT_FOUND", message: "Cortesia não encontrada" });
 }
 
 @Injectable()
@@ -99,10 +106,116 @@ export class EventosCortesiasService {
   }
 
   async listar(eventId: string, actor: EventoActor): Promise<CortesiaResumo[]> {
+    await this.carregarEvento(eventId, actor);
+    return this.consultarResumos(this.db, eq(eventoOperacoesAdministrativas.eventId, eventId));
+  }
+
+  async cancelar(eventId: string, orderId: string, input: CancelarCortesiaInput, actor: EventoActor): Promise<CortesiaResumo> {
+    await this.carregarEvento(eventId, actor);
+    return this.db.transaction(async (tx: any) => {
+      // Pedido → inventário → ingresso: a mesma ordem pedido → inventário da
+      // confirmação de pagamento. Evento e sessão não são travados aqui.
+      const pedido = await this.first<any>(tx.select().from(eventoPedidos).where(eq(eventoPedidos.id, orderId)).for("update"));
+      if (!pedido || pedido.eventId !== eventId || pedido.origin !== "CORTESIA") throw cortesiaNaoEncontrada();
+      const porPedido = eq(eventoPedidos.id, orderId);
+      if (pedido.status === "CANCELADO") return (await this.consultarResumos(tx, porPedido))[0]!;
+
+      const operacao = await this.first<any>(tx.select().from(eventoOperacoesAdministrativas).where(and(eq(eventoOperacoesAdministrativas.orderId, orderId), eq(eventoOperacoesAdministrativas.type, "CORTESIA"))));
+      if (!operacao) throw cortesiaNaoEncontrada();
+      await tx.select().from(eventoInventarioAssentos).where(eq(eventoInventarioAssentos.id, operacao.inventorySeatId)).for("update");
+      const ingresso = await this.first<any>(tx.select().from(eventoIngressos).where(eq(eventoIngressos.orderId, orderId)).for("update"));
+      if (ingresso?.status === "USADO") throw new ConflictException({ code: "CORTESIA_JA_UTILIZADA", message: "Este ingresso já foi utilizado e não pode ser cancelado" });
+
+      const agora = new Date();
+      await tx.update(eventoIngressos).set({ status: "CANCELADO", revokedAt: agora, updatedAt: agora }).where(eq(eventoIngressos.orderId, orderId));
+      await tx.update(eventoPedidos).set({ status: "CANCELADO", cancelledAt: agora, cancellationReason: input.motivo, updatedAt: agora }).where(eq(eventoPedidos.id, orderId));
+      await tx.update(eventoOperacoesAdministrativas).set({ status: "CANCELADA", cancelledAt: agora, updatedAt: agora }).where(eq(eventoOperacoesAdministrativas.id, operacao.id));
+      // Só devolve o assento se ele ainda estiver vendido por esta cortesia.
+      await tx.update(eventoInventarioAssentos)
+        .set({ status: "DISPONIVEL", soldAt: null, updatedAt: agora })
+        .where(and(eq(eventoInventarioAssentos.id, operacao.inventorySeatId), eq(eventoInventarioAssentos.status, "VENDIDO")));
+      await tx.insert(eventoAuditorias).values({
+        eventId,
+        sessionId: pedido.sessionId,
+        actorId: actor.userId,
+        actorRole: actor.role,
+        action: "CORTESIA_CANCELADA",
+        resourceType: "cortesia",
+        resourceId: orderId,
+        reason: input.motivo,
+        metadata: { orderNumber: pedido.orderNumber },
+      }).returning();
+
+      return (await this.consultarResumos(tx, porPedido))[0]!;
+    });
+  }
+
+  /** Dados do voucher sem exigir evento publicado, ao contrário da consulta pública do pedido. */
+  async obterVoucher(eventId: string, orderId: string, actor: EventoActor): Promise<PedidoComIngressos> {
+    const event = await this.carregarEvento(eventId, actor);
+    const pedido = await this.first<any>(this.db.select().from(eventoPedidos).where(and(eq(eventoPedidos.id, orderId), eq(eventoPedidos.eventId, eventId), eq(eventoPedidos.origin, "CORTESIA"))));
+    if (!pedido || pedido.status === "CANCELADO") throw cortesiaNaoEncontrada();
+    const sessao = await this.first<any>(this.db.select().from(eventoSessoes).where(eq(eventoSessoes.id, pedido.sessionId)));
+    const local = sessao?.locationId ? await this.first<any>(this.db.select().from(eventoLocais).where(eq(eventoLocais.id, sessao.locationId))) : undefined;
+    const itens: any[] = await this.db
+      .select({ item: eventoItensPedido, inventario: eventoInventarioAssentos, assento: eventoMapaAssentos, tipo: eventoTiposIngresso })
+      .from(eventoItensPedido)
+      .innerJoin(eventoInventarioAssentos, eq(eventoInventarioAssentos.id, eventoItensPedido.inventorySeatId))
+      .innerJoin(eventoMapaAssentos, eq(eventoMapaAssentos.id, eventoInventarioAssentos.seatId))
+      .innerJoin(eventoTiposIngresso, eq(eventoTiposIngresso.id, eventoItensPedido.ticketTypeId))
+      .where(eq(eventoItensPedido.orderId, orderId));
+
+    return {
+      orderNumber: pedido.orderNumber,
+      status: pedido.status,
+      eventTitle: event.title ?? "",
+      eventSlug: event.slug ?? "",
+      sessionId: pedido.sessionId,
+      expiresAt: pedido.expiresAt ?? null,
+      session: { startsAt: sessao?.startsAt, endsAt: sessao?.endsAt },
+      subtotalCents: pedido.subtotalCents ?? pedido.totalCents,
+      discountCents: pedido.discountCents ?? 0,
+      totalCents: pedido.totalCents,
+      appliedOffer: null,
+      items: itens.map(({ item, inventario, assento, tipo }) => ({
+        seatId: inventario.seatId,
+        ticketTypeId: item.ticketTypeId,
+        unitPriceCents: item.unitPriceCents,
+        totalPriceCents: item.totalPriceCents,
+        rowLabel: assento.rowLabel,
+        seatNumber: assento.seatNumber,
+        ticketTypeName: tipo.name,
+      })),
+      buyerName: pedido.buyerName ?? null,
+      event: { title: event.title ?? "", slug: event.slug ?? "", imageUrl: event.imageUrl ?? null, locationName: local?.name ?? null },
+      tickets: await montarIngressosDoPedido(this.db, orderId),
+    };
+  }
+
+  /** Mapa da sessão para o painel: exige só mapa confirmado, não evento publicado. */
+  async obterMapaAdmin(eventId: string, sessionId: string, actor: EventoActor): Promise<MapaAdminSessao> {
+    await this.carregarEvento(eventId, actor);
+    const sessao = await this.first<any>(this.db.select().from(eventoSessoes).where(and(eq(eventoSessoes.id, sessionId), eq(eventoSessoes.eventId, eventId))));
+    if (!sessao) throw new NotFoundException({ code: "SESSION_NOT_FOUND", message: "Sessão não encontrada" });
+    const mapa = sessao.mapId ? await this.first<any>(this.db.select().from(eventoMapas).where(eq(eventoMapas.id, sessao.mapId))) : undefined;
+    if (mapa?.status !== "CONFIRMADO") throw new ConflictException({ code: "MAP_NOT_CONFIRMED", message: "Confirme o mapa desta sessão para emitir cortesias" });
+
+    const assentos = await montarAssentosDaSessao(this.db, sessionId, mapa.id);
+    const seats = assentos.map(({ inventorySeatId: _inventorySeatId, inventoryStatus: _inventoryStatus, ...assento }) => assento);
+    return {
+      sessionId,
+      mapId: mapa.id,
+      seats,
+      layout: montarLayoutPublico(mapa.layout, new Set(seats.map((seat) => seat.rowLabel))),
+      inventarioPorAssento: Object.fromEntries(assentos.map((assento) => [assento.id, assento.inventorySeatId])),
+    };
+  }
+
+  private async carregarEvento(eventId: string, actor: EventoActor): Promise<any> {
     const event = await this.first<any>(this.db.select().from(eventos).where(eq(eventos.id, eventId)));
     if (!event) throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Evento não encontrado" });
     assertSchoolScope(actor, event.schoolId);
-    return this.consultarResumos(this.db, eq(eventoOperacoesAdministrativas.eventId, eventId));
+    return event;
   }
 
   private async emitirNaTransacao(tx: any, eventId: string, input: EmitirCortesiasInput, actor: EventoActor): Promise<CortesiaResumo[]> {

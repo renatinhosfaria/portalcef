@@ -296,6 +296,220 @@ describe("EventosCortesiasService.listar", () => {
   });
 });
 
+describe("EventosCortesiasService.cancelar", () => {
+  let db: FakeCortesiasDb;
+  let service: EventosCortesiasService;
+
+  beforeEach(() => {
+    db = new FakeCortesiasDb();
+    service = new EventosCortesiasService({ db } as any);
+  });
+
+  it("cancela: invalida o ingresso, cancela o pedido e libera o assento", async () => {
+    const [c] = await service.emitir("event-1", lote(["inv-1"]), ator);
+
+    const r = await service.cancelar("event-1", c!.orderId, { motivo: "Convidado desistiu" }, ator);
+
+    expect(r.situacao).toBe("CANCELADA");
+    expect(r.orderId).toBe(c!.orderId);
+    expect(r.canceladaEm).toBeInstanceOf(Date);
+    expect(db.state.ingressos[0]).toMatchObject({ status: "CANCELADO", revokedAt: expect.any(Date) });
+    expect(db.state.pedidos[0]).toMatchObject({ status: "CANCELADO", cancellationReason: "Convidado desistiu", cancelledAt: expect.any(Date) });
+    expect(db.state.operacoes[0]).toMatchObject({ status: "CANCELADA", cancelledAt: expect.any(Date) });
+    expect(db.inventario("inv-1")).toMatchObject({ status: "DISPONIVEL", soldAt: null });
+    expect(db.state.auditorias.at(-1)).toMatchObject({ action: "CORTESIA_CANCELADA", resourceType: "cortesia", resourceId: c!.orderId, sessionId: "session-1", actorId: "user-1", actorRole: "gerente_unidade", reason: "Convidado desistiu", metadata: { orderNumber: c!.orderNumber } });
+  });
+
+  it("trava o pedido, depois o inventário, depois o ingresso", async () => {
+    const [c] = await service.emitir("event-1", lote(["inv-1"]), ator);
+    db.lockSequence = [];
+
+    await service.cancelar("event-1", c!.orderId, { motivo: "Convidado desistiu" }, ator);
+
+    expect(db.lockSequence).toEqual([`update:${c!.orderId}`, "update:inv-1", `update:${db.state.ingressos[0]!.id}`]);
+  });
+
+  it("o assento cancelado pode receber nova cortesia", async () => {
+    const [c] = await service.emitir("event-1", lote(["inv-1"]), ator);
+    await service.cancelar("event-1", c!.orderId, { motivo: "Convidado desistiu" }, ator);
+
+    const nova = await service.emitir("event-1", lote(["inv-1"], { chave: "chave-2", grupo: "Outro grupo" }), ator);
+
+    expect(nova).toEqual([expect.objectContaining({ situacao: "ATIVA", rowLabel: "A", seatNumber: "1", grupo: "Outro grupo" })]);
+    expect(db.inventario("inv-1").status).toBe("VENDIDO");
+    const lista = await service.listar("event-1", ator);
+    expect(lista.map((item) => item.situacao).sort()).toEqual(["ATIVA", "CANCELADA"]);
+  });
+
+  it("cancelar duas vezes não altera nada na segunda", async () => {
+    const [c] = await service.emitir("event-1", lote(["inv-1"]), ator);
+    const primeira = await service.cancelar("event-1", c!.orderId, { motivo: "Convidado desistiu" }, ator);
+    const antes = structuredClone(db.state);
+
+    const segunda = await service.cancelar("event-1", c!.orderId, { motivo: "Outro motivo" }, ator);
+
+    expect(segunda).toEqual(primeira);
+    expect(db.state).toEqual(antes);
+    expect(db.state.auditorias.filter((a) => a.action === "CORTESIA_CANCELADA")).toHaveLength(1);
+    expect(db.state.pedidos[0]!.cancellationReason).toBe("Convidado desistiu");
+  });
+
+  it("não mexe no inventário que não está mais vendido", async () => {
+    const [c] = await service.emitir("event-1", lote(["inv-1"]), ator);
+    db.inventario("inv-1").status = "BLOQUEADO";
+
+    await expect(service.cancelar("event-1", c!.orderId, { motivo: "Convidado desistiu" }, ator)).resolves.toMatchObject({ situacao: "CANCELADA" });
+
+    expect(db.inventario("inv-1").status).toBe("BLOQUEADO");
+    expect(db.inventario("inv-1").soldAt).toBeInstanceOf(Date);
+    expect(db.state.pedidos[0]!.status).toBe("CANCELADO");
+  });
+
+  it("recusa cancelar ingresso já usado", async () => {
+    const [c] = await service.emitir("event-1", lote(["inv-1"]), ator);
+    db.state.ingressos[0]!.status = "USADO";
+
+    await expect(service.cancelar("event-1", c!.orderId, { motivo: "Convidado desistiu" }, ator)).rejects.toMatchObject({ status: 409, response: { code: "CORTESIA_JA_UTILIZADA" } });
+
+    expect(db.inventario("inv-1").status).toBe("VENDIDO");
+    expect(db.state.pedidos[0]!.status).toBe("CONFIRMADO");
+    expect(db.state.operacoes[0]!.status).toBe("ATIVA");
+    expect(db.state.auditorias.filter((a) => a.action === "CORTESIA_CANCELADA")).toHaveLength(0);
+  });
+
+  it("responde não encontrado para pedido de venda e para pedido de outro evento", async () => {
+    const [c] = await service.emitir("event-1", lote(["inv-1"]), ator);
+    db.state.pedidos.push({ id: "pedido-venda", eventId: "event-1", sessionId: "session-1", origin: "VENDA", status: "CONFIRMADO" });
+    db.state.eventos.push({ id: "event-2", schoolId: "escola-1", status: "RASCUNHO" });
+    const motivo = { motivo: "Convidado desistiu" };
+
+    await expect(service.cancelar("event-1", "pedido-venda", motivo, ator)).rejects.toMatchObject({ status: 404, response: { code: "CORTESIA_NOT_FOUND" } });
+    await expect(service.cancelar("event-2", c!.orderId, motivo, ator)).rejects.toMatchObject({ status: 404, response: { code: "CORTESIA_NOT_FOUND" } });
+    await expect(service.cancelar("event-1", "pedido-inexistente", motivo, ator)).rejects.toMatchObject({ status: 404, response: { code: "CORTESIA_NOT_FOUND" } });
+    expect(db.state.pedidos.find((p) => p.id === c!.orderId)!.status).toBe("CONFIRMADO");
+    expect(db.state.pedidos.find((p) => p.id === "pedido-venda")!.status).toBe("CONFIRMADO");
+  });
+
+  it("recusa cancelar cortesia de outra escola", async () => {
+    const [c] = await service.emitir("event-1", lote(["inv-1"]), ator);
+
+    await expect(service.cancelar("event-1", c!.orderId, { motivo: "Convidado desistiu" }, { ...ator, schoolId: "escola-2" })).rejects.toMatchObject({ response: { code: "FORBIDDEN" } });
+
+    expect(db.state.pedidos[0]!.status).toBe("CONFIRMADO");
+    expect(db.inventario("inv-1").status).toBe("VENDIDO");
+  });
+});
+
+describe("EventosCortesiasService.obterVoucher", () => {
+  let db: FakeCortesiasDb;
+  let service: EventosCortesiasService;
+
+  beforeEach(() => {
+    db = new FakeCortesiasDb();
+    service = new EventosCortesiasService({ db } as any);
+    Object.assign(db.state.eventos[0]!, { title: "Espetáculo de Natal", slug: "espetaculo-de-natal", imageUrl: "https://exemplo/capa.png" });
+  });
+
+  it("voucher devolve PedidoComIngressos com evento em rascunho", async () => {
+    const entrada = lote(["inv-1"]);
+    entrada.assentos[0]!.nome = "Maria Souza";
+    const [c] = await service.emitir("event-1", entrada, ator);
+    const tipoId = db.state.tipos[0]!.id;
+
+    const voucher = await service.obterVoucher("event-1", c!.orderId, ator);
+
+    expect(voucher).toMatchObject({
+      orderNumber: c!.orderNumber,
+      status: "CONFIRMADO",
+      eventTitle: "Espetáculo de Natal",
+      eventSlug: "espetaculo-de-natal",
+      sessionId: "session-1",
+      expiresAt: null,
+      session: { startsAt: new Date("2026-12-10T19:00:00Z"), endsAt: new Date("2026-12-10T21:00:00Z") },
+      subtotalCents: 0,
+      discountCents: 0,
+      totalCents: 0,
+      appliedOffer: null,
+      items: [{ seatId: "seat-1", ticketTypeId: tipoId, unitPriceCents: 0, totalPriceCents: 0, rowLabel: "A", seatNumber: "1", ticketTypeName: "Cortesia" }],
+      buyerName: "Professores",
+      event: { title: "Espetáculo de Natal", slug: "espetaculo-de-natal", imageUrl: "https://exemplo/capa.png", locationName: "Teatro Municipal" },
+    });
+    expect(voucher.tickets).toEqual([{ numero: db.state.ingressos[0]!.numero, qrPayload: db.state.ingressos[0]!.qrPayload, rowLabel: "A", seatNumber: "1", ticketTypeName: "Cortesia", participantName: "Maria Souza", status: "EMITIDO" }]);
+    expect(voucher.tickets[0]!.qrPayload).toEqual(expect.any(String));
+  });
+
+  it("voucher sem local na sessão devolve locationName nulo", async () => {
+    const [c] = await service.emitir("event-1", lote(["inv-1"]), ator);
+    db.state.sessoes[0]!.locationId = null;
+
+    await expect(service.obterVoucher("event-1", c!.orderId, ator)).resolves.toMatchObject({ event: { locationName: null } });
+  });
+
+  it("voucher de cortesia cancelada responde não encontrado", async () => {
+    const [c] = await service.emitir("event-1", lote(["inv-1"]), ator);
+    await service.cancelar("event-1", c!.orderId, { motivo: "Convidado desistiu" }, ator);
+
+    await expect(service.obterVoucher("event-1", c!.orderId, ator)).rejects.toMatchObject({ status: 404, response: { code: "CORTESIA_NOT_FOUND" } });
+  });
+
+  it("voucher recusa pedido de venda, pedido de outro evento e outra escola", async () => {
+    const [c] = await service.emitir("event-1", lote(["inv-1"]), ator);
+    db.state.pedidos.push({ id: "pedido-venda", eventId: "event-1", sessionId: "session-1", origin: "VENDA", status: "CONFIRMADO" });
+    db.state.eventos.push({ id: "event-2", schoolId: "escola-1", status: "RASCUNHO" });
+
+    await expect(service.obterVoucher("event-1", "pedido-venda", ator)).rejects.toMatchObject({ status: 404, response: { code: "CORTESIA_NOT_FOUND" } });
+    await expect(service.obterVoucher("event-2", c!.orderId, ator)).rejects.toMatchObject({ status: 404, response: { code: "CORTESIA_NOT_FOUND" } });
+    await expect(service.obterVoucher("event-1", c!.orderId, { ...ator, schoolId: "escola-2" })).rejects.toMatchObject({ response: { code: "FORBIDDEN" } });
+  });
+});
+
+describe("EventosCortesiasService.obterMapaAdmin", () => {
+  let db: FakeCortesiasDb;
+  let service: EventosCortesiasService;
+
+  beforeEach(() => {
+    db = new FakeCortesiasDb();
+    service = new EventosCortesiasService({ db } as any);
+  });
+
+  it("mapa admin funciona com evento em rascunho e marca a cortesia como vendida", async () => {
+    await service.emitir("event-1", lote(["inv-1"]), ator);
+    db.state.mapas[0]!.layout = {
+      largura: 800,
+      altura: 600,
+      rotulos: [{ fileira: "A", x: 10, y: 20 }, { fileira: "Z", x: 10, y: 500 }],
+      elementos: [{ tipo: "PALCO", texto: "Palco", x: 400, y: 10 }],
+    };
+
+    const mapa = await service.obterMapaAdmin("event-1", "session-1", ator);
+
+    expect(mapa.sessionId).toBe("session-1");
+    expect(mapa.mapId).toBe("map-1");
+    const estados = Object.fromEntries(mapa.seats.map((seat) => [seat.id, seat.state]));
+    expect(estados).toEqual({ "seat-1": "sold", "seat-2": "available", "seat-3": "available" });
+    expect(mapa.inventarioPorAssento).toEqual({ "seat-1": "inv-1", "seat-2": "inv-2", "seat-3": "inv-3" });
+    expect(mapa.seats.every((seat) => !("inventorySeatId" in seat) && !("inventoryStatus" in seat))).toBe(true);
+    expect(mapa.layout).toEqual({ largura: 800, altura: 600, rotulos: [{ fileira: "A", x: 10, y: 20 }], elementos: [{ tipo: "PALCO", texto: "Palco", x: 400, y: 10 }] });
+  });
+
+  it("mapa admin recusa mapa não confirmado e sessão de outro evento", async () => {
+    await expect(service.obterMapaAdmin("event-1", "session-outro-evento", ator)).rejects.toMatchObject({ status: 404, response: { code: "SESSION_NOT_FOUND" } });
+    await expect(service.obterMapaAdmin("event-1", "session-x", ator)).rejects.toMatchObject({ status: 404, response: { code: "SESSION_NOT_FOUND" } });
+
+    db.state.mapas[0]!.status = "EM_REVISAO";
+    await expect(service.obterMapaAdmin("event-1", "session-1", ator)).rejects.toMatchObject({ status: 409, response: { code: "MAP_NOT_CONFIRMED" } });
+
+    db.state.mapas[0]!.status = "CONFIRMADO";
+    db.state.sessoes[0]!.mapId = null;
+    await expect(service.obterMapaAdmin("event-1", "session-1", ator)).rejects.toMatchObject({ status: 409, response: { code: "MAP_NOT_CONFIRMED" } });
+  });
+
+  it("mapa admin recusa evento de outra escola e evento inexistente", async () => {
+    await expect(service.obterMapaAdmin("event-1", "session-1", { ...ator, schoolId: "escola-2" })).rejects.toMatchObject({ response: { code: "FORBIDDEN" } });
+    await expect(service.obterMapaAdmin("event-x", "session-1", ator)).rejects.toMatchObject({ status: 404, response: { code: "EVENT_NOT_FOUND" } });
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Banco falso em memória. Entende o shim de `@essencia/db` usado nos testes:
 // colunas são `{ __table, __column }` e operadores são `{ name, args }`.
@@ -319,6 +533,7 @@ const CHAVE_DO_ESTADO: Record<string, string> = {
   eventoOperacoesAdministrativas: "operacoes",
   eventoAuditorias: "auditorias",
   eventoPagamentos: "pagamentos",
+  eventoLocais: "locais",
   users: "usuarios",
 };
 
@@ -377,11 +592,12 @@ function estadoInicial(): Estado {
   return {
     eventos: [{ id: "event-1", schoolId: "escola-1", status: "RASCUNHO" }],
     sessoes: [
-      { id: "session-1", eventId: "event-1", mapId: "map-1", status: "RASCUNHO", startsAt: new Date("2026-12-10T19:00:00Z") },
+      { id: "session-1", eventId: "event-1", mapId: "map-1", locationId: "local-1", status: "RASCUNHO", startsAt: new Date("2026-12-10T19:00:00Z"), endsAt: new Date("2026-12-10T21:00:00Z") },
       { id: "session-2", eventId: "event-1", mapId: "map-1", status: "RASCUNHO", startsAt: new Date("2026-12-11T19:00:00Z") },
       { id: "session-outro-evento", eventId: "event-2", mapId: "map-2", status: "RASCUNHO", startsAt: new Date("2026-12-12T19:00:00Z") },
     ],
     mapas: [{ id: "map-1", eventId: "event-1", status: "CONFIRMADO" }],
+    locais: [{ id: "local-1", schoolId: "escola-1", name: "Teatro Municipal" }],
     assentos: [
       { id: "seat-1", mapId: "map-1", rowLabel: "A", seatNumber: "1" },
       { id: "seat-2", mapId: "map-1", rowLabel: "A", seatNumber: "2" },

@@ -1,48 +1,18 @@
 import { BadRequestException, ConflictException, Inject, Injectable, InternalServerErrorException, NotFoundException, Optional } from "@nestjs/common";
 import { and, asc, eq, eventoAuditorias, eventoCheckins, eventoIngressos, eventoInventarioAssentos, eventoLocais, eventoMapas, eventoOperacoesAdministrativas, eventoPedidos, eventoPoliticas, eventoSessoes, eventoTiposIngresso, eventos, inArray, ne, type Database } from "@essencia/db";
 import type { AtualizarEventoInput, AtualizarLocalEventoInput, CriarEventoInput, CriarSessaoInput, CriarRascunhoInput, EventoListQuery, LocalEventoInput } from "@essencia/shared/schemas";
-import type { EventoActor, EventoResumo, OfertaPrecoPublica, PublicEventCard, PublicEventDetail, PublicEventSession, PublicMap, PublicMapLayout } from "@essencia/shared/types";
+import type { EventoActor, EventoResumo, OfertaPrecoPublica, PublicEventCard, PublicEventDetail, PublicEventSession, PublicMap } from "@essencia/shared/types";
 import { DatabaseService } from "../../common/database/database.service";
 import { RASTER_IMAGE_MIME_TYPES, StorageService } from "../../common/storage/storage.service";
 import { EventosRulesService } from "./eventos-rules.service";
 import { MapasService } from "./mapas/mapas.service";
 import { EventosOfertasService } from "./eventos-ofertas.service";
-import { montarAssentosDaSessao } from "./montar-mapa-sessao";
+import { montarAssentosDaSessao, montarLayoutPublico } from "./montar-mapa-sessao";
 
 type DbTransaction = Parameters<Database["transaction"]>[0] extends (tx: infer T) => unknown ? T : never;
 
 function ehMeiaEntrada(nome: string | null | undefined): boolean {
   return (nome ?? "").normalize("NFKD").replace(/\p{Diacritic}/gu, "").toLowerCase().includes("meia");
-}
-
-function montarLayoutPublico(layout: unknown, fileirasComAssento: Set<string>): PublicMapLayout | null {
-  if (!layout || typeof layout !== "object") return null;
-  const value = layout as Record<string, unknown>;
-  const numero = (item: unknown) => typeof item === "number" && Number.isFinite(item);
-  if (!numero(value.largura) || !numero(value.altura) || !Array.isArray(value.rotulos) || !Array.isArray(value.elementos)) return null;
-  const rotulos = value.rotulos as unknown[];
-  const elementos = value.elementos as unknown[];
-  if (!rotulos.every((item) => {
-    if (!item || typeof item !== "object") return false;
-    const rotulo = item as Record<string, unknown>;
-    return typeof rotulo.fileira === "string" && numero(rotulo.x) && numero(rotulo.y);
-  }) || !elementos.every((item) => {
-    if (!item || typeof item !== "object") return false;
-    const elemento = item as Record<string, unknown>;
-    return (elemento.tipo === "PALCO" || elemento.tipo === "ENTRADA" || elemento.tipo === "SAIDA") && typeof elemento.texto === "string" && numero(elemento.x) && numero(elemento.y);
-  })) return null;
-  return {
-    largura: value.largura as number,
-    altura: value.altura as number,
-    rotulos: rotulos.filter((item) => fileirasComAssento.has((item as Record<string, unknown>).fileira as string)).map((item) => {
-      const rotulo = item as { fileira: string; x: number; y: number };
-      return { fileira: rotulo.fileira, x: rotulo.x, y: rotulo.y };
-    }),
-    elementos: elementos.map((item) => {
-      const elemento = item as PublicMapLayout["elementos"][number];
-      return { tipo: elemento.tipo, texto: elemento.texto, x: elemento.x, y: elemento.y };
-    }),
-  };
 }
 
 export function assertSchoolScope(actor: EventoActor, schoolId: string) {
