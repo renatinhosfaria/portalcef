@@ -60,3 +60,31 @@ export interface PagamentoEmbutidoResult { clientSecret: string; expiresAt: Date
 export interface MeusIngressosResult {
   pedidos: Array<{ orderNumber: string; eventTitle: string; sessionStartsAt: Date; acesso: string }>;
 }
+
+export type CortesiaSituacao = "ATIVA" | "USADA" | "CANCELADA";
+
+export interface CortesiaResumo {
+  orderId: string;
+  orderNumber: string;
+  session: { id: string; startsAt: Date };
+  rowLabel: string;
+  seatNumber: string;
+  participantName: string;
+  grupo: string;
+  motivo: string;
+  numero: string;
+  situacao: CortesiaSituacao;
+  emitidaPor: string;
+  emitidaEm: Date;
+  canceladaEm: Date | null;
+}
+
+export interface ConflitoAssentoCortesia {
+  inventorySeatId: string;
+  rowLabel: string;
+  seatNumber: string;
+  motivo: "VENDIDO" | "RESERVADO" | "BLOQUEADO" | "OUTRA_SESSAO" | "INEXISTENTE";
+}
+
+/** Mapa da sessão para o painel: `inventarioPorAssento` leva seat.id → inventorySeatId. */
+export interface MapaAdminSessao extends PublicMap { inventarioPorAssento: Record<string, string>; }

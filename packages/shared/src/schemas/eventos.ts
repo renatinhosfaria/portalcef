@@ -6,6 +6,28 @@ export const eventoParticipanteTipoSchema = z.enum(["ALUNO","CONVIDADO"]);
 export const politicaPublicaTipoSchema = z.enum(["PRIVACIDADE","COMPRA","CANCELAMENTO_REEMBOLSO","ACESSIBILIDADE","CONTATO"]);
 export const compradorPublicoSchema = z.object({ name: z.string().trim().min(2).max(200), email: z.string().trim().email().max(320), phone: z.string().trim().min(8).max(30) }).strict();
 export const reservaPublicaSchema = z.object({ sessionId: z.string().uuid(), seats: z.array(z.object({ seatId: z.string().uuid(), ticketTypeId: z.string().uuid(), participantIndex: z.number().int().nonnegative() })).min(1).max(20), buyer: compradorPublicoSchema.optional(), idempotencyKey: z.string().trim().min(8).max(180) }).strict();
+const vazioParaUndefined = (valor: unknown) => (typeof valor === "string" && valor.trim() === "" ? undefined : valor);
+export const emitirCortesiasSchema = z.object({
+  sessionId: z.string().uuid(),
+  chave: z.string().min(8).max(100),
+  grupo: z.string().trim().min(2).max(200),
+  motivo: z.string().trim().min(3).max(500),
+  contatoEmail: z.preprocess(vazioParaUndefined, z.string().trim().email().max(320).optional()),
+  contatoTelefone: z.preprocess(vazioParaUndefined, z.string().trim().max(30).optional()),
+  assentos: z.array(z.object({
+    inventorySeatId: z.string().uuid(),
+    nome: z.preprocess(vazioParaUndefined, z.string().trim().max(200).optional()),
+  }).strict()).min(1).max(50),
+}).strict().superRefine((value, context) => {
+  const vistos = new Set<string>();
+  value.assentos.forEach((assento, indice) => {
+    if (vistos.has(assento.inventorySeatId)) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ["assentos", indice, "inventorySeatId"], message: "Assento repetido no lote" });
+    }
+    vistos.add(assento.inventorySeatId);
+  });
+});
+export const cancelarCortesiaSchema = z.object({ motivo: z.string().trim().min(3).max(500) }).strict();
 export const finalizarPedidoSchema = z.object({ buyer: compradorPublicoSchema, participants: z.array(z.object({ participantIndex: z.number().int().nonnegative(), fullName: z.string().trim().min(2).max(200), type: eventoParticipanteTipoSchema, email: z.string().email().optional(), phone: z.string().max(30).optional() })).min(1).max(20), acceptances: z.array(z.object({ type: politicaPublicaTipoSchema, version: z.number().int().positive() })).length(5), idempotencyKey: z.string().trim().min(8).max(180) }).strict();
 export const pagamentoEmbutidoSchema = z.object({ returnUrl: z.string().url().refine((v) => v.startsWith("https://")), idempotencyKey: z.string().trim().min(8).max(180) }).strict();
 export const meusIngressosSchema = z.union([
@@ -77,3 +99,5 @@ export type FinalizarPedidoInput = z.infer<typeof finalizarPedidoSchema>;
 export type PagamentoEmbutidoInput = z.infer<typeof pagamentoEmbutidoSchema>;
 export type MeusIngressosInput = z.infer<typeof meusIngressosSchema>;
 export type AtualizarOfertaInput = z.infer<typeof atualizarOfertaSchema>;
+export type EmitirCortesiasInput = z.infer<typeof emitirCortesiasSchema>;
+export type CancelarCortesiaInput = z.infer<typeof cancelarCortesiaSchema>;
