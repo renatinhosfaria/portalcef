@@ -250,6 +250,54 @@ describe("EventoInscricoesService", () => {
       expect(db.transaction).toHaveBeenCalledTimes(2);
     });
 
+    it("reinicia a transação quando a colisão de número chega no formato do Drizzle", async () => {
+      jest
+        .spyOn(Date, "now")
+        .mockReturnValue(new Date("2026-05-15T12:00:00.000Z").getTime());
+      db.selectResults.push([]);
+      db.insertErrors.push(erroUnicoDrizzle("uq_evento_inscricoes_evento_numero"));
+      db.insertResults.push([inscricaoBase]);
+
+      const result = await service.criar(
+        "mae-por-inteiro",
+        {
+          nome: "Maria Silva",
+          cpf: "123.456.789-00",
+          dataNascimento: "1990-01-15",
+          email: "maria@exemplo.com",
+          telefone: "(34) 99999-9999",
+          filhos: [],
+        },
+        {},
+      );
+
+      expect(result.numeroInscricao).toBe("123-456");
+      expect(db.transaction).toHaveBeenCalledTimes(2);
+    });
+
+    it("responde conflito amigável para CPF repetido no formato do Drizzle", async () => {
+      jest
+        .spyOn(Date, "now")
+        .mockReturnValue(new Date("2026-05-15T12:00:00.000Z").getTime());
+      db.selectResults.push([]);
+      db.insertErrors.push(erroUnicoDrizzle("uq_evento_inscricoes_evento_cpf"));
+
+      await expect(
+        service.criar(
+          "mae-por-inteiro",
+          {
+            nome: "Maria Silva",
+            cpf: "123.456.789-00",
+            dataNascimento: "1990-01-15",
+            email: "maria@exemplo.com",
+            telefone: "(34) 99999-9999",
+            filhos: [],
+          },
+          {},
+        ),
+      ).rejects.toThrow("Já existe uma inscrição para este CPF neste evento.");
+    });
+
     it("retorna status fechado para evento encerrado", () => {
       jest.spyOn(Date, "now").mockReturnValue(new Date("2026-10-05T12:00:00Z").getTime());
       const status = service.obterStatus("mae-por-inteiro");
@@ -466,6 +514,20 @@ describe("EventoInscricoesService", () => {
       ).rejects.toBeInstanceOf(ConflictException);
     });
 
+    it("não cria segundo ganhador quando a colisão chega no formato do Drizzle", async () => {
+      const ganhadora = {
+        ...inscricaoBase,
+        presencaConfirmadaEm: new Date("2026-05-16T12:00:00.000Z"),
+        presencaConfirmadaPor: "usuario-1",
+      };
+      db.selectResults.push([ganhadora]);
+      db.insertErrors.push(erroUnicoDrizzle("uq_evento_sorteios_evento_brinde"));
+
+      await expect(
+        service.sortearBrinde("mae-por-inteiro", "Cesta de café", "usuario-2"),
+      ).rejects.toBeInstanceOf(ConflictException);
+    });
+
     it("não permite sortear brinde sem nome", async () => {
       await expect(
         service.sortearBrinde("mae-por-inteiro", "   ", "usuario-2"),
@@ -475,3 +537,16 @@ describe("EventoInscricoesService", () => {
     });
   });
 });
+
+/** Reproduz o erro como ele chega do Drizzle 0.45 com postgres-js: o original fica em `cause`. */
+function erroUnicoDrizzle(constraint: string) {
+  const original = Object.assign(
+    new Error("duplicate key value violates unique constraint"),
+    { code: "23505", constraint_name: constraint },
+  );
+  return Object.assign(new Error("Failed query: insert into ..."), {
+    query: "insert into ...",
+    params: [],
+    cause: original,
+  });
+}

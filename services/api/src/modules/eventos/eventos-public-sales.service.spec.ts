@@ -619,6 +619,49 @@ describe("EventosPublicSalesService - contratos públicos", () => {
     });
   });
 
+  it("reconhece a colisão de idempotência da reserva no formato do Drizzle (erro em cause, constraint_name)", async () => {
+    const existing = { id: "order-outra-sessao", orderNumber: "ABC123DEF456", sessionId: uuid(99), buyerEmail: null, totalCents: 1250, expiresAt: new Date(Date.now() + 60_000) };
+    let selectCalls = 0;
+    const db: any = {
+      transaction: async () => { throw erroUnicoDrizzle("uq_evento_pedidos_idempotency_key"); },
+      select: () => {
+        const chain: any = { from: () => chain, innerJoin: () => chain, where: async () => (selectCalls++ === 0 ? [existing] : []) };
+        return chain;
+      },
+    };
+
+    await expect(new EventosPublicSalesService({ db } as any).reservarAssentos(entradaReserva(1, "corrida-drizzle-123456"))).rejects.toMatchObject({
+      response: { code: "IDEMPOTENCY_CONFLICT" },
+    });
+  });
+
+  it("reconhece a colisão de idempotência da finalização no formato do Drizzle e devolve o próprio pedido", async () => {
+    const db = pedidoFinalizacaoDb();
+    db.transaction = async () => { throw erroUnicoDrizzle("uq_evento_pedidos_finalization_idempotency_key"); };
+    // Depois da colisão, a busca pela chave de finalização encontra o próprio pedido.
+    const selectOriginal = db.select;
+    let primeiraConsulta = true;
+    db.select = () => {
+      if (!primeiraConsulta) return selectOriginal();
+      primeiraConsulta = false;
+      const chain: any = { from: () => chain, where: async () => [db.order] };
+      return chain;
+    };
+    db.selectCalls = 2;
+
+    const result = await new EventosPublicSalesService({ db } as any).finalizarPedidoConvidado("ABC123DEF456", entradaFinalizacao());
+
+    expect(result.acesso).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(result.pedido).toMatchObject({ orderNumber: "ABC123DEF456" });
+  });
+
+  it("não trata outro erro do banco como colisão de idempotência", async () => {
+    const erro = erroUnicoDrizzle("fk_qualquer", "23503");
+    const db: any = { transaction: async () => { throw erro; }, select: () => { throw new Error("não deveria consultar"); } };
+
+    await expect(new EventosPublicSalesService({ db } as any).reservarAssentos(entradaReserva(1, "erro-fk-123456"))).rejects.toBe(erro);
+  });
+
   it("recusa a corrida quando não consegue comprovar os mesmos assentos", async () => {
     const existing = { id: "order-sem-itens", orderNumber: "ABC123DEF456", buyerEmail: null, totalCents: 1250, expiresAt: new Date(Date.now() + 60_000) };
     let selectCalls = 0;
@@ -1102,4 +1145,10 @@ function liberarPedidoDb(config: { order: any; payment?: any; inventories?: any[
     return chain;
   };
   return db;
+}
+
+/** Reproduz o erro como ele chega do Drizzle 0.45 com postgres-js: o original fica em `cause`. */
+function erroUnicoDrizzle(constraint: string, code = "23505") {
+  const original = Object.assign(new Error("duplicate key value violates unique constraint"), { code, constraint_name: constraint });
+  return Object.assign(new Error("Failed query: insert into ..."), { query: "insert into ...", params: [], cause: original });
 }
