@@ -4,6 +4,7 @@ import {
   asc,
   eq,
   inArray,
+  notInArray,
   eventoCheckins,
   eventoIngressos,
   eventoOperacoesAdministrativas,
@@ -39,6 +40,9 @@ export const STATUS_PEDIDO_ABERTO = [
   "RESERVADO",
   "AGUARDANDO_PAGAMENTO",
 ] as const;
+
+// Ingresso cancelado ou revogado já não ocupa lugar e não trava a troca do mapa.
+export const STATUS_INGRESSO_SEM_TRAVA = ["CANCELADO", "REVOGADO"] as const;
 
 type DadosTrava = {
   pedidos: Array<{ status: string; expiresAt: Date | null }>;
@@ -95,11 +99,16 @@ export async function carregarTrava(
     ? await lockRows<any>(pedidosQuery)
     : ((await pedidosQuery) as Array<{ status: string; expiresAt: Date | null }>);
 
-  const ingressos = sessionIds.length
+  const ingressos: Array<{ id: string; status: string }> = sessionIds.length
     ? await db
-        .select({ id: eventoIngressos.id })
+        .select({ id: eventoIngressos.id, status: eventoIngressos.status })
         .from(eventoIngressos)
-        .where(inArray(eventoIngressos.sessionId, sessionIds))
+        .where(
+          and(
+            inArray(eventoIngressos.sessionId, sessionIds),
+            notInArray(eventoIngressos.status, [...STATUS_INGRESSO_SEM_TRAVA]),
+          ),
+        )
     : [];
   const checkins = sessionIds.length
     ? await db
@@ -120,7 +129,7 @@ export async function carregarTrava(
   return classificarTrava(
     {
       pedidos,
-      ingressos: ingressos.length,
+      ingressos: ingressos.filter(({ status }) => status !== "CANCELADO").length,
       checkins: checkins.length,
       operacoesAtivas: operacoes.length,
     },

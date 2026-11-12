@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { PublicMap } from "@essencia/shared/types";
-import { dimensoesDoMapa, elementosDoMapa, paraLugaresPublicos, rotulosDoMapa } from "../mapa/adaptar-mapa";
+import { dimensoesDoMapa, elementosDoMapa, paraLugaresPublicos, rotulosDoMapa } from "./adaptar-mapa";
 
 const mapaBase: PublicMap = {
   sessionId: "sessao",
@@ -36,6 +36,7 @@ describe("adaptação do mapa público", () => {
     };
     const lugares = paraLugaresPublicos(mapa, new Set(["0"]));
     expect(lugares.every((lugar) => lugar.livre === false)).toBe(true);
+    expect(lugares.every((lugar) => lugar.estado === "bloqueado")).toBe(true);
   });
 
   it("ignora rótulo de fileira sem assento e acrescenta as pontas", () => {

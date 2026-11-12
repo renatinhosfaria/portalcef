@@ -1,47 +1,18 @@
 import { BadRequestException, ConflictException, Inject, Injectable, InternalServerErrorException, NotFoundException, Optional } from "@nestjs/common";
-import { and, asc, eq, eventoAuditorias, eventoCheckins, eventoIngressos, eventoInventarioAssentos, eventoLocais, eventoMapaAssentos, eventoMapas, eventoOperacoesAdministrativas, eventoPedidos, eventoPoliticas, eventoSessoes, eventoTiposIngresso, eventos, inArray, ne, type Database } from "@essencia/db";
+import { and, asc, eq, eventoAuditorias, eventoCheckins, eventoIngressos, eventoInventarioAssentos, eventoLocais, eventoMapas, eventoOperacoesAdministrativas, eventoPedidos, eventoPoliticas, eventoSessoes, eventoTiposIngresso, eventos, inArray, ne, type Database } from "@essencia/db";
 import type { AtualizarEventoInput, AtualizarLocalEventoInput, CriarEventoInput, CriarSessaoInput, CriarRascunhoInput, EventoListQuery, LocalEventoInput } from "@essencia/shared/schemas";
-import type { EventoActor, EventoResumo, OfertaPrecoPublica, PublicEventCard, PublicEventDetail, PublicEventSession, PublicMap, PublicMapLayout } from "@essencia/shared/types";
+import type { EventoActor, EventoResumo, OfertaPrecoPublica, PublicEventCard, PublicEventDetail, PublicEventSession, PublicMap } from "@essencia/shared/types";
 import { DatabaseService } from "../../common/database/database.service";
 import { RASTER_IMAGE_MIME_TYPES, StorageService } from "../../common/storage/storage.service";
 import { EventosRulesService } from "./eventos-rules.service";
 import { MapasService } from "./mapas/mapas.service";
 import { EventosOfertasService } from "./eventos-ofertas.service";
+import { montarAssentosDaSessao, montarLayoutPublico } from "./montar-mapa-sessao";
 
 type DbTransaction = Parameters<Database["transaction"]>[0] extends (tx: infer T) => unknown ? T : never;
 
 function ehMeiaEntrada(nome: string | null | undefined): boolean {
   return (nome ?? "").normalize("NFKD").replace(/\p{Diacritic}/gu, "").toLowerCase().includes("meia");
-}
-
-function montarLayoutPublico(layout: unknown, fileirasComAssento: Set<string>): PublicMapLayout | null {
-  if (!layout || typeof layout !== "object") return null;
-  const value = layout as Record<string, unknown>;
-  const numero = (item: unknown) => typeof item === "number" && Number.isFinite(item);
-  if (!numero(value.largura) || !numero(value.altura) || !Array.isArray(value.rotulos) || !Array.isArray(value.elementos)) return null;
-  const rotulos = value.rotulos as unknown[];
-  const elementos = value.elementos as unknown[];
-  if (!rotulos.every((item) => {
-    if (!item || typeof item !== "object") return false;
-    const rotulo = item as Record<string, unknown>;
-    return typeof rotulo.fileira === "string" && numero(rotulo.x) && numero(rotulo.y);
-  }) || !elementos.every((item) => {
-    if (!item || typeof item !== "object") return false;
-    const elemento = item as Record<string, unknown>;
-    return (elemento.tipo === "PALCO" || elemento.tipo === "ENTRADA" || elemento.tipo === "SAIDA") && typeof elemento.texto === "string" && numero(elemento.x) && numero(elemento.y);
-  })) return null;
-  return {
-    largura: value.largura as number,
-    altura: value.altura as number,
-    rotulos: rotulos.filter((item) => fileirasComAssento.has((item as Record<string, unknown>).fileira as string)).map((item) => {
-      const rotulo = item as { fileira: string; x: number; y: number };
-      return { fileira: rotulo.fileira, x: rotulo.x, y: rotulo.y };
-    }),
-    elementos: elementos.map((item) => {
-      const elemento = item as PublicMapLayout["elementos"][number];
-      return { tipo: elemento.tipo, texto: elemento.texto, x: elemento.x, y: elemento.y };
-    }),
-  };
 }
 
 export function assertSchoolScope(actor: EventoActor, schoolId: string) {
@@ -131,7 +102,8 @@ export class EventosService {
       const [slugOwner] = await this.db.select({ id: eventos.id }).from(eventos).where(and(eq(eventos.schoolId, existing.schoolId), eq(eventos.slug, normalizedSlug), ne(eventos.id, id))).limit(1);
       if (slugOwner) throw new ConflictException({ code: "SLUG_ALREADY_EXISTS", message: "Este slug já está em uso nesta escola" });
     }
-    const [sales] = await this.db.select({ id: eventoPedidos.id }).from(eventoPedidos).where(eq(eventoPedidos.eventId, id)).limit(1);
+    // Só venda trava a edição: cortesias (ativas ou canceladas) não bloqueiam.
+    const [sales] = await this.db.select({ id: eventoPedidos.id }).from(eventoPedidos).where(and(eq(eventoPedidos.eventId, id), eq(eventoPedidos.origin, "VENDA"))).limit(1);
     if (sales) throw new BadRequestException({ code: "EVENT_HAS_SALES", message: "O evento possui vendas; crie uma nova versão antes de alterar sua configuração" });
     const titleSuggestion = input.title ? this.normalizeSlug(input.title) : undefined;
     const manualSlug = existing.slug !== this.normalizeSlug(existing.title);
@@ -225,7 +197,8 @@ export class EventosService {
     const [session] = await (typeof sessionQuery.for === "function" ? sessionQuery.for("update") : sessionQuery);
     if (!session) throw new NotFoundException({ code: "SESSION_NOT_FOUND", message: "Sessão não encontrada" });
     await this.validarReferenciasSessao(eventId, event, input, db);
-    const [sale] = await db.select({ id: eventoPedidos.id }).from(eventoPedidos).where(eq(eventoPedidos.sessionId, sessionId)).limit(1);
+    // Só venda trava a edição: cortesias (ativas ou canceladas) não bloqueiam.
+    const [sale] = await db.select({ id: eventoPedidos.id }).from(eventoPedidos).where(and(eq(eventoPedidos.sessionId, sessionId), eq(eventoPedidos.origin, "VENDA"))).limit(1);
     if (sale) throw new BadRequestException({ code: "EVENT_HAS_SALES", message: "A sessão possui vendas e não pode ser alterada" });
     if (input.status === "PUBLICADA") throw new BadRequestException({ code: "SESSION_PUBLICATION_REQUIRES_INVENTORY", message: "Publique a sessão pelo fluxo de publicação após inicializar o inventário" });
     const [updated] = await db.update(eventoSessoes).set({ ...input, updatedAt: new Date() }).where(eq(eventoSessoes.id, sessionId)).returning();
@@ -270,7 +243,7 @@ export class EventosService {
   }
 
   async listarPublicados(now: Date): Promise<PublicEventCard[]> {
-    const rows = await this.db.select({ event: eventos, session: eventoSessoes, location: eventoLocais, ticket: eventoTiposIngresso, inventory: eventoInventarioAssentos }).from(eventos).innerJoin(eventoSessoes, and(eq(eventoSessoes.eventId, eventos.id), eq(eventoSessoes.status, "PUBLICADA"))).leftJoin(eventoLocais, eq(eventoLocais.id, eventoSessoes.locationId)).leftJoin(eventoTiposIngresso, and(eq(eventoTiposIngresso.eventId, eventos.id), eq(eventoTiposIngresso.active, true))).leftJoin(eventoInventarioAssentos, eq(eventoInventarioAssentos.sessionId, eventoSessoes.id)).where(eq(eventos.status, "PUBLICADO"));
+    const rows = await this.db.select({ event: eventos, session: eventoSessoes, location: eventoLocais, ticket: eventoTiposIngresso, inventory: eventoInventarioAssentos }).from(eventos).innerJoin(eventoSessoes, and(eq(eventoSessoes.eventId, eventos.id), eq(eventoSessoes.status, "PUBLICADA"))).leftJoin(eventoLocais, eq(eventoLocais.id, eventoSessoes.locationId)).leftJoin(eventoTiposIngresso, and(eq(eventoTiposIngresso.eventId, eventos.id), eq(eventoTiposIngresso.active, true), eq(eventoTiposIngresso.internal, false))).leftJoin(eventoInventarioAssentos, eq(eventoInventarioAssentos.sessionId, eventoSessoes.id)).where(eq(eventos.status, "PUBLICADO"));
     const byId = new Map<string, PublicEventCard>();
     const menorPrecoPadrao = new Map<string, number>();
     const menorPrecoQualquer = new Map<string, number>();
@@ -299,7 +272,7 @@ export class EventosService {
   async listarSessoesPublicas(slug: string, now = new Date()): Promise<PublicEventSession[]> {
     const detail = await this.getPublicBySlug(slug, now);
     const ofertasPublicas: OfertaPrecoPublica[] = this.ofertas ? await this.ofertas.listarPublicas(detail.id) : [];
-    const ticketTypes = await this.db.select().from(eventoTiposIngresso).where(and(eq(eventoTiposIngresso.eventId, detail.id), eq(eventoTiposIngresso.active, true))).orderBy(asc(eventoTiposIngresso.name));
+    const ticketTypes = await this.db.select().from(eventoTiposIngresso).where(and(eq(eventoTiposIngresso.eventId, detail.id), eq(eventoTiposIngresso.active, true), eq(eventoTiposIngresso.internal, false))).orderBy(asc(eventoTiposIngresso.name));
     const publicTicketTypes = ticketTypes.map((ticket: typeof eventoTiposIngresso.$inferSelect) => ({ id: ticket.id, name: ticket.name, description: ticket.description, priceCents: ticket.priceCents, maxPerOrder: ticket.maxPerOrder, eligibility: ticket.eligibility }));
     const rows = await this.db.select({ session: eventoSessoes, location: eventoLocais, inventory: eventoInventarioAssentos }).from(eventoSessoes).leftJoin(eventoLocais, eq(eventoLocais.id, eventoSessoes.locationId)).leftJoin(eventoInventarioAssentos, eq(eventoInventarioAssentos.sessionId, eventoSessoes.id)).where(and(eq(eventoSessoes.eventId, detail.id), eq(eventoSessoes.status, "PUBLICADA"))).orderBy(asc(eventoSessoes.startsAt));
     const result = new Map<string, PublicEventSession>();
@@ -319,15 +292,9 @@ export class EventosService {
     if (!parentEvent || parentEvent.status !== "PUBLICADO") throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Evento não encontrado" });
     const [map] = await this.db.select().from(eventoMapas).where(eq(eventoMapas.id, session.mapId));
     if (!map || map.status !== "CONFIRMADO") throw new NotFoundException({ code: "MAP_NOT_CONFIRMED", message: "Mapa não disponível" });
-    const rows = await this.db.select({ seat: eventoMapaAssentos, inventory: eventoInventarioAssentos }).from(eventoInventarioAssentos).innerJoin(eventoMapaAssentos, eq(eventoMapaAssentos.id, eventoInventarioAssentos.seatId)).where(and(eq(eventoInventarioAssentos.sessionId, sessionId), eq(eventoMapaAssentos.mapId, session.mapId)));
-    const seats: PublicMap["seats"] = rows.map(({ seat, inventory }: any) => {
-      let rotacao = 0;
-      try {
-        const valor = Number(seat.metadata?.rotacao);
-        if (Number.isFinite(valor)) rotacao = valor;
-      } catch { /* metadata inválido mantém a rotação padrão */ }
-      return { id: seat.id, sessionId, rowLabel: seat.rowLabel, seatNumber: seat.seatNumber, x: seat.x, y: seat.y, width: seat.width, height: seat.height, category: seat.category, accessible: seat.accessible, state: inventory.status === "VENDIDO" ? "sold" : inventory.status === "RESERVADO" ? "reserved" : inventory.status === "BLOQUEADO" ? "blocked" : "available", rotacao };
-    });
+    const assentos = await montarAssentosDaSessao(this.db, sessionId, session.mapId);
+    // Campos internos do inventário não fazem parte da resposta pública.
+    const seats: PublicMap["seats"] = assentos.map(({ inventorySeatId: _inventorySeatId, inventoryStatus: _inventoryStatus, ...assento }) => assento);
     return { sessionId, mapId: session.mapId, seats, layout: montarLayoutPublico(map.layout, new Set(seats.map((seat) => seat.rowLabel))) };
   }
 
@@ -478,7 +445,7 @@ export class EventosService {
     const [event] = await this.db.select().from(eventos).where(eq(eventos.id, eventId));
     if (!event) throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Evento não encontrado" });
     this.assertSchoolScope(actor, event.schoolId);
-    return this.db.select().from(eventoTiposIngresso).where(and(eq(eventoTiposIngresso.eventId, eventId), eq(eventoTiposIngresso.active, true))).orderBy(asc(eventoTiposIngresso.name));
+    return this.db.select().from(eventoTiposIngresso).where(and(eq(eventoTiposIngresso.eventId, eventId), eq(eventoTiposIngresso.active, true), eq(eventoTiposIngresso.internal, false))).orderBy(asc(eventoTiposIngresso.name));
   }
 
   async atualizarIngressos(eventId: string, inputs: Array<{ id?: string; name: string; description?: string | null; priceCents: number; eligibility?: string | null; salesLot?: string | null; rules?: Record<string, unknown> | null; maxPerOrder?: number | null }>, actor: EventoActor) {
@@ -486,7 +453,7 @@ export class EventosService {
     if (!event) throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Evento não encontrado" });
     this.assertSchoolScope(actor, event.schoolId);
     if (inputs.some((input) => !input.name?.trim() || !Number.isInteger(input.priceCents) || input.priceCents < 0 || (input.maxPerOrder != null && (!Number.isInteger(input.maxPerOrder) || input.maxPerOrder <= 0)))) throw new BadRequestException({ code: "INVALID_TICKET", message: "Ingresso inválido" });
-    const current = await this.db.select().from(eventoTiposIngresso).where(and(eq(eventoTiposIngresso.eventId, eventId), eq(eventoTiposIngresso.active, true)));
+    const current = await this.db.select().from(eventoTiposIngresso).where(and(eq(eventoTiposIngresso.eventId, eventId), eq(eventoTiposIngresso.active, true), eq(eventoTiposIngresso.internal, false)));
     const kept = new Set<string>();
     const result = [];
     for (const input of inputs) {
@@ -509,7 +476,7 @@ export class EventosService {
     this.assertSchoolScope(actor, event.schoolId);
     const [ticket] = await this.db.update(eventoTiposIngresso)
       .set({ active: false, updatedAt: new Date() })
-      .where(and(eq(eventoTiposIngresso.id, ticketId), eq(eventoTiposIngresso.eventId, eventId), eq(eventoTiposIngresso.active, true)))
+      .where(and(eq(eventoTiposIngresso.id, ticketId), eq(eventoTiposIngresso.eventId, eventId), eq(eventoTiposIngresso.active, true), eq(eventoTiposIngresso.internal, false), eq(eventoTiposIngresso.internal, false)))
       .returning();
     if (!ticket) throw new NotFoundException({ code: "TICKET_NOT_FOUND", message: "Ingresso não encontrado" });
     await this.audit(eventId, actor, "ATUALIZADO", "ingresso", ticketId, { active: false });

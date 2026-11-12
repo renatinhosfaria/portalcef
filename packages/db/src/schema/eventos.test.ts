@@ -14,6 +14,8 @@ import {
   eventoAceiteTipoEnum,
   eventoOfertaPricingTypeEnum,
   eventoOfertas,
+  eventoAuditoriaAcaoEnum,
+  eventoPedidoOrigemEnum,
   eventos,
 } from "./eventos.js";
 
@@ -104,4 +106,14 @@ test("migration 0054 torna comprador opcional e preenche números correlacionado
   assert.match(migration, /WHERE ingresso\."id" IS NOT NULL/);
   assert.match(migration, /ALTER COLUMN "numero" SET NOT NULL/);
   assert.match(migration, /CREATE UNIQUE INDEX "uq_evento_ingressos_numero"/);
+});
+
+test("cortesias: colunas e enums", () => {
+  assert.deepEqual([...eventoPedidoOrigemEnum], ["VENDA", "CORTESIA"]);
+  assert.equal(eventoPedidos.origin.notNull, true);
+  assert.equal(eventoPedidos.origin.default, "VENDA");
+  assert.equal(eventoTiposIngresso.internal.notNull, true);
+  assert.equal(eventoTiposIngresso.internal.default, false);
+  assert.ok(eventoAuditoriaAcaoEnum.includes("CORTESIA_EMITIDA"));
+  assert.ok(eventoAuditoriaAcaoEnum.includes("CORTESIA_CANCELADA"));
 });

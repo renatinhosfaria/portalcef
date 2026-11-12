@@ -24,7 +24,7 @@ export class EventosRulesService {
       const [sm] = await db.select().from(eventoMapas).where(eq(eventoMapas.id, session.mapId));
       if (!sm || sm.status !== "CONFIRMADO") this.fail("MAP_NOT_CONFIRMED", "O mapa da sessão precisa estar confirmado");
     }
-    const ticketTypes = await db.select().from(eventoTiposIngresso).where(and(eq(eventoTiposIngresso.eventId, eventId), eq(eventoTiposIngresso.active, true)));
+    const ticketTypes = await db.select().from(eventoTiposIngresso).where(and(eq(eventoTiposIngresso.eventId, eventId), eq(eventoTiposIngresso.active, true), eq(eventoTiposIngresso.internal, false)));
     if (!ticketTypes.length) this.fail("TICKET_TYPE_REQUIRED", "Configure ao menos um tipo de ingresso");
     if (ticketTypes.some((ticket: any) => ticket.priceCents < 0)) this.fail("INVALID_PRICE", "Preço inválido");
     const policies = await db.select().from(eventoPoliticas).where(and(eq(eventoPoliticas.eventId, eventId), eq(eventoPoliticas.active, true)));

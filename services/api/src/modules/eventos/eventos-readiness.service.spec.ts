@@ -1,3 +1,5 @@
+import { eventoTiposIngresso } from '@essencia/db';
+import { avaliarPredicado } from './avaliar-predicado.spec-helper';
 import { EventosReadinessService } from './eventos-readiness.service';
 
 describe('EventosReadinessService', () => {
@@ -69,7 +71,26 @@ describe('EventosReadinessService', () => {
     const db = fakeDb([[{ id: 'e1', schoolId: 's1', title: 'Evento', status: 'RASCUNHO' }]]);
     await expect(new EventosReadinessService({ db } as any).verificar('e1', { userId: 'u2', role: 'diretora_geral', schoolId: 's2' })).rejects.toMatchObject({ response: { code: 'FORBIDDEN' } });
   });
+
+  it('mantém o item de ingressos como bloqueador quando o único tipo ativo é interno', async () => {
+    const tipos = [{ id: 'ticket-cortesia', eventId: 'e1', name: 'Cortesia', priceCents: 0, internal: true, active: true }];
+    const respostas: Array<unknown[] | ((predicate: any) => unknown[])> = [
+      [{ id: 'e1', schoolId: 's1', title: 'Evento', slug: 'evento', status: 'RASCUNHO', description: 'x', cancellationPolicy: 'x', contactEmail: 'a@b.com', defaultMapId: 'm1' }],
+      [{ id: 'sess1', eventId: 'e1', startsAt: new Date('2026-11-01T10:00:00Z'), endsAt: new Date('2026-11-01T11:00:00Z'), capacity: 1, locationId: 'l1', mapId: 'm1', salesStartsAt: null, salesEndsAt: null }],
+      [{ id: 'm1', eventId: 'e1', status: 'CONFIRMADO' }],
+      (predicate) => tipos.filter((tipo) => avaliarPredicado(predicate, tipo)),
+      [],
+      [],
+    ];
+    let index = 0;
+    const db = { select: () => ({ from: (table: any) => ({ where: async (predicate: any) => { const resposta = respostas[index++]; if (table === eventoTiposIngresso && typeof resposta !== 'function') throw new Error('ordem de consultas inesperada'); return typeof resposta === 'function' ? resposta(predicate) : resposta ?? []; } }) }) };
+
+    const resultado = await new EventosReadinessService({ db } as any).verificar('e1', { userId: 'u1', role: 'diretora_geral', schoolId: 's1' });
+
+    expect(resultado.items.find((item) => item.key === 'INGRESSO_OBRIGATORIO')).toMatchObject({ state: 'BLOQUEADOR' });
+  });
 });
+
 
 function fakeDb(rows: unknown[][]) {
   let index = 0;

@@ -1,7 +1,7 @@
 # Ingressos de cortesia com assento marcado — Design
 
 **Data:** 2026-11-12
-**Status:** desenho aprovado pelo Renato em conversa em 2026-11-12; aguardando revisão desta spec
+**Status:** implementado em 2026-11-12 na branch `feat/eventos-cortesias`
 **Contexto:** pedido da escola para emitir ingressos sem custo, com o assento escolhido previamente pela própria escola.
 
 ## Intenção
@@ -204,7 +204,8 @@ Estados de carregamento, lista vazia ("Nenhuma cortesia emitida neste evento") e
 
 | Código | HTTP | Quando |
 |--------|------|--------|
-| `EVENT_NOT_FOUND` | 404 | Evento inexistente ou de outra escola. |
+| `EVENT_NOT_FOUND` | 404 | Evento inexistente. |
+| `FORBIDDEN` | 400 | Evento de outra escola (via `assertSchoolScope`). |
 | `SESSION_NOT_FOUND` | 404 | Sessão inexistente ou de outro evento. |
 | `MAP_NOT_CONFIRMED` | 409 | Sessão sem mapa confirmado. |
 | `EVENTO_CANCELADO` | 409 | Emissão em evento cancelado. |

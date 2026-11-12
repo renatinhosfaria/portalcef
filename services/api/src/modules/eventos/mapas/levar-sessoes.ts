@@ -3,6 +3,7 @@ import {
   and,
   asc,
   eq,
+  eventoIngressos,
   eventoInventarioAssentos,
   eventoItensPedido,
   eventoMapaAssentos,
@@ -107,22 +108,37 @@ export async function levarSessoesParaVersao(
     await db.update(eventoPedidos).set({ status: "EXPIRADO", updatedAt: entrada.agora }).where(eq(eventoPedidos.id, pedido.id));
   }
   const pedidosEncerrados = new Set(pedidosDesligados.map((pedido) => pedido.id));
-  const itemIds = itens.filter((item) => pedidosEncerrados.has(item.orderId)).map((item) => item.id);
+  // Ingresso (mesmo CANCELADO ou REVOGADO) aponta para o item e para o inventário
+  // com ON DELETE restrict: o item fica, e o inventário dele é remapeado abaixo.
+  const ingressoQuery = inventoryIds.length
+    ? db.select().from(eventoIngressos).where(inArray(eventoIngressos.inventorySeatId, inventoryIds))
+    : db.select().from(eventoIngressos).where(eq(eventoIngressos.inventorySeatId, "__nenhuma__"));
+  // Leitura sem trava: o inventário dessas linhas já está travado acima.
+  const ingressos: any[] = await ingressoQuery;
+  const itensComIngresso = new Set(ingressos.map((ingresso) => ingresso.itemId));
+  const itensMantidos = itens.filter((item) => pedidosEncerrados.has(item.orderId) && itensComIngresso.has(item.id));
+  const itemIds = itens.filter((item) => pedidosEncerrados.has(item.orderId) && !itensComIngresso.has(item.id)).map((item) => item.id);
   const reservaIds = reservas.filter((reserva) => pedidosEncerrados.has(reserva.orderId)).map((reserva) => reserva.id);
   if (itemIds.length) await db.delete(eventoItensPedido).where(inArray(eventoItensPedido.id, itemIds));
   if (reservaIds.length) await db.delete(eventoReservas).where(inArray(eventoReservas.id, reservaIds));
   const operacoesEncerradas = operacoes.filter((operacao) => operacao.status === "CANCELADA" || operacao.status === "EXPIRADA");
+  // Inventário que ainda tem quem dependa dele: operação encerrada, item mantido ou ingresso.
+  const inventariosDependentes = [
+    ...operacoesEncerradas.map((operacao) => operacao.inventorySeatId),
+    ...itensMantidos.map((item) => item.inventorySeatId),
+    ...ingressos.map((ingresso) => ingresso.inventorySeatId),
+  ];
   const inventarioPreservado = new Map<string, { sessionId: string; seatId: string }>();
   const lugaresUsadosPorSessao = new Map<string, Set<string>>();
-  if (operacoesEncerradas.length) {
+  if (inventariosDependentes.length) {
     const assentoIds = [...new Set(inventarioAntigo.map((item) => item.seatId))];
     const assentosAntigos = assentoIds.length
       ? await db.select().from(eventoMapaAssentos).where(inArray(eventoMapaAssentos.id, assentoIds))
       : [];
     const assentoPorId = new Map(assentosAntigos.map((assento: any) => [assento.id, assento]));
     const lugarPorChave = new Map(lugares.map((lugar: any) => [`${lugar.rowLabel}:${lugar.seatNumber}`, lugar]));
-    for (const operacao of operacoesEncerradas) {
-      const inventario = inventarioAntigo.find((item) => item.id === operacao.inventorySeatId);
+    for (const inventorySeatId of inventariosDependentes) {
+      const inventario = inventarioAntigo.find((item) => item.id === inventorySeatId);
       if (!inventario || inventarioPreservado.has(inventario.id)) continue;
       const assentoAntigo = assentoPorId.get(inventario.seatId) as any;
       const chave = assentoAntigo ? `${assentoAntigo.rowLabel}:${assentoAntigo.seatNumber}` : "";
@@ -133,7 +149,14 @@ export async function levarSessoesParaVersao(
       if (!lugar) {
         const existente = [...inventarioPreservado.entries()].find(([, preservado]) => preservado.sessionId === inventario.sessionId);
         if (!existente) throw new BadRequestException({ code: "MAP_EMPTY", message: "O mapa precisa de pelo menos um assento" });
-        await db.update(eventoOperacoesAdministrativas).set({ inventorySeatId: existente[0], updatedAt: entrada.agora }).where(eq(eventoOperacoesAdministrativas.id, operacao.id));
+        // Sem lugar livre no mapa novo: os dependentes passam a apontar para um inventário já preservado da sessão.
+        await db.update(eventoOperacoesAdministrativas).set({ inventorySeatId: existente[0], updatedAt: entrada.agora }).where(eq(eventoOperacoesAdministrativas.inventorySeatId, inventario.id));
+        if (itensMantidos.some((item) => item.inventorySeatId === inventario.id)) {
+          await db.update(eventoItensPedido).set({ inventorySeatId: existente[0], updatedAt: entrada.agora }).where(eq(eventoItensPedido.inventorySeatId, inventario.id));
+        }
+        if (ingressos.some((ingresso) => ingresso.inventorySeatId === inventario.id)) {
+          await db.update(eventoIngressos).set({ inventorySeatId: existente[0], updatedAt: entrada.agora }).where(eq(eventoIngressos.inventorySeatId, inventario.id));
+        }
         continue;
       }
       usados.add(lugar.id);

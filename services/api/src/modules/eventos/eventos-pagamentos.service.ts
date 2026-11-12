@@ -1,5 +1,4 @@
-import { BadRequestException, Injectable, InternalServerErrorException, NotFoundException, ConflictException } from "@nestjs/common";
-import { createHmac, randomBytes } from "node:crypto";
+import { BadRequestException, Injectable, NotFoundException, ConflictException } from "@nestjs/common";
 import {
   and,
   eq,
@@ -17,6 +16,7 @@ import {
 } from "@essencia/db";
 import { DatabaseService } from "../../common/database/database.service";
 import { gerarNumeroIngresso } from "@essencia/shared/eventos/ingresso";
+import { gerarTokenIngresso } from "./token-ingresso";
 
 type ConfirmarCheckoutInput = {
   checkoutSessionId: string;
@@ -122,15 +122,6 @@ export class EventosPagamentosService {
     }
   }
 
-  private token(orderNumber: string, itemId: string) {
-    const nonce = randomBytes(18).toString("base64url");
-    const payload = `${orderNumber}:${itemId}:${nonce}`;
-    const secret = process.env.EVENTOS_QR_SECRET;
-    if (!secret) throw new InternalServerErrorException({ code: "EVENTOS_QR_SECRET_MISSING", message: "Configuração de ingressos indisponível" });
-    const signature = createHmac("sha256", secret).update(payload).digest("base64url");
-    return { signedToken: `${payload}.${signature}`, qrPayload: `evento:${payload}.${signature}` };
-  }
-
   async confirmarCheckout(input: ConfirmarCheckoutInput): Promise<void> {
     const reference = await this.findPayment(
       this.db,
@@ -234,7 +225,7 @@ export class EventosPagamentosService {
         const converted = await tx.update(eventoReservas).set({ status: "CONVERTIDA", updatedAt: new Date() }).where(and(eq(eventoReservas.id, reservation.id), eq(eventoReservas.status, "ATIVA"))).returning();
         if (!this.changed(converted)) throw new ConflictException({ code: "RESERVATION_STATE_CHANGED", message: "Estado da reserva mudou durante a confirmação" });
         if (typeof tx.insert === "function") {
-          const token = this.token(order.orderNumber, item.id);
+          const token = gerarTokenIngresso(order.orderNumber, item.id);
           await tx.insert(eventoIngressos).values({ numero: gerarNumeroIngresso(), orderId: order.id, itemId: item.id, sessionId: order.sessionId, inventorySeatId: item.inventorySeatId, participantId, status: "EMITIDO", ...token }).returning();
         }
       }

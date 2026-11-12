@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import type { IngressoPublico, PedidoComIngressos } from "@essencia/shared/types";
-import { compartilharOuBaixar, gerarPdfIngressos, nomeArquivoIngresso } from "../../lib/pdf-ingresso";
+import { carregarArtePublica, compartilharOuBaixar, gerarPdfIngressos, nomeArquivoIngresso } from "../../lib/pdf-ingresso";
 import { classeBotaoAcao } from "../base/botao-acao";
 
 export function AcoesIngresso({ pedido, ingresso, indice: _indice, total: _total }: { pedido: PedidoComIngressos; ingresso: IngressoPublico; indice: number; total: number }): React.JSX.Element {
@@ -12,7 +12,7 @@ export function AcoesIngresso({ pedido, ingresso, indice: _indice, total: _total
     setCarregando(true);
     setResultado(null);
     try {
-      const blob = await gerarPdfIngressos(pedido, [ingresso]);
+      const blob = await gerarPdfIngressos(pedido, [ingresso], { carregarArte: carregarArtePublica });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
@@ -33,7 +33,7 @@ export function AcoesIngresso({ pedido, ingresso, indice: _indice, total: _total
     setCarregando(true);
     setResultado(null);
     try {
-      const blob = await gerarPdfIngressos(pedido, [ingresso]);
+      const blob = await gerarPdfIngressos(pedido, [ingresso], { carregarArte: carregarArtePublica });
       const arquivo = new File([blob], nomeArquivoIngresso(pedido, ingresso), { type: "application/pdf" });
       const acao = await compartilharOuBaixar(arquivo);
       setResultado(acao === "compartilhado" ? "Escolha o WhatsApp para enviar o PDF." : "PDF baixado. Anexe-o no WhatsApp.");

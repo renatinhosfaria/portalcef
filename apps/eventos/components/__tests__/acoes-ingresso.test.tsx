@@ -61,7 +61,7 @@ describe("AcoesIngresso", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Baixar ingresso" }));
 
-    await waitFor(() => expect(pdfIngresso.gerarPdfIngressos).toHaveBeenCalledWith(pedido, [ingresso]));
+    await waitFor(() => expect(pdfIngresso.gerarPdfIngressos).toHaveBeenCalledWith(pedido, [ingresso], { carregarArte: pdfIngresso.carregarArtePublica }));
     expect(click).toHaveBeenCalled();
   });
 
@@ -71,6 +71,6 @@ describe("AcoesIngresso", () => {
     fireEvent.click(screen.getByRole("button", { name: "Compartilhar PDF" }));
 
     await waitFor(() => expect(pdfIngresso.compartilharOuBaixar).toHaveBeenCalledWith(expect.any(File)));
-    expect(pdfIngresso.gerarPdfIngressos).toHaveBeenCalledWith(pedido, [ingresso]);
+    expect(pdfIngresso.gerarPdfIngressos).toHaveBeenCalledWith(pedido, [ingresso], { carregarArte: pdfIngresso.carregarArtePublica });
   });
 });

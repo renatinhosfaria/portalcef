@@ -74,4 +74,54 @@ describe("trava de venda", () => {
     await expect(lockRows.mock.calls[0][0]).resolves.toEqual(pedidos);
     expect((lockRows.mock.calls[0][0] as any).orderBy).toHaveBeenCalledTimes(1);
   });
+
+  // Procura na condição (o shim do jest representa operadores como { name, args })
+  // os valores excluídos por notInArray.
+  function statusExcluidos(no: any): unknown[] {
+    if (!no || typeof no !== "object") return [];
+    if (no.name === "notInArray") return no.args[1];
+    return Array.isArray(no.args) ? no.args.flatMap(statusExcluidos) : [];
+  }
+
+  // O fake aplica de verdade o filtro de status da consulta de ingressos:
+  // descarta as linhas cujo status foi excluído pela condição.
+  async function trava(ingressos: Array<{ id: string; status: string }>) {
+    const tabelas = new Map<unknown, unknown[]>([
+      [eventoSessoes, [{ id: "sessao-1" }]],
+      [eventoPedidos, []],
+      [eventoIngressos, ingressos],
+      [eventoCheckins, []],
+      [eventoOperacoesAdministrativas, []],
+    ]);
+    const db: any = {
+      select: () => ({
+        from: (table: unknown) => ({
+          where: (condicao: any) => {
+            const linhas = tabelas.get(table) ?? [];
+            if (table !== eventoIngressos) return Promise.resolve(linhas);
+            const excluidos = statusExcluidos(condicao);
+            return Promise.resolve(
+              (linhas as Array<{ status: string }>).filter(({ status }) => !excluidos.includes(status)),
+            );
+          },
+        }),
+      }),
+    };
+    return carregarTrava(db, "evento-1", agora);
+  }
+
+  it("ignora ingressos cancelados ao decidir se o mapa está travado", async () => {
+    await expect(trava([{ id: "ingresso-cortesia", status: "CANCELADO" }])).resolves.toBe("LIVRE");
+  });
+
+  it("ignora ingressos revogados ao decidir se o mapa está travado", async () => {
+    await expect(trava([{ id: "ingresso-cortesia", status: "REVOGADO" }])).resolves.toBe("LIVRE");
+  });
+
+  it("ingresso emitido continua travando o mapa", async () => {
+    await expect(trava([{ id: "ingresso-1", status: "EMITIDO" }])).resolves.toBe("VENDA_CONFIRMADA");
+    await expect(
+      trava([{ id: "a", status: "CANCELADO" }, { id: "b", status: "EMITIDO" }]),
+    ).resolves.toBe("VENDA_CONFIRMADA");
+  });
 });

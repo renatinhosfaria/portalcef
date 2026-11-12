@@ -19,7 +19,7 @@ export class EventosReadinessService {
     assertSchoolScope(actor, event.schoolId);
     const sessions: any[] = await this.rows(eventoSessoes, eq(eventoSessoes.eventId, eventId));
     const maps: any[] = await this.rows(eventoMapas, eq(eventoMapas.eventId, eventId));
-    const tickets: any[] = await this.rows(eventoTiposIngresso, and(eq(eventoTiposIngresso.eventId, eventId), eq(eventoTiposIngresso.active, true)));
+    const tickets: any[] = await this.rows(eventoTiposIngresso, and(eq(eventoTiposIngresso.eventId, eventId), eq(eventoTiposIngresso.active, true), eq(eventoTiposIngresso.internal, false)));
     const policies: any[] = await this.rows(eventoPoliticas, and(eq(eventoPoliticas.eventId, eventId), eq(eventoPoliticas.active, true)));
     if (this.mapas) {
       const confirmedMapIds = new Set<string>();

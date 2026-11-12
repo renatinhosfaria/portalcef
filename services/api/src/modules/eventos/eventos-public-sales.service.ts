@@ -1,10 +1,11 @@
 import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException, ServiceUnavailableException, forwardRef } from "@nestjs/common";
-import { and, asc, desc, eq, eventoAceites, eventoIngressos, eventoInventarioAssentos, eventoItensPedido, eventoLocais, eventoMapaAssentos, eventoOfertas, eventoPagamentos, eventoParticipantes, eventoPedidos, eventoPoliticas, eventoReservas, eventoSessoes, eventoTiposIngresso, eventoTokensConsulta, eventos, gt, inArray, isNull, lte, or, schema, type Database } from "@essencia/db";
+import { and, asc, desc, eq, eventoAceites, eventoInventarioAssentos, eventoItensPedido, eventoLocais, eventoMapaAssentos, eventoOfertas, eventoPagamentos, eventoParticipantes, eventoPedidos, eventoPoliticas, eventoReservas, eventoSessoes, eventoTiposIngresso, eventoTokensConsulta, eventos, gt, inArray, isNull, lte, or, schema, type Database } from "@essencia/db";
 import { finalizarPedidoSchema, meusIngressosSchema, pagamentoEmbutidoSchema, reservaPublicaSchema, type FinalizarPedidoInput, type MeusIngressosInput, type PagamentoEmbutidoInput, type ReservaPublicaInput } from "@essencia/shared/schemas";
 import { calcularPrecoPedido, type OfertaPreco } from "@essencia/shared/eventos/precos";
 import type { ConsultaPedidoPublica, FinalizacaoPublicaResult, MeusIngressosResult, PagamentoEmbutidoResult, PedidoComIngressos, PedidoPublicoResult, PoliticaPublica, ReservaPublicaResult } from "@essencia/shared/types";
 import { DatabaseService } from "../../common/database/database.service";
 import { PaymentsService } from "../payments/payments.service";
+import { montarIngressosDoPedido } from "./montar-pedido-ingressos";
 import { gerarTokenAcesso, hashTokenAcesso, validadeAcesso } from "./acesso-pedido";
 
 const fail = (code: string, message: string) => new BadRequestException({ code, message });
@@ -65,7 +66,7 @@ export class EventosPublicSalesService {
       for (const requested of input.seats) requestedQuantities.set(requested.ticketTypeId, (requestedQuantities.get(requested.ticketTypeId) ?? 0) + 1);
       const ticketById = new Map<string, any>();
       for (const [ticketTypeId, quantity] of requestedQuantities) {
-        const ticketQuery = tx.select().from(eventoTiposIngresso).where(and(eq(eventoTiposIngresso.id, ticketTypeId), eq(eventoTiposIngresso.eventId, event.id), eq(eventoTiposIngresso.active, true)));
+        const ticketQuery = tx.select().from(eventoTiposIngresso).where(and(eq(eventoTiposIngresso.id, ticketTypeId), eq(eventoTiposIngresso.eventId, event.id), eq(eventoTiposIngresso.active, true), eq(eventoTiposIngresso.internal, false)));
         const ticket = await this.first<any>(await this.lockRows(ticketQuery));
         if (!ticket) throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Ingresso não encontrado" });
         if (ticket.maxPerOrder !== null && ticket.maxPerOrder !== undefined && quantity > ticket.maxPerOrder) {
@@ -405,15 +406,7 @@ export class EventosPublicSalesService {
 
     const pedido = await this.pedidoResult(order, this.db);
     const tickets = ["CONFIRMADO", "USADO"].includes(order.status)
-      ? (await this.db.select({ ticket: eventoIngressos, item: eventoItensPedido, inventory: eventoInventarioAssentos, seat: eventoMapaAssentos, ticketType: eventoTiposIngresso, participant: eventoParticipantes }).from(eventoIngressos).innerJoin(eventoItensPedido, eq(eventoItensPedido.id, eventoIngressos.itemId)).innerJoin(eventoInventarioAssentos, eq(eventoInventarioAssentos.id, eventoIngressos.inventorySeatId)).innerJoin(eventoMapaAssentos, eq(eventoMapaAssentos.id, eventoInventarioAssentos.seatId)).innerJoin(eventoTiposIngresso, eq(eventoTiposIngresso.id, eventoItensPedido.ticketTypeId)).innerJoin(eventoParticipantes, eq(eventoParticipantes.id, eventoIngressos.participantId)).where(eq(eventoIngressos.orderId, order.id))).map((row: any) => ({
-        numero: row.ticket?.numero,
-        qrPayload: row.ticket?.qrPayload,
-        rowLabel: row.seat?.rowLabel ?? row.inventory?.rowLabel ?? "",
-        seatNumber: row.seat?.seatNumber ?? row.inventory?.seatNumber ?? "",
-        ticketTypeName: row.ticketType?.name ?? row.item?.ticketTypeName ?? "",
-        participantName: row.participant?.fullName ?? "",
-        status: row.ticket?.status,
-      }))
+      ? await montarIngressosDoPedido(this.db, order.id)
       : [];
 
     return {

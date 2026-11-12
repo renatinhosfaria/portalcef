@@ -47,7 +47,14 @@ export function normalizarReadiness(eventId: string, source: WorkspaceReadinessI
 
 export function WorkspaceShell({ eventId, children, readiness, lastSavedAt, saveState }: { eventId: string; children: ReactNode; readiness: WorkspaceReadiness; lastSavedAt?: string | null; saveState: SaveState }) {
   const normalized = normalizarReadiness(eventId, readiness.items);
-  const items: WorkspaceNavigationItem[] = normalized.map((item) => ({ key: item.key, label: item.label, href: item.href ?? `/eventos/${eventId}/${item.key}`, state: item.state as WorkspaceStepState, blocked: item.state === "BLOQUEADOR" }));
+  const items: WorkspaceNavigationItem[] = [];
+  for (const item of normalized) {
+    items.push({ key: item.key, label: item.label, href: item.href ?? `/eventos/${eventId}/${item.key}`, state: item.state as WorkspaceStepState, blocked: item.state === "BLOQUEADOR" });
+    if (item.key === "mapa") {
+      items.push({ key: "inventario", label: "Inventário", href: `/eventos/${eventId}/inventario`, state: "NAO_INICIADO", semEstado: true });
+      items.push({ key: "cortesias", label: "Cortesias", href: `/eventos/${eventId}/cortesias`, state: "NAO_INICIADO", semEstado: true });
+    }
+  }
   const pending = normalized.find((item) => item.state === "BLOQUEADOR" && item.message);
 
   return (

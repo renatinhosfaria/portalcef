@@ -386,6 +386,13 @@
       "when": 1794160000000,
       "tag": "0054_eventos_site_publico",
       "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1794250000000,
+      "tag": "0055_eventos_cortesias",
+      "breakpoints": true
     }
   ]
 }

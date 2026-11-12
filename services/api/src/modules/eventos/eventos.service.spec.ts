@@ -2,6 +2,8 @@ import { ConflictException, BadRequestException } from '@nestjs/common';
 import 'reflect-metadata';
 import { EventosService } from './eventos.service';
 import { MapasService } from './mapas/mapas.service';
+import { eventoPedidos, eventoSessoes, eventoTiposIngresso, eventos } from '@essencia/db';
+import { avaliarPredicado } from './avaliar-predicado.spec-helper';
 
 const actor = { userId: 'u1', role: 'diretora_geral', schoolId: 's1' };
 const event = (extra: Record<string, unknown> = {}) => ({
@@ -495,6 +497,20 @@ describe('EventosService contratos de workspace', () => {
     });
   });
 
+  it("não expõe campos internos do inventário na resposta pública", async () => {
+    const db = fakeDb({
+      selects: [[{ id: "s1", eventId: "e1", mapId: "mapa-1", status: "PUBLICADA" }], [event({ status: "PUBLICADO" })], [{ id: "mapa-1", status: "CONFIRMADO", layout: null }], [
+        { seat: { id: "seat-1", rowLabel: "A", seatNumber: "1", x: 10, y: 20, width: 50, height: 50, category: null, accessible: false, metadata: {} }, inventory: { id: "inv-1", status: "VENDIDO" } },
+      ]],
+    });
+
+    const mapa = await service(db).getPublicMap("s1");
+
+    expect(mapa.seats[0]).toMatchObject({ id: "seat-1", state: "sold" });
+    expect(mapa.seats[0]).not.toHaveProperty("inventorySeatId");
+    expect(mapa.seats[0]).not.toHaveProperty("inventoryStatus");
+  });
+
   it("devolve layout nulo quando o mapa não tem desenho", async () => {
     const db = fakeDb({ selects: [[{ id: "s1", eventId: "e1", mapId: "mapa-1", status: "PUBLICADA" }], [event({ status: "PUBLICADO" })], [{ id: "mapa-1", status: "CONFIRMADO", layout: null }], []] });
 
@@ -512,7 +528,123 @@ describe('EventosService contratos de workspace', () => {
     await expect(service(db).getPublicMap("s1")).resolves.toMatchObject({ seats: [expect.objectContaining({ rotacao: 12.5 }), expect.objectContaining({ rotacao: 0 })] });
   });
 
+
+  describe('tipo de ingresso interno (cortesia)', () => {
+    const inteira = () => ({ id: 'ticket-inteira', eventId: 'e1', name: 'Inteira', description: null, priceCents: 4500, maxPerOrder: null, eligibility: null, version: 1, internal: false, active: true });
+    const cortesia = () => ({ id: 'ticket-cortesia', eventId: 'e1', name: 'Cortesia', description: null, priceCents: 0, maxPerOrder: null, eligibility: null, version: 1, internal: true, active: true });
+
+    it('listarPublicados e getPublicBySlug não devolvem o tipo interno', async () => {
+      const db = tiposDb({ tipos: [inteira(), cortesia()], event: event({ status: 'PUBLICADO', slug: 'ballet' }) });
+
+      const lista = await service(db).listarPublicados(new Date('2026-11-09T12:00:00Z'));
+      expect(lista).toEqual([expect.objectContaining({ slug: 'ballet', fromPriceCents: 4500 })]);
+      expect(db.tiposVistosNoJoin).toEqual(['ticket-inteira']);
+
+      await expect(service(db).getPublicBySlug('ballet', new Date('2026-11-09T12:00:00Z'))).resolves.toMatchObject({ fromPriceCents: 4500 });
+      expect(db.tiposVistosNoJoin).toEqual(['ticket-inteira']);
+    });
+
+    it('um evento só com o tipo interno não expõe preço', async () => {
+      const db = tiposDb({ tipos: [cortesia()], event: event({ status: 'PUBLICADO', slug: 'ballet' }) });
+      await expect(service(db).listarPublicados(new Date('2026-11-09T12:00:00Z'))).resolves.toEqual([expect.objectContaining({ fromPriceCents: null })]);
+    });
+
+    it('listarSessoesPublicas não devolve o tipo interno', async () => {
+      const db = tiposDb({ tipos: [inteira(), cortesia()], event: event({ status: 'PUBLICADO', slug: 'ballet' }) });
+      const instance = service(db);
+      jest.spyOn(instance, 'getPublicBySlug').mockResolvedValue({ id: 'e1' } as any);
+
+      const sessoes = await instance.listarSessoesPublicas('ballet');
+
+      expect(sessoes).toHaveLength(1);
+      expect(sessoes[0]!.ticketTypes.map((tipo: any) => tipo.id)).toEqual(['ticket-inteira']);
+    });
+
+    it('listarIngressosAdmin não devolve o tipo interno', async () => {
+      const db = tiposDb({ tipos: [inteira(), cortesia()], event: event() });
+      const lista = await service(db).listarIngressosAdmin('e1', actor);
+      expect(lista.map((tipo: any) => tipo.id)).toEqual(['ticket-inteira']);
+    });
+
+    it('atualizarIngressos sem o tipo interno no payload o mantém ativo', async () => {
+      const db = tiposDb({ tipos: [inteira(), cortesia()], event: event() });
+
+      await service(db).atualizarIngressos('e1', [{ id: 'ticket-inteira', name: 'Inteira', priceCents: 5000 }], actor);
+
+      expect(db.estado.find((tipo: any) => tipo.id === 'ticket-cortesia')).toMatchObject({ active: true });
+      expect(db.estado.find((tipo: any) => tipo.id === 'ticket-inteira')).toMatchObject({ active: true, priceCents: 5000 });
+    });
+
+    it('atualizarIngressos sem o tipo comum o desativa e continua preservando o interno', async () => {
+      const db = tiposDb({ tipos: [inteira(), cortesia()], event: event() });
+
+      await service(db).atualizarIngressos('e1', [], actor);
+
+      expect(db.estado.find((tipo: any) => tipo.id === 'ticket-inteira')).toMatchObject({ active: false });
+      expect(db.estado.find((tipo: any) => tipo.id === 'ticket-cortesia')).toMatchObject({ active: true });
+    });
+
+    it('removerIngresso do tipo interno responde não encontrado e não o desativa', async () => {
+      const db = tiposDb({ tipos: [inteira(), cortesia()], event: event() });
+
+      await expect(service(db).removerIngresso('e1', 'ticket-cortesia', actor)).rejects.toMatchObject({ response: { code: 'TICKET_NOT_FOUND' } });
+      expect(db.estado.find((tipo: any) => tipo.id === 'ticket-cortesia')).toMatchObject({ active: true });
+    });
+  });
+
+  describe('cortesias não travam a edição do evento e da sessão', () => {
+    const cortesiaAtiva = { id: 'p-cortesia-1', eventId: 'e1', sessionId: 's1', origin: 'CORTESIA', status: 'CONFIRMADO' };
+    const cortesiaCancelada = { id: 'p-cortesia-2', eventId: 'e1', sessionId: 's1', origin: 'CORTESIA', status: 'CANCELADO' };
+    const venda = { id: 'p-venda', eventId: 'e1', sessionId: 's1', origin: 'VENDA', status: 'CONFIRMADO' };
+
+    it('atualizarEvento edita evento que só tem cortesias (ativa e cancelada)', async () => {
+      const db = pedidosDb({ event: event(), pedidos: [cortesiaAtiva, cortesiaCancelada] });
+      await expect(service(db).atualizarEvento('e1', { title: 'Novo Título' }, actor)).resolves.toMatchObject({ id: 'e1' });
+      expect(db.updated).toBe(true);
+    });
+
+    it('atualizarEvento continua bloqueado quando há pedido de venda', async () => {
+      const db = pedidosDb({ event: event(), pedidos: [cortesiaAtiva, venda] });
+      await expect(service(db).atualizarEvento('e1', { title: 'Novo Título' }, actor)).rejects.toMatchObject({ response: { code: 'EVENT_HAS_SALES' } });
+      expect(db.updated).toBe(false);
+    });
+
+    it('atualizarSessao edita sessão que só tem cortesias (ativa e cancelada)', async () => {
+      const db = pedidosDb({ event: event(), pedidos: [cortesiaAtiva, cortesiaCancelada] });
+      await expect(service(db).atualizarSessao('e1', 's1', { capacity: 12 }, actor)).resolves.toMatchObject({ id: 's1' });
+      expect(db.updated).toBe(true);
+    });
+
+    it('atualizarSessao continua bloqueado quando há pedido de venda', async () => {
+      const db = pedidosDb({ event: event(), pedidos: [cortesiaCancelada, venda] });
+      await expect(service(db).atualizarSessao('e1', 's1', { capacity: 12 }, actor)).rejects.toMatchObject({ response: { code: 'EVENT_HAS_SALES' } });
+      expect(db.updated).toBe(false);
+    });
+  });
+
 });
+
+/** Banco que filtra `eventoPedidos` pelos predicados da consulta, para provar o critério de bloqueio. */
+function pedidosDb(config: { event: any; pedidos: any[] }) {
+  const db: any = { updated: false };
+  const resposta = (linhas: any[]) => Object.assign(Promise.resolve(linhas), { limit: async (n: number) => linhas.slice(0, n), for: () => resposta(linhas) });
+  db.select = () => {
+    let tabela: unknown;
+    const builder: any = {};
+    builder.from = (alvo: unknown) => { tabela = alvo; return builder; };
+    builder.where = (predicado: any) => {
+      if (tabela === eventoPedidos) return resposta(config.pedidos.filter((pedido) => avaliarPredicado(predicado, pedido)));
+      if (tabela === eventoSessoes) return resposta([{ id: 's1', eventId: 'e1', mapId: null }]);
+      if (tabela === eventos) return resposta([config.event]);
+      return resposta([]);
+    };
+    return builder;
+  };
+  db.update = (tabela: unknown) => ({ set: (valores: any) => ({ where: () => ({ returning: async () => { db.updated = true; return tabela === eventoSessoes ? [{ id: 's1', eventId: 'e1', ...valores }] : [{ ...config.event, ...valores }]; } }) }) });
+  db.insert = () => ({ values: () => Object.assign(Promise.resolve(undefined), { returning: async () => [] }) });
+  db.transaction = async (callback: (tx: any) => Promise<unknown>) => callback(db);
+  return db;
+}
 
 function service(db: any, storage?: any, mapas?: any) { return new EventosService({ db } as any, { validarPublicacao: jest.fn() } as any, storage, mapas); }
 
@@ -549,5 +681,38 @@ function publicSessionsDb(selects: unknown[][]) {
     };
     return builder;
   };
+  return db;
+}
+
+/** Banco em memória que avalia os predicados de `eventoTiposIngresso` (inclusive nos joins). */
+function tiposDb(config: { tipos: any[]; event: any }) {
+  const estado = config.tipos.map((tipo) => ({ ...tipo }));
+  const db: any = { estado, tiposVistosNoJoin: [] as string[] };
+  const resposta = (linhas: any[]) => Object.assign(Promise.resolve(linhas), { limit: async () => linhas, orderBy: async () => [...linhas].sort((a, b) => String(a.name).localeCompare(String(b.name))) });
+  db.select = () => {
+    let tabela: unknown;
+    let predicadoJoin: any;
+    const builder: any = {};
+    builder.from = (alvo: unknown) => { tabela = alvo; return builder; };
+    builder.innerJoin = () => builder;
+    builder.leftJoin = (alvo: unknown, predicado: any) => { if (alvo === eventoTiposIngresso) predicadoJoin = predicado; return builder; };
+    builder.where = (predicado: any) => {
+      if (tabela === eventoTiposIngresso) return resposta(estado.filter((tipo: any) => avaliarPredicado(predicado, tipo)));
+      const sessao = { id: 's1', eventId: 'e1', status: 'PUBLICADA', startsAt: new Date('2026-12-07T19:00:00Z'), endsAt: new Date('2026-12-07T21:00:00Z'), capacity: 10, mapId: null, salesStartsAt: null, salesEndsAt: null };
+      if (tabela === eventoSessoes) return resposta([{ session: sessao, location: null, inventory: { status: 'DISPONIVEL' } }]);
+      if (predicadoJoin === undefined) return resposta([config.event]);
+      const visiveis = estado.filter((tipo: any) => avaliarPredicado(predicadoJoin, tipo));
+      db.tiposVistosNoJoin = visiveis.map((tipo: any) => tipo.id);
+      const base = { event: config.event, session: sessao, location: { name: 'Teatro Municipal' }, inventory: { status: 'DISPONIVEL' } };
+      return resposta(visiveis.length ? visiveis.map((ticket: any) => ({ ...base, ticket })) : [{ ...base, ticket: null }]);
+    };
+    return builder;
+  };
+  db.insert = () => ({ values: () => ({ returning: async () => [] }) });
+  db.update = (alvo: unknown) => ({ set: (valores: any) => ({ where: (predicado: any) => {
+    const afetados = alvo === eventoTiposIngresso ? estado.filter((tipo: any) => avaliarPredicado(predicado, tipo)) : [];
+    for (const tipo of afetados) Object.assign(tipo, valores);
+    return Object.assign(Promise.resolve(afetados), { returning: async () => afetados });
+  } }) });
   return db;
 }
