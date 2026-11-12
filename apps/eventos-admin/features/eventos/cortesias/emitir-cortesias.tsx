@@ -14,6 +14,8 @@ export interface SessaoCortesia { id: string; startsAt: string; apta: boolean }
 interface EmitirCortesiasProps {
   eventId: string;
   sessoes: SessaoCortesia[];
+  /** Muda quando algo fora da emissão (ex.: um cancelamento) altera a ocupação: recarrega o mapa. */
+  versaoMapa?: number;
   aoEmitir: (emitidas: CortesiaResumo[]) => void;
 }
 
@@ -22,7 +24,7 @@ function formatarSessao(inicio: string): string {
   return Number.isNaN(data.getTime()) ? inicio : data.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
 }
 
-export function EmitirCortesias({ eventId, sessoes, aoEmitir: aoEmitirPai }: EmitirCortesiasProps): React.JSX.Element {
+export function EmitirCortesias({ eventId, sessoes, versaoMapa = 0, aoEmitir: aoEmitirPai }: EmitirCortesiasProps): React.JSX.Element {
   const sessoesAptas = useMemo(() => sessoes.filter((sessao) => sessao.apta), [sessoes]);
   const [sessionId, setSessionId] = useState<string | null>(sessoesAptas[0]?.id ?? null);
   const [mapa, setMapa] = useState<MapaAdminSessao | null>(null);
@@ -45,7 +47,7 @@ export function EmitirCortesias({ eventId, sessoes, aoEmitir: aoEmitirPai }: Emi
     finally { setCarregando(false); }
   }, [eventId]);
 
-  useEffect(() => { void carregarMapa(sessionId); }, [carregarMapa, sessionId]);
+  useEffect(() => { void carregarMapa(sessionId); }, [carregarMapa, sessionId, versaoMapa]);
 
   const aoEmitir = useCallback((emitidas: CortesiaResumo[]) => {
     setMensagemSucesso(`${emitidas.length} ${emitidas.length === 1 ? "cortesia" : "cortesias"} emitida${emitidas.length === 1 ? "" : "s"}.`);
