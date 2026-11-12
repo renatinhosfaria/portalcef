@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { WorkspaceShell, normalizarReadiness } from "./workspace-shell";
+import { WorkspaceShell, normalizarReadiness, type WorkspaceReadiness } from "./workspace-shell";
 import { getActiveWorkspaceKey } from "./workspace-navigation";
 
 const readiness = {
@@ -87,5 +87,35 @@ describe("navegação e readiness do workspace", () => {
     for (const etapa of ["informacoes", "ingressos", "politicas", "revisar"]) {
       expect(existsSync(`${base}/${etapa}/page.tsx`)).toBe(true);
     }
+  });
+});
+
+describe("itens do mapa e cortesias na navegação", () => {
+  const renderizar = (itens: WorkspaceReadiness["items"]) => renderToStaticMarkup(
+    <WorkspaceShell eventId="evt-1" readiness={{ ...readiness, items: itens }} saveState="saved"><p /></WorkspaceShell>,
+  );
+  const rotulos = (html: string) => Array.from(html.matchAll(/<li>(.*?)<\/li>/g)).map((m) => m[1]);
+  const textos = (li: string) => li.replace(/<[^>]+>/g, "|").split("|").filter(Boolean);
+
+  it("mostra Cortesias logo depois de Inventário, sem rótulo de estado", () => {
+    const itens = rotulos(renderizar(readiness.items));
+    const nomes = itens.map((li) => textos(li)[0]);
+    expect(nomes.indexOf("Cortesias")).toBe(nomes.indexOf("Inventário") + 1);
+    expect(textos(itens[nomes.indexOf("Cortesias")])).toEqual(["Cortesias"]);
+  });
+
+  it("Inventário também não mostra rótulo de estado do mapa", () => {
+    const itens = rotulos(renderizar([{ key: "MAPA_CONFIRMADO", label: "Mapa", state: "BLOQUEADOR", message: "Confirme o mapa" }]));
+    const inventario = itens.find((li) => textos(li)[0] === "Inventário")!;
+    expect(textos(inventario)).toEqual(["Inventário"]);
+    expect(inventario).not.toContain("Pendente");
+  });
+
+  it("Cortesias não altera progresso nem o estado de Revisar e publicar", () => {
+    const base = normalizarReadiness("evt-1", readiness.items);
+    const html = renderizar(readiness.items);
+    expect(base.map((i) => i.key)).not.toContain("cortesias");
+    expect(base.find((i) => i.key === "revisar")?.state).toBe("BLOQUEADOR");
+    expect(html).not.toContain("Cortesias</span><span");
   });
 });

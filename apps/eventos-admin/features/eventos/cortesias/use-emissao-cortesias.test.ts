@@ -83,7 +83,7 @@ describe("useEmissaoCortesias", () => {
     await act(async () => { await result.current.emitir(); });
     expect(result.current.selecionados).toEqual(["seat-2"]);
     expect(result.current.conflitos).toEqual(new Set(["seat-2"]));
-    expect(result.current.erro).toContain("Fileira B · Assento 4");
+    expect(result.current.erro).toBe("Estes lugares não estão mais livres: Fileira B · Assento 4. Troque-os e tente de novo.");
     expect(gerarChave).toHaveBeenCalledTimes(1);
   });
 

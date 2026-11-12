@@ -46,6 +46,7 @@ describe("EmitirCortesias", () => {
     fireEvent.click(screen.getAllByRole("button").find((botao) => botao.textContent === "Emitir")!);
     await waitFor(() => expect(emitirCortesias).toHaveBeenCalled());
     expect(aoEmitir).toHaveBeenCalledWith(emitidas);
+    await waitFor(() => expect(screen.getByText("1 cortesia emitida.")).not.toBeNull());
     expect(obterMapaAdmin).toHaveBeenCalledTimes(2);
   });
 

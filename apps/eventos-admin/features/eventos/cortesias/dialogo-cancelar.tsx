@@ -5,11 +5,16 @@ import type { CortesiaResumo } from "@essencia/shared/types";
 
 interface DialogoCancelarProps { cortesia: CortesiaResumo | null; aoConfirmar(motivo: string): Promise<void>; aoFechar(): void }
 
+// O estado (motivo e erro) vive no conteúdo, remontado por cortesia, para não vazar entre elas.
 export function DialogoCancelar({ cortesia, aoConfirmar, aoFechar }: DialogoCancelarProps): React.JSX.Element | null {
+  if (!cortesia) return null;
+  return <ConteudoDialogo key={cortesia.orderId} cortesia={cortesia} aoConfirmar={aoConfirmar} aoFechar={aoFechar} />;
+}
+
+function ConteudoDialogo({ cortesia, aoConfirmar, aoFechar }: Omit<DialogoCancelarProps, "cortesia"> & { cortesia: CortesiaResumo }): React.JSX.Element {
   const [motivo, setMotivo] = useState("");
   const [erro, setErro] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
-  if (!cortesia) return null;
   async function confirmar(): Promise<void> {
     const aparado = motivo.trim();
     if (aparado.length < 3) { setErro("Informe um motivo com pelo menos 3 caracteres."); return; }

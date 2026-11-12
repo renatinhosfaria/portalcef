@@ -15,6 +15,7 @@ export default function CortesiasPage(): React.JSX.Element {
   const [sessoes, setSessoes] = useState<SessaoCortesia[]>([]);
   const [cortesias, setCortesias] = useState<CortesiaResumo[]>([]);
   const [erro, setErro] = useState<string | null>(null);
+  const [carregado, setCarregado] = useState(false);
   const carregar = useCallback(async () => {
     setErro(null);
     try {
@@ -23,8 +24,9 @@ export default function CortesiasPage(): React.JSX.Element {
       const linhas = dados<Array<{ id?: string; startsAt?: string; mapId?: string | null }>>(await respostaSessoes.json());
       setSessoes((linhas ?? []).filter((linha) => linha.id).map((linha) => ({ id: linha.id!, startsAt: linha.startsAt ?? "", apta: Boolean(linha.mapId) })));
       setCortesias(lista);
+      setCarregado(true);
     } catch { setErro("Não foi possível carregar as cortesias."); }
   }, [id]);
   useEffect(() => { void carregar(); }, [carregar]);
-  return <section className="space-y-8"><div><h1 className="text-2xl font-semibold">Cortesias</h1><p className="text-sm text-slate-600">Emita ingressos gratuitos com lugar marcado e acompanhe os cancelamentos.</p></div>{erro && <p role="alert" className="text-red-700">{erro}</p>}<EmitirCortesias eventId={id} sessoes={sessoes} aoEmitir={(emitidas) => { setCortesias((atual) => [...emitidas, ...atual]); void carregar(); }} /><div className="border-t border-slate-200 pt-6"><h2 className="mb-4 text-xl font-semibold">Cortesias emitidas</h2><ListaCortesias cortesias={cortesias} sessoes={sessoes} aoBaixar={(cortesia) => baixarVoucher(id, cortesia)} aoCancelar={async (cortesia, motivo) => { await cancelarCortesia(id, cortesia.orderId, motivo); await carregar(); }} /></div></section>;
+  return <section className="space-y-8"><div><h1 className="text-2xl font-semibold">Cortesias</h1><p className="text-sm text-slate-600">Emita ingressos gratuitos com lugar marcado e acompanhe os cancelamentos.</p></div>{erro && <p role="alert" className="text-red-700">{erro}</p>}{!carregado ? (!erro && <p>Carregando cortesias…</p>) : <><EmitirCortesias eventId={id} sessoes={sessoes} aoEmitir={(emitidas) => { setCortesias((atual) => [...emitidas, ...atual]); void carregar(); }} /><div className="border-t border-slate-200 pt-6"><h2 className="mb-4 text-xl font-semibold">Cortesias emitidas</h2><ListaCortesias cortesias={cortesias} sessoes={sessoes} aoBaixar={(cortesia) => baixarVoucher(id, cortesia)} aoCancelar={async (cortesia, motivo) => { await cancelarCortesia(id, cortesia.orderId, motivo); await carregar(); }} /></div></>}</section>;
 }

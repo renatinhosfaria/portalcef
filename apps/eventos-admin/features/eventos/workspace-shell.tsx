@@ -51,7 +51,7 @@ export function WorkspaceShell({ eventId, children, readiness, lastSavedAt, save
   for (const item of normalized) {
     items.push({ key: item.key, label: item.label, href: item.href ?? `/eventos/${eventId}/${item.key}`, state: item.state as WorkspaceStepState, blocked: item.state === "BLOQUEADOR" });
     if (item.key === "mapa") {
-      items.push({ key: "inventario", label: "Inventário", href: `/eventos/${eventId}/inventario`, state: item.state as WorkspaceStepState, blocked: item.state === "BLOQUEADOR" });
+      items.push({ key: "inventario", label: "Inventário", href: `/eventos/${eventId}/inventario`, state: "NAO_INICIADO", semEstado: true });
       items.push({ key: "cortesias", label: "Cortesias", href: `/eventos/${eventId}/cortesias`, state: "NAO_INICIADO", semEstado: true });
     }
   }

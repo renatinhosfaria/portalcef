@@ -142,7 +142,7 @@ export function useEmissaoCortesias({ eventId, sessionId, mapa, aoEmitir, gerarC
         const ids = new Set(selecionados.filter((seatId) => porInventario.has(mapa.inventarioPorAssento[seatId])));
         setConflitos(ids);
         const rotulos = conflitosRecebidos.map((conflito) => `Fileira ${conflito.rowLabel} · Assento ${conflito.seatNumber}`);
-        setErro(`Estes lugares não estão mais livres: ${rotulos.join(", ")}.`);
+        setErro(`Estes lugares não estão mais livres: ${rotulos.join(", ")}. Troque-os e tente de novo.`);
       } else {
         setErro(e instanceof Error ? e.message || erroGenerico : erroGenerico);
       }
