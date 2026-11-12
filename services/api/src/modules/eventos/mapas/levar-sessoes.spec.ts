@@ -1,4 +1,5 @@
 import {
+  eventoIngressos,
   eventoInventarioAssentos,
   eventoItensPedido,
   eventoMapaAssentos,
@@ -20,11 +21,12 @@ type Estado = {
   itens: any[];
   reservas: any[];
   operacoes?: any[];
+  ingressos?: any[];
 };
 
 function bancoEmMemoria(estado: Estado) {
   const dbModule = jest.requireMock("@essencia/db") as any;
-  const linhas = (tabela: unknown) => tabela === eventoSessoes ? estado.sessoes : tabela === eventoMapas ? estado.mapas : tabela === eventoMapaAssentos ? estado.assentos : tabela === eventoInventarioAssentos ? estado.inventario : tabela === eventoPedidos ? estado.pedidos : tabela === eventoItensPedido ? estado.itens : tabela === eventoReservas ? estado.reservas : tabela === eventoOperacoesAdministrativas ? estado.operacoes ?? [] : [];
+  const linhas = (tabela: unknown) => tabela === eventoSessoes ? estado.sessoes : tabela === eventoMapas ? estado.mapas : tabela === eventoMapaAssentos ? estado.assentos : tabela === eventoInventarioAssentos ? estado.inventario : tabela === eventoPedidos ? estado.pedidos : tabela === eventoItensPedido ? estado.itens : tabela === eventoReservas ? estado.reservas : tabela === eventoOperacoesAdministrativas ? estado.operacoes ?? [] : tabela === eventoIngressos ? estado.ingressos ?? [] : [];
   const combinar = (condicao: any, linha: any): boolean => {
     if (!condicao) return true;
     if (condicao.name === "and") return condicao.args.every((item: any) => combinar(item, linha));
@@ -48,6 +50,16 @@ function bancoEmMemoria(estado: Estado) {
     delete: (tabela: unknown) => ({ where: async (condicao: any) => {
       const alvo = linhas(tabela);
       const restantes = alvo.filter((linha: any) => !combinar(condicao, linha));
+      const apagados = alvo.filter((linha: any) => combinar(condicao, linha));
+      // Simula as FKs ON DELETE restrict do banco (migration 0049 e anteriores).
+      const restrict = (referenciado: boolean) => {
+        if (referenciado) throw Object.assign(new Error("viola chave estrangeira"), { code: "23503" });
+      };
+      if (tabela === eventoItensPedido) restrict(apagados.some((item: any) => (estado.ingressos ?? []).some((ingresso) => ingresso.itemId === item.id)));
+      if (tabela === eventoInventarioAssentos) {
+        const referencias = [...estado.itens, ...estado.reservas, ...(estado.operacoes ?? []), ...(estado.ingressos ?? [])];
+        restrict(apagados.some((inventario: any) => referencias.some((linha) => linha.inventorySeatId === inventario.id)));
+      }
       if (tabela === eventoInventarioAssentos) estado.inventario = restantes;
       if (tabela === eventoItensPedido) estado.itens = restantes;
       if (tabela === eventoReservas) estado.reservas = restantes;
@@ -160,6 +172,53 @@ describe("levar sessões para uma versão", () => {
     await levarSessoesParaVersao(banco.db, { eventId: "e1", versaoId: "v1", agora, lockRows: banco.lockRows });
     const assentosDaSessao = estado.inventario.filter((item) => item.sessionId === "s1").map((item) => item.seatId);
     expect(new Set(assentosDaSessao).size).toBe(assentosDaSessao.length);
+  });
+
+  it("cortesia emitida e cancelada: a troca de mapa conclui sem apagar o item que tem ingresso", async () => {
+    const estado: Estado = {
+      sessoes: [{ id: "s1", eventId: "e1" }],
+      mapas: [{ id: "v1" }],
+      assentos: [
+        { id: "a1", mapId: "v1", rowLabel: "A", seatNumber: "1", sellable: true },
+        { id: "b1", mapId: "v1", rowLabel: "B", seatNumber: "1", sellable: true },
+        { id: "old-a", mapId: "old", rowLabel: "A", seatNumber: "1", sellable: true },
+      ],
+      inventario: [{ id: "i1", sessionId: "s1", seatId: "old-a", status: "DISPONIVEL" }],
+      pedidos: [{ id: "p1", sessionId: "s1", origin: "CORTESIA", status: "CANCELADO", expiresAt: null }],
+      itens: [{ id: "item1", orderId: "p1", inventorySeatId: "i1" }],
+      reservas: [],
+      operacoes: [{ id: "op1", sessionId: "s1", inventorySeatId: "i1", orderId: "p1", type: "CORTESIA", status: "CANCELADA" }],
+      ingressos: [{ id: "t1", orderId: "p1", itemId: "item1", sessionId: "s1", inventorySeatId: "i1", status: "CANCELADO" }],
+    };
+    const banco = bancoEmMemoria(estado);
+    await expect(levarSessoesParaVersao(banco.db, { eventId: "e1", versaoId: "v1", agora, lockRows: banco.lockRows })).resolves.toMatchObject({ sessionIds: ["s1"], inventarioCriado: 1 });
+    expect(estado.itens).toEqual([expect.objectContaining({ id: "item1", inventorySeatId: "i1" })]);
+    expect(estado.ingressos).toEqual([expect.objectContaining({ id: "t1", itemId: "item1", inventorySeatId: "i1" })]);
+    expect(estado.inventario).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: "i1", seatId: "a1", status: "DISPONIVEL" }),
+      expect.objectContaining({ sessionId: "s1", seatId: "b1", status: "DISPONIVEL" }),
+    ]));
+    expect(estado.inventario).toHaveLength(2);
+  });
+
+  it("preserva o inventário de item com ingresso mesmo sem operação administrativa", async () => {
+    const estado: Estado = {
+      sessoes: [{ id: "s1", eventId: "e1" }],
+      mapas: [{ id: "v1" }],
+      assentos: [
+        { id: "a1", mapId: "v1", rowLabel: "A", seatNumber: "1", sellable: true },
+        { id: "old-a", mapId: "old", rowLabel: "A", seatNumber: "1", sellable: true },
+      ],
+      inventario: [{ id: "i1", sessionId: "s1", seatId: "old-a", status: "DISPONIVEL" }],
+      pedidos: [{ id: "p1", sessionId: "s1", origin: "VENDA", status: "CANCELADO", expiresAt: null }],
+      itens: [{ id: "item1", orderId: "p1", inventorySeatId: "i1" }],
+      reservas: [],
+      ingressos: [{ id: "t1", orderId: "p1", itemId: "item1", sessionId: "s1", inventorySeatId: "i1", status: "REVOGADO" }],
+    };
+    const banco = bancoEmMemoria(estado);
+    await expect(levarSessoesParaVersao(banco.db, { eventId: "e1", versaoId: "v1", agora, lockRows: banco.lockRows })).resolves.toMatchObject({ inventarioCriado: 0 });
+    expect(estado.itens).toHaveLength(1);
+    expect(estado.inventario).toEqual([expect.objectContaining({ id: "i1", seatId: "a1", status: "DISPONIVEL" })]);
   });
 
   it("evento sem sessão devolve capacidade null", async () => {
