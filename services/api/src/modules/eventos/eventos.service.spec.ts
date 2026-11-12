@@ -497,6 +497,20 @@ describe('EventosService contratos de workspace', () => {
     });
   });
 
+  it("não expõe campos internos do inventário na resposta pública", async () => {
+    const db = fakeDb({
+      selects: [[{ id: "s1", eventId: "e1", mapId: "mapa-1", status: "PUBLICADA" }], [event({ status: "PUBLICADO" })], [{ id: "mapa-1", status: "CONFIRMADO", layout: null }], [
+        { seat: { id: "seat-1", rowLabel: "A", seatNumber: "1", x: 10, y: 20, width: 50, height: 50, category: null, accessible: false, metadata: {} }, inventory: { id: "inv-1", status: "VENDIDO" } },
+      ]],
+    });
+
+    const mapa = await service(db).getPublicMap("s1");
+
+    expect(mapa.seats[0]).toMatchObject({ id: "seat-1", state: "sold" });
+    expect(mapa.seats[0]).not.toHaveProperty("inventorySeatId");
+    expect(mapa.seats[0]).not.toHaveProperty("inventoryStatus");
+  });
+
   it("devolve layout nulo quando o mapa não tem desenho", async () => {
     const db = fakeDb({ selects: [[{ id: "s1", eventId: "e1", mapId: "mapa-1", status: "PUBLICADA" }], [event({ status: "PUBLICADO" })], [{ id: "mapa-1", status: "CONFIRMADO", layout: null }], []] });
 

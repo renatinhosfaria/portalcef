@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, Inject, Injectable, InternalServerErrorException, NotFoundException, Optional } from "@nestjs/common";
-import { and, asc, eq, eventoAuditorias, eventoCheckins, eventoIngressos, eventoInventarioAssentos, eventoLocais, eventoMapaAssentos, eventoMapas, eventoOperacoesAdministrativas, eventoPedidos, eventoPoliticas, eventoSessoes, eventoTiposIngresso, eventos, inArray, ne, type Database } from "@essencia/db";
+import { and, asc, eq, eventoAuditorias, eventoCheckins, eventoIngressos, eventoInventarioAssentos, eventoLocais, eventoMapas, eventoOperacoesAdministrativas, eventoPedidos, eventoPoliticas, eventoSessoes, eventoTiposIngresso, eventos, inArray, ne, type Database } from "@essencia/db";
 import type { AtualizarEventoInput, AtualizarLocalEventoInput, CriarEventoInput, CriarSessaoInput, CriarRascunhoInput, EventoListQuery, LocalEventoInput } from "@essencia/shared/schemas";
 import type { EventoActor, EventoResumo, OfertaPrecoPublica, PublicEventCard, PublicEventDetail, PublicEventSession, PublicMap, PublicMapLayout } from "@essencia/shared/types";
 import { DatabaseService } from "../../common/database/database.service";
@@ -7,6 +7,7 @@ import { RASTER_IMAGE_MIME_TYPES, StorageService } from "../../common/storage/st
 import { EventosRulesService } from "./eventos-rules.service";
 import { MapasService } from "./mapas/mapas.service";
 import { EventosOfertasService } from "./eventos-ofertas.service";
+import { montarAssentosDaSessao } from "./montar-mapa-sessao";
 
 type DbTransaction = Parameters<Database["transaction"]>[0] extends (tx: infer T) => unknown ? T : never;
 
@@ -319,15 +320,9 @@ export class EventosService {
     if (!parentEvent || parentEvent.status !== "PUBLICADO") throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Evento não encontrado" });
     const [map] = await this.db.select().from(eventoMapas).where(eq(eventoMapas.id, session.mapId));
     if (!map || map.status !== "CONFIRMADO") throw new NotFoundException({ code: "MAP_NOT_CONFIRMED", message: "Mapa não disponível" });
-    const rows = await this.db.select({ seat: eventoMapaAssentos, inventory: eventoInventarioAssentos }).from(eventoInventarioAssentos).innerJoin(eventoMapaAssentos, eq(eventoMapaAssentos.id, eventoInventarioAssentos.seatId)).where(and(eq(eventoInventarioAssentos.sessionId, sessionId), eq(eventoMapaAssentos.mapId, session.mapId)));
-    const seats: PublicMap["seats"] = rows.map(({ seat, inventory }: any) => {
-      let rotacao = 0;
-      try {
-        const valor = Number(seat.metadata?.rotacao);
-        if (Number.isFinite(valor)) rotacao = valor;
-      } catch { /* metadata inválido mantém a rotação padrão */ }
-      return { id: seat.id, sessionId, rowLabel: seat.rowLabel, seatNumber: seat.seatNumber, x: seat.x, y: seat.y, width: seat.width, height: seat.height, category: seat.category, accessible: seat.accessible, state: inventory.status === "VENDIDO" ? "sold" : inventory.status === "RESERVADO" ? "reserved" : inventory.status === "BLOQUEADO" ? "blocked" : "available", rotacao };
-    });
+    const assentos = await montarAssentosDaSessao(this.db, sessionId, session.mapId);
+    // Campos internos do inventário não fazem parte da resposta pública.
+    const seats: PublicMap["seats"] = assentos.map(({ inventorySeatId: _inventorySeatId, inventoryStatus: _inventoryStatus, ...assento }) => assento);
     return { sessionId, mapId: session.mapId, seats, layout: montarLayoutPublico(map.layout, new Set(seats.map((seat) => seat.rowLabel))) };
   }
 
