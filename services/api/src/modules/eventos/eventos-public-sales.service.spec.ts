@@ -1,5 +1,6 @@
 import { EventosPublicSalesService } from "./eventos-public-sales.service";
 import { eventoAceites, eventoIngressos, eventoInventarioAssentos, eventoItensPedido, eventoOfertas, eventoPagamentos, eventoPedidos, eventoParticipantes, eventoPoliticas, eventoReservas, eventoSessoes, eventoTiposIngresso, eventoTokensConsulta, eventos, schema } from "@essencia/db";
+import { avaliarPredicado } from "./avaliar-predicado.spec-helper";
 import { hashTokenAcesso } from "./acesso-pedido";
 
 describe("EventosPublicSalesService - contratos públicos", () => {
@@ -184,6 +185,13 @@ describe("EventosPublicSalesService - contratos públicos", () => {
     expect(result.discountCents).toBe(0);
     expect(result.appliedOffer).toBeNull();
     expect(result.items).toHaveLength(1);
+  });
+
+  it("recusa tipo de ingresso interno na reserva pública com o mesmo código de tipo inexistente", async () => {
+    const db = criarBancoReserva({ quantidade: 1, precoAdulto: 1250, offers: [], tiposInternos: true });
+
+    await expect(new EventosPublicSalesService({ db } as any).reservarAssentos(entradaReserva(1, "cortesia-123456"))).rejects.toMatchObject({ response: { code: "EVENT_NOT_FOUND", message: "Ingresso não encontrado" } });
+    expect(db.itemRows).toHaveLength(0);
   });
 
   it("reserva sem dados do comprador grava comprador nulo", async () => {
@@ -679,12 +687,12 @@ function criarBancoReservaComColisao(buyerEmail: string) {
   return criarBancoReserva({ quantidade: 1, precoAdulto: 1250, offers: [], colisao: { buyerEmail } });
 }
 
-function criarBancoReserva(config: { quantidade: number; precoAdulto: number; precoCrianca?: number; offers: any[]; tiposMistos?: boolean; repetir?: boolean; colisao?: { buyerEmail: string }; takeover?: boolean; takeoverMultiassento?: boolean; statusInicial?: string }) {
+function criarBancoReserva(config: { quantidade: number; precoAdulto: number; precoCrianca?: number; offers: any[]; tiposMistos?: boolean; repetir?: boolean; colisao?: { buyerEmail: string }; takeover?: boolean; takeoverMultiassento?: boolean; statusInicial?: string; tiposInternos?: boolean }) {
   const event = { id: uuid(10), status: "PUBLICADO" };
   const session = { id: uuid(1), status: "PUBLICADA" };
   const tickets = [
-    { id: uuid(2), eventId: event.id, priceCents: config.precoAdulto, maxPerOrder: null, version: 1, active: true },
-    { id: uuid(3), eventId: event.id, priceCents: config.precoCrianca ?? config.precoAdulto, maxPerOrder: null, version: 1, active: true },
+    { id: uuid(2), eventId: event.id, priceCents: config.precoAdulto, maxPerOrder: null, version: 1, active: true, internal: config.tiposInternos ?? false },
+    { id: uuid(3), eventId: event.id, priceCents: config.precoCrianca ?? config.precoAdulto, maxPerOrder: null, version: 1, active: true, internal: config.tiposInternos ?? false },
   ];
   const oldOrder: any = { id: uuid(499), orderNumber: "OLD123456789", eventId: event.id, sessionId: session.id, status: "RESERVADO", expiresAt: new Date(Date.now() - 60_000) };
   const oldReservations: any[] = [];
@@ -729,6 +737,7 @@ function criarBancoReserva(config: { quantidade: number; precoAdulto: number; pr
       if (inTransaction && transactionAborted) throw { code: "25P02", message: "current transaction is aborted" };
         selectCalls += 1;
       let table: any;
+      let predicado: any;
       let resolved: any[] | undefined;
       const resolveValue = () => {
         if (resolved) return resolved;
@@ -741,7 +750,7 @@ function criarBancoReserva(config: { quantidade: number; precoAdulto: number; pr
         } else if (config.repetir && banco.jaCriado && table === eventoItensPedido) {
           value = itemRows.map((item) => ({ item, inventory: inventories.find((inventory) => inventory.id === item.inventorySeatId) }));
           } else if (table === eventos) value = [{ event, session }];
-          else if (table === eventoTiposIngresso) value = [tickets[Math.min(ticketReads++, tickets.length - 1)]];
+          else if (table === eventoTiposIngresso) { const candidato = tickets[Math.min(ticketReads++, tickets.length - 1)]; value = avaliarPredicado(predicado, candidato) ? [candidato] : []; }
           else if (table === eventoInventarioAssentos) {
             const read = inventoryReads++;
             const inventoryIndex = read < config.quantidade ? read : read - config.quantidade;
@@ -757,7 +766,8 @@ function criarBancoReserva(config: { quantidade: number; precoAdulto: number; pr
       const chain: any = {
         from: (selected: any) => { table = selected; return chain; },
         innerJoin: () => chain,
-        where: () => {
+        where: (predicate: any) => {
+          predicado = predicate;
           const promise: any = Promise.resolve(resolveValue());
           promise.for = () => {
             if (table === eventoInventarioAssentos) {

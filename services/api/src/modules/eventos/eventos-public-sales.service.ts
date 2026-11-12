@@ -65,7 +65,7 @@ export class EventosPublicSalesService {
       for (const requested of input.seats) requestedQuantities.set(requested.ticketTypeId, (requestedQuantities.get(requested.ticketTypeId) ?? 0) + 1);
       const ticketById = new Map<string, any>();
       for (const [ticketTypeId, quantity] of requestedQuantities) {
-        const ticketQuery = tx.select().from(eventoTiposIngresso).where(and(eq(eventoTiposIngresso.id, ticketTypeId), eq(eventoTiposIngresso.eventId, event.id), eq(eventoTiposIngresso.active, true)));
+        const ticketQuery = tx.select().from(eventoTiposIngresso).where(and(eq(eventoTiposIngresso.id, ticketTypeId), eq(eventoTiposIngresso.eventId, event.id), eq(eventoTiposIngresso.active, true), eq(eventoTiposIngresso.internal, false)));
         const ticket = await this.first<any>(await this.lockRows(ticketQuery));
         if (!ticket) throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Ingresso não encontrado" });
         if (ticket.maxPerOrder !== null && ticket.maxPerOrder !== undefined && quantity > ticket.maxPerOrder) {

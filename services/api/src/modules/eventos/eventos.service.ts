@@ -270,7 +270,7 @@ export class EventosService {
   }
 
   async listarPublicados(now: Date): Promise<PublicEventCard[]> {
-    const rows = await this.db.select({ event: eventos, session: eventoSessoes, location: eventoLocais, ticket: eventoTiposIngresso, inventory: eventoInventarioAssentos }).from(eventos).innerJoin(eventoSessoes, and(eq(eventoSessoes.eventId, eventos.id), eq(eventoSessoes.status, "PUBLICADA"))).leftJoin(eventoLocais, eq(eventoLocais.id, eventoSessoes.locationId)).leftJoin(eventoTiposIngresso, and(eq(eventoTiposIngresso.eventId, eventos.id), eq(eventoTiposIngresso.active, true))).leftJoin(eventoInventarioAssentos, eq(eventoInventarioAssentos.sessionId, eventoSessoes.id)).where(eq(eventos.status, "PUBLICADO"));
+    const rows = await this.db.select({ event: eventos, session: eventoSessoes, location: eventoLocais, ticket: eventoTiposIngresso, inventory: eventoInventarioAssentos }).from(eventos).innerJoin(eventoSessoes, and(eq(eventoSessoes.eventId, eventos.id), eq(eventoSessoes.status, "PUBLICADA"))).leftJoin(eventoLocais, eq(eventoLocais.id, eventoSessoes.locationId)).leftJoin(eventoTiposIngresso, and(eq(eventoTiposIngresso.eventId, eventos.id), eq(eventoTiposIngresso.active, true), eq(eventoTiposIngresso.internal, false))).leftJoin(eventoInventarioAssentos, eq(eventoInventarioAssentos.sessionId, eventoSessoes.id)).where(eq(eventos.status, "PUBLICADO"));
     const byId = new Map<string, PublicEventCard>();
     const menorPrecoPadrao = new Map<string, number>();
     const menorPrecoQualquer = new Map<string, number>();
@@ -299,7 +299,7 @@ export class EventosService {
   async listarSessoesPublicas(slug: string, now = new Date()): Promise<PublicEventSession[]> {
     const detail = await this.getPublicBySlug(slug, now);
     const ofertasPublicas: OfertaPrecoPublica[] = this.ofertas ? await this.ofertas.listarPublicas(detail.id) : [];
-    const ticketTypes = await this.db.select().from(eventoTiposIngresso).where(and(eq(eventoTiposIngresso.eventId, detail.id), eq(eventoTiposIngresso.active, true))).orderBy(asc(eventoTiposIngresso.name));
+    const ticketTypes = await this.db.select().from(eventoTiposIngresso).where(and(eq(eventoTiposIngresso.eventId, detail.id), eq(eventoTiposIngresso.active, true), eq(eventoTiposIngresso.internal, false))).orderBy(asc(eventoTiposIngresso.name));
     const publicTicketTypes = ticketTypes.map((ticket: typeof eventoTiposIngresso.$inferSelect) => ({ id: ticket.id, name: ticket.name, description: ticket.description, priceCents: ticket.priceCents, maxPerOrder: ticket.maxPerOrder, eligibility: ticket.eligibility }));
     const rows = await this.db.select({ session: eventoSessoes, location: eventoLocais, inventory: eventoInventarioAssentos }).from(eventoSessoes).leftJoin(eventoLocais, eq(eventoLocais.id, eventoSessoes.locationId)).leftJoin(eventoInventarioAssentos, eq(eventoInventarioAssentos.sessionId, eventoSessoes.id)).where(and(eq(eventoSessoes.eventId, detail.id), eq(eventoSessoes.status, "PUBLICADA"))).orderBy(asc(eventoSessoes.startsAt));
     const result = new Map<string, PublicEventSession>();
@@ -478,7 +478,7 @@ export class EventosService {
     const [event] = await this.db.select().from(eventos).where(eq(eventos.id, eventId));
     if (!event) throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Evento não encontrado" });
     this.assertSchoolScope(actor, event.schoolId);
-    return this.db.select().from(eventoTiposIngresso).where(and(eq(eventoTiposIngresso.eventId, eventId), eq(eventoTiposIngresso.active, true))).orderBy(asc(eventoTiposIngresso.name));
+    return this.db.select().from(eventoTiposIngresso).where(and(eq(eventoTiposIngresso.eventId, eventId), eq(eventoTiposIngresso.active, true), eq(eventoTiposIngresso.internal, false))).orderBy(asc(eventoTiposIngresso.name));
   }
 
   async atualizarIngressos(eventId: string, inputs: Array<{ id?: string; name: string; description?: string | null; priceCents: number; eligibility?: string | null; salesLot?: string | null; rules?: Record<string, unknown> | null; maxPerOrder?: number | null }>, actor: EventoActor) {
@@ -486,7 +486,7 @@ export class EventosService {
     if (!event) throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Evento não encontrado" });
     this.assertSchoolScope(actor, event.schoolId);
     if (inputs.some((input) => !input.name?.trim() || !Number.isInteger(input.priceCents) || input.priceCents < 0 || (input.maxPerOrder != null && (!Number.isInteger(input.maxPerOrder) || input.maxPerOrder <= 0)))) throw new BadRequestException({ code: "INVALID_TICKET", message: "Ingresso inválido" });
-    const current = await this.db.select().from(eventoTiposIngresso).where(and(eq(eventoTiposIngresso.eventId, eventId), eq(eventoTiposIngresso.active, true)));
+    const current = await this.db.select().from(eventoTiposIngresso).where(and(eq(eventoTiposIngresso.eventId, eventId), eq(eventoTiposIngresso.active, true), eq(eventoTiposIngresso.internal, false)));
     const kept = new Set<string>();
     const result = [];
     for (const input of inputs) {
@@ -509,7 +509,7 @@ export class EventosService {
     this.assertSchoolScope(actor, event.schoolId);
     const [ticket] = await this.db.update(eventoTiposIngresso)
       .set({ active: false, updatedAt: new Date() })
-      .where(and(eq(eventoTiposIngresso.id, ticketId), eq(eventoTiposIngresso.eventId, eventId), eq(eventoTiposIngresso.active, true)))
+      .where(and(eq(eventoTiposIngresso.id, ticketId), eq(eventoTiposIngresso.eventId, eventId), eq(eventoTiposIngresso.active, true), eq(eventoTiposIngresso.internal, false), eq(eventoTiposIngresso.internal, false)))
       .returning();
     if (!ticket) throw new NotFoundException({ code: "TICKET_NOT_FOUND", message: "Ingresso não encontrado" });
     await this.audit(eventId, actor, "ATUALIZADO", "ingresso", ticketId, { active: false });
