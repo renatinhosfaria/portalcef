@@ -135,7 +135,7 @@ describe("EventosCortesiasService.emitir", () => {
   it("trava evento e sessão e depois o inventário em ordem crescente de id", async () => {
     await service.emitir("event-1", lote(["inv-3", "inv-1"]), ator);
 
-    expect(db.lockSequence).toEqual(["event-1", "session-1", "inv-1", "inv-3"]);
+    expect(db.lockSequence).toEqual(["no key update:event-1", "no key update:session-1", "update:inv-1", "update:inv-3"]);
   });
 
   it("repetir a mesma chave não duplica", async () => {
@@ -407,6 +407,7 @@ function estadoInicial(): Estado {
 
 class FakeCortesiasDb {
   state: Estado = estadoInicial();
+  /** Travas na ordem em que foram pedidas, no formato `modo:id`. */
   lockSequence: string[] = [];
   transacoes = 0;
   /** Próximas inserções que falham, na ordem, por chave do estado. */
@@ -466,10 +467,10 @@ class FakeCortesiasDb {
       where: (predicado: any) => { consulta.where = predicado; return cadeia; },
       orderBy: (...ordens: any[]) => { consulta.ordens = ordens; return cadeia; },
       for: (modo: string) => {
-        if (modo !== "update") throw new Error(`Trava não suportada no fake: ${modo}`);
+        if (modo !== "update" && modo !== "no key update") throw new Error(`Trava não suportada no fake: ${modo}`);
         if (consulta.joins.length) throw new Error("O fake só trava consultas de uma tabela");
         const linhas = executar();
-        linhas.forEach((linha) => this.lockSequence.push(linha.id));
+        linhas.forEach((linha) => this.lockSequence.push(`${modo}:${linha.id}`));
         return Promise.resolve(linhas);
       },
       then: (resolve: (valor: Linha[]) => unknown, reject: (motivo: unknown) => unknown) => Promise.resolve().then(executar).then(resolve, reject),

@@ -106,16 +106,21 @@ export class EventosCortesiasService {
   }
 
   private async emitirNaTransacao(tx: any, eventId: string, input: EmitirCortesiasInput, actor: EventoActor): Promise<CortesiaResumo[]> {
-    // Evento e sessão são travados antes do inventário, na mesma ordem da
-    // reserva pública e da troca de mapa. Isso serializa a emissão com a venda
-    // da sessão (sem ciclo de travas) e faz uma requisição repetida esperar a
-    // primeira terminar antes de procurar a chave de idempotência.
-    const event = await this.first<any>(tx.select().from(eventos).where(eq(eventos.id, eventId)).for("update"));
+    // Evento e sessão são travados antes do inventário, como na reserva pública
+    // e na troca de mapa. O modo é NO KEY UPDATE: ele conflita com o FOR UPDATE
+    // da reserva pública e consigo mesmo (serializa com a venda da sessão, com
+    // outras emissões e com a criação do tipo "Cortesia", e faz uma requisição
+    // repetida esperar a primeira antes de procurar a chave de idempotência).
+    // Ele NÃO conflita com o FOR KEY SHARE que os INSERTs com FK pedem no
+    // evento e na sessão. Com FOR UPDATE, a confirmação de pagamento, que
+    // trava o inventário e só depois insere participante e ingresso, formaria
+    // um ciclo de travas (deadlock) com esta emissão.
+    const event = await this.first<any>(tx.select().from(eventos).where(eq(eventos.id, eventId)).for("no key update"));
     if (!event) throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Evento não encontrado" });
     assertSchoolScope(actor, event.schoolId);
     if (event.status === "CANCELADO") throw new ConflictException({ code: "EVENTO_CANCELADO", message: "Não é possível emitir cortesias em evento cancelado" });
 
-    const session = await this.first<any>(tx.select().from(eventoSessoes).where(and(eq(eventoSessoes.id, input.sessionId), eq(eventoSessoes.eventId, eventId))).for("update"));
+    const session = await this.first<any>(tx.select().from(eventoSessoes).where(and(eq(eventoSessoes.id, input.sessionId), eq(eventoSessoes.eventId, eventId))).for("no key update"));
     if (!session || session.status === "CANCELADA") throw new NotFoundException({ code: "SESSION_NOT_FOUND", message: "Sessão não encontrada" });
     const mapa = session.mapId ? await this.first<any>(tx.select().from(eventoMapas).where(eq(eventoMapas.id, session.mapId))) : undefined;
     if (mapa?.status !== "CONFIRMADO") throw new ConflictException({ code: "MAP_NOT_CONFIRMED", message: "Confirme o mapa desta sessão para emitir cortesias" });
