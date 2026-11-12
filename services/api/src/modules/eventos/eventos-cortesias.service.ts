@@ -28,6 +28,7 @@ import { gerarNumeroIngresso } from "@essencia/shared/eventos/ingresso";
 import type { CancelarCortesiaInput, EmitirCortesiasInput } from "@essencia/shared/schemas";
 import type { ConflitoAssentoCortesia, CortesiaResumo, EventoActor, MapaAdminSessao, PedidoComIngressos } from "@essencia/shared/types";
 import { DatabaseService } from "../../common/database/database.service";
+import { violacaoDeUnico } from "../../common/database/violacao-unico";
 import { assertSchoolScope } from "./eventos.service";
 import { montarAssentosDaSessao, montarLayoutPublico } from "./montar-mapa-sessao";
 import { montarIngressosDoPedido } from "./montar-pedido-ingressos";
@@ -37,18 +38,6 @@ const ALFABETO_PEDIDO = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const MAX_TENTATIVAS = 5;
 const UNICO_IDEMPOTENCIA = "uq_evento_pedidos_idempotency_key";
 const UNICOS_SORTEADOS = ["uq_evento_pedidos_order_number", "uq_evento_ingressos_numero"];
-
-/**
- * Devolve o nome da restrição quando o erro é violação de único (23505).
- * O Drizzle embrulha o erro do driver em `cause`, e o postgres-js chama o
- * campo de `constraint_name`; aceitamos as duas formas.
- */
-function violacaoDeUnico(error: unknown): string | null {
-  for (const candidato of [error, (error as { cause?: unknown } | null)?.cause] as any[]) {
-    if (candidato?.code === "23505") return candidato.constraint_name ?? candidato.constraint ?? "";
-  }
-  return null;
-}
 
 function motivoDoConflito(inventario: any, sessionId: string): ConflitoAssentoCortesia["motivo"] | null {
   if (!inventario) return "INEXISTENTE";
