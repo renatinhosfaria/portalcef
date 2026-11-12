@@ -163,6 +163,9 @@ export type EventoPoliticaTipo = (typeof eventoPoliticaTipoEnum)[number];
 export const eventoAceiteTipoEnum = ["PRIVACIDADE", "COMPRA", "CANCELAMENTO_REEMBOLSO", "ACESSIBILIDADE", "CONTATO"] as const;
 export type EventoAceiteTipo = (typeof eventoAceiteTipoEnum)[number];
 
+export const eventoPedidoOrigemEnum = ["VENDA", "CORTESIA"] as const;
+export type EventoPedidoOrigem = (typeof eventoPedidoOrigemEnum)[number];
+
 export const eventoAuditoriaAcaoEnum = [
   "CRIADO",
   "ATUALIZADO",
@@ -176,6 +179,8 @@ export const eventoAuditoriaAcaoEnum = [
   "TRANSFERIDO",
   "CHECKIN",
   "BLOQUEADO",
+  "CORTESIA_EMITIDA",
+  "CORTESIA_CANCELADA",
 ] as const;
 export type EventoAuditoriaAcao = (typeof eventoAuditoriaAcaoEnum)[number];
 
@@ -425,6 +430,7 @@ export const eventoTiposIngresso = pgTable(
     rules: jsonb("rules"),
     version: integer("version").notNull().default(1),
     active: boolean("active").notNull().default(true),
+    internal: boolean("internal").notNull().default(false),
     ...timestamps(),
   },
   (table) => ({
@@ -523,6 +529,9 @@ export const eventoPedidos = pgTable(
     confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
     cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
     cancellationReason: text("cancellation_reason"),
+    origin: text("origin", { enum: eventoPedidoOrigemEnum })
+      .notNull()
+      .default("VENDA"),
     ...timestamps(),
   },
   (table) => ({
@@ -551,6 +560,10 @@ export const eventoPedidos = pgTable(
     nonNegativeDiscount: check(
       "evento_pedidos_non_negative_discount",
       sql`${table.discountCents} >= 0`,
+    ),
+    validOrigin: check(
+      "evento_pedidos_valid_origin",
+      sql`${table.origin} IN ('VENDA', 'CORTESIA')`,
     ),
   }),
 );
