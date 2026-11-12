@@ -29,6 +29,8 @@ describe("WorkspaceShell de eventos", () => {
     expect(html).toContain("Mapa e lugares");
     expect(html).toContain("Ingressos");
     expect(html).toContain("Políticas");
+    expect(html).toContain("Cortesias");
+    expect(html).toContain('href="/eventos/evt-1/cortesias"');
     expect(html).toContain("Revisar e publicar");
     expect(html).toContain("Salvo agora");
     expect(html).toContain("Adicione uma sessão");

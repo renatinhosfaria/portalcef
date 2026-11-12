@@ -11,6 +11,7 @@ export type WorkspaceNavigationItem = {
   href: string;
   state: WorkspaceStepState;
   blocked?: boolean;
+  semEstado?: boolean;
 };
 
 const stateLabels: Record<WorkspaceStepState, string> = {
@@ -42,7 +43,7 @@ export function WorkspaceNavigation({ eventId: _eventId, items, activeKey }: { e
             <li key={item.key}>
               <Link href={item.href} aria-current={active ? "page" : undefined} className={`group flex items-center justify-between gap-3 rounded-xl px-3 py-3 text-sm outline-none transition focus-visible:ring-2 focus-visible:ring-[#3d7c4a] ${active ? "bg-[#eaf3e8] font-semibold text-[#245432]" : "text-slate-700 hover:bg-slate-50"}`}>
                 <span>{item.label}</span>
-                <span className={`shrink-0 text-xs ${item.blocked || item.state === "BLOQUEADOR" ? "font-semibold text-amber-700" : "text-slate-500"}`}>{stateLabels[item.state]}</span>
+                {!item.semEstado && <span className={`shrink-0 text-xs ${item.blocked || item.state === "BLOQUEADOR" ? "font-semibold text-amber-700" : "text-slate-500"}`}>{stateLabels[item.state]}</span>}
               </Link>
             </li>
           );
