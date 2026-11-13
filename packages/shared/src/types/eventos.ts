@@ -11,8 +11,8 @@ export interface AtualizarOfertaInput { id?: string; version?: number; name: str
 export interface PublicSeat { id: string; sessionId: string; rowLabel: string; seatNumber: string; x: number; y: number; width: number; height: number; category: string | null; accessible: boolean; state: "available" | "reserved" | "sold" | "blocked"; rotacao?: number; }
 export interface PublicMap { sessionId: string; mapId: string; seats: PublicSeat[]; layout?: PublicMapLayout | null; }
 export interface PoliticaPublica { type: "PRIVACIDADE" | "COMPRA" | "CANCELAMENTO_REEMBOLSO" | "ACESSIBILIDADE" | "CONTATO"; version: number; content: string; }
-export interface ReservaPublicaResult { reservationId: string; orderNumber: string; expiresAt: Date; subtotalCents: number; discountCents: number; totalCents: number; appliedOffer: OfertaPrecoPublica | null; items: Array<{ seatId: string; ticketTypeId: string; unitPriceCents: number; totalPriceCents: number }>; }
-export interface PedidoPublicoResult { orderNumber: string; status: string; eventTitle: string; eventSlug: string; sessionId: string; expiresAt: Date | null; session: { startsAt: Date; endsAt: Date }; subtotalCents: number; discountCents: number; totalCents: number; appliedOffer: OfertaPrecoPublica | null; items: ItemPedidoPublico[]; }
+export interface ReservaPublicaResult { reservationId: string; orderNumber: string; expiresAt: Date; subtotalCents: number; offerDiscountCents?: number; couponDiscountCents?: number; discountCents: number; totalCents: number; appliedOffer: OfertaPrecoPublica | null; appliedCoupon?: import("../eventos/cupons").CupomAplicado | null; items: Array<{ seatId: string; ticketTypeId: string; unitPriceCents: number; totalPriceCents: number }>; }
+export interface PedidoPublicoResult { orderNumber: string; status: string; eventTitle: string; eventSlug: string; sessionId: string; expiresAt: Date | null; session: { startsAt: Date; endsAt: Date }; subtotalCents: number; offerDiscountCents?: number; couponDiscountCents?: number; discountCents: number; totalCents: number; appliedOffer: OfertaPrecoPublica | null; appliedCoupon?: import("../eventos/cupons").CupomAplicado | null; items: ItemPedidoPublico[]; }
 export type ConsultaPedidoPublica = PedidoPublicoResult;
 
 export interface PedidoComIngressos extends PedidoPublicoResult {
@@ -116,3 +116,5 @@ export interface ConflitoAssentoCortesia {
 
 /** Mapa da sessão para o painel: `inventarioPorAssento` leva seat.id → inventorySeatId. */
 export interface MapaAdminSessao extends PublicMap { inventarioPorAssento: Record<string, string>; }
+
+export type { TipoPrecoCupom, CupomPreco, CupomAdmin, CupomAplicado } from "../eventos/cupons";

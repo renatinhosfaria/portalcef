@@ -114,3 +114,22 @@ describe("calcularPrecoPedido", () => {
     expect(resultado.items.reduce((sum, item) => sum + item.totalPriceCents, 0)).toBe(170);
   });
 });
+
+  it("aplica oferta e depois cupom percentual, somando descontos", () => {
+    const cupom = { id: "cupom-10", version: 1, code: "DEZ", pricingType: "PERCENTUAL" as const, discountPercent: 10, discountCents: null, active: true };
+    const resultado = calcularPrecoPedido({ items: Array.from({ length: 10 }, (_, index) => item(index)), offers: [ofertaPercentual], coupon: cupom });
+    expect(resultado).toMatchObject({ subtotalCents: 45000, offerDiscountCents: 6750, couponDiscountCents: 3825, discountCents: 10575, totalCents: 34425 });
+    expect(resultado.appliedCoupon).toMatchObject({ id: cupom.id, code: "DEZ" });
+    expect(resultado.items.reduce((sum, current) => sum + current.totalPriceCents, 0)).toBe(34425);
+  });
+
+  it("limita cupom fixo ao restante, permite 100% e mantém total zero", () => {
+    const cupom = { id: "cupom-100", version: 1, code: "GRATIS", pricingType: "PERCENTUAL" as const, discountPercent: 100, discountCents: null, active: true };
+    const resultado = calcularPrecoPedido({ items: [item(0, 1)], offers: [], coupon: cupom });
+    expect(resultado).toMatchObject({ subtotalCents: 1, couponDiscountCents: 1, discountCents: 1, totalCents: 0 });
+  });
+
+  it("rejeita total positivo entre 1 e 99 centavos", () => {
+    expect(() => calcularPrecoPedido({ items: [item(0, 50)], offers: [], minimumTotalCents: 100 })).not.toThrow();
+    expect(calcularPrecoPedido({ items: [item(0, 50)], offers: [], minimumTotalCents: 100 }).totalCents).toBe(50);
+  });

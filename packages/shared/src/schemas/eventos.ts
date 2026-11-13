@@ -106,3 +106,19 @@ export type EmitirCortesiasInput = z.infer<typeof emitirCortesiasSchema>;
 export type CancelarCortesiaInput = z.infer<typeof cancelarCortesiaSchema>;
 export type JuntarAlunasInput = z.infer<typeof juntarAlunasSchema>;
 export type SepararAlunaInput = z.infer<typeof separarAlunaSchema>;
+
+export const criarCupomSchema = z.object({
+  id: z.string().uuid().optional(), version: z.number().int().positive().optional(),
+  code: z.string().trim().min(1).max(80), name: z.string().trim().max(200).nullable().optional(),
+  pricingType: z.enum(["PERCENTUAL", "VALOR_FIXO"]), discountPercent: z.number().int().min(1).max(100).nullable().optional(), discountCents: z.number().int().nonnegative().nullable().optional(),
+  startsAt: date.nullable().optional(), endsAt: date.nullable().optional(), usageLimit: z.number().int().positive().nullable().optional(), usageLimitPerBuyer: z.number().int().positive().nullable().optional(), active: z.boolean().optional(),
+}).strict().superRefine((value, context) => {
+  if (value.endsAt && value.startsAt && value.endsAt <= value.startsAt) context.addIssue({ code: z.ZodIssueCode.custom, path: ["endsAt"], message: "O fim deve ser posterior ao início" });
+  if (value.pricingType === "PERCENTUAL" && (value.discountPercent === null || value.discountPercent === undefined)) context.addIssue({ code: z.ZodIssueCode.custom, path: ["discountPercent"], message: "Informe o percentual do cupom" });
+  if (value.pricingType === "VALOR_FIXO" && (value.discountCents === null || value.discountCents === undefined)) context.addIssue({ code: z.ZodIssueCode.custom, path: ["discountCents"], message: "Informe o valor do cupom" });
+});
+export const atualizarCupomSchema = criarCupomSchema;
+export const aplicarCupomSchema = z.object({ code: z.string().trim().max(80) }).strict();
+export type CriarCupomInput = z.infer<typeof criarCupomSchema>;
+export type AtualizarCupomInput = z.infer<typeof atualizarCupomSchema>;
+export type AplicarCupomInput = z.infer<typeof aplicarCupomSchema>;

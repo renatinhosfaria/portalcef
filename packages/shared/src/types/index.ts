@@ -280,3 +280,4 @@ export * from "./workflows";
 
 export * from "./eventos";
 export * from "../eventos/precos";
+export * from "../eventos/cupons";
