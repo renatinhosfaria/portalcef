@@ -1,10 +1,12 @@
 import type { FinalizarPedidoInput, MeusIngressosInput, PagamentoEmbutidoInput, ReservaPublicaInput } from "@essencia/shared/schemas";
+import { normalizarCodigoCupom } from "@essencia/shared/types";
 import type {
   ConsultaPedidoPublica,
   FinalizacaoPublicaResult,
   MeusIngressosResult,
   PagamentoEmbutidoResult,
   PedidoComIngressos,
+  PedidoPublicoResult,
   PoliticaPublica,
   PublicEventCard,
   PublicEventDetail,
@@ -183,6 +185,15 @@ export async function iniciarPagamento(orderNumber: string, input: PagamentoEmbu
 
 export async function liberarPedido(orderNumber: string): Promise<void> {
   await buscarApiPublica(`/eventos/public/pedidos/${encodeURIComponent(orderNumber)}/liberar`, { method: "POST" });
+}
+
+export async function aplicarCupom(orderNumber: string, code: string): Promise<PedidoPublicoResult> {
+  const normalizedOrder = orderNumber.trim();
+  const normalizedCode = normalizarCodigoCupom(code);
+  const idempotencyKey = chavePersistida(undefined, "cupom", `${normalizedOrder}|${normalizedCode}`);
+  const result = await enviarJson<PedidoPublicoResult>(`/eventos/public/pedidos/${encodeURIComponent(normalizedOrder)}/cupom`, { code }, idempotencyKey);
+  publicOrderState.orderNumber = result.orderNumber;
+  return result;
 }
 
 export async function obterIngressos(orderNumber: string, acesso: string, init?: RequestInit): Promise<PedidoComIngressos> {

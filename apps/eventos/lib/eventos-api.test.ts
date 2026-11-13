@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buscarApiPublica,
   buscarMeusIngressos,
+  aplicarCupom,
   iniciarPagamento,
   liberarPedido,
   listarEventosPublicos,
@@ -130,6 +131,19 @@ describe("API pública de eventos", () => {
     expect(path).toBe("/api/eventos/public/pedidos/ABC123DEF456/liberar");
     expect(init?.method).toBe("POST");
     vi.restoreAllMocks();
+  });
+
+  it("aplica cupom com código normalizado e chave idempotente por pedido/código", async () => {
+    vi.stubGlobal("window", {});
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response(JSON.stringify({ orderNumber: "ABC123DEF456", appliedCoupon: { code: "DEZ" } }), { status: 200 }));
+
+    await aplicarCupom("ABC123DEF456", " dez ");
+    await aplicarCupom("ABC123DEF456", "DEZ");
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/eventos/public/pedidos/ABC123DEF456/cupom");
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({ code: " dez " });
+    expect((fetchMock.mock.calls[0]?.[1]?.headers as Record<string, string>)?.["Idempotency-Key"]).toBe((fetchMock.mock.calls[1]?.[1]?.headers as Record<string, string>)?.["Idempotency-Key"]);
   });
 
   it("codifica o acesso ao buscar ingressos", async () => {

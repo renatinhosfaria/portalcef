@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException, ServiceUnavailableException, forwardRef } from "@nestjs/common";
-import { and, asc, desc, eq, eventoAceites, eventoInventarioAssentos, eventoItensPedido, eventoLocais, eventoMapaAssentos, eventoOfertas, eventoPagamentos, eventoParticipantes, eventoPedidos, eventoPoliticas, eventoReservas, eventoSessoes, eventoTiposIngresso, eventoTokensConsulta, eventos, gt, inArray, isNull, lte, or, schema, type Database } from "@essencia/db";
-import { finalizarPedidoSchema, meusIngressosSchema, pagamentoEmbutidoSchema, reservaPublicaSchema, type FinalizarPedidoInput, type MeusIngressosInput, type PagamentoEmbutidoInput, type ReservaPublicaInput } from "@essencia/shared/schemas";
+import { and, asc, desc, eq, eventoAceites, eventoCupons, eventoCupomUsos, eventoInventarioAssentos, eventoItensPedido, eventoLocais, eventoMapaAssentos, eventoOfertas, eventoPagamentos, eventoParticipantes, eventoPedidos, eventoPoliticas, eventoReservas, eventoSessoes, eventoTiposIngresso, eventoTokensConsulta, eventos, gt, inArray, isNull, lte, or, schema, type Database } from "@essencia/db";
+import { aplicarCupomSchema, finalizarPedidoSchema, meusIngressosSchema, pagamentoEmbutidoSchema, reservaPublicaSchema, type AplicarCupomInput, type FinalizarPedidoInput, type MeusIngressosInput, type PagamentoEmbutidoInput, type ReservaPublicaInput } from "@essencia/shared/schemas";
+import { normalizarCodigoCupom, type CupomPreco } from "@essencia/shared/types";
 import { calcularPrecoPedido, type OfertaPreco } from "@essencia/shared/eventos/precos";
 import type { ConsultaPedidoPublica, FinalizacaoPublicaResult, MeusIngressosResult, PagamentoEmbutidoResult, PedidoComIngressos, PedidoPublicoResult, PoliticaPublica, ReservaPublicaResult } from "@essencia/shared/types";
 import { DatabaseService } from "../../common/database/database.service";
@@ -245,9 +246,73 @@ export class EventosPublicSalesService {
       discountCents: order.discountCents ?? 0,
       totalCents: order.totalCents,
       appliedOffer: snapshot,
-      appliedCoupon: order.appliedCoupon ?? rows.find((row: any) => row.item?.pricingEvidence?.couponSnapshot)?.item?.pricingEvidence?.couponSnapshot ?? null,
+      appliedCoupon: order.couponSnapshot ?? order.appliedCoupon ?? rows.find((row: any) => row.item?.pricingEvidence?.couponSnapshot)?.item?.pricingEvidence?.couponSnapshot ?? null,
       items: rows.map((row: any) => ({ seatId: row.inventory?.seatId, ticketTypeId: row.item?.ticketTypeId, unitPriceCents: row.item?.unitPriceCents, totalPriceCents: row.item?.totalPriceCents })),
     };
+  }
+
+  async aplicarCupom(orderNumber: string, raw: unknown): Promise<PedidoPublicoResult> {
+    const input = validated<AplicarCupomInput>(aplicarCupomSchema, raw);
+    const code = normalizarCodigoCupom(input.code);
+    return this.db.transaction(async (tx: any) => {
+      const order = await this.getOrder(orderNumber, tx, true);
+      const now = new Date();
+      if (order.expiresAt && order.expiresAt <= now && !["CONFIRMADO", "USADO"].includes(order.status)) {
+        throw new NotFoundException({ code: "ORDER_NOT_FOUND", message: "Pedido não encontrado" });
+      }
+      if (!["INICIADO", "RESERVADO"].includes(order.status)) {
+        throw new ConflictException({ code: "ORDER_NOT_AVAILABLE", message: "Pedido não está disponível para alterar o cupom" });
+      }
+      const snapshotAtual = order.couponSnapshot ?? order.appliedCoupon ?? null;
+      if ((!code && !snapshotAtual) || (code && snapshotAtual && normalizarCodigoCupom(String(snapshotAtual.code ?? "")) === code)) {
+        return this.pedidoResult(order, tx);
+      }
+
+      const itemQuery = tx.select({ item: eventoItensPedido, inventory: eventoInventarioAssentos, ticket: eventoTiposIngresso }).from(eventoItensPedido)
+        .innerJoin(eventoInventarioAssentos, eq(eventoInventarioAssentos.id, eventoItensPedido.inventorySeatId))
+        .innerJoin(eventoTiposIngresso, eq(eventoTiposIngresso.id, eventoItensPedido.ticketTypeId))
+        .where(eq(eventoItensPedido.orderId, order.id));
+      const itemRows = await this.lockRows<any[]>(itemQuery, [eventoItensPedido, eventoInventarioAssentos]);
+      if (!itemRows.length) throw new ConflictException({ code: "ORDER_NOT_AVAILABLE", message: "Pedido não possui itens reservados" });
+
+      let coupon: CupomPreco | null = null;
+      if (code) {
+        const couponRows = await tx.select().from(eventoCupons).where(eq(eventoCupons.eventId, order.eventId));
+        const candidate = (couponRows as any[]).find((row) => normalizarCodigoCupom(String(row.code ?? "")) === code);
+        if (!candidate) throw new NotFoundException({ code: "COUPON_NOT_FOUND", message: "Cupom não encontrado" });
+        if (!candidate.active) throw fail("COUPON_INACTIVE", "Cupom inativo");
+        if (candidate.startsAt && now < candidate.startsAt) throw fail("COUPON_NOT_STARTED", "Cupom ainda não está válido");
+        if (candidate.endsAt && now >= candidate.endsAt) throw fail("COUPON_EXPIRED", "Cupom expirado");
+        if (candidate.usageLimit !== null && candidate.usageLimit !== undefined) {
+          const uses = await tx.select().from(eventoCupomUsos).where(and(eq(eventoCupomUsos.couponId, candidate.id), eq(eventoCupomUsos.status, "CONFIRMADO")));
+          if ((uses as any[]).length >= candidate.usageLimit) throw fail("COUPON_USAGE_LIMIT_REACHED", "Limite de uso do cupom esgotado");
+        }
+        coupon = { id: candidate.id, version: candidate.version, code, name: candidate.name ?? null, pricingType: candidate.pricingType, discountPercent: candidate.discountPercent ?? null, discountCents: candidate.discountCents ?? null, active: true, startsAt: candidate.startsAt ?? null, endsAt: candidate.endsAt ?? null, usageLimit: candidate.usageLimit ?? null, usageLimitPerBuyer: candidate.usageLimitPerBuyer ?? null };
+      }
+
+      const rawOffers = await tx.select().from(eventoOfertas).where(and(eq(eventoOfertas.eventId, order.eventId), eq(eventoOfertas.active, true)));
+      const activeOffers = (rawOffers as any[]).filter((candidate) => candidate.active);
+      if (activeOffers.length > 1) throw new ConflictException({ code: "MULTIPLE_ACTIVE_OFFERS", message: "Mais de uma oferta ativa para o evento" });
+      const quantidade = itemRows.reduce((total, row) => total + Number(row.item?.quantity ?? 1), 0);
+      const ofertaAtiva = activeOffers[0];
+      if (ofertaAtiva?.pricingType === "VALOR_FIXO" && quantidade >= ofertaAtiva.minQuantity && (ofertaAtiva.maxQuantity === null || ofertaAtiva.maxQuantity === undefined || quantidade <= ofertaAtiva.maxQuantity)) {
+        throw fail("OFFER_NOT_SUPPORTED_PUBLIC", "A oferta de valor fixo não está disponível na compra pública");
+      }
+      const offers: OfertaPreco[] = activeOffers.filter((candidate) => candidate.pricingType === "PERCENTUAL").map((candidate) => ({ id: candidate.id, version: candidate.version, name: candidate.name, pricingType: candidate.pricingType, minQuantity: candidate.minQuantity, maxQuantity: candidate.maxQuantity ?? null, priceCents: candidate.priceCents ?? null, discountPercent: candidate.discountPercent ?? null, active: true }));
+      const items = itemRows.map((row: any, index: number) => ({ seatId: row.inventory?.seatId ?? row.item?.pricingEvidence?.seatId ?? String(index), ticketTypeId: row.item.ticketTypeId, participantIndex: Number(row.item?.pricingEvidence?.participantIndex ?? index), basePriceCents: Number(row.item?.pricingEvidence?.baseUnitPriceCents ?? row.ticket?.priceCents ?? row.item.unitPriceCents + (row.item?.pricingEvidence?.allocatedDiscountCents ?? 0)) }));
+      const preco = calcularPrecoPedido({ items, offers, coupon });
+      if (preco.totalCents > 0 && preco.totalCents < 100) throw fail("INVALID_AMOUNT", "Valor mínimo para pagamento: R$ 1,00");
+      const appliedCoupon = preco.appliedCoupon;
+      const updates = { subtotalCents: preco.subtotalCents, offerDiscountCents: preco.offerDiscountCents, couponDiscountCents: preco.couponDiscountCents, discountCents: preco.discountCents, totalCents: preco.totalCents, appliedOfferId: preco.appliedOffer?.id ?? null, appliedCouponId: appliedCoupon?.id ?? null, couponSnapshot: appliedCoupon ?? null, updatedAt: now };
+      await tx.update(eventoPedidos).set(updates).where(eq(eventoPedidos.id, order.id));
+      for (const [index, row] of itemRows.entries()) {
+        const price = preco.items[index]!;
+        const evidence = { ...(row.item?.pricingEvidence ?? {}), source: appliedCoupon ? "eventoCupons" : preco.appliedOffer ? "eventoOfertas" : "eventoTiposIngresso", baseUnitPriceCents: price.baseUnitPriceCents, allocatedDiscountCents: price.allocatedDiscountCents, allocatedOfferDiscountCents: price.allocatedOfferDiscountCents, allocatedCouponDiscountCents: price.allocatedCouponDiscountCents, offerId: preco.appliedOffer?.id ?? null, offerVersion: preco.appliedOffer?.version ?? null, offerSnapshot: preco.appliedOffer ?? null, couponId: appliedCoupon?.id ?? null, couponVersion: appliedCoupon?.version ?? null, couponSnapshot: appliedCoupon ?? null, participantIndex: price.participantIndex, seatId: price.seatId, allocationMethod: "MAIOR_RESTO" };
+        await tx.update(eventoItensPedido).set({ unitPriceCents: price.unitPriceCents, totalPriceCents: price.totalPriceCents, pricingEvidence: evidence, updatedAt: now }).where(eq(eventoItensPedido.id, row.item.id));
+      }
+      Object.assign(order, updates, { couponSnapshot: appliedCoupon ?? null });
+      return this.pedidoResult(order, tx);
+    });
   }
 
   async finalizarPedidoConvidado(orderNumber: string, raw: unknown): Promise<FinalizacaoPublicaResult> {
@@ -453,7 +518,7 @@ export class EventosPublicSalesService {
   }
 
   async consultarPedido(orderNumber: string, db: any = this.db): Promise<ConsultaPedidoPublica> { const order = await this.getOrder(orderNumber, db); if (order.expiresAt && order.expiresAt <= new Date() && !["CONFIRMADO", "USADO"].includes(order.status)) throw new NotFoundException({ code: "ORDER_NOT_FOUND", message: "Pedido não encontrado" }); return this.pedidoResult(order, db); }
-  private async pedidoResult(order: any, db: any): Promise<PedidoPublicoResult> { if (order.event?.status !== "PUBLICADO" || order.session?.status !== "PUBLICADA") throw new NotFoundException({ code: "ORDER_NOT_FOUND", message: "Pedido não encontrado" }); const itemsQuery = db.select({ item: eventoItensPedido, inventory: eventoInventarioAssentos, seat: eventoMapaAssentos, ticket: eventoTiposIngresso }).from(eventoItensPedido).innerJoin(eventoInventarioAssentos, eq(eventoInventarioAssentos.id, eventoItensPedido.inventorySeatId)).innerJoin(eventoMapaAssentos, eq(eventoMapaAssentos.id, eventoInventarioAssentos.seatId)).innerJoin(eventoTiposIngresso, eq(eventoTiposIngresso.id, eventoItensPedido.ticketTypeId)).where(eq(eventoItensPedido.orderId, order.id)); const rows = typeof itemsQuery.orderBy === "function" ? await itemsQuery.orderBy(asc(eventoItensPedido.createdAt)) : await itemsQuery; const orderedRows = [...rows].sort((left: any, right: any) => (left.item?.pricingEvidence?.participantIndex ?? Number.MAX_SAFE_INTEGER) - (right.item?.pricingEvidence?.participantIndex ?? Number.MAX_SAFE_INTEGER)); const snapshot = order.appliedOffer ?? orderedRows.find((row: any) => row.item?.pricingEvidence?.offerSnapshot)?.item?.pricingEvidence?.offerSnapshot ?? null; return { orderNumber: order.orderNumber, status: order.status, eventTitle: order.event?.title ?? "", eventSlug: order.event?.slug ?? "", sessionId: order.session?.id ?? order.sessionId, expiresAt: order.expiresAt ?? null, session: { startsAt: order.session?.startsAt, endsAt: order.session?.endsAt }, subtotalCents: order.subtotalCents ?? order.totalCents, offerDiscountCents: order.offerDiscountCents ?? order.discountCents ?? 0, couponDiscountCents: order.couponDiscountCents ?? 0, discountCents: order.discountCents ?? 0, totalCents: order.totalCents, appliedOffer: snapshot, appliedCoupon: order.appliedCoupon ?? null, items: orderedRows.map((row: any) => ({ seatId: row.inventory?.seatId, ticketTypeId: row.item?.ticketTypeId, participantIndex: row.item?.pricingEvidence?.participantIndex, unitPriceCents: row.item?.unitPriceCents, totalPriceCents: row.item?.totalPriceCents, rowLabel: row.seat?.rowLabel ?? row.inventory?.rowLabel ?? "", seatNumber: row.seat?.seatNumber ?? row.inventory?.seatNumber ?? "", ticketTypeName: row.ticket?.name ?? row.item?.ticketTypeName ?? "" })) }; }
+  private async pedidoResult(order: any, db: any): Promise<PedidoPublicoResult> { if (order.event?.status !== "PUBLICADO" || order.session?.status !== "PUBLICADA") throw new NotFoundException({ code: "ORDER_NOT_FOUND", message: "Pedido não encontrado" }); const itemsQuery = db.select({ item: eventoItensPedido, inventory: eventoInventarioAssentos, seat: eventoMapaAssentos, ticket: eventoTiposIngresso }).from(eventoItensPedido).innerJoin(eventoInventarioAssentos, eq(eventoInventarioAssentos.id, eventoItensPedido.inventorySeatId)).innerJoin(eventoMapaAssentos, eq(eventoMapaAssentos.id, eventoInventarioAssentos.seatId)).innerJoin(eventoTiposIngresso, eq(eventoTiposIngresso.id, eventoItensPedido.ticketTypeId)).where(eq(eventoItensPedido.orderId, order.id)); const rows = typeof itemsQuery.orderBy === "function" ? await itemsQuery.orderBy(asc(eventoItensPedido.createdAt)) : await itemsQuery; const orderedRows = [...rows].sort((left: any, right: any) => (left.item?.pricingEvidence?.participantIndex ?? Number.MAX_SAFE_INTEGER) - (right.item?.pricingEvidence?.participantIndex ?? Number.MAX_SAFE_INTEGER)); const snapshot = order.appliedOffer ?? orderedRows.find((row: any) => row.item?.pricingEvidence?.offerSnapshot)?.item?.pricingEvidence?.offerSnapshot ?? null; const couponSnapshot = order.couponSnapshot ?? order.appliedCoupon ?? orderedRows.find((row: any) => row.item?.pricingEvidence?.couponSnapshot)?.item?.pricingEvidence?.couponSnapshot ?? null; return { orderNumber: order.orderNumber, status: order.status, eventTitle: order.event?.title ?? "", eventSlug: order.event?.slug ?? "", sessionId: order.session?.id ?? order.sessionId, expiresAt: order.expiresAt ?? null, session: { startsAt: order.session?.startsAt, endsAt: order.session?.endsAt }, subtotalCents: order.subtotalCents ?? order.totalCents, offerDiscountCents: order.offerDiscountCents ?? order.discountCents ?? 0, couponDiscountCents: order.couponDiscountCents ?? 0, discountCents: order.discountCents ?? 0, totalCents: order.totalCents, appliedOffer: snapshot, appliedCoupon: couponSnapshot, items: orderedRows.map((row: any) => ({ seatId: row.inventory?.seatId, ticketTypeId: row.item?.ticketTypeId, participantIndex: row.item?.pricingEvidence?.participantIndex, unitPriceCents: row.item?.unitPriceCents, totalPriceCents: row.item?.totalPriceCents, rowLabel: row.seat?.rowLabel ?? row.inventory?.rowLabel ?? "", seatNumber: row.seat?.seatNumber ?? row.inventory?.seatNumber ?? "", ticketTypeName: row.ticket?.name ?? row.item?.ticketTypeName ?? "" })) }; }
   private async getOrder(orderNumber: string, db: any, lock = false): Promise<any> { let query = db.select({ order: eventoPedidos, event: eventos, session: eventoSessoes, location: eventoLocaisTabela }).from(eventoPedidos).innerJoin(eventos, eq(eventos.id, eventoPedidos.eventId)).innerJoin(eventoSessoes, eq(eventoSessoes.id, eventoPedidos.sessionId)); if (typeof query.leftJoin === "function") query = query.leftJoin(eventoLocaisTabela, eq(eventoLocaisTabela.id, eventoSessoes.locationId)); query = query.where(eq(eventoPedidos.orderNumber, orderNumber)); const result = await this.first<any>(lock ? await this.lockRows(query, [eventoPedidos, eventos, eventoSessoes]) : query); if (!result) throw new NotFoundException({ code: "ORDER_NOT_FOUND", message: "Pedido não encontrado" }); return result.order ? { ...result.order, event: result.event, session: result.session, location: result.location } : result; }
   private updatedExactlyOne(result: any): boolean { if (typeof result?.count === "number") return result.count === 1; return Array.isArray(result) ? result.length === 1 : result?.rowCount === 1; }
 

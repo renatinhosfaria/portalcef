@@ -31,6 +31,9 @@ export class EventosPublicController {
   @Post("pedidos/:orderNumber/finalizar")
   @Throttle({ strict: { limit: 20, ttl: 60000 } })
   finalizar(@Param("orderNumber") orderNumber: string, @Body() input: unknown) { return this.sales.finalizarPedidoConvidado(orderNumber, input); }
+  @Post("pedidos/:orderNumber/cupom")
+  @Throttle({ strict: { limit: 20, ttl: 60000 } })
+  aplicarCupom(@Param("orderNumber") orderNumber: string, @Body() input: unknown) { return this.sales.aplicarCupom(orderNumber, input); }
   @Post("pedidos/:orderNumber/checkout")
   @Throttle({ strict: { limit: 20, ttl: 60000 } })
   checkout(@Param("orderNumber") orderNumber: string, @Body() input: unknown) { return this.sales.iniciarCheckout(orderNumber, input); }

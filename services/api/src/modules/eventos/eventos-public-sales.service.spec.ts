@@ -1,5 +1,5 @@
 import { EventosPublicSalesService } from "./eventos-public-sales.service";
-import { eventoAceites, eventoIngressos, eventoInventarioAssentos, eventoItensPedido, eventoOfertas, eventoPagamentos, eventoPedidos, eventoParticipantes, eventoPoliticas, eventoReservas, eventoSessoes, eventoTiposIngresso, eventoTokensConsulta, eventos, schema } from "@essencia/db";
+import { eventoAceites, eventoCupons, eventoCupomUsos, eventoIngressos, eventoInventarioAssentos, eventoItensPedido, eventoOfertas, eventoPagamentos, eventoPedidos, eventoParticipantes, eventoPoliticas, eventoReservas, eventoSessoes, eventoTiposIngresso, eventoTokensConsulta, eventos, schema } from "@essencia/db";
 import { avaliarPredicado } from "./avaliar-predicado.spec-helper";
 import { hashTokenAcesso } from "./acesso-pedido";
 
@@ -722,6 +722,68 @@ describe("EventosPublicSalesService - contratos públicos", () => {
       response: { code: "MULTIPLE_ACTIVE_OFFERS" },
     });
   });
+
+  it("aplica cupom normalizado, recalcula oferta antes do cupom e persiste snapshot", async () => {
+    const expiresAt = new Date(Date.now() + 60_000);
+    const db = cupomAplicacaoDb({
+      order: { subtotalCents: 10000, offerDiscountCents: 1000, discountCents: 1000, totalCents: 9000, expiresAt },
+      offers: [{ id: "offer-1", version: 2, name: "Volume", pricingType: "PERCENTUAL", minQuantity: 1, maxQuantity: null, discountPercent: 10, active: true }],
+      coupons: [{ id: "coupon-1", eventId: "event-1", code: " DEZ ", version: 3, name: "Dez por cento", pricingType: "PERCENTUAL", discountPercent: 10, discountCents: null, active: true, startsAt: null, endsAt: null, usageLimit: null }],
+    });
+
+    const result = await new EventosPublicSalesService({ db } as any).aplicarCupom("ABC123DEF456", { code: " dez " });
+
+    expect(result).toMatchObject({ subtotalCents: 10000, offerDiscountCents: 1000, couponDiscountCents: 900, discountCents: 1900, totalCents: 8100, appliedCoupon: { id: "coupon-1", code: "DEZ", version: 3 } });
+    expect(db.order).toMatchObject({ appliedCouponId: "coupon-1", couponDiscountCents: 900, discountCents: 1900, totalCents: 8100, couponSnapshot: { id: "coupon-1", code: "DEZ", version: 3 } });
+    expect(db.itemRows[0].pricingEvidence).toMatchObject({ allocatedOfferDiscountCents: 1000, allocatedCouponDiscountCents: 900, couponSnapshot: { id: "coupon-1", code: "DEZ" } });
+    expect(db.order.expiresAt).toEqual(expiresAt);
+  });
+
+  it("recusa cupom inexistente, inativo, fora da validade e esgotado", async () => {
+    for (const [extra, code] of [
+      [{}, "NAOEXISTE"],
+      [{ active: false }, "TESTE"],
+      [{ startsAt: new Date(Date.now() + 60_000) }, "TESTE"],
+      [{ usageLimit: 1 }, "TESTE"],
+    ] as Array<[Record<string, unknown>, string]>) {
+      const db = cupomAplicacaoDb({ coupons: [{ id: "coupon-1", eventId: "event-1", code: "TESTE", version: 1, pricingType: "PERCENTUAL", discountPercent: 10, discountCents: null, active: true, startsAt: null, endsAt: null, usageLimit: null, ...extra }], uses: extra.usageLimit ? [{ couponId: "coupon-1", status: "CONFIRMADO" }] : [] });
+      await expect(new EventosPublicSalesService({ db } as any).aplicarCupom("ABC123DEF456", { code })).rejects.toMatchObject({ response: { code: expect.stringMatching(/COUPON|CUPOM/) } });
+      expect(db.mutations).toBe(0);
+    }
+  });
+
+  it("remove cupom, permite substituição e mantém snapshot ao consultar pedido", async () => {
+    const db = cupomAplicacaoDb({ coupons: [
+      { id: "coupon-1", eventId: "event-1", code: "DEZ", version: 1, pricingType: "PERCENTUAL", discountPercent: 10, discountCents: null, active: true, startsAt: null, endsAt: null, usageLimit: null },
+      { id: "coupon-2", eventId: "event-1", code: "VINTE", version: 1, pricingType: "PERCENTUAL", discountPercent: 20, discountCents: null, active: true, startsAt: null, endsAt: null, usageLimit: null },
+    ], offers: [{ id: "offer-1", version: 1, name: "Volume", pricingType: "PERCENTUAL", minQuantity: 1, maxQuantity: null, discountPercent: 10, active: true }] });
+    const service = new EventosPublicSalesService({ db } as any);
+    await service.aplicarCupom("ABC123DEF456", { code: "DEZ" });
+    await service.aplicarCupom("ABC123DEF456", { code: "VINTE" });
+    expect(db.order).toMatchObject({ appliedCouponId: "coupon-2", couponSnapshot: { code: "VINTE" } });
+    await service.aplicarCupom("ABC123DEF456", { code: "" });
+    expect(db.order).toMatchObject({ appliedCouponId: null, couponSnapshot: null, couponDiscountCents: 0, discountCents: 1000, totalCents: 9000 });
+    db.order.appliedCoupon = undefined;
+    db.order.couponSnapshot = { id: "coupon-2", code: "VINTE", version: 1, pricingType: "PERCENTUAL", discountPercent: 20, discountCents: null };
+    db.coupons[1]!.active = false;
+    const snapshot = await service.consultarPedido("ABC123DEF456");
+    expect(snapshot.appliedCoupon).toMatchObject({ code: "VINTE", version: 1 });
+    await expect(service.aplicarCupom("ABC123DEF456", { code: " vinte " })).resolves.toMatchObject({ appliedCoupon: { code: "VINTE", version: 1 } });
+  });
+
+  it("aceita cupom de 100% e recusa total positivo entre 1 e 99 centavos sem mutar", async () => {
+    const gratuito = cupomAplicacaoDb({ coupons: [{ id: "coupon-100", eventId: "event-1", code: "GRATIS", version: 1, pricingType: "PERCENTUAL", discountPercent: 100, discountCents: null, active: true, startsAt: null, endsAt: null, usageLimit: null }] });
+    const gratuitoResult = await new EventosPublicSalesService({ db: gratuito } as any).aplicarCupom("ABC123DEF456", { code: "GRATIS" });
+    expect(gratuitoResult).toMatchObject({ couponDiscountCents: 10000, totalCents: 0 });
+
+    const centavos = cupomAplicacaoDb({ coupons: [{ id: "coupon-10", eventId: "event-1", code: "DEZ", version: 1, pricingType: "PERCENTUAL", discountPercent: 10, discountCents: null, active: true, startsAt: null, endsAt: null, usageLimit: null }] });
+    centavos.itemRows[0]!.pricingEvidence.baseUnitPriceCents = 101;
+    centavos.itemRows[0]!.unitPriceCents = 101;
+    centavos.itemRows[0]!.totalPriceCents = 101;
+    const before = centavos.mutations;
+    await expect(new EventosPublicSalesService({ db: centavos } as any).aplicarCupom("ABC123DEF456", { code: "DEZ" })).rejects.toMatchObject({ response: { code: "INVALID_AMOUNT" } });
+    expect(centavos.mutations).toBe(before);
+  });
 });
 
 function uuid(n: number) {
@@ -1011,6 +1073,30 @@ function vendaDb(data: any) {
   const order = { id: "order-1", orderNumber: "ABC123DEF456", totalCents: data.ticket?.priceCents ?? 0, expiresAt: new Date(Date.now() + 60_000), buyerEmail: "a@b.com" };
   const rows = [[], data.session ? [{ event: data.event, session: data.session }] : [], data.ticket ? [data.ticket] : [], data.inventory ? [data.inventory] : [], data.inventory ? [data.inventory] : [], [], [{ item: { ticketTypeId: data.ticket?.id, unitPriceCents: data.ticket?.priceCents, totalPriceCents: data.ticket?.priceCents }, inventory: data.inventory }]];
   const db: any = { transaction: async (fn: any) => fn(db), select: () => { const value = rows[selects++] ?? []; const chain: any = { from: () => chain, innerJoin: () => chain, where: async () => value, orderBy: async () => value }; return chain; }, insert: () => ({ values: () => ({ returning: async () => [order] }) }), update: () => ({ set: () => ({ where: () => ({ returning: async () => [{}] }) }) }) };
+  return db;
+}
+
+function cupomAplicacaoDb(config: { order?: any; coupons?: any[]; offers?: any[]; uses?: any[] }) {
+  const event = { id: "event-1", status: "PUBLICADO", title: "Festival", slug: "festival" };
+  const session = { id: "session-1", status: "PUBLICADA", startsAt: new Date("2026-12-01T10:00:00Z"), endsAt: new Date("2026-12-01T12:00:00Z") };
+  const order: any = { id: "order-1", orderNumber: "ABC123DEF456", eventId: event.id, sessionId: session.id, status: "RESERVADO", subtotalCents: 10000, offerDiscountCents: 1000, couponDiscountCents: 0, discountCents: 1000, totalCents: 9000, expiresAt: new Date(Date.now() + 60_000), ...(config.order ?? {}) };
+  const itemRows: any[] = [{ id: "item-1", orderId: order.id, inventorySeatId: "inventory-1", ticketTypeId: "ticket-1", unitPriceCents: 9000, totalPriceCents: 9000, pricingEvidence: { participantIndex: 0, baseUnitPriceCents: 10000, allocatedOfferDiscountCents: 1000, allocatedDiscountCents: 1000, offerSnapshot: { id: "offer-old", version: 1, name: "Antiga", minQuantity: 1, maxQuantity: null, discountPercent: 10 } } }];
+  const inventoryRows: any[] = [{ id: "inventory-1", orderId: order.id, sessionId: session.id, seatId: "seat-1", status: "RESERVADO", reservedByOrderId: order.id, reservationExpiresAt: order.expiresAt }];
+  const ticketRows: any[] = [{ id: "ticket-1", eventId: event.id, priceCents: 10000, active: true, internal: false, version: 1 }];
+  const db: any = { order, event, session, itemRows, inventories: inventoryRows, coupons: config.coupons ?? [], offers: config.offers ?? [], uses: config.uses ?? [], mutations: 0, transaction: async (fn: any) => fn(db) };
+  db.select = () => {
+    const chain: any = { table: undefined, from: (table: any) => { chain.table = table; return chain; }, innerJoin: () => chain, leftJoin: () => chain, where: async () => {
+      if (chain.table === eventoPedidos) return [{ order, event, session }];
+      if (chain.table === eventoItensPedido) return itemRows.map((item) => ({ item, inventory: inventoryRows.find((row) => row.id === item.inventorySeatId), ticket: ticketRows.find((row) => row.id === item.ticketTypeId) }));
+      if (chain.table === eventoOfertas) return db.offers;
+      if (chain.table === eventoCupons) return db.coupons;
+      if (chain.table === eventoCupomUsos) return db.uses;
+      if (chain.table === eventoInventarioAssentos) return inventoryRows;
+      return [];
+    }, orderBy: async () => itemRows.map((item) => ({ item, inventory: inventoryRows.find((row) => row.id === item.inventorySeatId), ticket: ticketRows.find((row) => row.id === item.ticketTypeId) })), for: () => chain };
+    return chain;
+  };
+  db.update = (table: any) => ({ set: (values: any) => ({ where: async () => { db.mutations += 1; if (table === eventoPedidos) Object.assign(order, values); if (table === eventoItensPedido) itemRows.forEach((item) => Object.assign(item, values)); if (table === eventoInventarioAssentos) inventoryRows.forEach((row) => Object.assign(row, values)); return [{ ...order }]; }, returning: async () => { db.mutations += 1; if (table === eventoPedidos) Object.assign(order, values); if (table === eventoItensPedido) itemRows.forEach((item) => Object.assign(item, values)); return [{ ...order }]; } }) });
   return db;
 }
 
