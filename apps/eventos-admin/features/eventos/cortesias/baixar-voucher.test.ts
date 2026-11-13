@@ -21,7 +21,7 @@ describe("baixarVoucher", () => {
     vi.spyOn(document, "createElement").mockImplementation(((tag: string) => tag === "a" ? Object.assign(originalCreate("a"), { click }) : originalCreate(tag)) as typeof document.createElement);
     await baixarVoucher("ev-1", cortesia);
     expect(obterVoucher).toHaveBeenCalledWith("ev-1", "pedido-1");
-    expect(gerarPdfIngressos).toHaveBeenCalledWith(pedido, pedido.tickets, expect.objectContaining({ carregarArte: expect.any(Function) }));
+    expect(gerarPdfIngressos).toHaveBeenCalledWith(pedido, pedido.tickets, expect.objectContaining({ carregarArte: expect.any(Function), variante: "CORTESIA" }));
     expect(nomeArquivoIngresso).toHaveBeenCalledWith(pedido, pedido.tickets[0]);
     expect(click).toHaveBeenCalled();
   });

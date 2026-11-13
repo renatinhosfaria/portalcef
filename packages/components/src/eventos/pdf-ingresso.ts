@@ -5,6 +5,8 @@ import { formatarNumeroIngresso } from "@essencia/shared/eventos/ingresso";
 import { formatarDataHoraExtenso } from "@essencia/shared/eventos/datas";
 
 export type CarregarArte = (imageUrl: string) => Promise<string | null>;
+export type VariantePdfIngresso = "INGRESSO" | "CORTESIA";
+export type OpcoesPdfIngresso = { carregarArte: CarregarArte; variante?: VariantePdfIngresso };
 
 function textoIngresso(pedido: PedidoComIngressos, ingresso: IngressoPublico): string[] {
   return [
@@ -19,10 +21,11 @@ function textoIngresso(pedido: PedidoComIngressos, ingresso: IngressoPublico): s
   ];
 }
 
-export async function gerarPdfIngressos(pedido: PedidoComIngressos, ingressos: IngressoPublico[], opcoes: { carregarArte: CarregarArte }): Promise<Blob> {
+export async function gerarPdfIngressos(pedido: PedidoComIngressos, ingressos: IngressoPublico[], opcoes: OpcoesPdfIngresso): Promise<Blob> {
   const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a5" });
   const largura = pdf.internal.pageSize.getWidth();
   const { carregarArte } = opcoes;
+  const variante = opcoes.variante ?? "INGRESSO";
 
   for (const [indice, ingresso] of ingressos.entries()) {
     if (indice > 0) pdf.addPage("a5", "portrait");
@@ -30,7 +33,7 @@ export async function gerarPdfIngressos(pedido: PedidoComIngressos, ingressos: I
     pdf.roundedRect(10, 10, largura - 20, 190, 5, 5, "F");
     pdf.setTextColor(31, 42, 36);
     pdf.setFontSize(18);
-    pdf.text("Ingresso", 16, 24);
+    pdf.text(variante === "CORTESIA" ? "Ingresso · Cortesia" : "Ingresso", 16, 24);
     pdf.setFontSize(13);
     pdf.text(textoIngresso(pedido, ingresso), 16, 36, { maxWidth: largura - 48, lineHeightFactor: 1.65 });
 

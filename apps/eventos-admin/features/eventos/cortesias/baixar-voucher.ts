@@ -14,7 +14,7 @@ export async function carregarArteAdmin(imageUrl: string): Promise<string | null
 export async function baixarVoucher(eventId: string, cortesia: CortesiaResumo): Promise<void> {
   const pedido = await obterVoucher(eventId, cortesia.orderId);
   const ingresso = pedido.tickets[0];
-  const blob = await gerarPdfIngressos(pedido, pedido.tickets, { carregarArte: carregarArteAdmin });
+  const blob = await gerarPdfIngressos(pedido, pedido.tickets, { carregarArte: carregarArteAdmin, variante: "CORTESIA" });
   const arquivo = new File([blob], nomeArquivoIngresso(pedido, ingresso), { type: "application/pdf" });
   const url = URL.createObjectURL(arquivo);
   const link = document.createElement("a");
