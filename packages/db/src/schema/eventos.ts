@@ -2,6 +2,7 @@ import { relations, sql } from "drizzle-orm";
 import {
   boolean,
   check,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -526,7 +527,8 @@ export const eventoCupons = pgTable(
   (table) => ({
     eventIdx: index("idx_evento_cupons_event").on(table.eventId),
     activeIdx: index("idx_evento_cupons_event_active").on(table.eventId, table.active),
-    codeUnique: uniqueIndex("uq_evento_cupons_event_code").on(table.eventId, table.code),
+    codeUnique: uniqueIndex("uq_evento_cupons_event_code").on(table.eventId, sql`upper(btrim(${table.code}))`),
+    eventIdCodeUnique: uniqueIndex("uq_evento_cupons_event_id_id").on(table.eventId, table.id),
     validPricingType: check("evento_cupons_valid_pricing_type", sql`${table.pricingType} IN ('PERCENTUAL', 'VALOR_FIXO')`),
     validDiscountPercent: check("evento_cupons_valid_discount_percent", sql`${table.discountPercent} IS NULL OR (${table.discountPercent} >= 1 AND ${table.discountPercent} <= 100)`),
     nonNegativeDiscount: check("evento_cupons_non_negative_discount", sql`${table.discountCents} IS NULL OR ${table.discountCents} >= 0`),
@@ -613,6 +615,11 @@ export const eventoPedidos = pgTable(
       "evento_pedidos_valid_origin",
       sql`${table.origin} IN ('VENDA', 'CORTESIA')`,
     ),
+    appliedCouponEventForeignKey: foreignKey({
+      name: "evento_pedidos_applied_coupon_event_fk",
+      columns: [table.eventId, table.appliedCouponId],
+      foreignColumns: [eventoCupons.eventId, eventoCupons.id],
+    }),
   }),
 );
 export type EventoPedido = typeof eventoPedidos.$inferSelect;

@@ -153,6 +153,8 @@ test("cupons de eventos preservam regras de preço, período e limites", () => {
   assert.ok(eventoCupons);
   const config = getTableConfig(eventoCupons);
   const checks = config.checks.map((item) => item.name);
+  assert.ok(checks.includes("evento_cupons_valid_pricing_type"));
+  assert.ok(checks.includes("evento_cupons_valid_pricing_values"));
   assert.ok(checks.includes("evento_cupons_valid_discount_percent"));
   assert.ok(checks.includes("evento_cupons_non_negative_discount"));
   assert.ok(checks.includes("evento_cupons_valid_period"));
@@ -168,6 +170,11 @@ test("pedido guarda snapshot e totais separados do cupom", () => {
   assert.ok("appliedCouponId" in eventoPedidos);
   assert.ok("couponSnapshot" in eventoPedidos);
   assert.ok("couponDiscountCents" in eventoPedidos);
+  assert.ok("offerDiscountCents" in eventoPedidos);
+  const checks = getTableConfig(eventoPedidos).checks.map((item) => item.name);
+  assert.equal(getTableConfig(eventoPedidos).foreignKeys.length, 5);
+  assert.ok(checks.includes("evento_pedidos_non_negative_offer_discount"));
+  assert.ok(checks.includes("evento_pedidos_non_negative_coupon_discount"));
 });
 
 test("retenções e usos de cupom têm estados e unicidade operacional", () => {
@@ -185,6 +192,15 @@ test("migration 0057 cria persistência de cupons", () => {
   assert.match(migration, /CREATE TABLE "evento_cupom_retencoes"/);
   assert.match(migration, /CREATE TABLE "evento_cupom_usos"/);
   assert.match(migration, /ALTER TABLE "evento_pedidos" ADD COLUMN "coupon_snapshot" jsonb/);
+  assert.match(migration, /evento_pedidos_applied_coupon_event_fk/);
+  assert.match(migration, /upper\(btrim\("code"\)\)/);
+  assert.match(migration, /evento_cupons_valid_pricing_type/);
+  assert.match(migration, /evento_cupons_valid_pricing_values/);
+  assert.match(migration, /discount_percent.*>= 1.*<= 100/s);
+  assert.match(migration, /discount_cents.*>= 0/s);
+  assert.match(migration, /ends_at.*>.*starts_at/s);
+  assert.match(migration, /usage_limit.*> 0/s);
+  assert.match(migration, /offer_discount_cents.*>= 0/s);
   const journal = JSON.parse(readFileSync(join(__dirname, "../../drizzle/meta/_journal.json"), "utf8"));
   assert.equal(journal.entries.at(-1).tag, "0057_eventos_cupons");
 });

@@ -29,9 +29,12 @@ CREATE TABLE "evento_cupons" (
 );
 ALTER TABLE "evento_cupons" ADD CONSTRAINT "evento_cupons_event_id_eventos_id_fk" FOREIGN KEY ("event_id") REFERENCES "public"."eventos"("id") ON DELETE cascade ON UPDATE no action;
 ALTER TABLE "evento_pedidos" ADD CONSTRAINT "evento_pedidos_applied_coupon_id_evento_cupons_id_fk" FOREIGN KEY ("applied_coupon_id") REFERENCES "public"."evento_cupons"("id") ON DELETE set null ON UPDATE no action;
+
 CREATE INDEX "idx_evento_cupons_event" ON "evento_cupons" USING btree ("event_id");
 CREATE INDEX "idx_evento_cupons_event_active" ON "evento_cupons" USING btree ("event_id", "active");
-CREATE UNIQUE INDEX "uq_evento_cupons_event_code" ON "evento_cupons" USING btree ("event_id", "code");
+CREATE UNIQUE INDEX "uq_evento_cupons_event_code" ON "evento_cupons" USING btree ("event_id", upper(btrim("code")));
+CREATE UNIQUE INDEX "uq_evento_cupons_event_id_id" ON "evento_cupons" USING btree ("event_id", "id");
+ALTER TABLE "evento_pedidos" ADD CONSTRAINT "evento_pedidos_applied_coupon_event_fk" FOREIGN KEY ("event_id", "applied_coupon_id") REFERENCES "public"."evento_cupons"("event_id", "id") ON DELETE restrict ON UPDATE no action;
 CREATE TABLE "evento_cupom_retencoes" (
   "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
   "coupon_id" uuid NOT NULL,
