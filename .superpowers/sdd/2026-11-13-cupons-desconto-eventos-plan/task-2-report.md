@@ -36,3 +36,15 @@ Verificações executadas:
 - `pnpm --filter @essencia/db typecheck` — passando.
 - `pnpm --filter @essencia/db lint` — passando.
 - `git diff --check` — passando.
+
+## Correção da revisão — round 2
+
+- A FK composta de evento e cupom aplicado agora declara explicitamente `.onDelete("restrict")` no schema Drizzle, alinhada ao `ON DELETE RESTRICT` da migration 0057.
+- O teste de schema identifica a FK composta e verifica a política `restrict`.
+
+Verificações executadas:
+
+- `pnpm --filter @essencia/db test` — 16 testes passando.
+- `pnpm --filter @essencia/db typecheck` — passando.
+- `pnpm --filter @essencia/db lint` — passando.
+- `git diff --check` — passando.

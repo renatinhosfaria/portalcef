@@ -172,7 +172,8 @@ test("pedido guarda snapshot e totais separados do cupom", () => {
   assert.ok("couponDiscountCents" in eventoPedidos);
   assert.ok("offerDiscountCents" in eventoPedidos);
   const checks = getTableConfig(eventoPedidos).checks.map((item) => item.name);
-  assert.equal(getTableConfig(eventoPedidos).foreignKeys.length, 5);
+  const appliedCouponEventForeignKey = getTableConfig(eventoPedidos).foreignKeys.find((item) => item.reference().columns.length === 2);
+  assert.equal(appliedCouponEventForeignKey?.onDelete, "restrict");
   assert.ok(checks.includes("evento_pedidos_non_negative_offer_discount"));
   assert.ok(checks.includes("evento_pedidos_non_negative_coupon_discount"));
 });

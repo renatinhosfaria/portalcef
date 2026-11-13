@@ -619,7 +619,7 @@ export const eventoPedidos = pgTable(
       name: "evento_pedidos_applied_coupon_event_fk",
       columns: [table.eventId, table.appliedCouponId],
       foreignColumns: [eventoCupons.eventId, eventoCupons.id],
-    }),
+    }).onDelete("restrict"),
   }),
 );
 export type EventoPedido = typeof eventoPedidos.$inferSelect;
