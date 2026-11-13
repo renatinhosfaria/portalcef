@@ -19,7 +19,7 @@ function ratear(desconto: number, valores: number[], items: ItemPreco[]): number
   const partes = valores.map((valor, index) => { const numerador = desconto * valor; return { index, inteiro: Math.floor(numerador / total), resto: numerador % total }; });
   let restantes = desconto - partes.reduce((sum, parte) => sum + parte.inteiro, 0);
   partes.forEach((parte) => { alocacoes[parte.index] = parte.inteiro; });
-  partes.slice().sort((a, b) => { if (b.resto !== a.resto) return b.resto - a.resto; const itemA = items[a.index]!; const itemB = items[b.index]!; if (itemA.participantIndex !== itemB.participantIndex) return itemA.participantIndex - itemB.participantIndex; return itemA.seatId.localeCompare(itemB.seatId); }).forEach((parte) => { if (restantes > 0) { alocacoes[parte.index] = (alocacoes[parte.index] ?? 0) + 1; restantes -= 1; } });
+  partes.filter((parte) => valores[parte.index]! > 0).slice().sort((a, b) => { if (b.resto !== a.resto) return b.resto - a.resto; const itemA = items[a.index]!; const itemB = items[b.index]!; if (itemA.participantIndex !== itemB.participantIndex) return itemA.participantIndex - itemB.participantIndex; return itemA.seatId.localeCompare(itemB.seatId); }).forEach((parte) => { if (restantes > 0 && (alocacoes[parte.index] ?? 0) < valores[parte.index]!) { alocacoes[parte.index] = (alocacoes[parte.index] ?? 0) + 1; restantes -= 1; } });
   return alocacoes;
 }
 

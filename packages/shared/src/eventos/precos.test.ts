@@ -133,3 +133,27 @@ describe("calcularPrecoPedido", () => {
     expect(() => calcularPrecoPedido({ items: [item(0, 50)], offers: [], minimumTotalCents: 100 })).not.toThrow();
     expect(calcularPrecoPedido({ items: [item(0, 50)], offers: [], minimumTotalCents: 100 }).totalCents).toBe(50);
   });
+
+  it("não rateia desconto para item gratuito", () => {
+    const resultado = calcularPrecoPedido({
+      items: [item(0, 0), item(1, 100)],
+      offers: [],
+      coupon: { id: "cupom", version: 1, code: "FIXO", pricingType: "VALOR_FIXO", discountPercent: null, discountCents: 1, active: true },
+    });
+    expect(resultado.totalCents).toBe(99);
+    expect(resultado.items.map((item) => item.totalPriceCents)).toEqual([0, 99]);
+    expect(resultado.items.map((item) => item.allocatedCouponDiscountCents)).toEqual([0, 1]);
+  });
+
+  it("aplica cupom fixo e rateia centavos sequencialmente após oferta", () => {
+    const resultado = calcularPrecoPedido({
+      items: [item(0, 101), item(1, 100), item(2, 99)],
+      offers: [{ ...ofertaPercentual, minQuantity: 1, discountPercent: 10 }],
+      coupon: { id: "cupom", version: 1, code: "FIXO", pricingType: "VALOR_FIXO", discountPercent: null, discountCents: 7, active: true },
+    });
+    expect(resultado.offerDiscountCents).toBe(30);
+    expect(resultado.couponDiscountCents).toBe(7);
+    expect(resultado.discountCents).toBe(37);
+    expect(resultado.items.reduce((sum, current) => sum + current.totalPriceCents, 0)).toBe(263);
+    expect(resultado.items.reduce((sum, current) => sum + current.allocatedCouponDiscountCents, 0)).toBe(7);
+  });

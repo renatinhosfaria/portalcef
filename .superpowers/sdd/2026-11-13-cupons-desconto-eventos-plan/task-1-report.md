@@ -19,3 +19,17 @@ Concluída em 13/11/2026.
 A regra de rejeição de pagamentos positivos entre 1 e 99 centavos pertence ao fluxo de checkout; o motor de preços mantém esses totais calculáveis para permitir a validação posterior.
 
 Atualizado em: 2026-11-13
+
+## Correção round 1
+
+- Corrigido o rateio para excluir itens de preço zero dos candidatos ao centavo residual e limitar a alocação ao valor disponível do item.
+- Tornados obrigatórios `offerDiscountCents`, `couponDiscountCents` e `appliedCoupon` nos resultados públicos; serviço e fixtures foram ajustados.
+- Adicionados testes comportamentais para cupom fixo, distribuição sequencial após oferta e item gratuito.
+
+### Validação da correção
+- `pnpm --filter @essencia/shared test -- src/eventos/cupons.test.ts src/eventos/precos.test.ts src/schemas/eventos-cupom.test.ts`: 20 testes aprovados.
+- `pnpm --filter @essencia/shared typecheck`: aprovado.
+- `pnpm --filter @essencia/shared lint`: aprovado; permanecem apenas 5 avisos preexistentes em `fetchers/client.ts`.
+- `pnpm turbo typecheck`: iniciou todos os pacotes, sem erro reportado antes do limite de execução do comando.
+
+Atualizado em: 2026-11-13
