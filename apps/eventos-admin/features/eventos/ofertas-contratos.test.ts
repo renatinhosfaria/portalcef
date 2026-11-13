@@ -53,10 +53,11 @@ describe("contrato de ofertas do painel", () => {
 });
 
 describe("OfertaEditor", () => {
-  it("renderiza o resumo da regra em português", () => {
+  it("não renderiza o resumo textual da regra", () => {
     const html = renderToStaticMarkup(React.createElement(OfertaEditor, { initialValue: ofertaBase, onChange: vi.fn() }));
 
-    expect(html).toContain("15% a partir de 10 lugares");
+    expect(html).not.toContain("15% a partir de 10 lugares");
+    expect(html).not.toContain("sem limite máximo");
     expect(html).toContain("Desconto para grupos");
     expect(html).toContain("Oferta ativa");
   });

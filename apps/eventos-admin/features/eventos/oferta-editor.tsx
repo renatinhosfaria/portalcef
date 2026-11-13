@@ -14,10 +14,6 @@ function numeroOuNulo(event: ChangeEvent<HTMLInputElement>): number | null {
 }
 
 export function OfertaEditor({ initialValue, onChange, disabled = false }: OfertaEditorProps) {
-  const resumo = initialValue.pricingType === "PERCENTUAL"
-    ? `${initialValue.discountPercent ?? 0}% a partir de ${initialValue.minQuantity || 0} lugares`
-    : `Preço fixo a partir de ${initialValue.minQuantity || 0} lugares`;
-  const maximo = initialValue.maxQuantity == null ? "sem limite máximo" : `até ${initialValue.maxQuantity} lugares`;
   const atualizar = (patch: Partial<OfertaValue>) => onChange?.({ ...initialValue, ...patch });
 
   return (
@@ -25,8 +21,6 @@ export function OfertaEditor({ initialValue, onChange, disabled = false }: Ofert
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h3 className="text-base font-semibold text-slate-900">Desconto por volume</h3>
-          <p className="mt-1 text-sm text-blue-700" role="status">{resumo}</p>
-          <p className="text-xs text-slate-500">{maximo}</p>
         </div>
         <span className={`text-sm ${initialValue.active ? "text-emerald-700" : "text-slate-500"}`}>
           {initialValue.active ? "Oferta ativa" : "Oferta arquivada"}
