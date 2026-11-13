@@ -79,9 +79,7 @@ export class EventosCuponsService {
         const values = { eventId, code: codes[index], name: input.name === undefined ? (previous?.name ?? null) : (input.name?.trim() || null), pricingType: input.pricingType, discountPercent: input.pricingType === "PERCENTUAL" ? input.discountPercent : null, discountCents: input.pricingType === "VALOR_FIXO" ? input.discountCents : null, startsAt: input.startsAt === undefined ? (previous?.startsAt ?? null) : input.startsAt, endsAt: input.endsAt === undefined ? (previous?.endsAt ?? null) : input.endsAt, usageLimit: input.usageLimit === undefined ? (previous?.usageLimit ?? null) : input.usageLimit, usageLimitPerBuyer: input.usageLimitPerBuyer === undefined ? (previous?.usageLimitPerBuyer ?? null) : input.usageLimitPerBuyer, version: previous ? previous.version + 1 : 1, active: input.active !== false };
         let row: any;
         if (previous) {
-          const updateQuery = tx.update(eventoCupons).set({ ...values, updatedAt: new Date() }).where(and(eq(eventoCupons.id, previous.id), eq(eventoCupons.eventId, eventId), eq(eventoCupons.version, previous.version)));
-          const awaitedUpdate = await updateQuery;
-          const result = typeof awaitedUpdate?.returning === "function" ? await awaitedUpdate.returning() : (typeof updateQuery?.returning === "function" ? await updateQuery.returning() : awaitedUpdate);
+          const result = await tx.update(eventoCupons).set({ ...values, updatedAt: new Date() }).where(and(eq(eventoCupons.id, previous.id), eq(eventoCupons.eventId, eventId), eq(eventoCupons.version, previous.version))).returning();
           row = result?.[0];
           if (!row) throw new ConflictException({ code: "VERSION_CONFLICT", message: "O cupom foi alterado por outra pessoa" });
         } else {
@@ -92,7 +90,8 @@ export class EventosCuponsService {
         const summary = this.resumo(row, 0); saved.push(summary);
         await tx.insert(eventoAuditorias).values({ eventId, actorId: actor.userId, actorRole: actor.role, action: "ATUALIZADO", resourceType: "cupom", resourceId: row.id, version: summary.version, metadata: { code: summary.code, active: summary.active } });
       }
-      return saved;
+      const counts = await this.usos(saved, tx);
+      return saved.map((summary) => ({ ...summary, confirmedUses: counts.get(summary.id) ?? 0 }));
     });
   }
 }

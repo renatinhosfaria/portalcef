@@ -2,15 +2,20 @@ import { BadRequestException } from "@nestjs/common";
 import type { EventoActor } from "@essencia/shared/types";
 import { EventosCuponsService } from "./eventos-cupons.service";
 import { EventosAdminController } from "./eventos-admin.controller";
+import { EVENTOS_ADMIN_ROLES } from "./eventos.constants";
+import { EXACT_ROLES_KEY, ROLES_KEY } from "../../common/decorators/roles.decorator";
 
 const actor: EventoActor = { userId: "u1", role: "diretora_geral", schoolId: "s1" };
 const evento = (extra: Record<string, unknown> = {}) => ({ id: "e1", schoolId: "s1", ...extra });
 const cupom = (extra: Record<string, unknown> = {}) => ({ id: "c1", eventId: "e1", code: "DEZ", name: "Dez por cento", pricingType: "PERCENTUAL", discountPercent: 10, discountCents: null, startsAt: null, endsAt: null, usageLimit: 10, usageLimitPerBuyer: 1, version: 1, active: true, ...extra });
 
 describe("EventosCuponsService", () => {
-  it("expõe as rotas administrativas de cupons", () => {
-    expect(typeof (EventosAdminController.prototype as any).coupons).toBe("function");
-    expect(typeof (EventosAdminController.prototype as any).updateCoupons).toBe("function");
+  it("expõe as rotas administrativas de cupons com o contrato de proteção", () => {
+    const proto = EventosAdminController.prototype as any;
+    expect(typeof proto.coupons).toBe("function");
+    expect(typeof proto.updateCoupons).toBe("function");
+    expect(Reflect.getMetadata(ROLES_KEY, EventosAdminController)).toEqual(EVENTOS_ADMIN_ROLES);
+    expect(Reflect.getMetadata(EXACT_ROLES_KEY, EventosAdminController)).toBe(true);
   });
 
   it("recusa evento fora do escopo da escola", async () => {
@@ -37,11 +42,17 @@ describe("EventosCuponsService", () => {
 
   it("versiona edição, permite desativar, não apaga e audita", async () => {
     const updated: any[] = [];
-    const db = fakeDb({ selects: [[evento()], [cupom()]], update: (values) => { updated.push(values); return [{ ...cupom(), ...values, version: 2 }]; } });
+    const db = fakeDb({ selects: [[evento()], [cupom()], [{ couponId: "c1", confirmedUses: 3 }]], update: (values) => { updated.push(values); return [{ ...cupom(), ...values, version: 2 }]; } });
     const result = await service(db).atualizar("e1", [{ id: "c1", version: 1, code: "dez", pricingType: "PERCENTUAL", discountPercent: 20, active: false }] as any, actor);
-    expect(result[0]).toMatchObject({ id: "c1", code: "DEZ", version: 2, active: false, discountPercent: 20 });
+    expect(result[0]).toMatchObject({ id: "c1", code: "DEZ", version: 2, active: false, discountPercent: 20, confirmedUses: 3 });
+    expect(updated).toHaveLength(1);
     expect(updated[0]).toMatchObject({ version: 2, active: false });
     expect(db.audit).toEqual(expect.arrayContaining([expect.objectContaining({ resourceType: "cupom", action: "ATUALIZADO", version: 2 })]));
+  });
+
+  it("lista usos confirmados sem expor retenções", async () => {
+    const db = fakeDb({ selects: [[evento()], [cupom(), cupom({ id: "c2", code: "FIXO" })], [{ couponId: "c1", confirmedUses: 4 }]] });
+    await expect(service(db).listarAdmin("e1", actor)).resolves.toEqual(expect.arrayContaining([expect.objectContaining({ id: "c1", confirmedUses: 4 }), expect.objectContaining({ id: "c2", confirmedUses: 0 })]));
   });
 
   it("recusa versão obsoleta antes de atualizar", async () => {
@@ -56,7 +67,7 @@ function fakeDb(options: { selects?: unknown[][]; insert?: (values: any) => any[
   const db: any = { audit: [] };
   db.select = () => ({ from: () => ({ where: () => { const rows = options.selects?.[selectIndex++] ?? []; const query: any = Promise.resolve(rows); query.for = () => query; query.groupBy = () => query; return query; } }) });
   db.insert = (table: unknown) => ({ values: (values: any) => { if (table) db.audit.push(values); return { returning: async () => options.insert?.(values) ?? [] }; } });
-  db.update = () => ({ set: (values: any) => ({ where: async () => ({ returning: async () => options.update?.(values) ?? [] }) }) });
+  db.update = () => ({ set: (values: any) => ({ where: () => ({ returning: async () => options.update?.(values) ?? [] }) }) });
   db.transaction = async (callback: (tx: any) => Promise<unknown>) => callback(db);
   return db;
 }
