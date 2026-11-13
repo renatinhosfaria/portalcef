@@ -569,7 +569,8 @@ describe("EventosPublicSalesService - contratos públicos", () => {
       return { resultado, banco };
     };
     expect((await fazer(9, "volume-9-123456")).resultado).toMatchObject({ subtotalCents: 40500, discountCents: 0, totalCents: 40500, appliedOffer: null });
-    expect((await fazer(10, "volume-10-123456")).resultado).toMatchObject({ subtotalCents: 45000, discountCents: 6750, totalCents: 38250, appliedOffer: { id: oferta.id, version: 2 } });
+    expect((await fazer(10, "volume-10-123456")).resultado).toMatchObject({ subtotalCents: 45000, offerDiscountCents: 6750, discountCents: 6750, totalCents: 38250, appliedOffer: { id: oferta.id, version: 2 } });
+    expect((await fazer(10, "volume-10-persistido-123456")).banco.order).toMatchObject({ offerDiscountCents: 6750, couponDiscountCents: 0 });
     const vinte = await fazer(20, "volume-20-123456");
     expect(vinte.resultado).toMatchObject({ subtotalCents: 90000, discountCents: 13500, totalCents: 76500 });
     expect(vinte.resultado.items).toHaveLength(20);
@@ -783,6 +784,11 @@ describe("EventosPublicSalesService - contratos públicos", () => {
     const before = centavos.mutations;
     await expect(new EventosPublicSalesService({ db: centavos } as any).aplicarCupom("ABC123DEF456", { code: "DEZ" })).rejects.toMatchObject({ response: { code: "INVALID_AMOUNT" } });
     expect(centavos.mutations).toBe(before);
+  });
+
+  it("ignora oferta fixa incompatível ao aplicar cupom", async () => {
+    const db = cupomAplicacaoDb({ offers: [{ id: "offer-fixed", version: 1, name: "Fixa", pricingType: "VALOR_FIXO", minQuantity: 1, maxQuantity: null, priceCents: 100, discountPercent: null, active: true, compatibleTicketTypeIds: ["outro-ticket"] }], coupons: [{ id: "coupon-1", eventId: "event-1", code: "DEZ", version: 1, pricingType: "PERCENTUAL", discountPercent: 10, discountCents: null, active: true, startsAt: null, endsAt: null, usageLimit: null }] });
+    await expect(new EventosPublicSalesService({ db } as any).aplicarCupom("ABC123DEF456", { code: "DEZ" })).resolves.toMatchObject({ appliedCoupon: { code: "DEZ" } });
   });
 });
 

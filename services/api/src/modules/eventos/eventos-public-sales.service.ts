@@ -184,6 +184,8 @@ export class EventosPublicSalesService {
         buyerPhone: null,
         status: "INICIADO",
         subtotalCents: preco.subtotalCents,
+        offerDiscountCents: preco.offerDiscountCents,
+        couponDiscountCents: preco.couponDiscountCents,
         discountCents: preco.discountCents,
         appliedOfferId: preco.appliedOffer?.id ?? null,
         totalCents: preco.totalCents,
@@ -192,7 +194,7 @@ export class EventosPublicSalesService {
       };
       [order] = await tx.insert(eventoPedidos).values(valoresPedido).returning();
       if (!order) throw new ConflictException({ code: "ORDER_NOT_CREATED", message: "Não foi possível criar o pedido" });
-      order = { ...valoresPedido, ...order, subtotalCents: order.subtotalCents ?? preco.subtotalCents, discountCents: order.discountCents ?? preco.discountCents, appliedOfferId: order.appliedOfferId ?? preco.appliedOffer?.id ?? null, totalCents: order.totalCents ?? preco.totalCents };
+      order = { ...valoresPedido, ...order, subtotalCents: order.subtotalCents ?? preco.subtotalCents, offerDiscountCents: order.offerDiscountCents ?? preco.offerDiscountCents, couponDiscountCents: order.couponDiscountCents ?? preco.couponDiscountCents, discountCents: order.discountCents ?? preco.discountCents, appliedOfferId: order.appliedOfferId ?? preco.appliedOffer?.id ?? null, totalCents: order.totalCents ?? preco.totalCents };
 
       for (const item of selected) {
         const indice = preco.items.findIndex((price) => price.seatId === item.requested.seatId);
@@ -295,7 +297,8 @@ export class EventosPublicSalesService {
       if (activeOffers.length > 1) throw new ConflictException({ code: "MULTIPLE_ACTIVE_OFFERS", message: "Mais de uma oferta ativa para o evento" });
       const quantidade = itemRows.reduce((total, row) => total + Number(row.item?.quantity ?? 1), 0);
       const ofertaAtiva = activeOffers[0];
-      if (ofertaAtiva?.pricingType === "VALOR_FIXO" && quantidade >= ofertaAtiva.minQuantity && (ofertaAtiva.maxQuantity === null || ofertaAtiva.maxQuantity === undefined || quantidade <= ofertaAtiva.maxQuantity)) {
+      const ofertaCompativel = !ofertaAtiva?.compatibleTicketTypeIds || itemRows.every((row: any) => ofertaAtiva.compatibleTicketTypeIds.includes(row.item.ticketTypeId));
+      if (ofertaAtiva?.pricingType === "VALOR_FIXO" && ofertaCompativel && quantidade >= ofertaAtiva.minQuantity && (ofertaAtiva.maxQuantity === null || ofertaAtiva.maxQuantity === undefined || quantidade <= ofertaAtiva.maxQuantity)) {
         throw fail("OFFER_NOT_SUPPORTED_PUBLIC", "A oferta de valor fixo não está disponível na compra pública");
       }
       const offers: OfertaPreco[] = activeOffers.filter((candidate) => candidate.pricingType === "PERCENTUAL").map((candidate) => ({ id: candidate.id, version: candidate.version, name: candidate.name, pricingType: candidate.pricingType, minQuantity: candidate.minQuantity, maxQuantity: candidate.maxQuantity ?? null, priceCents: candidate.priceCents ?? null, discountPercent: candidate.discountPercent ?? null, active: true }));

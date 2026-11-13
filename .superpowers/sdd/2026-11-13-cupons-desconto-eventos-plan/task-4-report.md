@@ -19,5 +19,12 @@
 
 - A aplicação pública valida o limite total confirmado no momento da aplicação; retenções, identidade do comprador e confirmação concorrente permanecem no fluxo das Tasks 5–7.
 - Ofertas percentuais ativas são recalculadas do cadastro atual; ofertas públicas de valor fixo continuam recusadas conforme o contrato existente.
+- Correção posterior: a reserva inicial agora persiste `offerDiscountCents`/`couponDiscountCents`; ofertas fixas só bloqueiam quando compatíveis com os tipos de ingresso da reserva.
+
+## Correção round 1
+
+- `pnpm --filter @essencia/api exec jest src/modules/eventos/eventos-public-sales.service.spec.ts --runInBand` — **73 testes aprovados**.
+- `pnpm --filter @essencia/eventos test -- lib/eventos-api.test.ts` — **13 testes aprovados**.
+- `pnpm --filter @essencia/api typecheck` — aprovado.
 
 Atualizado em: 2026-11-13
