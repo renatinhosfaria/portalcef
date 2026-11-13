@@ -33,3 +33,14 @@ Atualizado em: 2026-11-13
 - `pnpm turbo typecheck`: iniciou todos os pacotes, sem erro reportado antes do limite de execução do comando.
 
 Atualizado em: 2026-11-13
+
+## Correção round 2
+
+- Atualizados `reservaResult` e `obterVoucher` para preencher os campos obrigatórios de descontos separados e `appliedCoupon`.
+- Cupons continuam nulos em vouchers de cortesia; reservas públicas usam snapshot persistido quando disponível.
+
+### Validação da correção
+- `pnpm --filter @essencia/shared test -- src/eventos/cupons.test.ts src/eventos/precos.test.ts src/schemas/eventos-cupom.test.ts`: 20 testes aprovados.
+- `pnpm --filter @essencia/api typecheck`: aprovado.
+
+Atualizado em: 2026-11-13

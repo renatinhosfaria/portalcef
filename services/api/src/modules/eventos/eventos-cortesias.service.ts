@@ -176,9 +176,12 @@ export class EventosCortesiasService {
       expiresAt: pedido.expiresAt ?? null,
       session: { startsAt: sessao?.startsAt, endsAt: sessao?.endsAt },
       subtotalCents: pedido.subtotalCents ?? pedido.totalCents,
+      offerDiscountCents: pedido.offerDiscountCents ?? pedido.discountCents ?? 0,
+      couponDiscountCents: pedido.couponDiscountCents ?? 0,
       discountCents: pedido.discountCents ?? 0,
       totalCents: pedido.totalCents,
       appliedOffer: null,
+      appliedCoupon: null,
       items: itens.map(({ item, inventario, assento, tipo }) => ({
         seatId: inventario.seatId,
         ticketTypeId: item.ticketTypeId,

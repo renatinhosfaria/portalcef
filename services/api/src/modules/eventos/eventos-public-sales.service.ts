@@ -240,9 +240,12 @@ export class EventosPublicSalesService {
       orderNumber: order.orderNumber,
       expiresAt: order.expiresAt,
       subtotalCents: order.subtotalCents ?? order.totalCents,
+      offerDiscountCents: order.offerDiscountCents ?? order.discountCents ?? 0,
+      couponDiscountCents: order.couponDiscountCents ?? 0,
       discountCents: order.discountCents ?? 0,
       totalCents: order.totalCents,
       appliedOffer: snapshot,
+      appliedCoupon: order.appliedCoupon ?? rows.find((row: any) => row.item?.pricingEvidence?.couponSnapshot)?.item?.pricingEvidence?.couponSnapshot ?? null,
       items: rows.map((row: any) => ({ seatId: row.inventory?.seatId, ticketTypeId: row.item?.ticketTypeId, unitPriceCents: row.item?.unitPriceCents, totalPriceCents: row.item?.totalPriceCents })),
     };
   }
