@@ -19,6 +19,11 @@ import {
   eventoParticipantes,
   eventoJuncoesAluna,
   eventos,
+  eventoCupons,
+  eventoCupomRetencoes,
+  eventoCupomUsos,
+  eventoCupomRetencaoStatusEnum,
+  eventoCupomUsoStatusEnum,
 } from "./eventos.js";
 
 test("expõe as entidades do módulo e mantém unicidade por sessão", () => {
@@ -141,5 +146,45 @@ test("migration 0056 cria a coluna da aluna e a tabela de junções", () => {
   assert.match(migration, /CREATE TABLE "evento_juncoes_aluna"/);
   assert.match(migration, /CREATE UNIQUE INDEX "uq_evento_juncoes_aluna_event_source"/);
   const journal = JSON.parse(readFileSync(join(__dirname, "../../drizzle/meta/_journal.json"), "utf8"));
-  assert.equal(journal.entries.at(-1).tag, "0056_eventos_aluna_convidou");
+  assert.ok(journal.entries.some((entry: { tag: string }) => entry.tag === "0056_eventos_aluna_convidou"));
+});
+
+test("cupons de eventos preservam regras de preço, período e limites", () => {
+  assert.ok(eventoCupons);
+  const config = getTableConfig(eventoCupons);
+  const checks = config.checks.map((item) => item.name);
+  assert.ok(checks.includes("evento_cupons_valid_discount_percent"));
+  assert.ok(checks.includes("evento_cupons_non_negative_discount"));
+  assert.ok(checks.includes("evento_cupons_valid_period"));
+  assert.ok(checks.includes("evento_cupons_positive_limits"));
+  const unique = config.indexes.find((item) => item.config.name === "uq_evento_cupons_event_code");
+  assert.equal(unique?.config.unique, true);
+  assert.ok("code" in eventoCupons);
+  assert.ok("discountPercent" in eventoCupons);
+  assert.ok("discountCents" in eventoCupons);
+});
+
+test("pedido guarda snapshot e totais separados do cupom", () => {
+  assert.ok("appliedCouponId" in eventoPedidos);
+  assert.ok("couponSnapshot" in eventoPedidos);
+  assert.ok("couponDiscountCents" in eventoPedidos);
+});
+
+test("retenções e usos de cupom têm estados e unicidade operacional", () => {
+  assert.deepEqual(eventoCupomRetencaoStatusEnum, ["ATIVA", "CONVERTIDA", "LIBERADA"]);
+  assert.deepEqual(eventoCupomUsoStatusEnum, ["CONFIRMADO", "REVERTIDO"]);
+  const retencao = getTableConfig(eventoCupomRetencoes);
+  const uso = getTableConfig(eventoCupomUsos);
+  assert.equal(retencao.indexes.find((item) => item.config.name === "uq_evento_cupom_retencoes_coupon_order")?.config.unique, true);
+  assert.equal(uso.indexes.find((item) => item.config.name === "uq_evento_cupom_usos_coupon_order")?.config.unique, true);
+});
+
+test("migration 0057 cria persistência de cupons", () => {
+  const migration = readFileSync(join(__dirname, "../../drizzle/0057_eventos_cupons.sql"), "utf8");
+  assert.match(migration, /CREATE TABLE "evento_cupons"/);
+  assert.match(migration, /CREATE TABLE "evento_cupom_retencoes"/);
+  assert.match(migration, /CREATE TABLE "evento_cupom_usos"/);
+  assert.match(migration, /ALTER TABLE "evento_pedidos" ADD COLUMN "coupon_snapshot" jsonb/);
+  const journal = JSON.parse(readFileSync(join(__dirname, "../../drizzle/meta/_journal.json"), "utf8"));
+  assert.equal(journal.entries.at(-1).tag, "0057_eventos_cupons");
 });

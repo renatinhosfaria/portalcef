@@ -499,6 +499,45 @@ export const eventoOfertas = pgTable(
 export type EventoOferta = typeof eventoOfertas.$inferSelect;
 export type NewEventoOferta = typeof eventoOfertas.$inferInsert;
 
+export const eventoCupomRetencaoStatusEnum = ["ATIVA", "CONVERTIDA", "LIBERADA"] as const;
+export type EventoCupomRetencaoStatus = (typeof eventoCupomRetencaoStatusEnum)[number];
+
+export const eventoCupomUsoStatusEnum = ["CONFIRMADO", "REVERTIDO"] as const;
+export type EventoCupomUsoStatus = (typeof eventoCupomUsoStatusEnum)[number];
+
+export const eventoCupons = pgTable(
+  "evento_cupons",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    eventId: uuid("event_id").notNull().references(() => eventos.id, { onDelete: "cascade" }),
+    code: varchar("code", { length: 80 }).notNull(),
+    name: varchar("name", { length: 200 }),
+    pricingType: text("pricing_type", { enum: eventoOfertaPricingTypeEnum }).notNull(),
+    discountPercent: integer("discount_percent"),
+    discountCents: integer("discount_cents"),
+    startsAt: timestamp("starts_at", { withTimezone: true }),
+    endsAt: timestamp("ends_at", { withTimezone: true }),
+    usageLimit: integer("usage_limit"),
+    usageLimitPerBuyer: integer("usage_limit_per_buyer"),
+    version: integer("version").notNull().default(1),
+    active: boolean("active").notNull().default(true),
+    ...timestamps(),
+  },
+  (table) => ({
+    eventIdx: index("idx_evento_cupons_event").on(table.eventId),
+    activeIdx: index("idx_evento_cupons_event_active").on(table.eventId, table.active),
+    codeUnique: uniqueIndex("uq_evento_cupons_event_code").on(table.eventId, table.code),
+    validPricingType: check("evento_cupons_valid_pricing_type", sql`${table.pricingType} IN ('PERCENTUAL', 'VALOR_FIXO')`),
+    validDiscountPercent: check("evento_cupons_valid_discount_percent", sql`${table.discountPercent} IS NULL OR (${table.discountPercent} >= 1 AND ${table.discountPercent} <= 100)`),
+    nonNegativeDiscount: check("evento_cupons_non_negative_discount", sql`${table.discountCents} IS NULL OR ${table.discountCents} >= 0`),
+    validPricingValues: check("evento_cupons_valid_pricing_values", sql`(${table.pricingType} = 'PERCENTUAL' AND ${table.discountPercent} IS NOT NULL) OR (${table.pricingType} = 'VALOR_FIXO' AND ${table.discountCents} IS NOT NULL)`),
+    validPeriod: check("evento_cupons_valid_period", sql`${table.endsAt} IS NULL OR ${table.startsAt} IS NULL OR ${table.endsAt} > ${table.startsAt}`),
+    positiveLimits: check("evento_cupons_positive_limits", sql`(${table.usageLimit} IS NULL OR ${table.usageLimit} > 0) AND (${table.usageLimitPerBuyer} IS NULL OR ${table.usageLimitPerBuyer} > 0)`),
+  }),
+);
+export type EventoCupom = typeof eventoCupons.$inferSelect;
+export type NewEventoCupom = typeof eventoCupons.$inferInsert;
+
 export const eventoPedidos = pgTable(
   "evento_pedidos",
   {
@@ -519,10 +558,17 @@ export const eventoPedidos = pgTable(
     totalCents: integer("total_cents").notNull(),
     subtotalCents: integer("subtotal_cents").default(0),
     discountCents: integer("discount_cents").default(0),
+    offerDiscountCents: integer("offer_discount_cents").default(0),
+    couponDiscountCents: integer("coupon_discount_cents").default(0),
     appliedOfferId: uuid("applied_offer_id").references(
       () => eventoOfertas.id,
       { onDelete: "set null" },
     ),
+    appliedCouponId: uuid("applied_coupon_id").references(
+      () => eventoCupons.id,
+      { onDelete: "set null" },
+    ),
+    couponSnapshot: jsonb("coupon_snapshot"),
     idempotencyKey: varchar("idempotency_key", { length: 180 }).notNull(),
     finalizationIdempotencyKey: varchar("finalization_idempotency_key", { length: 180 }),
     expiresAt: timestamp("expires_at", { withTimezone: true }),
@@ -561,6 +607,8 @@ export const eventoPedidos = pgTable(
       "evento_pedidos_non_negative_discount",
       sql`${table.discountCents} >= 0`,
     ),
+    nonNegativeOfferDiscount: check("evento_pedidos_non_negative_offer_discount", sql`${table.offerDiscountCents} >= 0`),
+    nonNegativeCouponDiscount: check("evento_pedidos_non_negative_coupon_discount", sql`${table.couponDiscountCents} >= 0`),
     validOrigin: check(
       "evento_pedidos_valid_origin",
       sql`${table.origin} IN ('VENDA', 'CORTESIA')`,
@@ -569,6 +617,56 @@ export const eventoPedidos = pgTable(
 );
 export type EventoPedido = typeof eventoPedidos.$inferSelect;
 export type NewEventoPedido = typeof eventoPedidos.$inferInsert;
+
+export const eventoCupomRetencoes = pgTable(
+  "evento_cupom_retencoes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    couponId: uuid("coupon_id").notNull().references(() => eventoCupons.id, { onDelete: "restrict" }),
+    orderId: uuid("order_id").notNull().references(() => eventoPedidos.id, { onDelete: "restrict" }),
+    status: text("status", { enum: eventoCupomRetencaoStatusEnum }).notNull().default("ATIVA"),
+    buyerEmail: varchar("buyer_email", { length: 320 }),
+    buyerPhone: varchar("buyer_phone", { length: 30 }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    convertedAt: timestamp("converted_at", { withTimezone: true }),
+    releasedAt: timestamp("released_at", { withTimezone: true }),
+    ...timestamps(),
+  },
+  (table) => ({
+    couponIdx: index("idx_evento_cupom_retencoes_coupon").on(table.couponId, table.status),
+    orderIdx: index("idx_evento_cupom_retencoes_order").on(table.orderId),
+    couponOrderUnique: uniqueIndex("uq_evento_cupom_retencoes_coupon_order").on(table.couponId, table.orderId),
+    validStatus: check("evento_cupom_retencoes_valid_status", sql`${table.status} IN ('ATIVA', 'CONVERTIDA', 'LIBERADA')`),
+  }),
+);
+export type EventoCupomRetencao = typeof eventoCupomRetencoes.$inferSelect;
+export type NewEventoCupomRetencao = typeof eventoCupomRetencoes.$inferInsert;
+
+export const eventoCupomUsos = pgTable(
+  "evento_cupom_usos",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    couponId: uuid("coupon_id").notNull().references(() => eventoCupons.id, { onDelete: "restrict" }),
+    orderId: uuid("order_id").notNull().references(() => eventoPedidos.id, { onDelete: "restrict" }),
+    status: text("status", { enum: eventoCupomUsoStatusEnum }).notNull().default("CONFIRMADO"),
+    buyerEmail: varchar("buyer_email", { length: 320 }),
+    buyerPhone: varchar("buyer_phone", { length: 30 }),
+    discountCents: integer("discount_cents").notNull(),
+    couponSnapshot: jsonb("coupon_snapshot").notNull(),
+    confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
+    revertedAt: timestamp("reverted_at", { withTimezone: true }),
+    ...timestamps(),
+  },
+  (table) => ({
+    couponIdx: index("idx_evento_cupom_usos_coupon").on(table.couponId, table.status),
+    orderIdx: index("idx_evento_cupom_usos_order").on(table.orderId),
+    couponOrderUnique: uniqueIndex("uq_evento_cupom_usos_coupon_order").on(table.couponId, table.orderId),
+    nonNegativeDiscount: check("evento_cupom_usos_non_negative_discount", sql`${table.discountCents} >= 0`),
+    validStatus: check("evento_cupom_usos_valid_status", sql`${table.status} IN ('CONFIRMADO', 'REVERTIDO')`),
+  }),
+);
+export type EventoCupomUso = typeof eventoCupomUsos.$inferSelect;
+export type NewEventoCupomUso = typeof eventoCupomUsos.$inferInsert;
 
 export const eventoItensPedido = pgTable(
   "evento_itens_pedido",
@@ -1158,6 +1256,7 @@ export const eventosRelations = relations(eventos, ({ one, many }) => ({
   sessions: many(eventoSessoes),
   ticketTypes: many(eventoTiposIngresso),
   offers: many(eventoOfertas),
+  coupons: many(eventoCupons),
   orders: many(eventoPedidos),
   participants: many(eventoParticipantes),
   adminOperations: many(eventoOperacoesAdministrativas),
@@ -1217,10 +1316,20 @@ export const eventoOfertasRelations = relations(eventoOfertas, ({ one, many }) =
   appliedOrders: many(eventoPedidos),
 }));
 
+export const eventoCuponsRelations = relations(eventoCupons, ({ one, many }) => ({
+  event: one(eventos, { fields: [eventoCupons.eventId], references: [eventos.id] }),
+  appliedOrders: many(eventoPedidos),
+  retencoes: many(eventoCupomRetencoes),
+  usos: many(eventoCupomUsos),
+}));
+
 export const eventoPedidosRelations = relations(eventoPedidos, ({ one, many }) => ({
   event: one(eventos, { fields: [eventoPedidos.eventId], references: [eventos.id] }),
   session: one(eventoSessoes, { fields: [eventoPedidos.sessionId], references: [eventoSessoes.id] }),
   appliedOffer: one(eventoOfertas, { fields: [eventoPedidos.appliedOfferId], references: [eventoOfertas.id] }),
+  appliedCoupon: one(eventoCupons, { fields: [eventoPedidos.appliedCouponId], references: [eventoCupons.id] }),
+  couponRetencoes: many(eventoCupomRetencoes),
+  couponUsos: many(eventoCupomUsos),
   items: many(eventoItensPedido),
   reservations: many(eventoReservas),
   participants: many(eventoParticipantes),
@@ -1229,6 +1338,16 @@ export const eventoPedidosRelations = relations(eventoPedidos, ({ one, many }) =
   tickets: many(eventoIngressos),
   acceptances: many(eventoAceites),
   lookupTokens: many(eventoTokensConsulta),
+}));
+
+export const eventoCupomRetencoesRelations = relations(eventoCupomRetencoes, ({ one }) => ({
+  coupon: one(eventoCupons, { fields: [eventoCupomRetencoes.couponId], references: [eventoCupons.id] }),
+  order: one(eventoPedidos, { fields: [eventoCupomRetencoes.orderId], references: [eventoPedidos.id] }),
+}));
+
+export const eventoCupomUsosRelations = relations(eventoCupomUsos, ({ one }) => ({
+  coupon: one(eventoCupons, { fields: [eventoCupomUsos.couponId], references: [eventoCupons.id] }),
+  order: one(eventoPedidos, { fields: [eventoCupomUsos.orderId], references: [eventoPedidos.id] }),
 }));
 
 export const eventoItensPedidoRelations = relations(eventoItensPedido, ({ one, many }) => ({
