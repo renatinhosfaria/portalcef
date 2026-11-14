@@ -48,4 +48,13 @@ describe("etapa de ingressos", () => {
     expect(source).toContain("cuponsRevision.current += 1");
     expect(source).toContain('method: "DELETE"');
   });
+
+  it("preserva dirty dos cupons restantes após excluir um cartão", () => {
+    expect(source).toContain("const remaining = cupons.filter");
+    expect(source).toContain("setCuponsDirty(remaining.length > 0)");
+  });
+
+  it("rearma autosave quando a exclusão falha", () => {
+    expect(source).toContain("queueMicrotask(() => setCuponsDirty(true))");
+  });
 });
