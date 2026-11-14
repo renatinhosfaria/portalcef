@@ -921,6 +921,62 @@ Body:
 
 ---
 
+### Eventos (público) - Cupons e checkout
+
+As rotas públicas de eventos não exigem autenticação. O pedido mantém o snapshot do cupom aplicado; alterações posteriores no cadastro administrativo não mudam o preço já reservado. A oferta automática por quantidade é calculada antes do cupom, e a resposta sempre separa `offerDiscountCents`, `couponDiscountCents` e `discountCents`.
+
+#### POST `/eventos/public/pedidos/:orderNumber/cupom`
+
+Aplica, substitui ou remove um cupom do pedido reservado. Para remover, envie `code` vazio. O código é normalizado com espaços removidos e letras maiúsculas.
+
+Corpo:
+
+```json
+{ "code": "FAMILIA10" }
+```
+
+Resposta: `PedidoPublicoResult`, contendo `subtotalCents`, `offerDiscountCents`, `couponDiscountCents`, `discountCents`, `totalCents`, `appliedOffer`, `appliedCoupon` e os itens com seus preços recalculados. A chamada é idempotente por pedido e código normalizado.
+
+Erros: `VALIDATION_ERROR` (400), `COUPON_INACTIVE`, `COUPON_NOT_STARTED`, `COUPON_EXPIRED`, `COUPON_USAGE_LIMIT_REACHED` e `INVALID_AMOUNT` (400), `COUPON_NOT_FOUND` e `ORDER_NOT_FOUND` (404), `ORDER_NOT_AVAILABLE` e `OFFER_NOT_SUPPORTED_PUBLIC` (409).
+
+### Eventos (admin) - Cupons
+
+Prefixo `/eventos/admin/:id` (`:id` é o evento). As rotas exigem `AuthGuard -> RolesGuard` com os papéis `master`, `diretora_geral`, `gerente_unidade` ou `auxiliar_administrativo`. O evento precisa pertencer à escola da sessão.
+
+#### GET `/eventos/admin/:id/cupons`
+
+Lista os cupons do evento, inclusive inativos. Cada item informa `id`, `version`, `code`, `name`, `pricingType` (`PERCENTUAL` ou `VALOR_FIXO`), `discountPercent` ou `discountCents`, vigência (`startsAt`, `endsAt`), `usageLimit`, `usageLimitPerBuyer`, `active` e `confirmedUses`. Retenções internas não são expostas.
+
+#### PATCH `/eventos/admin/:id/cupons`
+
+Cria ou atualiza um ou vários cupons. O corpo pode ser um objeto ou uma lista de objetos; ao atualizar, informe `id` e a `version` atual para controle de concorrência.
+
+Exemplo:
+
+```json
+{
+  "code": "FAMILIA10",
+  "name": "Família - 10%",
+  "pricingType": "PERCENTUAL",
+  "discountPercent": 10,
+  "startsAt": "2026-12-01T00:00:00.000Z",
+  "endsAt": "2026-12-31T23:59:59.000Z",
+  "usageLimit": 100,
+  "usageLimitPerBuyer": 1,
+  "active": true
+}
+```
+
+Para valor fixo, use `pricingType: "VALOR_FIXO"` e `discountCents` como inteiro não negativo. Percentuais aceitam de 1 a 100. A resposta é `{ "success": true, "data": [...] }` com os cupons salvos.
+
+Erros: `VALIDATION_ERROR` (400), `EVENT_NOT_FOUND` (404), `COUPON_NOT_FOUND` (404), `DUPLICATE_COUPON_CODE` (400/409), `COUPON_VERSION_REQUIRED` (400), `VERSION_CONFLICT` (409), `INVALID_COUPON_PERIOD` (400), `INVALID_COUPON_LIMIT` (400) e `FORBIDDEN` (400).
+
+#### DELETE `/eventos/admin/:id/cupons/:couponId`
+
+Remove um cupom que ainda não possui uso ou retenção, preservando a auditoria. Cupons com histórico não podem ser removidos. Resposta: `{ "success": true, "data": null }`.
+
+Erros: `COUPON_NOT_FOUND` (404), `COUPON_IN_USE` (409), `EVENT_NOT_FOUND` (404) e `FORBIDDEN` (400).
+
 ### Eventos (admin) - Cortesias
 
 Prefixo `/eventos/admin/:id` (`:id` é o evento). Todas as rotas exigem `AuthGuard -> RolesGuard`, com correspondência exata de papel.

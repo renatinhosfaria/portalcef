@@ -45,7 +45,7 @@ describe("EscolhaLugares", () => {
   });
 
   it("reserva sem comprador e navega para o checkout", async () => {
-    vi.mocked(eventosApi.reservarAssentos).mockResolvedValue({ reservationId: "reserva", orderNumber: "PED-123", expiresAt: new Date(), subtotalCents: 4500, discountCents: 0, totalCents: 4500, appliedOffer: null, items: [] });
+    vi.mocked(eventosApi.reservarAssentos).mockResolvedValue({ reservationId: "reserva", orderNumber: "PED-123", expiresAt: new Date(), subtotalCents: 4500, offerDiscountCents: 0, couponDiscountCents: 0, discountCents: 0, totalCents: 4500, appliedOffer: null, appliedCoupon: null, items: [] });
     const sessaoUma = { ...sessao, ticketTypes: [sessao.ticketTypes[0]!] };
     render(<EscolhaLugares evento={evento} sessao={sessaoUma} map={mapa} />);
     fireEvent.click(screen.getByRole("button", { name: /Fileira G, assento 19/ }));
