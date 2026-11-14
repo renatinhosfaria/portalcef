@@ -119,8 +119,8 @@ describe("EventosCuponsService", () => {
       usos: [{ id: "use-5", couponId: "coupon-1", orderId: "order-5", status: "CONFIRMADO", buyerEmail: "a@example.com", buyerPhone: "5511999999999", discountCents: 100, couponSnapshot: {} }],
     });
     const cupons = service(db);
-    await cupons.reverterUso("order-5", "reembolso", db as any);
-    await cupons.reverterUso("order-5", "reembolso", db as any);
+    await cupons.reverterUsoPorPedido("order-5", "reembolso", db as any);
+    await cupons.reverterUsoPorPedido("order-5", "reembolso", db as any);
     expect(db.usos[0]).toMatchObject({ status: "REVERTIDO", revertedAt: expect.any(Date) });
     expect(db.audit.filter((entry: any) => entry.action === "USO_REVERTIDO")).toHaveLength(1);
   });

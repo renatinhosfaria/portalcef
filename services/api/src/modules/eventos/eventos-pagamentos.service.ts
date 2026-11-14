@@ -43,6 +43,17 @@ export class EventosPagamentosService {
     return this.database.db;
   }
 
+  async reverterUsoPorPedido(orderId: string, motivo: string): Promise<void> {
+    await this.cuponsService?.reverterUsoPorPedido(orderId, motivo, this.db);
+  }
+
+  async reverterUsoPorPagamento(paymentIntentId: string, motivo: string): Promise<boolean> {
+    const reference = await this.findPayment(this.db, undefined, paymentIntentId);
+    if (!reference) return false;
+    await this.reverterUsoPorPedido(reference.order.id, motivo);
+    return true;
+  }
+
   private async first<T>(query: any): Promise<T | undefined> {
     const rows = await query;
     return rows?.[0];

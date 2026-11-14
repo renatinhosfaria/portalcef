@@ -180,6 +180,10 @@ export class EventosCuponsService {
     await db.update(eventoCupomUsos).set({ status: "REVERTIDO", revertedAt: now, updatedAt: now }).where(and(eq(eventoCupomUsos.id, uso.id), eq(eventoCupomUsos.status, "CONFIRMADO"))).returning();
     await this.auditoria(db, coupon, "USO_REVERTIDO", orderId, { motivo });
   }
+
+  async reverterUsoPorPedido(orderId: string, motivo: string, db: Database = this.db): Promise<void> {
+    await this.reverterUso(orderId, motivo, db);
+  }
   async listarAdmin(eventId: string, actor: EventoActor): Promise<CupomAdmin[]> {
     await this.evento(eventId, actor);
     const rows = await this.db.select().from(eventoCupons).where(eq(eventoCupons.eventId, eventId));

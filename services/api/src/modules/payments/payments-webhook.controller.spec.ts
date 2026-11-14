@@ -80,6 +80,57 @@ describe("PaymentsWebhookController - Eventos", () => {
     expect(eventosPagamentos.confirmarCheckout).toHaveBeenCalledWith(expect.objectContaining({ eventOrderId: "pedido-evento-1", amountCents: 1_000 }));
   });
 
+  it("reverte cupom de pedido de Evento em charge.refunded sem tocar na loja", async () => {
+    const eventosPagamentos = {
+      reverterUsoPorPedido: jest.fn().mockResolvedValue(undefined),
+    };
+    const loja = { reconcileStripeRefund: jest.fn().mockResolvedValue(undefined) };
+    const controller = new PaymentsWebhookController(
+      { get: jest.fn().mockReturnValue("whsec_test") } as any,
+      {} as any,
+      loja as any,
+      eventosPagamentos as any,
+    );
+
+    await (controller as any).handleChargeRefunded({
+      id: "ch_evento",
+      amount_refunded: 1000,
+      payment_intent: "pi_evento",
+      metadata: { eventOrderId: "pedido-evento-1" },
+    });
+
+    expect(eventosPagamentos.reverterUsoPorPedido).toHaveBeenCalledWith(
+      "pedido-evento-1",
+      "charge.refunded",
+    );
+    expect(loja.reconcileStripeRefund).not.toHaveBeenCalled();
+  });
+
+  it("identifica reembolso de Evento pelo PaymentIntent quando a charge não traz metadata", async () => {
+    const eventosPagamentos = {
+      reverterUsoPorPagamento: jest.fn().mockResolvedValue(true),
+    };
+    const loja = { reconcileStripeRefund: jest.fn().mockResolvedValue(undefined) };
+    const controller = new PaymentsWebhookController(
+      { get: jest.fn().mockReturnValue("whsec_test") } as any,
+      {} as any,
+      loja as any,
+      eventosPagamentos as any,
+    );
+
+    await (controller as any).handleChargeRefunded({
+      id: "ch_evento_2",
+      amount_refunded: 1000,
+      payment_intent: "pi_evento_2",
+    });
+
+    expect(eventosPagamentos.reverterUsoPorPagamento).toHaveBeenCalledWith(
+      "pi_evento_2",
+      "charge.refunded",
+    );
+    expect(loja.reconcileStripeRefund).not.toHaveBeenCalled();
+  });
+
   it("falha explicitamente se o provider obrigatório estiver ausente", async () => {
     const controller = new PaymentsWebhookController(
       { get: jest.fn().mockReturnValue("whsec_test") } as any,
