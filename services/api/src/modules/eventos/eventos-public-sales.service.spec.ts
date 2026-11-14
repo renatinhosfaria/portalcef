@@ -314,6 +314,7 @@ describe("EventosPublicSalesService - contratos públicos", () => {
     const token = db.tokens[0];
 
     expect(result).toHaveProperty("pedido");
+    expect(result.pagamentoNecessario).toBe(true);
     expect(result.acesso).toMatch(/^[A-Za-z0-9_-]{43}$/);
     expect(token).toMatchObject({ orderId: db.order.id, email: "ana@example.com", expiresAt: new Date("2027-01-06T12:00:00Z") });
     expect(token).not.toHaveProperty("token");

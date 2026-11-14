@@ -50,7 +50,7 @@ describe("relógio de reserva", () => {
 
 describe("FluxoCheckout", () => {
   beforeEach(() => {
-    vi.mocked(eventosApi.finalizarPedido).mockResolvedValue({ pedido, acesso: "acesso-seguro" });
+    vi.mocked(eventosApi.finalizarPedido).mockResolvedValue({ pedido, acesso: "acesso-seguro", pagamentoNecessario: true });
     vi.mocked(eventosApi.iniciarPagamento).mockResolvedValue({ clientSecret: "cs_test", expiresAt: pedido.expiresAt!, orderNumber: pedido.orderNumber });
     vi.mocked(eventosApi.liberarPedido).mockResolvedValue(undefined);
   });
@@ -198,7 +198,7 @@ describe("FluxoCheckout", () => {
   it("reutiliza a chave de idempotência ao repetir uma tentativa", async () => {
     vi.mocked(eventosApi.finalizarPedido)
       .mockRejectedValueOnce(new Error("resposta perdida"))
-      .mockResolvedValueOnce({ pedido, acesso: "acesso-seguro" });
+      .mockResolvedValueOnce({ pedido, acesso: "acesso-seguro", pagamentoNecessario: true });
     render(<FluxoCheckout pedido={pedido} evento={evento} sessao={sessao} politicas={politicas} publishableKey="pk_test" />);
     fireEvent.change(screen.getByLabelText("Nome completo"), { target: { value: "Ana Silva" } });
     fireEvent.change(screen.getByLabelText("E-mail"), { target: { value: "ana@example.com" } });
@@ -222,7 +222,7 @@ describe("FluxoCheckout", () => {
     try {
       const agora = Date.now();
       vi.setSystemTime(agora);
-      let resolver!: (value: { pedido: PedidoPublicoResult; acesso: string }) => void;
+      let resolver!: (value: { pedido: PedidoPublicoResult; acesso: string; pagamentoNecessario: boolean }) => void;
       vi.mocked(eventosApi.finalizarPedido).mockReturnValueOnce(new Promise((resolve) => { resolver = resolve; }));
       render(<FluxoCheckout pedido={{ ...pedido, expiresAt: new Date(agora + 1000) }} evento={evento} sessao={sessao} politicas={politicas} publishableKey="pk_test" />);
       fireEvent.change(screen.getByLabelText("Nome completo"), { target: { value: "Ana Silva" } });
@@ -235,7 +235,7 @@ describe("FluxoCheckout", () => {
       vi.advanceTimersByTime(1100);
       await Promise.resolve();
       await act(async () => {
-        resolver({ pedido: { ...pedido, expiresAt: new Date(agora + 30 * 60_000) }, acesso: "acesso-tardio" });
+        resolver({ pedido: { ...pedido, expiresAt: new Date(agora + 30 * 60_000) }, acesso: "acesso-tardio", pagamentoNecessario: true });
         await Promise.resolve();
         await Promise.resolve();
       });

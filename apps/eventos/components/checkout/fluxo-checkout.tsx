@@ -83,6 +83,10 @@ export function FluxoCheckout({ pedido, evento, sessao, politicas, publishableKe
       if (finalizacao.pedido.expiresAt) setExpiraEm(finalizacao.pedido.expiresAt);
       expiradoRef.current = false;
       setExpirado(false);
+      if (!finalizacao.pagamentoNecessario) {
+        irParaIngressos();
+        return;
+      }
       if (!pagamentoKeyRef.current) pagamentoKeyRef.current = gerarChaveIdempotenciaPublica("pagamento");
       const pagamento = await iniciarPagamento(pedido.orderNumber, { returnUrl: montarUrlRetornoPagamento(pedido.orderNumber, finalizacao.acesso), idempotencyKey: pagamentoKeyRef.current });
       setExpiraEm(pagamento.expiresAt);

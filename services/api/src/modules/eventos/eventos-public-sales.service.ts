@@ -10,6 +10,7 @@ import { montarIngressosDoPedido } from "./montar-pedido-ingressos";
 import { gerarTokenAcesso, hashTokenAcesso, validadeAcesso } from "./acesso-pedido";
 import { violacaoDeUnico } from "../../common/database/violacao-unico";
 import { EventosCuponsService } from "./eventos-cupons.service";
+import { EventosConfirmacaoService } from "./eventos-confirmacao.service";
 
 const fail = (code: string, message: string) => new BadRequestException({ code, message });
 const validated = <T>(schema: { safeParse(value: unknown): { success: boolean; data?: T } }, value: unknown): T => { const result = schema.safeParse(value); if (!result.success) throw fail("VALIDATION_ERROR", "Dados inválidos"); return result.data as T; };
@@ -20,7 +21,7 @@ const eventoTokensConsultaTabela = (eventoTokensConsulta as any) ?? (schema as a
 export class EventosPublicSalesService {
   private readonly checkoutLocks = new Map<string, Promise<void>>();
 
-  constructor(private readonly database: DatabaseService, @Inject(forwardRef(() => PaymentsService)) private readonly paymentsService: PaymentsService = undefined as never, @Optional() private readonly cuponsService?: EventosCuponsService) {}
+  constructor(private readonly database: DatabaseService, @Inject(forwardRef(() => PaymentsService)) private readonly paymentsService: PaymentsService = undefined as never, @Optional() private readonly cuponsService?: EventosCuponsService, @Optional() private readonly confirmacaoService?: EventosConfirmacaoService) {}
   private get db(): Database { return this.database.db; }
   private async first<T>(query: any): Promise<T | undefined> { const rows = await query; return rows?.[0]; }
   private async lockRows<T>(query: any, tables?: any[]): Promise<T> {
@@ -352,6 +353,12 @@ export class EventosPublicSalesService {
       for (const participant of input.participants) { const [created] = await tx.insert(eventoParticipantes).values({ eventId: order.eventId, orderId: order.id, type: participant.type, fullName: participant.fullName, studentName: participant.studentName ?? null, email: participant.email ?? null, phone: participant.phone ?? null }).returning(); const item = itensOrdenados.find((candidate: any) => candidate.pricingEvidence?.participantIndex === participant.participantIndex); if (!item) throw fail("VALIDATION_ERROR", "Participante sem item correspondente"); if (created) await tx.update(eventoItensPedido).set({ participantId: created.id, updatedAt: new Date() }).where(eq(eventoItensPedido.id, item.id)); }
       await tx.update(eventoPedidos).set({ buyerName: buyer.name, buyerEmail: buyer.email, buyerPhone: buyer.phone, status: "RESERVADO", finalizationIdempotencyKey: input.idempotencyKey, updatedAt: new Date() }).where(eq(eventoPedidos.id, order.id));
       const finalizado = { ...order, ...buyer, buyerName: buyer.name, buyerEmail: buyer.email, buyerPhone: buyer.phone, status: "RESERVADO", finalizationIdempotencyKey: input.idempotencyKey };
+      if (finalizado.totalCents === 0) {
+        if (this.cuponsService) await this.cuponsService.reterUso(order.id, input.idempotencyKey, { email: buyer.email, phone: buyer.phone }, finalizado.expiresAt ?? new Date(Date.now() + 30 * 60_000), tx);
+        const confirmacao = this.confirmacaoService ?? new EventosConfirmacaoService(this.cuponsService);
+        await confirmacao.confirmarPedido(order.id, "CORTESIA_100", tx);
+        finalizado.status = "CONFIRMADO";
+      }
       return this.finalizacaoResult(finalizado, tx);
     }).catch(async (error: any) => { if (violacaoDeUnico(error) !== null) { const existing = await this.first<any>(this.db.select().from(eventoPedidos).where(eq(eventoPedidos.finalizationIdempotencyKey, input.idempotencyKey))); const ownOrder = await this.getOrder(orderNumber, this.db); if (existing?.id === ownOrder.id) return this.finalizacaoResult(ownOrder, this.db); throw new ConflictException({ code: "IDEMPOTENCY_CONFLICT", message: "Chave de idempotência já utilizada" }); } throw error; }));
   }
@@ -361,7 +368,7 @@ export class EventosPublicSalesService {
     const { token, hash } = gerarTokenAcesso();
     const expiresAt = validadeAcesso(order.session?.endsAt ?? order.session?.startsAt);
     await db.insert(eventoTokensConsulta).values({ orderId: order.id, email: order.buyerEmail, tokenHash: hash, expiresAt });
-    return { pedido, acesso: token };
+    return { pedido, acesso: token, pagamentoNecessario: Number(order.totalCents ?? pedido.totalCents) > 0 };
   }
 
   private async serializarCheckout<T>(orderNumber: string, callback: () => Promise<T>): Promise<T> {

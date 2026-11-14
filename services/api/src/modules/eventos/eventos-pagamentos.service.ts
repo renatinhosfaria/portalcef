@@ -3,11 +3,9 @@ import {
   and,
   eq,
   eventoAuditorias,
-  eventoIngressos,
   eventoInventarioAssentos,
   eventoItensPedido,
   eventoPagamentos,
-  eventoParticipantes,
   eventoPedidos,
   eventoReservas,
   lte,
@@ -15,9 +13,8 @@ import {
   type Database,
 } from "@essencia/db";
 import { DatabaseService } from "../../common/database/database.service";
-import { gerarNumeroIngresso } from "@essencia/shared/eventos/ingresso";
-import { gerarTokenIngresso } from "./token-ingresso";
 import { EventosCuponsService } from "./eventos-cupons.service";
+import { EventosConfirmacaoService } from "./eventos-confirmacao.service";
 
 type ConfirmarCheckoutInput = {
   checkoutSessionId: string;
@@ -36,7 +33,7 @@ type FalharCheckoutInput = {
 
 @Injectable()
 export class EventosPagamentosService {
-  constructor(private readonly database: DatabaseService, @Optional() private readonly cuponsService?: EventosCuponsService) {
+  constructor(private readonly database: DatabaseService, @Optional() private readonly cuponsService?: EventosCuponsService, @Optional() private readonly confirmacaoService?: EventosConfirmacaoService) {
     if (!process.env.EVENTOS_QR_SECRET) {
       throw new Error("EVENTOS_QR_SECRET não configurada no ambiente");
     }
@@ -146,7 +143,7 @@ export class EventosPagamentosService {
       const order = current.order;
       this.assertAmount(payment, order, input.amountCents);
 
-      if (["CONFIRMADO", "USADO"].includes(order.status) || payment.status === "APROVADO") {
+      if (["CONFIRMADO", "USADO"].includes(order.status) && payment.status === "APROVADO") {
         return;
       }
       if (["CANCELADO", "EXPIRADO", "REEMBOLSADO"].includes(order.status)) {
@@ -185,60 +182,16 @@ export class EventosPagamentosService {
         : [];
       if (!this.changed(transition)) {
         const latest = (await this.findPayment(tx, input.checkoutSessionId, input.paymentIntentId, input.eventOrderId)) ?? current;
-        if (["CONFIRMADO", "USADO"].includes(latest.order.status) || latest.payment.status === "APROVADO") return;
+        if (["CONFIRMADO", "USADO"].includes(latest.order.status) && latest.payment.status === "APROVADO") return;
         throw new ConflictException({ code: "PAYMENT_IN_PROGRESS", message: "Pagamento de Evento em processamento" });
       }
 
-      for (const item of itensOrdenados) {
-        const existingTicket = typeof tx.select === "function"
-          ? await this.first<any>(tx.select().from(eventoIngressos).where(eq(eventoIngressos.itemId, item.id)))
-          : undefined;
-        if (existingTicket) continue;
-
-        const reservation = typeof tx.select === "function"
-          ? await this.first<any>(tx.select().from(eventoReservas).where(and(eq(eventoReservas.orderId, order.id), eq(eventoReservas.inventorySeatId, item.inventorySeatId), eq(eventoReservas.status, "ATIVA"))))
-          : undefined;
-        if (!reservation) throw new ConflictException({ code: "RESERVATION_NOT_ACTIVE", message: "Reserva de assento não está ativa" });
-        const inventory = typeof tx.select === "function"
-          ? await this.first<any>(tx.select().from(eventoInventarioAssentos).where(eq(eventoInventarioAssentos.id, item.inventorySeatId)))
-          : undefined;
-        if (!inventory || inventory.status !== "RESERVADO" || inventory.reservedByOrderId !== order.id) throw new ConflictException({ code: "SEAT_NOT_RESERVED", message: "Assento não está reservado para este pedido" });
-
-        let participantId = item.participantId;
-        if (!participantId && typeof tx.insert === "function") {
-          const [participant] = await tx.insert(eventoParticipantes).values({
-            eventId: order.eventId,
-            orderId: order.id,
-            type: "CONVIDADO",
-            fullName: order.buyerName,
-            email: order.buyerEmail,
-            phone: order.buyerPhone,
-          }).returning();
-          participantId = participant?.id;
-          if (participantId && typeof tx.update === "function") {
-            await tx.update(eventoItensPedido).set({ participantId, updatedAt: new Date() }).where(eq(eventoItensPedido.id, item.id));
-          }
-        }
-        if (!participantId) throw new BadRequestException({ code: "PARTICIPANT_REQUIRED", message: "Participante obrigatório para emitir ingresso" });
-
-        const sold = await tx.update(eventoInventarioAssentos).set({ status: "VENDIDO", soldAt: new Date(), reservationExpiresAt: null, reservedByOrderId: null, updatedAt: new Date() }).where(and(eq(eventoInventarioAssentos.id, item.inventorySeatId), eq(eventoInventarioAssentos.status, "RESERVADO"), eq(eventoInventarioAssentos.reservedByOrderId, order.id))).returning();
-        if (!this.changed(sold)) throw new ConflictException({ code: "SEAT_STATE_CHANGED", message: "Estado do assento mudou durante a confirmação" });
-        const converted = await tx.update(eventoReservas).set({ status: "CONVERTIDA", updatedAt: new Date() }).where(and(eq(eventoReservas.id, reservation.id), eq(eventoReservas.status, "ATIVA"))).returning();
-        if (!this.changed(converted)) throw new ConflictException({ code: "RESERVATION_STATE_CHANGED", message: "Estado da reserva mudou durante a confirmação" });
-        if (typeof tx.insert === "function") {
-          const token = gerarTokenIngresso(order.orderNumber, item.id);
-          await tx.insert(eventoIngressos).values({ numero: gerarNumeroIngresso(), orderId: order.id, itemId: item.id, sessionId: order.sessionId, inventorySeatId: item.inventorySeatId, participantId, status: "EMITIDO", ...token }).returning();
-        }
-      }
-
+      const confirmacao = this.confirmacaoService ?? new EventosConfirmacaoService(this.cuponsService);
+      (tx as any).__eventosLocksHeld = true;
+      await confirmacao.confirmarPedido(order.id, "STRIPE", tx);
       if (typeof tx.update === "function") {
         await tx.update(eventoPagamentos).set({ status: "APROVADO", method: input.method ?? payment.method ?? "card", receivedAmountCents: input.amountCents, stripeCheckoutSessionId: input.checkoutSessionId || payment.stripeCheckoutSessionId, stripePaymentIntentId: input.paymentIntentId || payment.stripePaymentIntentId, processedAt: new Date(), updatedAt: new Date() }).where(eq(eventoPagamentos.id, payment.id)).returning();
-        await tx.update(eventoPedidos).set({ status: "CONFIRMADO", confirmedAt: new Date(), updatedAt: new Date() }).where(eq(eventoPedidos.id, order.id)).returning();
       }
-      if (typeof tx.insert === "function" && order.eventId && payment.id) {
-        await tx.insert(eventoAuditorias).values({ eventId: order.eventId, action: "CONFIRMADO", resourceType: "pagamento", resourceId: payment.id, metadata: { checkoutSessionId: input.checkoutSessionId || null, paymentIntentId: input.paymentIntentId || null, amountCents: input.amountCents } });
-      }
-      if (this.cuponsService) await this.cuponsService.confirmarUso(order.id, tx);
     });
   }
 
@@ -259,7 +212,7 @@ export class EventosPagamentosService {
         ? await this.first(this.lockRows(tx.select().from(eventoPedidos).where(eq(eventoPedidos.id, current.order.id))))
         : undefined;
       const order = lockedOrder ?? current.order;
-      if (["CONFIRMADO", "USADO"].includes(order.status) || payment.status === "APROVADO") return;
+      if (["CONFIRMADO", "USADO"].includes(order.status) && payment.status === "APROVADO") return;
 
       const reservations = typeof tx.select === "function"
         ? await tx.select().from(eventoReservas).where(and(eq(eventoReservas.orderId, order.id), eq(eventoReservas.status, "ATIVA")))

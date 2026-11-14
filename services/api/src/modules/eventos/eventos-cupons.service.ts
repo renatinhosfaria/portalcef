@@ -149,7 +149,6 @@ export class EventosCuponsService {
       throw new BadRequestException({ code: "COUPON_RETENTION_EXPIRED", message: "A retenção do cupom expirou" });
     }
     this.validarSnapshot(coupon, snapshot, now);
-    this.validarVigencia(coupon, now);
     await db.update(eventoCupomRetencoesTabela).set({ status: "CONVERTIDA", convertedAt: now, updatedAt: now }).where(and(eq(eventoCupomRetencoesTabela.id, own.id), eq(eventoCupomRetencoesTabela.status, "ATIVA"))).returning();
     await db.insert(eventoCupomUsos).values({ couponId: coupon.id, orderId, status: "CONFIRMADO", buyerEmail: own.buyerEmail, buyerPhone: own.buyerPhone, discountCents: Number(order?.couponDiscountCents ?? 0), couponSnapshot: snapshot, confirmedAt: now }).returning();
     await this.auditoria(db, coupon, "USO_CONFIRMADO", orderId, { discountCents: Number(order?.couponDiscountCents ?? 0) });

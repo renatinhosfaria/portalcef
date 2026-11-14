@@ -21,7 +21,7 @@ export interface PedidoComIngressos extends PedidoPublicoResult {
   tickets: IngressoPublico[];
 }
 
-export interface FinalizacaoPublicaResult { pedido: PedidoPublicoResult; acesso: string; }
+export interface FinalizacaoPublicaResult { pedido: PedidoPublicoResult; acesso: string; pagamentoNecessario: boolean; }
 
 export type ProntidaoState = "BLOQUEADOR" | "AVISO" | "OK";
 export interface ProntidaoItem { key: string; label: string; state: ProntidaoState; href?: string; message?: string; }
