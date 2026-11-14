@@ -34,4 +34,12 @@ describe("etapa de ingressos", () => {
     expect(source).toContain("ofertaError");
     expect(source).toContain("disabled={ofertaLoading || Boolean(ofertaError) ||");
   });
+
+  it("carrega vários cupons e autosalva com versão e conflito", () => {
+    expect(source).toContain("/cupons");
+    expect(source).toContain("CupomEditor");
+    expect(source).toContain("Cupons salvos automaticamente");
+    expect(source).toContain("Conflito de versão dos cupons");
+    expect(source).toContain("Adicionar cupom");
+  });
 });

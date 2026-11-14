@@ -7,6 +7,8 @@ import { assertRespostaApi, construirPayloadIngresso, ingressosProntosParaSalvar
 import { OfertaEditor } from "@/features/eventos/oferta-editor";
 import { construirPayloadOferta, ofertaInicial, ofertaProntaParaSalvar, type OfertaValue } from "@/features/eventos/ofertas-contratos";
 import { useEventoAutosave } from "@/features/eventos/use-evento-autosave";
+import { CupomEditor } from "@/features/eventos/cupom-editor";
+import { construirPayloadCupom, cupomInicial, cupomProntoParaSalvar, type CupomValue } from "@/features/eventos/cupons-contratos";
 
 export default function IngressosPage() {
   const { id } = useParams<{ id: string }>();
@@ -22,12 +24,26 @@ export default function IngressosPage() {
   const [ofertaError, setOfertaError] = useState("");
   const changeRevision = useRef(0);
   const ofertaRevision = useRef(0);
+  const [cupons, setCupons] = useState<CupomValue[]>([]);
+  const [cuponsDirty, setCuponsDirty] = useState(false);
+  const [cuponsLoading, setCuponsLoading] = useState(true);
+  const [cuponsError, setCuponsError] = useState("");
+  const cuponsRevision = useRef(0);
 
   useEffect(() => {
     fetch(`/eventos-admin/api/eventos/admin/${id}/ingressos`, { credentials: "include" })
       .then((response) => response.ok ? response.json() : Promise.reject())
       .then((rows) => setItems(rows))
       .catch(() => setError("Não foi possível carregar os ingressos."));
+  }, [id]);
+
+  useEffect(() => {
+    setCuponsLoading(true);
+    fetch(`/eventos-admin/api/eventos/admin/${id}/cupons`, { credentials: "include" })
+      .then((response) => response.ok ? response.json() : Promise.reject())
+      .then((body: unknown) => { const data = body && typeof body === "object" && "data" in body ? (body as { data?: unknown }).data : body; setCupons(Array.isArray(data) ? data as CupomValue[] : []); })
+      .catch(() => setCuponsError("Não foi possível carregar os cupons."))
+      .finally(() => setCuponsLoading(false));
   }, [id]);
 
   useEffect(() => {
@@ -105,6 +121,12 @@ export default function IngressosPage() {
     },
     onSaved: () => router.refresh(),
     debounceMs: 700,
+  });
+
+  const cuponsAutosave = useEventoAutosave({
+    eventId: id, value: cupons, dirty: !cuponsLoading && !cuponsError && cuponsDirty && cupomProntoParaSalvar(cupons), serialize: (value) => value.map(construirPayloadCupom),
+    save: async (payload, eventId) => { const revision = cuponsRevision.current; const response = await fetch(`/eventos-admin/api/eventos/admin/${eventId}/cupons`, { method: "PATCH", credentials: "include", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) }); const body = await response.json().catch(() => ({})); assertRespostaApi({ ok: response.ok, status: response.status, body }); const data = body.data ?? body; queueMicrotask(() => { if (cuponsRevision.current === revision) { setCupons(Array.isArray(data) ? data as CupomValue[] : []); setCuponsDirty(false); } }); },
+    onSaved: () => router.refresh(), debounceMs: 700,
   });
 
   const update = (index: number, value: Partial<IngressoValue>) => {
@@ -201,6 +223,13 @@ export default function IngressosPage() {
         <p className="text-sm text-slate-500" role="status">
           {ofertaLoading ? "Carregando oferta…" : ofertaError ? "A oferta está bloqueada até o carregamento ser concluído." : ofertaDirty && !ofertaProntaParaSalvar(oferta) ? "Revise a oferta antes de salvar." : ofertaAutosave.state === "saving" ? "Salvando oferta…" : ofertaAutosave.state === "saved" ? "ofertas salvas automaticamente" : ofertaAutosave.state === "conflict" ? "Conflito de edição da oferta; recarregue para revisar." : ofertaAutosave.state === "error" ? "Não foi possível salvar a oferta." : ""}
         </p>
+      </section>
+      <section className="space-y-4 border-t border-slate-200 pt-5" aria-labelledby="cupons-heading">
+        <div><h2 id="cupons-heading" className="text-xl font-semibold">Cupons de desconto</h2><p className="text-sm text-slate-600">Cadastre vários cupons, limites e vigência. Alterações são versionadas automaticamente.</p></div>
+        {cuponsLoading && <p role="status">Carregando cupons…</p>}{cuponsError && <p role="alert" className="text-red-700">{cuponsError}</p>}
+        {!cuponsLoading && cupons.map((cupom, index) => <CupomEditor key={cupom.id ?? `novo-${index}`} value={cupom} disabled={Boolean(cuponsError) || cuponsAutosave.state === "saving"} onChange={(next) => { cuponsRevision.current += 1; setCupons(current => current.map((item, itemIndex) => itemIndex === index ? next : item)); setCuponsDirty(true); }} onDelete={() => { cuponsRevision.current += 1; setCupons(current => current.filter((_, itemIndex) => itemIndex !== index)); setCuponsDirty(true); }} />)}
+        <button type="button" className="rounded border px-3 py-2" disabled={cuponsLoading || Boolean(cuponsError)} onClick={() => { cuponsRevision.current += 1; setCupons(current => [...current, { ...cupomInicial }]); setCuponsDirty(true); }}>Adicionar cupom</button>
+        {!cuponsLoading && <p role="status" className="text-sm text-slate-500">{cuponsDirty && !cupomProntoParaSalvar(cupons) ? "Revise os cupons antes de salvar." : cuponsAutosave.state === "saving" ? "Salvando cupons…" : cuponsAutosave.state === "saved" ? "Cupons salvos automaticamente" : cuponsAutosave.state === "conflict" ? "Conflito de versão dos cupons; recarregue para revisar." : ""}</p>}
       </section>
     </section>
   );
