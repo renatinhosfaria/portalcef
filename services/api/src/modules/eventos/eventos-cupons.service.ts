@@ -78,7 +78,10 @@ export class EventosCuponsService {
 
   private validarSnapshot(coupon: any, snapshot: any, now: Date) {
     if (!coupon || !snapshot) throw new NotFoundException({ code: "COUPON_NOT_FOUND", message: "Cupom não encontrado" });
-    if (Number(coupon.version) !== Number(snapshot.version) || normalizarCodigoCupom(String(coupon.code ?? "")) !== normalizarCodigoCupom(String(snapshot.code ?? "")) || coupon.pricingType !== snapshot.pricingType || (coupon.pricingType === "PERCENTUAL" && Number(coupon.discountPercent) !== Number(snapshot.discountPercent)) || (coupon.pricingType === "VALOR_FIXO" && Number(coupon.discountCents) !== Number(snapshot.discountCents))) {
+    // O snapshot congela preço, código e versão no pedido. A edição administrativa
+    // do cupom cria uma nova versão, mas não pode invalidar carrinhos já aplicados.
+    // A identidade continua obrigatória para impedir uso de snapshot de outro cupom.
+    if (!coupon.id || !snapshot.id || String(coupon.id) !== String(snapshot.id)) {
       throw new ConflictException({ code: "COUPON_CHANGED", message: "O cupom mudou desde a aplicação no pedido" });
     }
     void now;

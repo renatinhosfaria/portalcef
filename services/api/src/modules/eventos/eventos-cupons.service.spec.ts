@@ -144,6 +144,22 @@ describe("EventosCuponsService", () => {
     await expect(service(db).reterUso("order-desativado", "checkout-1", { email: "a@example.com", phone: "5511999999999" }, new Date("2026-11-14T16:00:00Z"), db as any)).resolves.toBeUndefined();
     expect(db.retencoes).toHaveLength(1);
   });
+
+  it("confirma snapshot retido mesmo após atualização e desativação que incrementa a versão", async () => {
+    const db = cupomUsoDb({
+      order: { id: "order-atualizado", status: "AGUARDANDO_PAGAMENTO", appliedCouponId: "coupon-1", couponDiscountCents: 100, couponSnapshot: { id: "coupon-1", code: "DEZ", version: 1, pricingType: "PERCENTUAL", discountPercent: 10 } },
+      coupon: { id: "coupon-1", eventId: "event-1", code: "DEZ", version: 1, pricingType: "PERCENTUAL", discountPercent: 10, active: true, usageLimit: null, usageLimitPerBuyer: null, startsAt: null, endsAt: null },
+    });
+    const cupons = service(db);
+
+    await cupons.reterUso("order-atualizado", "checkout-1", { email: "a@example.com", phone: "5511999999999" }, new Date("2026-11-14T16:00:00Z"), db as any);
+    db.coupon.version = 2;
+    db.coupon.active = false;
+    await expect(cupons.confirmarUso("order-atualizado", db as any)).resolves.toBeUndefined();
+
+    expect(db.usos).toHaveLength(1);
+    expect(db.usos[0]).toMatchObject({ orderId: "order-atualizado", status: "CONFIRMADO", couponSnapshot: expect.objectContaining({ version: 1 }) });
+  });
 });
 
 function service(db: any) { return new EventosCuponsService({ db } as any); }

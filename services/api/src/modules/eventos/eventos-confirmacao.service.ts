@@ -71,7 +71,7 @@ export class EventosConfirmacaoService {
 
     await db.update(eventoPedidos).set({ status: "CONFIRMADO", confirmedAt: new Date(), updatedAt: new Date() }).where(eq(eventoPedidos.id, order.id)).returning();
     if (typeof db.insert === "function" && order.eventId) {
-      await db.insert(eventoAuditorias).values({ eventId: order.eventId, action: "CONFIRMADO", resourceType: payment ? "pagamento" : "pedido", resourceId: payment?.id ?? order.id, metadata: { origem } }).returning();
+      await db.insert(eventoAuditorias).values({ eventId: order.eventId, action: "CONFIRMADO", resourceType: payment ? "pagamento" : "pedido", resourceId: payment?.id ?? order.id, metadata: { origem, ...((db as any).__eventosConfirmacaoMetadata ?? {}) } }).returning();
     }
     if (this.cuponsService) await this.cuponsService.confirmarUso(order.id, db);
   }

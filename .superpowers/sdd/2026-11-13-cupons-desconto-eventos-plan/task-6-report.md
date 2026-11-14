@@ -18,3 +18,14 @@ Também removi a revalidação de vigência atual em `confirmarUso`: o snapshot 
 - O marcador interno `__eventosLocksHeld` evita repetir locks já adquiridos pelo fluxo Stripe nos shims e na transação compartilhada.
 
 Atualizado em: 2026-11-13
+
+## Correção da rodada 1
+
+`validarSnapshot` passou a exigir apenas a identidade do cupom. Alterações administrativas posteriores, inclusive incremento de versão, mudança de código/preço ou desativação, não invalidam o snapshot congelado no pedido; limites, expiração da retenção e unicidade do uso continuam sendo verificados. A auditoria do Stripe também voltou a registrar `checkoutSessionId`, `paymentIntentId` e `amountCents` junto da origem.
+
+### Validação da correção
+
+- `pnpm --filter @essencia/api exec jest src/modules/eventos/eventos-cupons.service.spec.ts src/modules/eventos/eventos-confirmacao.service.spec.ts src/modules/eventos/eventos-public-sales.service.spec.ts src/modules/eventos/eventos-pagamentos.service.spec.ts --runInBand`: aprovado (115 testes).
+- `pnpm --filter @essencia/api typecheck`: aprovado.
+
+Atualizado em: 2026-11-13

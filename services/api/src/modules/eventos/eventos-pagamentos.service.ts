@@ -188,6 +188,11 @@ export class EventosPagamentosService {
 
       const confirmacao = this.confirmacaoService ?? new EventosConfirmacaoService(this.cuponsService);
       (tx as any).__eventosLocksHeld = true;
+      (tx as any).__eventosConfirmacaoMetadata = {
+        checkoutSessionId: input.checkoutSessionId || payment.stripeCheckoutSessionId || null,
+        paymentIntentId: input.paymentIntentId || payment.stripePaymentIntentId || null,
+        amountCents: input.amountCents,
+      };
       await confirmacao.confirmarPedido(order.id, "STRIPE", tx);
       if (typeof tx.update === "function") {
         await tx.update(eventoPagamentos).set({ status: "APROVADO", method: input.method ?? payment.method ?? "card", receivedAmountCents: input.amountCents, stripeCheckoutSessionId: input.checkoutSessionId || payment.stripeCheckoutSessionId, stripePaymentIntentId: input.paymentIntentId || payment.stripePaymentIntentId, processedAt: new Date(), updatedAt: new Date() }).where(eq(eventoPagamentos.id, payment.id)).returning();
