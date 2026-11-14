@@ -417,11 +417,10 @@ export class EventosPublicSalesService {
         const linesTotalCents = items.reduce((total: number, item: { unitAmount: number; quantity: number }) => total + item.unitAmount * item.quantity, 0);
         if (linesTotalCents !== order.totalCents) throw fail("CHECKOUT_AMOUNT_MISMATCH", "Linhas do checkout não fecham o total do pedido");
 
-        if (this.cuponsService) await this.cuponsService.reterUso(order.id, input.idempotencyKey, { email: order.buyerEmail, phone: order.buyerPhone ?? "" }, checkoutExpiresAt, db);
         if (order.totalCents === 0) {
-          await this.estenderCheckout(order.id, checkoutExpiresAt, db);
-          return { clientSecret: "", expiresAt: checkoutExpiresAt, orderNumber: order.orderNumber };
+          throw fail("CHECKOUT_FREE_UNSUPPORTED", "Checkout gratuito ainda não está disponível");
         }
+        if (this.cuponsService) await this.cuponsService.reterUso(order.id, input.idempotencyKey, { email: order.buyerEmail, phone: order.buyerPhone ?? "" }, checkoutExpiresAt, db);
         if (!this.paymentsService) throw new ServiceUnavailableException({ code: "CHECKOUT_UNAVAILABLE", message: "Checkout ainda indisponível" });
 
         const existing = await this.first<any>(db.select().from(eventoPagamentos).where(eq(eventoPagamentos.orderId, order.id)));

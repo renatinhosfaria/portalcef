@@ -30,4 +30,8 @@ O repositório não possui fluxo de reembolso/cancelamento de pedido confirmado 
 
 Validação do fix: 113 testes focados PASS (incluindo `eventos-cupons`, `eventos-public-sales` e `eventos-pagamentos`), typecheck da API PASS.
 
+## Fix round 2
+
+O checkout de total zero agora retorna `CHECKOUT_FREE_UNSUPPORTED` antes de criar retenção ou sessão Stripe. Isso mantém o contrato atual, que exige `clientSecret` não vazio no cliente, até a confirmação gratuita prevista na Task 6.
+
 Atualizado em: 2026-11-13

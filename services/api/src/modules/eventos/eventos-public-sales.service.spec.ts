@@ -184,12 +184,12 @@ describe("EventosPublicSalesService - contratos públicos", () => {
     expect(db.payments).toHaveLength(1);
   });
 
-  it("retém cupom no checkout gratuito e não cria Stripe", async () => {
+  it("recusa checkout gratuito explicitamente até a confirmação da Task 6", async () => {
     const db = checkoutDb({ id: "order-gratis", orderNumber: "ABC123DEF456", status: "RESERVADO", totalCents: 0, buyerName: "Ana", buyerEmail: "a@b.com", buyerPhone: "11999999999", expiresAt: new Date(Date.now() + 60_000), eventId: "event-1", sessionId: "session-1" }, [{ item: { ticketTypeId: "ticket", unitPriceCents: 0, quantity: 1 }, ticket: { name: "Cortesia" } }]);
     const cupons = { reterUso: jest.fn().mockResolvedValue(undefined) };
     const payments = { createEmbeddedCheckoutSession: jest.fn() };
-    await expect(new EventosPublicSalesService({ db } as any, payments as any, cupons as any).iniciarCheckout("ABC123DEF456", { returnUrl: "https://eventos.portalcef.com.br/pagamento/retorno", idempotencyKey: "checkout-gratis-123456" })).resolves.toMatchObject({ clientSecret: "" });
-    expect(cupons.reterUso).toHaveBeenCalledWith("order-gratis", "checkout-gratis-123456", { email: "a@b.com", phone: "11999999999" }, expect.any(Date), db);
+    await expect(new EventosPublicSalesService({ db } as any, payments as any, cupons as any).iniciarCheckout("ABC123DEF456", { returnUrl: "https://eventos.portalcef.com.br/pagamento/retorno", idempotencyKey: "checkout-gratis-123456" })).rejects.toMatchObject({ response: { code: "CHECKOUT_FREE_UNSUPPORTED" } });
+    expect(cupons.reterUso).not.toHaveBeenCalled();
     expect(payments.createEmbeddedCheckoutSession).not.toHaveBeenCalled();
   });
 
