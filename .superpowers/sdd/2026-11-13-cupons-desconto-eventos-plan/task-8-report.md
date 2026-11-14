@@ -31,3 +31,9 @@ Concluída.
 - Exclusão de um cartão preserva `dirty` dos cupons restantes; a alteração remanescente rearma o PATCH automático após a invalidação.
 - Em falha do DELETE, o estado dirty é rearmado em microtask, permitindo retry e evitando perda de edições de outros cartões.
 - Testes admin: 15 aprovados; typecheck aprovado.
+
+## Rodada de correções 4
+- Falhas de DELETE agora são tratadas dentro do `try`, incluindo `fetch`, parsing JSON e validação da resposta.
+- Erro de exclusão usa estado separado (`cuponsDeleteError`) e não bloqueia o autosave das demais edições.
+- Dirty é rearmado após falha para permitir retry observável.
+- Testes admin: 15 aprovados; typecheck aprovado.

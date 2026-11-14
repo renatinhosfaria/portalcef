@@ -56,5 +56,7 @@ describe("etapa de ingressos", () => {
 
   it("rearma autosave quando a exclusão falha", () => {
     expect(source).toContain("queueMicrotask(() => setCuponsDirty(true))");
+    expect(source).toContain("cuponsDeleteError");
+    expect(source).toContain("try { const response = await fetch");
   });
 });
