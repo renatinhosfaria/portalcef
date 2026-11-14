@@ -85,6 +85,21 @@ describe("FluxoCheckout", () => {
     expect(screen.getByText(/Pagamento/)).toBeTruthy();
   });
 
+  it("segue para os ingressos sem iniciar Stripe quando o pedido é gratuito", async () => {
+    vi.mocked(eventosApi.finalizarPedido).mockResolvedValueOnce({ pedido: { ...pedido, totalCents: 0 }, acesso: "acesso-gratuito", pagamentoNecessario: false });
+    render(<FluxoCheckout pedido={pedido} evento={evento} sessao={sessao} politicas={politicas} publishableKey="pk_test" />);
+    fireEvent.change(screen.getByLabelText("Nome completo"), { target: { value: "Ana Silva" } });
+    fireEvent.change(screen.getByLabelText("E-mail"), { target: { value: "ana@example.com" } });
+    fireEvent.change(screen.getByLabelText("Celular (WhatsApp)"), { target: { value: "34999999999" } });
+    fireEvent.change(screen.getByLabelText("Nome de quem vai sentar no lugar G19"), { target: { value: "Ana Silva" } });
+    fireEvent.change(screen.getByLabelText("Nome de quem vai sentar no lugar G20"), { target: { value: "Bia Silva" } });
+    fireEvent.click(screen.getByRole("checkbox", { name: "Li e aceito as políticas do evento" }));
+    fireEvent.click(screen.getByRole("button", { name: "Ir para o pagamento" }));
+
+    await waitFor(() => expect(routerPush).toHaveBeenCalledWith(`/pedido/${pedido.orderNumber}?acesso=acesso-gratuito`));
+    expect(eventosApi.iniciarPagamento).not.toHaveBeenCalled();
+  });
+
   function preencherObrigatorios() {
     fireEvent.change(screen.getByLabelText("Nome completo"), { target: { value: "Ana Silva" } });
     fireEvent.change(screen.getByLabelText("E-mail"), { target: { value: "ana@example.com" } });
