@@ -17,3 +17,12 @@
 ## Preocupações
 
 - A identificação por `PaymentIntent` consulta os pagamentos de Eventos antes do fluxo da loja; quando não encontra referência, o webhook segue normalmente para a reconciliação da loja.
+
+## Correção da revisão (round 1)
+
+- O webhook deixou de confiar isoladamente em `charge.metadata.eventOrderId`.
+- A reversão agora exige um `PaymentIntent` e valida que ele pertence ao `eventOrderId` informado; conflito ou ausência de pagamento de Evento retorna `false` e segue para a reconciliação da loja.
+- Teste de conflito adicionado para garantir o fallback seguro.
+- Testes focados: 22 aprovados.
+- `pnpm --filter @essencia/api lint`: aprovado, 0 erros (avisos preexistentes).
+- `pnpm --filter @essencia/api typecheck`: aprovado.

@@ -82,7 +82,7 @@ describe("PaymentsWebhookController - Eventos", () => {
 
   it("reverte cupom de pedido de Evento em charge.refunded sem tocar na loja", async () => {
     const eventosPagamentos = {
-      reverterUsoPorPedido: jest.fn().mockResolvedValue(undefined),
+      reverterUsoPorPagamento: jest.fn().mockResolvedValue(true),
     };
     const loja = { reconcileStripeRefund: jest.fn().mockResolvedValue(undefined) };
     const controller = new PaymentsWebhookController(
@@ -99,11 +99,43 @@ describe("PaymentsWebhookController - Eventos", () => {
       metadata: { eventOrderId: "pedido-evento-1" },
     });
 
-    expect(eventosPagamentos.reverterUsoPorPedido).toHaveBeenCalledWith(
-      "pedido-evento-1",
+    expect(eventosPagamentos.reverterUsoPorPagamento).toHaveBeenCalledWith(
+      "pi_evento",
       "charge.refunded",
+      "pedido-evento-1",
     );
     expect(loja.reconcileStripeRefund).not.toHaveBeenCalled();
+  });
+
+  it("reconcilia a loja quando metadata e PaymentIntent de Evento entram em conflito", async () => {
+    const eventosPagamentos = {
+      reverterUsoPorPagamento: jest.fn().mockResolvedValue(false),
+    };
+    const loja = { reconcileStripeRefund: jest.fn().mockResolvedValue(undefined) };
+    const controller = new PaymentsWebhookController(
+      { get: jest.fn().mockReturnValue("whsec_test") } as any,
+      {} as any,
+      loja as any,
+      eventosPagamentos as any,
+    );
+
+    await (controller as any).handleChargeRefunded({
+      id: "ch_conflito",
+      amount_refunded: 1000,
+      payment_intent: "pi_loja",
+      metadata: { eventOrderId: "pedido-evento-errado" },
+    });
+
+    expect(eventosPagamentos.reverterUsoPorPagamento).toHaveBeenCalledWith(
+      "pi_loja",
+      "charge.refunded",
+      "pedido-evento-errado",
+    );
+    expect(loja.reconcileStripeRefund).toHaveBeenCalledWith({
+      paymentIntentId: "pi_loja",
+      stripeRefundId: "ch_conflito",
+      amount: 1000,
+    });
   });
 
   it("identifica reembolso de Evento pelo PaymentIntent quando a charge não traz metadata", async () => {
@@ -127,6 +159,7 @@ describe("PaymentsWebhookController - Eventos", () => {
     expect(eventosPagamentos.reverterUsoPorPagamento).toHaveBeenCalledWith(
       "pi_evento_2",
       "charge.refunded",
+      undefined,
     );
     expect(loja.reconcileStripeRefund).not.toHaveBeenCalled();
   });

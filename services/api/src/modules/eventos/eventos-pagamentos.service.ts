@@ -47,9 +47,10 @@ export class EventosPagamentosService {
     await this.cuponsService?.reverterUsoPorPedido(orderId, motivo, this.db);
   }
 
-  async reverterUsoPorPagamento(paymentIntentId: string, motivo: string): Promise<boolean> {
+  async reverterUsoPorPagamento(paymentIntentId: string, motivo: string, expectedOrderId?: string): Promise<boolean> {
     const reference = await this.findPayment(this.db, undefined, paymentIntentId);
     if (!reference) return false;
+    if (expectedOrderId && reference.order.id !== expectedOrderId) return false;
     await this.reverterUsoPorPedido(reference.order.id, motivo);
     return true;
   }

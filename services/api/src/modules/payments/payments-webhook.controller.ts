@@ -477,19 +477,11 @@ export class PaymentsWebhookController {
         ? charge.payment_intent
         : charge.payment_intent?.id;
 
-    const eventOrderId = charge.metadata?.eventOrderId;
-    if (eventOrderId) {
-      await this.getEventosPagamentosService().reverterUsoPorPedido(
-        eventOrderId,
-        "charge.refunded",
-      );
-      return;
-    }
-
     if (paymentIntentId && this.eventosPagamentosService?.reverterUsoPorPagamento) {
       const handled = await this.eventosPagamentosService.reverterUsoPorPagamento(
         paymentIntentId,
         "charge.refunded",
+        charge.metadata?.eventOrderId,
       );
       if (handled) return;
     }
