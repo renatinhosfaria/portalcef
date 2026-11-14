@@ -35,6 +35,12 @@ describe("EventosCuponsService", () => {
     await expect(service(usado).remover("e1", "c1", actor)).rejects.toMatchObject({ response: { code: "COUPON_IN_USE" } });
   });
 
+  it("bloqueia remoção com qualquer histórico de retenção ou uso", async () => {
+    const db: any = fakeDb({ selects: [[evento()], [cupom()], [{ id: "ret-1", status: "LIBERADA" }]] });
+    db.delete = () => ({ where: async () => { throw new Error("não deveria excluir"); } });
+    await expect(service(db).remover("e1", "c1", actor)).rejects.toMatchObject({ response: { code: "COUPON_IN_USE" } });
+  });
+
   it("normaliza código, cria vários cupons e resume usos confirmados", async () => {
     const inserted: any[] = [];
     const db = fakeDb({ selects: [[evento()], []], insert: (values) => { inserted.push(values); return [{ id: `c${inserted.length}`, ...values }]; } });

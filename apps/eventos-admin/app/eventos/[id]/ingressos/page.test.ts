@@ -42,4 +42,10 @@ describe("etapa de ingressos", () => {
     expect(source).toContain("Conflito de versão dos cupons");
     expect(source).toContain("Adicionar cupom");
   });
+
+  it("invalida autosave e atualiza revisão antes de excluir cupom persistido", () => {
+    expect(source).toContain("cuponsAutosave.invalidate()");
+    expect(source).toContain("cuponsRevision.current += 1");
+    expect(source).toContain('method: "DELETE"');
+  });
 });

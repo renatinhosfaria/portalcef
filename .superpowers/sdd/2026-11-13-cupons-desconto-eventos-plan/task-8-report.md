@@ -20,3 +20,9 @@ Concluída.
 - GET normaliza datas ISO para `datetime-local` e mantém conversão para `Date` no payload.
 - Editor bloqueia autosave e mostra mensagem específica para códigos duplicados normalizados.
 - Testes adicionais da API: 15 aprovados; testes do admin: 12 aprovados; typecheck da API e do admin aprovados.
+
+## Rodada de correções 2
+- Exclusão persistida invalida o autosave, incrementa a revisão local e limpa o cartão somente após DELETE aprovado.
+- DELETE agora consulta todos os usos e retenções, independentemente de status; qualquer histórico retorna `COUPON_IN_USE` para evitar violação de FK e preservar auditoria.
+- Cobertos cenários de retenção/histórico e cancelamento de autosave.
+- API: 16 testes aprovados; admin: 12 testes aprovados; typechecks API/admin aprovados.
