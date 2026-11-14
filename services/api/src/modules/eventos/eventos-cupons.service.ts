@@ -109,7 +109,6 @@ export class EventosCuponsService {
     if (own?.status === "ATIVA" || own?.status === "CONVERTIDA") {
       // A retenção é idempotente por pedido; a chave só identifica a tentativa
       // de checkout e não pode criar uma segunda retenção para a mesma ordem.
-      void checkoutKey;
       return;
     }
     for (const row of retencoes.filter((candidate) => candidate.status === "ATIVA" && candidate.expiresAt && new Date(candidate.expiresAt) <= now)) {
@@ -125,10 +124,11 @@ export class EventosCuponsService {
     }
     if (own?.status === "LIBERADA") {
       await db.update(eventoCupomRetencoesTabela).set({ status: "ATIVA", buyerEmail: email, buyerPhone: phone, expiresAt, releasedAt: null, updatedAt: now }).where(eq(eventoCupomRetencoesTabela.id, own.id)).returning();
+      await this.auditoria(db, coupon, "RETENCAO_CRIADA", orderId, { checkoutKey, reativada: true });
       return;
     }
     await db.insert(eventoCupomRetencoesTabela).values({ couponId: coupon.id, orderId, status: "ATIVA", buyerEmail: email, buyerPhone: phone, expiresAt }).returning();
-    void checkoutKey;
+    await this.auditoria(db, coupon, "RETENCAO_CRIADA", orderId, { checkoutKey });
   }
 
   async confirmarUso(orderId: string, db: Database = this.db): Promise<void> {
