@@ -927,7 +927,7 @@ As rotas públicas de eventos não exigem autenticação. O pedido mantém o sna
 
 #### POST `/eventos/public/pedidos/:orderNumber/cupom`
 
-Aplica, substitui ou remove um cupom do pedido reservado. Para remover, envie `code` vazio. O código é normalizado com espaços removidos e letras maiúsculas.
+Aplica, substitui ou remove um cupom do pedido nos estados `INICIADO` ou `RESERVADO`. Para remover, envie `code` vazio. O código é normalizado com `trim()` e letras maiúsculas (`toUpperCase()`).
 
 Corpo:
 

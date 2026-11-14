@@ -26,12 +26,13 @@ A integração final foi concluída no commit desta task. Fixtures legadas foram
 - `pnpm turbo lint` — PASS, com warnings legados já existentes no monorepo.
 - `pnpm turbo typecheck` — PASS (22 pacotes).
 - `git diff --check` — PASS.
+- Rodada de revisão: fixture de checkout, teste focado de `checkout.test.tsx`, `@essencia/components test/typecheck/lint` e `@essencia/eventos typecheck/lint` — PASS; o lint de eventos mantém apenas o warning preexistente de `<img>`.
 
 A execução integral de `pnpm --filter @essencia/api exec jest src/modules/eventos --runInBand` também foi feita. As suítes de cupons, checkout, pagamentos e confirmação passaram; 19 testes legados de `mapas/gerador` falharam com `ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING_FLAG`/`--experimental-vm-modules`, falha preexistente e fora do escopo desta task.
 
 ## Banco e segurança
 
-Não houve alteração de schema ou migration nesta task; portanto `pnpm db:generate` e `pnpm db:migrate` não foram executados. A migration 0057 e os checks de cupons já foram cobertos pelo teste do pacote `@essencia/db`. A revisão da árvore não encontrou `.env`, segredos, pedidos reais ou mudanças fora do escopo.
+Não houve alteração de schema ou migration nesta task. O ambiente não tinha `DATABASE_URL` nem um banco de desenvolvimento disponível, portanto `pnpm db:migrate` não foi executado e a integração da migration não pode ser considerada validada. `pnpm db:generate` também não foi necessário, pois não houve mudança de schema. A migration 0057 e os checks de cupons foram cobertos pelo teste do pacote `@essencia/db`; isso não substitui a aplicação em banco. A revisão da árvore não encontrou `.env`, segredos, pedidos reais ou mudanças fora do escopo.
 
 ## Preocupações
 
