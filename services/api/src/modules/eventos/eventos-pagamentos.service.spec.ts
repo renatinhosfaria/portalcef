@@ -190,6 +190,17 @@ describe("EventosPagamentosService", () => {
     expect(cupons.liberarRetencao).toHaveBeenCalledWith("order-1", "falha_gateway", db);
   });
 
+  it("reverte uso por PaymentIntent dentro de uma transação", async () => {
+    const db = new FakeEventosDb();
+    const cupons = { reverterUsoPorPedido: jest.fn().mockResolvedValue(undefined) };
+    const service = new EventosPagamentosService({ db } as any, cupons as any);
+
+    await expect(service.reverterUsoPorPagamento("pi-1", "charge.refunded")).resolves.toBe(true);
+
+    expect(db.transactionCalls).toBe(1);
+    expect(cupons.reverterUsoPorPedido).toHaveBeenCalledWith("order-1", "charge.refunded", expect.anything());
+  });
+
   it("exige segredo dedicado para assinar ingressos", () => {
     const original = process.env.EVENTOS_QR_SECRET;
     delete process.env.EVENTOS_QR_SECRET;

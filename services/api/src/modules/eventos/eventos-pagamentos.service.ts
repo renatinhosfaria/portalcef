@@ -43,16 +43,32 @@ export class EventosPagamentosService {
     return this.database.db;
   }
 
-  async reverterUsoPorPedido(orderId: string, motivo: string): Promise<void> {
-    await this.cuponsService?.reverterUsoPorPedido(orderId, motivo, this.db);
+  async reverterUsoPorPedido(orderId: string, motivo: string, db: Database = this.db): Promise<void> {
+    await this.cuponsService?.reverterUsoPorPedido(orderId, motivo, db);
   }
 
   async reverterUsoPorPagamento(paymentIntentId: string, motivo: string, expectedOrderId?: string): Promise<boolean> {
-    const reference = await this.findPayment(this.db, undefined, paymentIntentId);
-    if (!reference) return false;
-    if (expectedOrderId && reference.order.id !== expectedOrderId) return false;
-    await this.reverterUsoPorPedido(reference.order.id, motivo);
-    return true;
+    const executar = async (tx: any): Promise<boolean> => {
+      // A referência Stripe identifica o pedido, mas a reversão precisa
+      // bloquear o pedido antes do pagamento e do cupom para serializar com a
+      // confirmação do gateway.
+      const reference = await this.findPayment(tx, undefined, paymentIntentId);
+      if (!reference) return false;
+      if (expectedOrderId && reference.order.id !== expectedOrderId) return false;
+
+      const lockedOrder = typeof tx?.select === "function"
+        ? await this.first(this.lockRows(tx.select().from(eventoPedidos).where(eq(eventoPedidos.id, reference.order.id))))
+        : reference.order;
+      if (!lockedOrder || (expectedOrderId && lockedOrder.id !== expectedOrderId)) return false;
+
+      if (reference.payment?.id && typeof tx?.select === "function") {
+        await this.first(this.lockRows(tx.select().from(eventoPagamentos).where(eq(eventoPagamentos.id, reference.payment.id))));
+      }
+      await this.reverterUsoPorPedido(lockedOrder.id, motivo, tx);
+      return true;
+    };
+    const transaction = (this.db as any)?.transaction;
+    return typeof transaction === "function" ? transaction.call(this.db, executar) : executar(this.db);
   }
 
   private async first<T>(query: any): Promise<T | undefined> {

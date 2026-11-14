@@ -43,6 +43,12 @@ describe("etapa de ingressos", () => {
     expect(source).toContain("Adicionar cupom");
   });
 
+  it("normaliza datas ISO também na resposta do PATCH de cupons", () => {
+    expect(source).toContain("normalizarDataCupom(item.startsAt)");
+    expect(source).toContain("normalizarDataCupom(item.endsAt)");
+    expect(source).toContain("setCupons(normalizarCupons(data))");
+  });
+
   it("invalida autosave e atualiza revisão antes de excluir cupom persistido", () => {
     expect(source).toContain("cuponsAutosave.invalidate()");
     expect(source).toContain("cuponsRevision.current += 1");

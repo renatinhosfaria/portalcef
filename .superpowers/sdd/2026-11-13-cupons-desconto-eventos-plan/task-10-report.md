@@ -14,6 +14,11 @@ A integração final foi concluída no commit desta task. Fixtures legadas foram
 - `apps/eventos/components/__tests__/escolha-lugares.test.tsx`
 - `apps/eventos/components/__tests__/ingressos.test.tsx`
 - `docs/API.md`
+- `services/api/src/modules/eventos/eventos-cupons.service.ts`
+- `services/api/src/modules/eventos/eventos-pagamentos.service.ts`
+- `services/api/src/modules/eventos/eventos-public-sales.service.ts`
+- `packages/db/drizzle/0057_eventos_cupons.sql`
+- `apps/eventos-admin/app/eventos/[id]/ingressos/page.tsx`
 
 ## Verificações executadas
 
@@ -33,7 +38,24 @@ A execução integral de `pnpm --filter @essencia/api exec jest src/modules/even
 
 ## Banco e segurança
 
-Não houve alteração de schema ou migration nesta task. O ambiente não tinha `DATABASE_URL` nem um banco de desenvolvimento disponível, portanto `pnpm db:migrate` não foi executado e a integração da migration não pode ser considerada validada. `pnpm db:generate` também não foi necessário, pois não houve mudança de schema. A migration 0057 e os checks de cupons foram cobertos pelo teste do pacote `@essencia/db`; isso não substitui a aplicação em banco. A revisão da árvore não encontrou `.env`, segredos, pedidos reais ou mudanças fora do escopo.
+A revisão final altera a migration 0057 para preencher `offer_discount_cents` com `COALESCE(discount_cents, 0)` antes de aplicar as restrições. O ambiente não tinha `DATABASE_URL` nem um banco de desenvolvimento disponível, portanto `pnpm db:migrate` não foi executado e a aplicação da migration em banco real não pode ser considerada validada. O teste do pacote `@essencia/db` cobre o SQL de backfill, mas não substitui a aplicação em banco. A revisão da árvore não encontrou `.env`, segredos, pedidos reais ou mudanças fora do escopo.
+
+## Correção da revisão final
+
+- Retenção ativa de cupom é renovada no retry do checkout sob `FOR UPDATE`, preservando a identidade do comprador e auditando a renovação.
+- Reversão de uso por pedido e por `PaymentIntent` ocorre em transação, com locks na ordem pedido → pagamento (quando aplicável) → cupom → uso e atualização condicional idempotente.
+- Finalização gratuita exige cupom aplicado e `couponDiscountCents > 0`; preço zero genérico e oferta de 100% sem cupom continuam bloqueados.
+- Migration 0057 faz backfill de `offer_discount_cents` a partir do legado `discount_cents`.
+- Resposta do PATCH administrativo de cupons normaliza novamente datas ISO para o formato aceito pelo `datetime-local`.
+
+## Verificações da correção final
+
+- `pnpm --filter @essencia/api exec jest src/modules/eventos/eventos-cupons.service.spec.ts src/modules/eventos/eventos-public-sales.service.spec.ts src/modules/eventos/eventos-pagamentos.service.spec.ts src/modules/eventos/eventos-confirmacao.service.spec.ts --runInBand` — PASS (4 suítes, 121 testes).
+- `pnpm --filter @essencia/db test -- src/schema/eventos.test.ts` — PASS (16 testes, incluindo o backfill da migration 0057).
+- `pnpm --filter @essencia/eventos-admin test -- app/eventos/[id]/ingressos/page.test.ts` — PASS (10 testes, incluindo a normalização da resposta do PATCH).
+- `pnpm turbo lint` — PASS, com warnings legados (1.355 avisos, sem erros).
+- `pnpm turbo typecheck` — PASS (22 pacotes).
+- `git diff --check` — PASS.
 
 ## Preocupações
 

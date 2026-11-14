@@ -328,6 +328,12 @@ export class EventosPublicSalesService {
     if (new Set(indexes).size !== indexes.length || indexes.some((index) => index < 0 || index >= input.participants.length) || indexes.some((_, index) => !indexes.includes(index))) throw fail("VALIDATION_ERROR", "Índices de participantes inválidos");
     return this.serializarCheckout(orderNumber, () => this.db.transaction(async (tx: any) => {
       const order = await this.getOrder(orderNumber, tx, true);
+      const totalCents = Number(order.totalCents ?? 0);
+      const couponDiscountCents = Number(order.couponDiscountCents ?? 0);
+      const hasAppliedCoupon = Boolean(order.appliedCouponId ?? order.couponSnapshot ?? order.appliedCoupon);
+      if (totalCents === 0 && !(couponDiscountCents > 0 && hasAppliedCoupon)) {
+        throw fail("FREE_ORDER_REQUIRES_COUPON", "Pedidos gratuitos precisam de um cupom aplicado");
+      }
       const prior = await this.first<any>(tx.select().from(eventoPedidos).where(eq(eventoPedidos.finalizationIdempotencyKey, input.idempotencyKey)));
       if (prior) { if (prior.id !== order.id) throw new ConflictException({ code: "IDEMPOTENCY_CONFLICT", message: "Chave de idempotência já utilizada" }); return this.finalizacaoResult(order, tx); }
       if (order.finalizationIdempotencyKey) {

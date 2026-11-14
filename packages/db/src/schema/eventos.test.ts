@@ -202,6 +202,7 @@ test("migration 0057 cria persistência de cupons", () => {
   assert.match(migration, /ends_at.*>.*starts_at/s);
   assert.match(migration, /usage_limit.*> 0/s);
   assert.match(migration, /offer_discount_cents.*>= 0/s);
+  assert.match(migration, /UPDATE "evento_pedidos" SET "offer_discount_cents" = COALESCE\("discount_cents", 0\)/);
   const journal = JSON.parse(readFileSync(join(__dirname, "../../drizzle/meta/_journal.json"), "utf8"));
   assert.equal(journal.entries.at(-1).tag, "0057_eventos_cupons");
 });

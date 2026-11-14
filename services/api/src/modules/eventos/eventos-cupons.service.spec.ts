@@ -101,6 +101,22 @@ describe("EventosCuponsService", () => {
     expect(db.retencoes[0].status).toBe("CONVERTIDA");
   });
 
+  it("renova a retenção ativa quando o checkout é repetido com prazo estendido", async () => {
+    const db = cupomUsoDb({
+      order: { id: "order-renovado", appliedCouponId: "coupon-1", couponSnapshot: { id: "coupon-1", code: "DEZ", version: 1, pricingType: "PERCENTUAL", discountPercent: 10 } },
+      coupon: { id: "coupon-1", eventId: "event-1", code: "DEZ", version: 1, pricingType: "PERCENTUAL", discountPercent: 10, active: true, usageLimit: 2, usageLimitPerBuyer: 1, startsAt: null, endsAt: null },
+    });
+    const cupons = service(db);
+    const primeiroPrazo = new Date(Date.now() + 60_000);
+    const prazoEstendido = new Date(Date.now() + 30 * 60_000);
+
+    await cupons.reterUso("order-renovado", "checkout-1", { email: "a@example.com", phone: "5511999999999" }, primeiroPrazo, db as any);
+    await cupons.reterUso("order-renovado", "checkout-2", { email: "a@example.com", phone: "5511999999999" }, prazoEstendido, db as any);
+
+    expect(db.retencoes).toHaveLength(1);
+    expect(db.retencoes[0]).toMatchObject({ status: "ATIVA", expiresAt: prazoEstendido });
+  });
+
   it("considera retenções ativas e usos confirmados no limite total", async () => {
     const db = cupomUsoDb({
       order: { id: "order-3", appliedCouponId: "coupon-1", couponSnapshot: { id: "coupon-1", code: "DEZ", version: 1, pricingType: "PERCENTUAL", discountPercent: 10 } },
@@ -141,6 +157,7 @@ describe("EventosCuponsService", () => {
     await cupons.reverterUsoPorPedido("order-5", "reembolso", db as any);
     expect(db.usos[0]).toMatchObject({ status: "REVERTIDO", revertedAt: expect.any(Date) });
     expect(db.audit.filter((entry: any) => entry.action === "USO_REVERTIDO")).toHaveLength(1);
+    expect(db.transactionCalls).toBe(2);
   });
 
   it("libera e rejeita retenção expirada antes de confirmar", async () => {
@@ -193,8 +210,8 @@ function fakeDb(options: { selects?: unknown[][]; insert?: (values: any) => any[
 }
 
 function cupomUsoDb(config: { order: any; coupon: any; retencoes?: any[]; usos?: any[] }) {
-  const db: any = { order: { status: "RESERVADO", expiresAt: new Date("2026-11-14T23:00:00Z"), ...config.order }, coupon: config.coupon, retencoes: config.retencoes ?? [], usos: config.usos ?? [], audit: [] };
-  db.transaction = async (callback: (tx: any) => Promise<unknown>) => callback(db);
+  const db: any = { order: { status: "RESERVADO", expiresAt: new Date("2026-11-14T23:00:00Z"), ...config.order }, coupon: config.coupon, retencoes: config.retencoes ?? [], usos: config.usos ?? [], audit: [], transactionCalls: 0 };
+  db.transaction = async (callback: (tx: any) => Promise<unknown>) => { db.transactionCalls += 1; return callback(db); };
   db.select = () => {
     let table: unknown;
     const chain: any = {

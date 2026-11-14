@@ -1,4 +1,5 @@
 ALTER TABLE "evento_pedidos" ADD COLUMN "offer_discount_cents" integer DEFAULT 0;
+UPDATE "evento_pedidos" SET "offer_discount_cents" = COALESCE("discount_cents", 0);
 ALTER TABLE "evento_pedidos" ADD COLUMN "coupon_discount_cents" integer DEFAULT 0;
 ALTER TABLE "evento_pedidos" ADD COLUMN "applied_coupon_id" uuid;
 ALTER TABLE "evento_pedidos" ADD COLUMN "coupon_snapshot" jsonb;

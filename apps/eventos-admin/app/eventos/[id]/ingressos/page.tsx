@@ -10,6 +10,10 @@ import { useEventoAutosave } from "@/features/eventos/use-evento-autosave";
 import { CupomEditor } from "@/features/eventos/cupom-editor";
 import { construirPayloadCupom, codigosCupomDuplicados, cupomInicial, cupomProntoParaSalvar, normalizarDataCupom, type CupomValue } from "@/features/eventos/cupons-contratos";
 
+const normalizarCupons = (value: unknown): CupomValue[] => Array.isArray(value)
+  ? (value as CupomValue[]).map((item) => ({ ...item, startsAt: normalizarDataCupom(item.startsAt), endsAt: normalizarDataCupom(item.endsAt) }))
+  : [];
+
 export default function IngressosPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
@@ -42,7 +46,7 @@ export default function IngressosPage() {
     setCuponsLoading(true);
     fetch(`/eventos-admin/api/eventos/admin/${id}/cupons`, { credentials: "include" })
       .then((response) => response.ok ? response.json() : Promise.reject())
-      .then((body: unknown) => { const data = body && typeof body === "object" && "data" in body ? (body as { data?: unknown }).data : body; setCupons(Array.isArray(data) ? (data as CupomValue[]).map((item) => ({ ...item, startsAt: normalizarDataCupom(item.startsAt), endsAt: normalizarDataCupom(item.endsAt) })) : []); })
+      .then((body: unknown) => { const data = body && typeof body === "object" && "data" in body ? (body as { data?: unknown }).data : body; setCupons(normalizarCupons(data)); })
       .catch(() => setCuponsError("Não foi possível carregar os cupons."))
       .finally(() => setCuponsLoading(false));
   }, [id]);
@@ -126,7 +130,7 @@ export default function IngressosPage() {
 
   const cuponsAutosave = useEventoAutosave({
     eventId: id, value: cupons, dirty: !cuponsLoading && !cuponsError && cuponsDirty && cupomProntoParaSalvar(cupons) && codigosCupomDuplicados(cupons).length === 0, serialize: (value) => value.map(construirPayloadCupom),
-    save: async (payload, eventId) => { const revision = cuponsRevision.current; const response = await fetch(`/eventos-admin/api/eventos/admin/${eventId}/cupons`, { method: "PATCH", credentials: "include", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) }); const body = await response.json().catch(() => ({})); assertRespostaApi({ ok: response.ok, status: response.status, body }); const data = body.data ?? body; queueMicrotask(() => { if (cuponsRevision.current === revision) { setCupons(Array.isArray(data) ? data as CupomValue[] : []); setCuponsDirty(false); } }); },
+    save: async (payload, eventId) => { const revision = cuponsRevision.current; const response = await fetch(`/eventos-admin/api/eventos/admin/${eventId}/cupons`, { method: "PATCH", credentials: "include", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) }); const body = await response.json().catch(() => ({})); assertRespostaApi({ ok: response.ok, status: response.status, body }); const data = body.data ?? body; queueMicrotask(() => { if (cuponsRevision.current === revision) { setCupons(normalizarCupons(data)); setCuponsDirty(false); } }); },
     onSaved: () => router.refresh(), debounceMs: 700,
   });
 

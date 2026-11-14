@@ -297,6 +297,19 @@ describe("EventosPublicSalesService - contratos públicos", () => {
     expect(db.acceptances.every((acceptance: any) => acceptance.acceptedByName === "Ana Maria" && acceptance.acceptedByEmail === "ana@example.com")).toBe(true);
   });
 
+  it.each([
+    ["preço zero sem cupom", { totalCents: 0, subtotalCents: 1250, discountCents: 0, couponDiscountCents: 0, appliedCouponId: null, couponSnapshot: null }],
+    ["oferta de 100% sem cupom", { totalCents: 0, subtotalCents: 1250, discountCents: 1250, offerDiscountCents: 1250, couponDiscountCents: 0, appliedOfferId: "offer-100", appliedCouponId: null, couponSnapshot: null }],
+  ])("bloqueia %s na finalização gratuita", async (_descricao, valores) => {
+    const db = pedidoFinalizacaoDb({ order: { ...valores, status: "INICIADO" }, item: { unitPriceCents: 0, totalPriceCents: 0 } });
+    const cupons = { reterUso: jest.fn() };
+    const confirmacao = { confirmarPedido: jest.fn() };
+
+    await expect(new EventosPublicSalesService({ db } as any, undefined, cupons as any, confirmacao as any).finalizarPedidoConvidado("ABC123DEF456", entradaFinalizacao())).rejects.toMatchObject({ response: { code: "FREE_ORDER_REQUIRES_COUPON" } });
+    expect(cupons.reterUso).not.toHaveBeenCalled();
+    expect(confirmacao.confirmarPedido).not.toHaveBeenCalled();
+  });
+
   it("finalização grava a aluna que convidou no participante e aceita o campo vazio", async () => {
     const comAluna = pedidoFinalizacaoDb();
     const entrada = entradaFinalizacao();
@@ -964,12 +977,12 @@ function entradaFinalizacao() {
   };
 }
 
-function pedidoFinalizacaoDb() {
-  const order: any = { id: "order-1", orderNumber: "ABC123DEF456", eventId: "event-1", sessionId: "session-1", status: "INICIADO", totalCents: 1250, subtotalCents: 1250, discountCents: 0, expiresAt: new Date("2026-12-01T12:00:00Z") };
+function pedidoFinalizacaoDb(config: { order?: any; item?: any } = {}) {
+  const order: any = { id: "order-1", orderNumber: "ABC123DEF456", eventId: "event-1", sessionId: "session-1", status: "INICIADO", totalCents: 1250, subtotalCents: 1250, discountCents: 0, expiresAt: new Date("2026-12-01T12:00:00Z"), ...config.order };
   const event = { id: "event-1", status: "PUBLICADO", title: "Festival", slug: "festival-escola" };
   const session = { id: "session-1", status: "PUBLICADA", startsAt: new Date("2026-12-01T10:00:00Z"), endsAt: new Date("2026-12-07T12:00:00Z") };
   const policies = ["PRIVACIDADE", "COMPRA", "CANCELAMENTO_REEMBOLSO", "ACESSIBILIDADE", "CONTATO"].map((type) => ({ id: `policy-${type}`, type, version: 1 }));
-  const item = { id: "item-1", orderId: order.id, ticketTypeId: "ticket-1", pricingEvidence: { participantIndex: 0 }, unitPriceCents: 1250, totalPriceCents: 1250 };
+  const item = { id: "item-1", orderId: order.id, ticketTypeId: "ticket-1", pricingEvidence: { participantIndex: 0 }, unitPriceCents: 1250, totalPriceCents: 1250, ...config.item };
   const reservation = { id: "reservation-1", orderId: order.id, inventorySeatId: "inventory-1", status: "ATIVA", expiresAt: order.expiresAt };
   const inventory = { id: "inventory-1", reservedByOrderId: order.id, status: "RESERVADO", reservationExpiresAt: order.expiresAt };
   const itemResult = { item, inventory: { seatId: "seat-1" }, seat: { rowLabel: "A", seatNumber: "12" }, ticket: { name: "Inteira" } };

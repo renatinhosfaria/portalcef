@@ -16,11 +16,19 @@ type CompradorCupom = { email: string; phone: string };
 export class EventosCuponsService {
   constructor(private readonly database: DatabaseService) {}
   private get db(): Database { return this.database.db; }
+  private async transactionFor<T>(db: Database, fn: (tx: Database) => Promise<T>): Promise<T> {
+    const transaction = (db as any)?.transaction;
+    return typeof transaction === "function" ? transaction.call(db, fn) : fn(db);
+  }
   private async transaction<T>(fn: (db: Database) => Promise<T>): Promise<T> {
-    const transaction = (this.db as any).transaction;
-    return typeof transaction === "function" ? transaction.call(this.db, fn) : fn(this.db);
+    return this.transactionFor(this.db, fn);
   }
   private async lock<T>(query: any): Promise<T> { return typeof query?.for === "function" ? query.for("update") : query; }
+  private updatedExactlyOne(result: any): boolean {
+    if (typeof result?.count === "number") return result.count === 1;
+    if (Array.isArray(result)) return result.length === 1;
+    return result?.rowCount === 1;
+  }
   private assertScope(actor: EventoActor, schoolId: string) {
     if (actor.role !== "master" && (!actor.schoolId || actor.schoolId !== schoolId)) throw new BadRequestException({ code: "FORBIDDEN", message: "Acesso negado" });
   }
@@ -59,9 +67,10 @@ export class EventosCuponsService {
     await db.insert(eventoAuditorias).values({ eventId: coupon.eventId, action, resourceType: "cupom", resourceId: coupon.id, metadata: { orderId, ...metadata } });
   }
 
-  private async pedido(orderId: string, db: any) {
+  private async pedido(orderId: string, db: any, lock = false) {
     if (typeof db?.select !== "function") return undefined;
-    const rows = await db.select().from(eventoPedidos).where(eq(eventoPedidos.id, orderId));
+    const query = db.select().from(eventoPedidos).where(eq(eventoPedidos.id, orderId));
+    const rows = await (lock ? this.lock<any[]>(query) : query);
     return (rows as any[]).find((row) => row.id === orderId) ?? rows[0];
   }
 
@@ -109,10 +118,19 @@ export class EventosCuponsService {
     const retencoes = (await this.lock<any[]>(retencoesQuery)) as any[];
     const usos = (await this.lock<any[]>(usosQuery)) as any[];
     const own = retencoes.find((row) => row.orderId === orderId);
-    if (own?.status === "ATIVA" || own?.status === "CONVERTIDA") {
-      // A retenção é idempotente por pedido; a chave só identifica a tentativa
-      // de checkout e não pode criar uma segunda retenção para a mesma ordem.
-      return;
+    if (own?.status === "CONVERTIDA") return;
+    if (own?.status === "ATIVA") {
+      // O checkout pode ser repetido para renovar a janela da mesma ordem. A
+      // retenção está bloqueada pelo SELECT ... FOR UPDATE acima, portanto a
+      // atualização e a confirmação enxergam o mesmo prazo.
+      const refreshed = await db.update(eventoCupomRetencoesTabela)
+        .set({ expiresAt, updatedAt: now })
+        .where(and(eq(eventoCupomRetencoesTabela.id, own.id), eq(eventoCupomRetencoesTabela.status, "ATIVA")))
+        .returning();
+      if (this.updatedExactlyOne(refreshed)) {
+        await this.auditoria(db, coupon, "RETENCAO_RENOVADA", orderId, { checkoutKey });
+        return;
+      }
     }
     for (const row of retencoes.filter((candidate) => candidate.status === "ATIVA" && candidate.expiresAt && new Date(candidate.expiresAt) <= now)) {
       await db.update(eventoCupomRetencoesTabela).set({ status: "LIBERADA", releasedAt: now, updatedAt: now }).where(and(eq(eventoCupomRetencoesTabela.id, row.id), eq(eventoCupomRetencoesTabela.status, "ATIVA"))).returning();
@@ -135,7 +153,7 @@ export class EventosCuponsService {
   }
 
   async confirmarUso(orderId: string, db: Database = this.db): Promise<void> {
-    const order = await this.pedido(orderId, db);
+    const order = await this.pedido(orderId, db, !(db as any)?.__eventosLocksHeld);
     if (!order || !["AGUARDANDO_PAGAMENTO", "CONFIRMADO", "USADO"].includes(order.status)) return;
     const { coupon, snapshot } = await this.cupomDoPedido(order, db, true);
     if (!coupon || !snapshot) return;
@@ -170,15 +188,25 @@ export class EventosCuponsService {
   }
 
   async reverterUso(orderId: string, motivo: string, db: Database = this.db): Promise<void> {
-    const order = await this.pedido(orderId, db);
-    const { coupon } = await this.cupomDoPedido(order, db, true);
-    if (!coupon) return;
-    const usos = (await this.lock<any[]>(db.select().from(eventoCupomUsos).where(eq(eventoCupomUsos.couponId, coupon.id)))) as any[];
-    const uso = usos.find((row) => row.orderId === orderId);
-    if (!uso || uso.status !== "CONFIRMADO") return;
-    const now = new Date();
-    await db.update(eventoCupomUsos).set({ status: "REVERTIDO", revertedAt: now, updatedAt: now }).where(and(eq(eventoCupomUsos.id, uso.id), eq(eventoCupomUsos.status, "CONFIRMADO"))).returning();
-    await this.auditoria(db, coupon, "USO_REVERTIDO", orderId, { motivo });
+    await this.transactionFor(db, async (tx) => {
+      // A confirmação adquire os mesmos locks na ordem pedido → cupom → uso.
+      // Isso impede que um refund leia antes da conversão e perca a reversão.
+      const order = await this.pedido(orderId, tx, !(tx as any)?.__eventosLocksHeld);
+      const { coupon } = await this.cupomDoPedido(order, tx, true);
+      if (!coupon) return;
+      const usos = (await this.lock<any[]>(tx.select().from(eventoCupomUsos).where(eq(eventoCupomUsos.couponId, coupon.id)))) as any[];
+      const uso = usos.find((row) => row.orderId === orderId);
+      if (!uso || uso.status !== "CONFIRMADO") return;
+      const now = new Date();
+      const reverted = await tx.update(eventoCupomUsos)
+        .set({ status: "REVERTIDO", revertedAt: now, updatedAt: now })
+        .where(and(eq(eventoCupomUsos.id, uso.id), eq(eventoCupomUsos.status, "CONFIRMADO")))
+        .returning();
+      // Outra operação pode ter concluído a transição depois do SELECT. Nesse
+      // caso a linha já está tratada e não devemos registrar auditoria falsa.
+      if (!this.updatedExactlyOne(reverted)) return;
+      await this.auditoria(tx, coupon, "USO_REVERTIDO", orderId, { motivo });
+    });
   }
 
   async reverterUsoPorPedido(orderId: string, motivo: string, db: Database = this.db): Promise<void> {
