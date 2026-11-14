@@ -66,7 +66,7 @@ describe("EventosCuponsService", () => {
       order: { id: "order-1", appliedCouponId: "coupon-1", couponSnapshot: { id: "coupon-1", code: "DEZ", version: 1, pricingType: "PERCENTUAL", discountPercent: 10 } },
       coupon: { id: "coupon-1", eventId: "event-1", code: "DEZ", version: 1, pricingType: "PERCENTUAL", discountPercent: 10, active: true, usageLimit: 2, usageLimitPerBuyer: 1, startsAt: null, endsAt: null },
     });
-    const expiresAt = new Date("2026-11-13T15:00:00Z");
+    const expiresAt = new Date("2026-11-14T15:00:00Z");
     const cupons = service(db);
 
     await cupons.reterUso("order-1", "checkout-1", { email: " Ana@EXAMPLE.com ", phone: "+55 (11) 99999-9999" }, expiresAt, db as any);
@@ -75,6 +75,7 @@ describe("EventosCuponsService", () => {
     expect(db.retencoes).toHaveLength(1);
     expect(db.retencoes[0]).toMatchObject({ status: "ATIVA", buyerEmail: "ana@example.com", buyerPhone: "5511999999999", expiresAt });
 
+    db.order.status = "AGUARDANDO_PAGAMENTO";
     await cupons.confirmarUso("order-1", db as any);
     await cupons.confirmarUso("order-1", db as any);
     expect(db.usos).toHaveLength(1);
@@ -123,6 +124,26 @@ describe("EventosCuponsService", () => {
     expect(db.usos[0]).toMatchObject({ status: "REVERTIDO", revertedAt: expect.any(Date) });
     expect(db.audit.filter((entry: any) => entry.action === "USO_REVERTIDO")).toHaveLength(1);
   });
+
+  it("libera e rejeita retenção expirada antes de confirmar", async () => {
+    const db = cupomUsoDb({
+      order: { id: "order-expirada", status: "AGUARDANDO_PAGAMENTO", appliedCouponId: "coupon-1", couponDiscountCents: 100, couponSnapshot: { id: "coupon-1", code: "DEZ", version: 1, pricingType: "PERCENTUAL", discountPercent: 10 } },
+      coupon: { id: "coupon-1", eventId: "event-1", code: "DEZ", version: 1, pricingType: "PERCENTUAL", discountPercent: 10, active: true, usageLimit: null, usageLimitPerBuyer: null, startsAt: null, endsAt: null },
+      retencoes: [{ id: "ret-expirada", couponId: "coupon-1", orderId: "order-expirada", status: "ATIVA", buyerEmail: "a@example.com", buyerPhone: "5511999999999", expiresAt: new Date("2026-11-13T10:00:00Z") }],
+    });
+    await expect(service(db).confirmarUso("order-expirada", db as any)).rejects.toMatchObject({ response: { code: "COUPON_RETENTION_EXPIRED" } });
+    expect(db.retencoes[0].status).toBe("LIBERADA");
+    expect(db.usos).toHaveLength(0);
+  });
+
+  it("mantém snapshot aplicado quando cupom é desativado depois", async () => {
+    const db = cupomUsoDb({
+      order: { id: "order-desativado", appliedCouponId: "coupon-1", couponSnapshot: { id: "coupon-1", code: "DEZ", version: 1, pricingType: "PERCENTUAL", discountPercent: 10 } },
+      coupon: { id: "coupon-1", eventId: "event-1", code: "DEZ", version: 1, pricingType: "PERCENTUAL", discountPercent: 10, active: false, usageLimit: null, usageLimitPerBuyer: null, startsAt: null, endsAt: null },
+    });
+    await expect(service(db).reterUso("order-desativado", "checkout-1", { email: "a@example.com", phone: "5511999999999" }, new Date("2026-11-14T16:00:00Z"), db as any)).resolves.toBeUndefined();
+    expect(db.retencoes).toHaveLength(1);
+  });
 });
 
 function service(db: any) { return new EventosCuponsService({ db } as any); }
@@ -137,7 +158,7 @@ function fakeDb(options: { selects?: unknown[][]; insert?: (values: any) => any[
 }
 
 function cupomUsoDb(config: { order: any; coupon: any; retencoes?: any[]; usos?: any[] }) {
-  const db: any = { order: config.order, coupon: config.coupon, retencoes: config.retencoes ?? [], usos: config.usos ?? [], audit: [] };
+  const db: any = { order: { status: "RESERVADO", expiresAt: new Date("2026-11-14T23:00:00Z"), ...config.order }, coupon: config.coupon, retencoes: config.retencoes ?? [], usos: config.usos ?? [], audit: [] };
   db.transaction = async (callback: (tx: any) => Promise<unknown>) => callback(db);
   db.select = () => {
     let table: unknown;

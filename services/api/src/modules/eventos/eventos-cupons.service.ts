@@ -78,16 +78,23 @@ export class EventosCuponsService {
 
   private validarSnapshot(coupon: any, snapshot: any, now: Date) {
     if (!coupon || !snapshot) throw new NotFoundException({ code: "COUPON_NOT_FOUND", message: "Cupom não encontrado" });
-    if (!coupon.active) throw new BadRequestException({ code: "COUPON_INACTIVE", message: "Cupom inativo" });
-    if (coupon.startsAt && now < coupon.startsAt) throw new BadRequestException({ code: "COUPON_NOT_STARTED", message: "Cupom ainda não está válido" });
-    if (coupon.endsAt && now >= coupon.endsAt) throw new BadRequestException({ code: "COUPON_EXPIRED", message: "Cupom expirado" });
     if (Number(coupon.version) !== Number(snapshot.version) || normalizarCodigoCupom(String(coupon.code ?? "")) !== normalizarCodigoCupom(String(snapshot.code ?? "")) || coupon.pricingType !== snapshot.pricingType || (coupon.pricingType === "PERCENTUAL" && Number(coupon.discountPercent) !== Number(snapshot.discountPercent)) || (coupon.pricingType === "VALOR_FIXO" && Number(coupon.discountCents) !== Number(snapshot.discountCents))) {
       throw new ConflictException({ code: "COUPON_CHANGED", message: "O cupom mudou desde a aplicação no pedido" });
     }
+    void now;
+  }
+
+  private validarVigencia(coupon: any, now: Date) {
+    if (!coupon.active) throw new BadRequestException({ code: "COUPON_INACTIVE", message: "Cupom inativo" });
+    if (coupon.startsAt && now < coupon.startsAt) throw new BadRequestException({ code: "COUPON_NOT_STARTED", message: "Cupom ainda não está válido" });
+    if (coupon.endsAt && now >= coupon.endsAt) throw new BadRequestException({ code: "COUPON_EXPIRED", message: "Cupom expirado" });
   }
 
   async reterUso(orderId: string, checkoutKey: string, buyer: CompradorCupom, expiresAt: Date, db: Database = this.db): Promise<void> {
     const order = await this.pedido(orderId, db);
+    if (!order || !["RESERVADO", "AGUARDANDO_PAGAMENTO"].includes(order.status)) {
+      throw new ConflictException({ code: "ORDER_NOT_AVAILABLE", message: "Pedido indisponível para retenção do cupom" });
+    }
     const { coupon, snapshot } = await this.cupomDoPedido(order, db, true);
     if (!coupon || !snapshot) return;
     const now = new Date();
@@ -99,7 +106,12 @@ export class EventosCuponsService {
     const retencoes = (await this.lock<any[]>(retencoesQuery)) as any[];
     const usos = (await this.lock<any[]>(usosQuery)) as any[];
     const own = retencoes.find((row) => row.orderId === orderId);
-    if (own?.status === "ATIVA" || own?.status === "CONVERTIDA") return;
+    if (own?.status === "ATIVA" || own?.status === "CONVERTIDA") {
+      // A retenção é idempotente por pedido; a chave só identifica a tentativa
+      // de checkout e não pode criar uma segunda retenção para a mesma ordem.
+      void checkoutKey;
+      return;
+    }
     for (const row of retencoes.filter((candidate) => candidate.status === "ATIVA" && candidate.expiresAt && new Date(candidate.expiresAt) <= now)) {
       await db.update(eventoCupomRetencoesTabela).set({ status: "LIBERADA", releasedAt: now, updatedAt: now }).where(and(eq(eventoCupomRetencoesTabela.id, row.id), eq(eventoCupomRetencoesTabela.status, "ATIVA"))).returning();
       row.status = "LIBERADA";
@@ -121,6 +133,7 @@ export class EventosCuponsService {
 
   async confirmarUso(orderId: string, db: Database = this.db): Promise<void> {
     const order = await this.pedido(orderId, db);
+    if (!order || !["AGUARDANDO_PAGAMENTO", "CONFIRMADO", "USADO"].includes(order.status)) return;
     const { coupon, snapshot } = await this.cupomDoPedido(order, db, true);
     if (!coupon || !snapshot) return;
     const retencoes = (await this.lock<any[]>(db.select().from(eventoCupomRetencoesTabela).where(eq(eventoCupomRetencoesTabela.couponId, coupon.id)))) as any[];
@@ -130,6 +143,13 @@ export class EventosCuponsService {
     if (uso?.status === "CONFIRMADO" || uso?.status === "REVERTIDO") return;
     if (!own || own.status !== "ATIVA") return;
     const now = new Date();
+    if ((own.expiresAt && new Date(own.expiresAt) <= now) || (order.expiresAt && new Date(order.expiresAt) <= now)) {
+      await db.update(eventoCupomRetencoesTabela).set({ status: "LIBERADA", releasedAt: now, updatedAt: now }).where(and(eq(eventoCupomRetencoesTabela.id, own.id), eq(eventoCupomRetencoesTabela.status, "ATIVA"))).returning();
+      await this.auditoria(db, coupon, "RETENCAO_LIBERADA", orderId, { motivo: "retencao_expirada" });
+      throw new BadRequestException({ code: "COUPON_RETENTION_EXPIRED", message: "A retenção do cupom expirou" });
+    }
+    this.validarSnapshot(coupon, snapshot, now);
+    this.validarVigencia(coupon, now);
     await db.update(eventoCupomRetencoesTabela).set({ status: "CONVERTIDA", convertedAt: now, updatedAt: now }).where(and(eq(eventoCupomRetencoesTabela.id, own.id), eq(eventoCupomRetencoesTabela.status, "ATIVA"))).returning();
     await db.insert(eventoCupomUsos).values({ couponId: coupon.id, orderId, status: "CONFIRMADO", buyerEmail: own.buyerEmail, buyerPhone: own.buyerPhone, discountCents: Number(order?.couponDiscountCents ?? 0), couponSnapshot: snapshot, confirmedAt: now }).returning();
     await this.auditoria(db, coupon, "USO_CONFIRMADO", orderId, { discountCents: Number(order?.couponDiscountCents ?? 0) });

@@ -21,4 +21,13 @@ Implementação concluída no commit `feat: controla usos concorrentes de cupons
 
 O repositório não possui fluxo de reembolso/cancelamento de pedido confirmado neste módulo; portanto `reverterUso` fica disponível e idempotente para ser chamado pelo fluxo compartilhado extraído na Task 6. A resposta de checkout gratuito usa `clientSecret: ""`, preservando o contrato atual enquanto evita a criação de Stripe.
 
+## Fix round 1
+
+- Confirmação agora verifica estado do pedido, validade do snapshot/cupom e expiração da retenção; retenções vencidas são liberadas sob lock e não viram uso confirmado.
+- A retenção continua aceitando snapshot já aplicado mesmo após desativação/expiração administrativa do cupom; a validade atual é exigida somente na confirmação paga.
+- Foram adicionadas regressões de checkout gratuito sem Stripe, liberação manual/expiração/falha do gateway e confirmação compartilhada.
+- Retry com chave de checkout diferente para o mesmo pedido permanece idempotente e não cria uma segunda retenção; a chave identifica a tentativa, enquanto a unicidade operacional é `couponId + orderId`.
+
+Validação do fix: 113 testes focados PASS (incluindo `eventos-cupons`, `eventos-public-sales` e `eventos-pagamentos`), typecheck da API PASS.
+
 Atualizado em: 2026-11-13

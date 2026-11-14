@@ -69,6 +69,13 @@ describe("EventosPagamentosService", () => {
     expect(db.state.tickets).toHaveLength(1);
   });
 
+  it("confirma uso de cupom pelo serviço compartilhado após pagamento", async () => {
+    const db = new FakeEventosDb();
+    const cupons = { confirmarUso: jest.fn().mockResolvedValue(undefined) };
+    await new EventosPagamentosService({ db } as any, cupons as any).confirmarCheckout({ checkoutSessionId: "cs-1", amountCents: 1_000 });
+    expect(cupons.confirmarUso).toHaveBeenCalledWith("order-1", db);
+  });
+
   it("bloqueia pedido, inventário e reserva antes do pagamento", async () => {
     const db = new FakeEventosDb();
     const service = new EventosPagamentosService({ db } as any);
@@ -176,6 +183,13 @@ describe("EventosPagamentosService", () => {
     expect(db.state.order.status).toBe("CANCELADO");
   });
 
+  it("libera retenção de cupom quando gateway falha", async () => {
+    const db = new FakeEventosDb();
+    const cupons = { liberarRetencao: jest.fn().mockResolvedValue(undefined) };
+    await new EventosPagamentosService({ db } as any, cupons as any).falharCheckout({ checkoutSessionId: "cs-1", reason: "Checkout expirado" });
+    expect(cupons.liberarRetencao).toHaveBeenCalledWith("order-1", "falha_gateway", db);
+  });
+
   it("exige segredo dedicado para assinar ingressos", () => {
     const original = process.env.EVENTOS_QR_SECRET;
     delete process.env.EVENTOS_QR_SECRET;
@@ -234,6 +248,16 @@ describe("EventosExpirationJob", () => {
     await service.liberarReservasExpiradas(new Date("2026-10-28T12:00:00Z"));
 
     expect(db.lockSequence.slice(0, 3)).toEqual(["eventoPedidos", "inventário:inventory-1", "eventoReservas"]);
+  });
+
+  it("libera retenção de cupom ao expirar reserva", async () => {
+    const db = new FakeEventosDb();
+    db.state.reservation.expiresAt = new Date("2026-10-28T11:00:00Z");
+    db.state.inventory.reservationExpiresAt = new Date("2026-10-28T11:00:00Z");
+    const cupons = { liberarRetencao: jest.fn().mockResolvedValue(undefined) };
+    const sales = new EventosPublicSalesService({ db } as any, undefined as any, cupons as any);
+    await sales.liberarReservasExpiradas(new Date("2026-10-28T12:00:00Z"));
+    expect(cupons.liberarRetencao).toHaveBeenCalledWith("order-1", "expiracao", db);
   });
 });
 

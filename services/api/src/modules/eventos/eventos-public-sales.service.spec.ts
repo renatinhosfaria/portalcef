@@ -77,6 +77,13 @@ describe("EventosPublicSalesService - contratos públicos", () => {
     expect(db.mutations).toBe(0);
   });
 
+  it("libera retenção quando comprador libera o pedido", async () => {
+    const db = liberarPedidoDb({ order: { id: "order-retencao", orderNumber: "ABC123DEF456", status: "AGUARDANDO_PAGAMENTO" }, payment: { id: "payment-retencao", orderId: "order-retencao", status: "PENDENTE", stripeCheckoutSessionId: null }, inventories: [], reservations: [] });
+    const cupons = { liberarRetencao: jest.fn().mockResolvedValue(undefined) };
+    await new EventosPublicSalesService({ db } as any, undefined as any, cupons as any).liberarPedido("ABC123DEF456");
+    expect(cupons.liberarRetencao).toHaveBeenCalledWith("order-retencao", "liberar_pedido", db);
+  });
+
   it("não cancela pedido quando uma confirmação ocorre durante a transação", async () => {
     const db = liberarPedidoDb({
       order: { id: "order-corrida", orderNumber: "ABC123DEF456", status: "AGUARDANDO_PAGAMENTO" },
@@ -175,6 +182,15 @@ describe("EventosPublicSalesService - contratos públicos", () => {
     expect(results[1]).toMatchObject({ clientSecret: "cs_secret_unica" });
     expect(createEmbeddedCheckoutSession).toHaveBeenCalledTimes(1);
     expect(db.payments).toHaveLength(1);
+  });
+
+  it("retém cupom no checkout gratuito e não cria Stripe", async () => {
+    const db = checkoutDb({ id: "order-gratis", orderNumber: "ABC123DEF456", status: "RESERVADO", totalCents: 0, buyerName: "Ana", buyerEmail: "a@b.com", buyerPhone: "11999999999", expiresAt: new Date(Date.now() + 60_000), eventId: "event-1", sessionId: "session-1" }, [{ item: { ticketTypeId: "ticket", unitPriceCents: 0, quantity: 1 }, ticket: { name: "Cortesia" } }]);
+    const cupons = { reterUso: jest.fn().mockResolvedValue(undefined) };
+    const payments = { createEmbeddedCheckoutSession: jest.fn() };
+    await expect(new EventosPublicSalesService({ db } as any, payments as any, cupons as any).iniciarCheckout("ABC123DEF456", { returnUrl: "https://eventos.portalcef.com.br/pagamento/retorno", idempotencyKey: "checkout-gratis-123456" })).resolves.toMatchObject({ clientSecret: "" });
+    expect(cupons.reterUso).toHaveBeenCalledWith("order-gratis", "checkout-gratis-123456", { email: "a@b.com", phone: "11999999999" }, expect.any(Date), db);
+    expect(payments.createEmbeddedCheckoutSession).not.toHaveBeenCalled();
   });
 
   it("usa o preço persistido do ingresso e retorna itens da reserva", async () => {
