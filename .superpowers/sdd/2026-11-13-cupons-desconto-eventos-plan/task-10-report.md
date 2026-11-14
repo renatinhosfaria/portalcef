@@ -27,6 +27,7 @@ A integração final foi concluída no commit desta task. Fixtures legadas foram
 - `pnpm turbo typecheck` — PASS (22 pacotes).
 - `git diff --check` — PASS.
 - Rodada de revisão: fixture de checkout, teste focado de `checkout.test.tsx`, `@essencia/components test/typecheck/lint` e `@essencia/eventos typecheck/lint` — PASS; o lint de eventos mantém apenas o warning preexistente de `<img>`.
+- Rodada de revisão 2: removida a oferta artificial da fixture de checkout para manter quantidade, descontos e total semanticamente coerentes; `checkout.test.tsx` validado novamente.
 
 A execução integral de `pnpm --filter @essencia/api exec jest src/modules/eventos --runInBand` também foi feita. As suítes de cupons, checkout, pagamentos e confirmação passaram; 19 testes legados de `mapas/gerador` falharam com `ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING_FLAG`/`--experimental-vm-modules`, falha preexistente e fora do escopo desta task.
 
