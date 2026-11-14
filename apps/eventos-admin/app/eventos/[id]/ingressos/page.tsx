@@ -8,7 +8,7 @@ import { OfertaEditor } from "@/features/eventos/oferta-editor";
 import { construirPayloadOferta, ofertaInicial, ofertaProntaParaSalvar, type OfertaValue } from "@/features/eventos/ofertas-contratos";
 import { useEventoAutosave } from "@/features/eventos/use-evento-autosave";
 import { CupomEditor } from "@/features/eventos/cupom-editor";
-import { construirPayloadCupom, cupomInicial, cupomProntoParaSalvar, type CupomValue } from "@/features/eventos/cupons-contratos";
+import { construirPayloadCupom, codigosCupomDuplicados, cupomInicial, cupomProntoParaSalvar, normalizarDataCupom, type CupomValue } from "@/features/eventos/cupons-contratos";
 
 export default function IngressosPage() {
   const { id } = useParams<{ id: string }>();
@@ -41,7 +41,7 @@ export default function IngressosPage() {
     setCuponsLoading(true);
     fetch(`/eventos-admin/api/eventos/admin/${id}/cupons`, { credentials: "include" })
       .then((response) => response.ok ? response.json() : Promise.reject())
-      .then((body: unknown) => { const data = body && typeof body === "object" && "data" in body ? (body as { data?: unknown }).data : body; setCupons(Array.isArray(data) ? data as CupomValue[] : []); })
+      .then((body: unknown) => { const data = body && typeof body === "object" && "data" in body ? (body as { data?: unknown }).data : body; setCupons(Array.isArray(data) ? (data as CupomValue[]).map((item) => ({ ...item, startsAt: normalizarDataCupom(item.startsAt), endsAt: normalizarDataCupom(item.endsAt) })) : []); })
       .catch(() => setCuponsError("Não foi possível carregar os cupons."))
       .finally(() => setCuponsLoading(false));
   }, [id]);
@@ -124,7 +124,7 @@ export default function IngressosPage() {
   });
 
   const cuponsAutosave = useEventoAutosave({
-    eventId: id, value: cupons, dirty: !cuponsLoading && !cuponsError && cuponsDirty && cupomProntoParaSalvar(cupons), serialize: (value) => value.map(construirPayloadCupom),
+    eventId: id, value: cupons, dirty: !cuponsLoading && !cuponsError && cuponsDirty && cupomProntoParaSalvar(cupons) && codigosCupomDuplicados(cupons).length === 0, serialize: (value) => value.map(construirPayloadCupom),
     save: async (payload, eventId) => { const revision = cuponsRevision.current; const response = await fetch(`/eventos-admin/api/eventos/admin/${eventId}/cupons`, { method: "PATCH", credentials: "include", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) }); const body = await response.json().catch(() => ({})); assertRespostaApi({ ok: response.ok, status: response.status, body }); const data = body.data ?? body; queueMicrotask(() => { if (cuponsRevision.current === revision) { setCupons(Array.isArray(data) ? data as CupomValue[] : []); setCuponsDirty(false); } }); },
     onSaved: () => router.refresh(), debounceMs: 700,
   });
@@ -227,9 +227,10 @@ export default function IngressosPage() {
       <section className="space-y-4 border-t border-slate-200 pt-5" aria-labelledby="cupons-heading">
         <div><h2 id="cupons-heading" className="text-xl font-semibold">Cupons de desconto</h2><p className="text-sm text-slate-600">Cadastre vários cupons, limites e vigência. Alterações são versionadas automaticamente.</p></div>
         {cuponsLoading && <p role="status">Carregando cupons…</p>}{cuponsError && <p role="alert" className="text-red-700">{cuponsError}</p>}
-        {!cuponsLoading && cupons.map((cupom, index) => <CupomEditor key={cupom.id ?? `novo-${index}`} value={cupom} disabled={Boolean(cuponsError) || cuponsAutosave.state === "saving"} onChange={(next) => { cuponsRevision.current += 1; setCupons(current => current.map((item, itemIndex) => itemIndex === index ? next : item)); setCuponsDirty(true); }} onDelete={() => { cuponsRevision.current += 1; setCupons(current => current.filter((_, itemIndex) => itemIndex !== index)); setCuponsDirty(true); }} />)}
+        {!cuponsLoading && cupons.map((cupom, index) => <CupomEditor key={cupom.id ?? `novo-${index}`} value={cupom} disabled={Boolean(cuponsError) || cuponsAutosave.state === "saving"} onChange={(next) => { cuponsRevision.current += 1; setCupons(current => current.map((item, itemIndex) => itemIndex === index ? next : item)); setCuponsDirty(true); }} onDelete={async () => { if (!cupom.id) { setCupons(current => current.filter((_, itemIndex) => itemIndex !== index)); setCuponsDirty(true); return; } const response = await fetch(`/eventos-admin/api/eventos/admin/${id}/cupons/${cupom.id}`, { method: "DELETE", credentials: "include" }); const body = await response.json().catch(() => ({})); try { assertRespostaApi({ ok: response.ok, status: response.status, body }); setCupons(current => current.filter(item => item.id !== cupom.id)); router.refresh(); } catch (deleteError) { setCuponsError(deleteError instanceof Error ? deleteError.message : "Não foi possível excluir o cupom."); } }} />)}
         <button type="button" className="rounded border px-3 py-2" disabled={cuponsLoading || Boolean(cuponsError)} onClick={() => { cuponsRevision.current += 1; setCupons(current => [...current, { ...cupomInicial }]); setCuponsDirty(true); }}>Adicionar cupom</button>
         {!cuponsLoading && <p role="status" className="text-sm text-slate-500">{cuponsDirty && !cupomProntoParaSalvar(cupons) ? "Revise os cupons antes de salvar." : cuponsAutosave.state === "saving" ? "Salvando cupons…" : cuponsAutosave.state === "saved" ? "Cupons salvos automaticamente" : cuponsAutosave.state === "conflict" ? "Conflito de versão dos cupons; recarregue para revisar." : ""}</p>}
+        {codigosCupomDuplicados(cupons).length > 0 && <p role="alert" className="text-red-700">Código de cupom duplicado: {codigosCupomDuplicados(cupons).join(", ")}</p>}
       </section>
     </section>
   );

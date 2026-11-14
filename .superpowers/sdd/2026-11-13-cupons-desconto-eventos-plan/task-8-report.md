@@ -14,3 +14,9 @@ Concluída.
 
 ## Preocupações
 - Datas são convertidas para `Date` no payload para atender ao contrato compartilhado; inputs usam `datetime-local`.
+
+## Rodada de correções
+- Adicionado DELETE administrativo protegido para cupom sem uso; cupons com uso confirmado retornam `COUPON_IN_USE` e permanecem bloqueados no editor.
+- GET normaliza datas ISO para `datetime-local` e mantém conversão para `Date` no payload.
+- Editor bloqueia autosave e mostra mensagem específica para códigos duplicados normalizados.
+- Testes adicionais da API: 15 aprovados; testes do admin: 12 aprovados; typecheck da API e do admin aprovados.

@@ -230,4 +230,17 @@ export class EventosCuponsService {
       return saved.map((summary) => ({ ...summary, confirmedUses: counts.get(summary.id) ?? 0 }));
     });
   }
+
+  async remover(eventId: string, couponId: string, actor: EventoActor): Promise<void> {
+    await this.transaction(async (tx) => {
+      await this.evento(eventId, actor, tx, true);
+      const rows = await this.lock<any[]>(tx.select().from(eventoCupons).where(and(eq(eventoCupons.id, couponId), eq(eventoCupons.eventId, eventId))));
+      const coupon = rows[0];
+      if (!coupon) throw new NotFoundException({ code: "COUPON_NOT_FOUND", message: "Cupom não encontrado" });
+      const counts = await this.usos([coupon], tx);
+      if ((counts.get(coupon.id) ?? 0) > 0) throw new ConflictException({ code: "COUPON_IN_USE", message: "Cupom usado não pode ser excluído" });
+      await tx.delete(eventoCupons).where(and(eq(eventoCupons.id, couponId), eq(eventoCupons.eventId, eventId)));
+      await tx.insert(eventoAuditorias).values({ eventId, actorId: actor.userId, actorRole: actor.role, action: "EXCLUIDO", resourceType: "cupom", resourceId: coupon.id, version: coupon.version, metadata: { code: coupon.code } });
+    });
+  }
 }

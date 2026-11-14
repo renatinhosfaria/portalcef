@@ -8,6 +8,13 @@ export type CupomValue = {
 };
 
 export const cupomInicial: CupomValue = { code: "", name: "", pricingType: "PERCENTUAL", discountPercent: 10, discountCents: null, startsAt: null, endsAt: null, usageLimit: null, usageLimitPerBuyer: null, active: true, confirmedUses: 0 };
+export function normalizarDataCupom(value: string | Date | null | undefined): string {
+  if (!value) return "";
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const pad = (number: number) => String(number).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
 
 export function construirPayloadCupom(value: CupomValue): AtualizarCupomInput {
   return {
@@ -31,3 +38,4 @@ function cupomValido(value: CupomValue) {
   return code && percent && fixed && dates && limits;
 }
 export function cupomProntoParaSalvar(value: CupomValue | CupomValue[]) { const values = Array.isArray(value) ? value : [value]; return values.length > 0 && values.every(cupomValido); }
+export function codigosCupomDuplicados(values: CupomValue[]): string[] { const counts = new Map<string, number>(); values.forEach((item) => { const code = item.code.trim().toUpperCase(); if (code) counts.set(code, (counts.get(code) ?? 0) + 1); }); return [...counts.entries()].filter(([, count]) => count > 1).map(([code]) => code); }

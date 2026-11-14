@@ -15,12 +15,24 @@ describe("EventosCuponsService", () => {
     const proto = EventosAdminController.prototype as any;
     expect(typeof proto.coupons).toBe("function");
     expect(typeof proto.updateCoupons).toBe("function");
+    expect(typeof proto.deleteCoupon).toBe("function");
     expect(Reflect.getMetadata(ROLES_KEY, EventosAdminController)).toEqual(EVENTOS_ADMIN_ROLES);
     expect(Reflect.getMetadata(EXACT_ROLES_KEY, EventosAdminController)).toBe(true);
   });
 
   it("recusa evento fora do escopo da escola", async () => {
     await expect(service(fakeDb({ selects: [[evento({ schoolId: "s2" })]] })).listarAdmin("e1", actor)).rejects.toMatchObject({ response: { code: "FORBIDDEN" } });
+  });
+
+  it("remove cupom sem uso e bloqueia cupom usado", async () => {
+    const deleted: string[] = [];
+    const db: any = fakeDb({ selects: [[evento()], [cupom()], []] });
+    db.delete = () => ({ where: async () => { deleted.push("c1"); } });
+    await expect(service(db).remover("e1", "c1", actor)).resolves.toBeUndefined();
+    expect(deleted).toEqual(["c1"]);
+    const usado: any = fakeDb({ selects: [[evento()], [cupom()], [{ couponId: "c1", confirmedUses: 1 }]] });
+    usado.delete = () => ({ where: async () => { throw new Error("não deveria excluir"); } });
+    await expect(service(usado).remover("e1", "c1", actor)).rejects.toMatchObject({ response: { code: "COUPON_IN_USE" } });
   });
 
   it("normaliza código, cria vários cupons e resume usos confirmados", async () => {
@@ -169,6 +181,7 @@ function fakeDb(options: { selects?: unknown[][]; insert?: (values: any) => any[
   db.select = () => ({ from: () => ({ where: () => { const rows = options.selects?.[selectIndex++] ?? []; const query: any = Promise.resolve(rows); query.for = () => query; query.groupBy = () => query; return query; } }) });
   db.insert = (table: unknown) => ({ values: (values: any) => { if (table) db.audit.push(values); return { returning: async () => options.insert?.(values) ?? [] }; } });
   db.update = () => ({ set: (values: any) => ({ where: () => ({ returning: async () => options.update?.(values) ?? [] }) }) });
+  db.delete = () => ({ where: async () => undefined });
   db.transaction = async (callback: (tx: any) => Promise<unknown>) => callback(db);
   return db;
 }

@@ -129,6 +129,12 @@ export class EventosAdminController {
     return { success: true, data: await this.cuponsService!.atualizar(id, parsed.filter((item): item is { success: true; data: any } => item.success).map((item) => item.data), actor) };
   }
 
+  @Delete(":id/cupons/:couponId")
+  async deleteCoupon(@Param("id") id: string, @Param("couponId") couponId: string, @CurrentUser() actor: any) {
+    await this.cuponsService!.remover(id, couponId, actor);
+    return { success: true, data: null };
+  }
+
   @Get(":id/ofertas")
   offers(@Param("id") id: string, @CurrentUser() actor: any) { return this.ofertasService!.listarAdmin(id, actor); }
 

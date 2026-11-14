@@ -20,4 +20,10 @@ describe("contratos de cupom", () => {
   it("permite vários cupons e mantém inativos como histórico", () => {
     expect(cupomProntoParaSalvar([{ ...cupomInicial, code: "ATIVO" }, { ...cupomInicial, code: "INATIVO", active: false }])).toBe(true);
   });
+
+  it("normaliza datas ISO para o formato aceito pelo datetime-local", async () => {
+    const { normalizarDataCupom } = await import("./cupons-contratos");
+    expect(normalizarDataCupom("2026-11-13T10:30:00.000Z")).toMatch(/^2026-11-13T/);
+    expect(normalizarDataCupom(null)).toBe("");
+  });
 });
