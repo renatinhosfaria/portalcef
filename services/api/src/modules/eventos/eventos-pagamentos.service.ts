@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException, ConflictException } from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException, ConflictException, Optional } from "@nestjs/common";
 import {
   and,
   eq,
@@ -17,6 +17,7 @@ import {
 import { DatabaseService } from "../../common/database/database.service";
 import { gerarNumeroIngresso } from "@essencia/shared/eventos/ingresso";
 import { gerarTokenIngresso } from "./token-ingresso";
+import { EventosCuponsService } from "./eventos-cupons.service";
 
 type ConfirmarCheckoutInput = {
   checkoutSessionId: string;
@@ -35,7 +36,7 @@ type FalharCheckoutInput = {
 
 @Injectable()
 export class EventosPagamentosService {
-  constructor(private readonly database: DatabaseService) {
+  constructor(private readonly database: DatabaseService, @Optional() private readonly cuponsService?: EventosCuponsService) {
     if (!process.env.EVENTOS_QR_SECRET) {
       throw new Error("EVENTOS_QR_SECRET não configurada no ambiente");
     }
@@ -237,6 +238,7 @@ export class EventosPagamentosService {
       if (typeof tx.insert === "function" && order.eventId && payment.id) {
         await tx.insert(eventoAuditorias).values({ eventId: order.eventId, action: "CONFIRMADO", resourceType: "pagamento", resourceId: payment.id, metadata: { checkoutSessionId: input.checkoutSessionId || null, paymentIntentId: input.paymentIntentId || null, amountCents: input.amountCents } });
       }
+      if (this.cuponsService) await this.cuponsService.confirmarUso(order.id, tx);
     });
   }
 
@@ -284,6 +286,7 @@ export class EventosPagamentosService {
       if (typeof tx.insert === "function" && order.eventId && payment.id) {
         await tx.insert(eventoAuditorias).values({ eventId: order.eventId, action: "CANCELADO", resourceType: "pagamento", resourceId: payment.id, reason: "checkout_failed" });
       }
+      if (this.cuponsService) await this.cuponsService.liberarRetencao(order.id, "falha_gateway", tx);
     });
   }
 }

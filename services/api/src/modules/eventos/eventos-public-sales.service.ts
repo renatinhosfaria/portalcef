@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException, ServiceUnavailableException, forwardRef } from "@nestjs/common";
+import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException, Optional, ServiceUnavailableException, forwardRef } from "@nestjs/common";
 import { and, asc, desc, eq, eventoAceites, eventoCupons, eventoCupomUsos, eventoInventarioAssentos, eventoItensPedido, eventoLocais, eventoMapaAssentos, eventoOfertas, eventoPagamentos, eventoParticipantes, eventoPedidos, eventoPoliticas, eventoReservas, eventoSessoes, eventoTiposIngresso, eventoTokensConsulta, eventos, gt, inArray, isNull, lte, or, schema, type Database } from "@essencia/db";
 import { aplicarCupomSchema, finalizarPedidoSchema, meusIngressosSchema, pagamentoEmbutidoSchema, reservaPublicaSchema, type AplicarCupomInput, type FinalizarPedidoInput, type MeusIngressosInput, type PagamentoEmbutidoInput, type ReservaPublicaInput } from "@essencia/shared/schemas";
 import { normalizarCodigoCupom, type CupomPreco } from "@essencia/shared/types";
@@ -9,6 +9,7 @@ import { PaymentsService } from "../payments/payments.service";
 import { montarIngressosDoPedido } from "./montar-pedido-ingressos";
 import { gerarTokenAcesso, hashTokenAcesso, validadeAcesso } from "./acesso-pedido";
 import { violacaoDeUnico } from "../../common/database/violacao-unico";
+import { EventosCuponsService } from "./eventos-cupons.service";
 
 const fail = (code: string, message: string) => new BadRequestException({ code, message });
 const validated = <T>(schema: { safeParse(value: unknown): { success: boolean; data?: T } }, value: unknown): T => { const result = schema.safeParse(value); if (!result.success) throw fail("VALIDATION_ERROR", "Dados inválidos"); return result.data as T; };
@@ -19,7 +20,7 @@ const eventoTokensConsultaTabela = (eventoTokensConsulta as any) ?? (schema as a
 export class EventosPublicSalesService {
   private readonly checkoutLocks = new Map<string, Promise<void>>();
 
-  constructor(private readonly database: DatabaseService, @Inject(forwardRef(() => PaymentsService)) private readonly paymentsService: PaymentsService = undefined as never) {}
+  constructor(private readonly database: DatabaseService, @Inject(forwardRef(() => PaymentsService)) private readonly paymentsService: PaymentsService = undefined as never, @Optional() private readonly cuponsService?: EventosCuponsService) {}
   private get db(): Database { return this.database.db; }
   private async first<T>(query: any): Promise<T | undefined> { const rows = await query; return rows?.[0]; }
   private async lockRows<T>(query: any, tables?: any[]): Promise<T> {
@@ -392,7 +393,7 @@ export class EventosPublicSalesService {
 
   async iniciarCheckout(orderNumber: string, raw: unknown): Promise<PagamentoEmbutidoResult> {
     const input = validated<PagamentoEmbutidoInput>(pagamentoEmbutidoSchema, raw);
-    if (!this.paymentsService) throw new ServiceUnavailableException({ code: "CHECKOUT_UNAVAILABLE", message: "Checkout ainda indisponível" });
+    if (!this.paymentsService && typeof (this.db as any)?.select !== "function") throw new ServiceUnavailableException({ code: "CHECKOUT_UNAVAILABLE", message: "Checkout ainda indisponível" });
     this.validarUrlCheckout(input.returnUrl);
     return this.serializarCheckout(orderNumber, async () => {
       const executar = async (db: any): Promise<PagamentoEmbutidoResult> => {
@@ -415,6 +416,13 @@ export class EventosPublicSalesService {
         });
         const linesTotalCents = items.reduce((total: number, item: { unitAmount: number; quantity: number }) => total + item.unitAmount * item.quantity, 0);
         if (linesTotalCents !== order.totalCents) throw fail("CHECKOUT_AMOUNT_MISMATCH", "Linhas do checkout não fecham o total do pedido");
+
+        if (this.cuponsService) await this.cuponsService.reterUso(order.id, input.idempotencyKey, { email: order.buyerEmail, phone: order.buyerPhone ?? "" }, checkoutExpiresAt, db);
+        if (order.totalCents === 0) {
+          await this.estenderCheckout(order.id, checkoutExpiresAt, db);
+          return { clientSecret: "", expiresAt: checkoutExpiresAt, orderNumber: order.orderNumber };
+        }
+        if (!this.paymentsService) throw new ServiceUnavailableException({ code: "CHECKOUT_UNAVAILABLE", message: "Checkout ainda indisponível" });
 
         const existing = await this.first<any>(db.select().from(eventoPagamentos).where(eq(eventoPagamentos.orderId, order.id)));
         if (existing?.status === "PENDENTE" && existing.stripeCheckoutSessionId) {
@@ -561,6 +569,7 @@ export class EventosPublicSalesService {
       await tx.update(eventoPagamentos)
         .set({ status: "EXPIRADO", processedAt: now, updatedAt: now })
         .where(and(eq(eventoPagamentos.orderId, current.id), eq(eventoPagamentos.status, "PENDENTE")));
+      if (this.cuponsService) await this.cuponsService.liberarRetencao(current.id, "liberar_pedido", tx);
       const updatedOrder = await tx.update(eventoPedidos)
         .set({ status: "CANCELADO", cancelledAt: now, cancellationReason: "Lugares liberados pelo comprador", updatedAt: now })
         .where(and(
@@ -614,6 +623,7 @@ export class EventosPublicSalesService {
         if (["INICIADO", "RESERVADO", "AGUARDANDO_PAGAMENTO"].includes(order.status)) {
           await tx.update(eventoPedidos).set({ status: "EXPIRADO", cancelledAt: now, cancellationReason: "Reserva de Evento expirada", updatedAt: now }).where(and(eq(eventoPedidos.id, reservation.orderId), inArray(eventoPedidos.status, ["INICIADO", "RESERVADO", "AGUARDANDO_PAGAMENTO"] as any)));
           await tx.update(eventoPagamentos).set({ status: "EXPIRADO", processedAt: now, updatedAt: now }).where(and(eq(eventoPagamentos.orderId, reservation.orderId), eq(eventoPagamentos.status, "PENDENTE")));
+          if (this.cuponsService) await this.cuponsService.liberarRetencao(reservation.orderId, "expiracao", tx);
         }
         released += 1;
       }
