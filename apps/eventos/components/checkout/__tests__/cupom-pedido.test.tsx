@@ -57,6 +57,7 @@ describe("CupomPedido", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Remover cupom" }));
     expect((screen.getByRole("button", { name: "Removendo cupom…" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByRole("button", { name: "Aplicar cupom" })).toBeTruthy();
     resolver(pedido);
     await waitFor(() => expect(onAtualizar).toHaveBeenCalledWith(pedido));
     expect(screen.getByRole("status").textContent).toContain("Cupom removido");

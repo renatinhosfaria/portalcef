@@ -39,8 +39,8 @@ export function FluxoCheckout({ pedido, evento, sessao, politicas, publishableKe
   const acessoGuardado = useCallback(() => typeof window === "undefined" ? null : window.sessionStorage.getItem(`eventos:acesso:${pedidoAtual.orderNumber}`), [pedidoAtual.orderNumber]);
   const irParaIngressos = useCallback(() => {
     const acesso = acessoGuardado();
-    router.push(acesso ? `/pedido/${encodeURIComponent(pedido.orderNumber)}?acesso=${encodeURIComponent(acesso)}` : `/pedido/consulta?pedido=${encodeURIComponent(pedido.orderNumber)}`);
-  }, [acessoGuardado, pedido.orderNumber, router]);
+    router.push(acesso ? `/pedido/${encodeURIComponent(pedidoAtual.orderNumber)}?acesso=${encodeURIComponent(acesso)}` : `/pedido/consulta?pedido=${encodeURIComponent(pedidoAtual.orderNumber)}`);
+  }, [acessoGuardado, pedidoAtual.orderNumber, router]);
   const liberarUmaVez = useCallback(() => {
     if (!liberacaoPromiseRef.current) liberacaoPromiseRef.current = liberarPedido(pedidoAtual.orderNumber);
     return liberacaoPromiseRef.current;

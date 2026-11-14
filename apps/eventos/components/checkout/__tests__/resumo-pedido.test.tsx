@@ -27,4 +27,10 @@ describe("ResumoPedido", () => {
     render(<ResumoPedido pedido={{ ...pedido, couponDiscountCents: 10000, discountCents: 10000, totalCents: 0 }} evento={evento} sessao={sessao} onAlterar={vi.fn()} onAtualizar={vi.fn()} />);
     expect(screen.getAllByText("Pedido gratuito").length).toBeGreaterThan(0);
   });
+
+  it("informa pedido gratuito quando o subtotal retornado é zero", () => {
+    render(<ResumoPedido pedido={{ ...pedido, subtotalCents: 0, offerDiscountCents: 0, couponDiscountCents: 0, discountCents: 0, totalCents: 0, appliedOffer: null, appliedCoupon: null, items: [] }} evento={evento} sessao={sessao} onAlterar={vi.fn()} onAtualizar={vi.fn()} />);
+    expect(screen.getAllByText("R$ 0,00").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Pedido gratuito").length).toBeGreaterThan(0);
+  });
 });

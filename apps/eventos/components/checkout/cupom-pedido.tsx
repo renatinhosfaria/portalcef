@@ -8,7 +8,7 @@ type Props = { pedido: PedidoPublicoResult; onAtualizar: (pedido: PedidoPublicoR
 
 export function CupomPedido({ pedido, onAtualizar }: Props): React.JSX.Element {
   const [codigo, setCodigo] = useState(pedido.appliedCoupon?.code ?? "");
-  const [carregando, setCarregando] = useState(false);
+  const [acaoEmAndamento, setAcaoEmAndamento] = useState<"aplicar" | "remover" | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [mensagem, setMensagem] = useState<string | null>(null);
 
@@ -19,7 +19,7 @@ export function CupomPedido({ pedido, onAtualizar }: Props): React.JSX.Element {
   async function enviar(codigoParaAplicar: string, acao: "aplicar" | "remover") {
     setErro(null);
     setMensagem(null);
-    setCarregando(true);
+    setAcaoEmAndamento(acao);
     try {
       const atualizado = await aplicarCupom(pedido.orderNumber, codigoParaAplicar.trim());
       onAtualizar(atualizado);
@@ -28,7 +28,7 @@ export function CupomPedido({ pedido, onAtualizar }: Props): React.JSX.Element {
     } catch (cause) {
       setErro(cause instanceof EventosApiError || cause instanceof Error ? cause.message : "Não foi possível aplicar o cupom.");
     } finally {
-      setCarregando(false);
+      setAcaoEmAndamento(null);
     }
   }
 
@@ -37,11 +37,11 @@ export function CupomPedido({ pedido, onAtualizar }: Props): React.JSX.Element {
     <form onSubmit={(event) => { event.preventDefault(); if (codigo.trim()) void enviar(codigo, "aplicar"); }} className="space-y-2">
       <label htmlFor="codigo-cupom" className="block text-sm font-semibold text-[#1f2a24]">Cupom de desconto</label>
       <div className="flex gap-2">
-        <input id="codigo-cupom" value={codigo} onChange={(event) => setCodigo(event.target.value)} disabled={carregando} autoComplete="off" maxLength={80} className="min-h-10 min-w-0 flex-1 rounded-lg border border-[#d9ddcf] px-3 text-sm" />
-        <button type="submit" disabled={carregando || !codigo.trim()} className="min-h-10 rounded-lg bg-[#3f6f12] px-3 text-sm font-semibold text-white disabled:opacity-60">{carregando ? "Aplicando cupom…" : "Aplicar cupom"}</button>
+        <input id="codigo-cupom" value={codigo} onChange={(event) => setCodigo(event.target.value)} disabled={acaoEmAndamento !== null} autoComplete="off" maxLength={80} className="min-h-10 min-w-0 flex-1 rounded-lg border border-[#d9ddcf] px-3 text-sm" />
+        <button type="submit" disabled={acaoEmAndamento !== null || !codigo.trim()} className="min-h-10 rounded-lg bg-[#3f6f12] px-3 text-sm font-semibold text-white disabled:opacity-60">{acaoEmAndamento === "aplicar" ? "Aplicando cupom…" : "Aplicar cupom"}</button>
       </div>
     </form>
-    {aplicado && <button type="button" onClick={() => void enviar("", "remover")} disabled={carregando} className="mt-2 text-sm font-semibold text-[#3f6f12] underline disabled:opacity-60">{carregando ? "Removendo cupom…" : "Remover cupom"}</button>}
+    {aplicado && <button type="button" onClick={() => void enviar("", "remover")} disabled={acaoEmAndamento !== null} className="mt-2 text-sm font-semibold text-[#3f6f12] underline disabled:opacity-60">{acaoEmAndamento === "remover" ? "Removendo cupom…" : "Remover cupom"}</button>}
     {erro && <p role="alert" className="mt-2 text-sm text-[#8b1e1e]">{erro}</p>}
     {mensagem && <p role="status" className="mt-2 text-sm text-[#3f6f12]">{mensagem}</p>}
   </section>;

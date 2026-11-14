@@ -26,4 +26,12 @@ Implementação concluída no checkout público de eventos.
 - O typecheck global ainda depende da atualização dos fixtures legados da vitrine para o contrato expandido de preços.
 - O lint reporta apenas o aviso conhecido de `<img>` em `resumo-pedido.tsx`.
 
+## Rodada complementar
+
+- Adicionada cobertura explícita para `subtotalCents: 0` no resumo.
+- `irParaIngressos` agora usa `pedidoAtual.orderNumber`.
+- Aplicar e remover cupom têm estados de ação independentes, mantendo os rótulos de carregamento corretos em cada botão.
+- Testes focados após o ajuste: **PASS** — 4 arquivos, 27 testes.
+- Typecheck continua com os mesmos quatro fixtures legados pendentes da Task 10.
+
 Atualizado em: 2026-11-13
