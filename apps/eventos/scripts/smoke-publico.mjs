@@ -75,6 +75,7 @@ const pedido = {
     { seatId: "a2", ticketTypeId: "tipo-adulto", unitPriceCents: 4500, totalPriceCents: 4500, rowLabel: "A", seatNumber: "2", ticketTypeName: "Adulto" },
   ],
 };
+let pedidoAtual = pedido;
 const ingressos = {
   ...pedido,
   status: "CONFIRMADO",
@@ -85,6 +86,8 @@ const ingressos = {
     { numero: "B2P911CD", qrPayload: "qr-b2p9", rowLabel: "A", seatNumber: "2", ticketTypeName: "Adulto", participantName: "Bruno Souza", status: "ATIVO" },
   ],
 };
+
+let finalizacaoMockada = null;
 
 function json(response, value, status = 200) {
   response.statusCode = status;
@@ -102,9 +105,15 @@ function iniciarApi() {
     if (path === "/api/eventos/public/ballet/politicas" && request.method === "GET") return json(response, politicas);
     if (path === "/api/eventos/public/sessoes/sessao-1/map" && request.method === "GET") return json(response, mapa);
     if (path === "/api/eventos/public/reservas" && request.method === "POST") return json(response, { reservationId: "reserva-1", orderNumber: pedido.orderNumber, expiresAt, subtotalCents: pedido.subtotalCents, offerDiscountCents: 0, couponDiscountCents: 0, discountCents: 0, totalCents: pedido.totalCents, appliedOffer: null, appliedCoupon: null, items: pedido.items });
-    if (path === "/api/eventos/public/pedidos/PEDIDO123" && request.method === "GET") return json(response, pedido);
-    if (path === "/api/eventos/public/pedidos/PEDIDO123/cupom" && request.method === "POST") return json(response, { ...pedido, couponDiscountCents: 900, discountCents: 900, totalCents: 8100, appliedCoupon: { id: "cupom-1", version: 1, code: "FAMILIA10", name: "Família 10%", pricingType: "PERCENTUAL", discountPercent: 10, discountCents: null } });
-    if (path === "/api/eventos/public/pedidos/PEDIDO123/finalizar" && request.method === "POST") return json(response, { pedido: { ...pedido, status: "AGUARDANDO_PAGAMENTO" }, acesso: "acesso-seguro-123", pagamentoNecessario: true });
+    if (path === "/api/eventos/public/pedidos/PEDIDO123" && request.method === "GET") return json(response, pedidoAtual);
+    if (path === "/api/eventos/public/pedidos/PEDIDO123/cupom" && request.method === "POST") {
+      pedidoAtual = { ...pedidoAtual, couponDiscountCents: 900, discountCents: 900, totalCents: 8100, appliedCoupon: { id: "cupom-1", version: 1, code: "FAMILIA10", name: "Família 10%", pricingType: "PERCENTUAL", discountPercent: 10, discountCents: null } };
+      return json(response, pedidoAtual);
+    }
+    if (path === "/api/eventos/public/pedidos/PEDIDO123/finalizar" && request.method === "POST") {
+      finalizacaoMockada = { pedido: { ...pedidoAtual, status: "AGUARDANDO_PAGAMENTO" }, acesso: "acesso-seguro-123", pagamentoNecessario: true };
+      return json(response, finalizacaoMockada);
+    }
     if (path === "/api/eventos/public/pedidos/PEDIDO123/checkout" && request.method === "POST") return json(response, { clientSecret: "cs_test_smoke", expiresAt, orderNumber: pedido.orderNumber });
     if (path === "/api/eventos/public/pedidos/PEDIDO123/ingressos" && request.method === "GET") return json(response, ingressos);
     if (path === "/api/eventos/public/pedidos/PEDIDO123/liberar" && request.method === "POST") { response.statusCode = 204; return response.end(); }
@@ -137,6 +146,8 @@ async function aguardarServidor(baseUrl) {
 }
 
 async function exercitarViewport(browser, nome, viewport, apiPort, baseUrl) {
+  pedidoAtual = { ...pedido };
+  finalizacaoMockada = null;
   const contexto = await browser.newContext({ viewport, reducedMotion: "reduce" });
   const pagina = await contexto.newPage();
   const errosConsole = [];
@@ -216,6 +227,8 @@ async function exercitarViewport(browser, nome, viewport, apiPort, baseUrl) {
   await pagina.waitForTimeout(3000);
   if (!await pagina.getByText("Pagamento indisponível no momento").count()) throw new Error(`${nome}: pagamento não avançou (url=${pagina.url()} alert=${await pagina.locator('[role="alert"]').allTextContents()} botao=${await pagina.locator("button").allTextContents()})`);
   if (!await pagina.getByText("Pagamento processado pela Stripe").count()) throw new Error(`${nome}: etapa Stripe não carregou o texto esperado`);
+  if (finalizacaoMockada?.pedido.totalCents !== 8100) throw new Error(`${nome}: finalização perdeu o total com cupom (total=${finalizacaoMockada?.pedido.totalCents ?? "ausente"})`);
+  await expect(pagina.locator("body")).toContainText("R$ 81,00");
 
   await acessar("/pedido/PEDIDO123?acesso=acesso-seguro-123");
   await pagina.locator('[aria-label="QR code do ingresso"] svg').first().waitFor({ state: "visible", timeout: 10000 });

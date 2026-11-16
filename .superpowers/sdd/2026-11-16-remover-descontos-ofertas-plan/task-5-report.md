@@ -17,6 +17,13 @@
 - `pnpm turbo test` — não concluiu pelo mesmo motivo; `vitest` ausente em apps fora do escopo (por exemplo, `apps/workflows`, `apps/login` e `apps/usuarios`).
 - A migration `packages/db/drizzle/0058_arquiva_ofertas_eventos.sql` foi revisada. `db:migrate` não foi executado por depender de ambiente de banco autorizado; nenhum dado foi alterado.
 
+## Rodada final de correção
+
+- Removidos o `EventosOfertasPublicService`, o spec correspondente e o provider no `EventosModule`; a varredura dos módulos não encontrou imports ou consumidores restantes.
+- O mock do smoke agora mantém o pedido atualizado após aplicar `FAMILIA10` e devolve esse mesmo estado na finalização. O cenário verifica `R$ 81,00` depois da finalização e confirma o total `8100` em mobile e desktop.
+- A asserção nova reproduziu o defeito antes da correção (finalização em `9000`) e passou após preservar o estado do pedido.
+- Validação final: eventos (23 arquivos, 158 testes), eventos-admin (46 arquivos, 230 testes), API focada (3 suítes, 97 testes), typechecks e lint dos pacotes afetados, além do smoke mobile/desktop.
+
 ## Preocupações
 
 O pipeline global requer instalação das dependências dos apps que não possuem `node_modules` neste worktree. A suíte focada e o smoke cobrem o comportamento da Task 5.
