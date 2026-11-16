@@ -1,11 +1,10 @@
 import { BadRequestException, ConflictException, Inject, Injectable, InternalServerErrorException, NotFoundException, Optional } from "@nestjs/common";
 import { and, asc, eq, eventoAuditorias, eventoCheckins, eventoIngressos, eventoInventarioAssentos, eventoLocais, eventoMapas, eventoOperacoesAdministrativas, eventoPedidos, eventoPoliticas, eventoSessoes, eventoTiposIngresso, eventos, inArray, ne, type Database } from "@essencia/db";
 import type { AtualizarEventoInput, AtualizarLocalEventoInput, CriarEventoInput, CriarSessaoInput, CriarRascunhoInput, EventoListQuery, LocalEventoInput } from "@essencia/shared/schemas";
-import type { EventoActor, EventoResumo, OfertaPrecoPublica, PublicEventCard, PublicEventDetail, PublicEventSession, PublicMap } from "@essencia/shared/types";
+import type { EventoActor, EventoResumo, PublicEventCard, PublicEventDetail, PublicEventSession, PublicMap } from "@essencia/shared/types";
 import { DatabaseService } from "../../common/database/database.service";
 import { RASTER_IMAGE_MIME_TYPES, StorageService } from "../../common/storage/storage.service";
 import { EventosRulesService } from "./eventos-rules.service";
-import { EventosOfertasPublicService } from "./eventos-ofertas-public.service";
 import { MapasService } from "./mapas/mapas.service";
 import { montarAssentosDaSessao, montarLayoutPublico } from "./montar-mapa-sessao";
 
@@ -22,7 +21,7 @@ export function assertSchoolScope(actor: EventoActor, schoolId: string) {
 
 @Injectable()
 export class EventosService {
-  constructor(private readonly database: DatabaseService, private readonly rules: EventosRulesService, @Optional() @Inject(StorageService) private readonly storage: StorageService | undefined, @Optional() @Inject(MapasService) private readonly mapas: MapasService | undefined, @Optional() @Inject(EventosOfertasPublicService) private readonly ofertas: EventosOfertasPublicService | undefined = undefined) {}
+  constructor(private readonly database: DatabaseService, private readonly rules: EventosRulesService, @Optional() @Inject(StorageService) private readonly storage: StorageService | undefined, @Optional() @Inject(MapasService) private readonly mapas: MapasService | undefined) {}
   private get db(): Database { return this.database.db; }
   private normalizeSlug(slug: string) { return slug.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""); }
   private resumo(event: typeof eventos.$inferSelect): EventoResumo { return { id: event.id, schoolId: event.schoolId, slug: event.slug, title: event.title, status: event.status as EventoResumo["status"], publishedAt: event.publishedAt, plannedPublicationAt: event.plannedPublicationAt }; }
@@ -271,7 +270,6 @@ export class EventosService {
 
   async listarSessoesPublicas(slug: string, now = new Date()): Promise<PublicEventSession[]> {
     const detail = await this.getPublicBySlug(slug, now);
-    const ofertasPublicas: OfertaPrecoPublica[] = this.ofertas ? await this.ofertas.listarPublicas(detail.id) : [];
     const ticketTypes = await this.db.select().from(eventoTiposIngresso).where(and(eq(eventoTiposIngresso.eventId, detail.id), eq(eventoTiposIngresso.active, true), eq(eventoTiposIngresso.internal, false))).orderBy(asc(eventoTiposIngresso.name));
     const publicTicketTypes = ticketTypes.map((ticket: typeof eventoTiposIngresso.$inferSelect) => ({ id: ticket.id, name: ticket.name, description: ticket.description, priceCents: ticket.priceCents, maxPerOrder: ticket.maxPerOrder, eligibility: ticket.eligibility }));
     const rows = await this.db.select({ session: eventoSessoes, location: eventoLocais, inventory: eventoInventarioAssentos }).from(eventoSessoes).leftJoin(eventoLocais, eq(eventoLocais.id, eventoSessoes.locationId)).leftJoin(eventoInventarioAssentos, eq(eventoInventarioAssentos.sessionId, eventoSessoes.id)).where(and(eq(eventoSessoes.eventId, detail.id), eq(eventoSessoes.status, "PUBLICADA"))).orderBy(asc(eventoSessoes.startsAt));
@@ -280,7 +278,7 @@ export class EventosService {
       const existing = result.get(row.session.id);
       const available = this.salesAvailability(row.session) === "available" && (row.inventory?.status === "DISPONIVEL" || row.inventory?.status === "LIBERADO");
       if (existing) { if (available) existing.availability = "available"; continue; }
-      result.set(row.session.id, { id: row.session.id, startsAt: row.session.startsAt, endsAt: row.session.endsAt, status: "PUBLICADA", capacity: row.session.capacity, mapId: row.session.mapId, salesStartsAt: row.session.salesStartsAt, salesEndsAt: row.session.salesEndsAt, location: row.location ? { name: row.location.name, address: row.location.address, room: row.location.room, instructions: row.location.instructions, accessibility: row.location.accessibility } : null, availability: available ? "available" : "sold_out", ticketTypes: publicTicketTypes, offers: ofertasPublicas });
+      result.set(row.session.id, { id: row.session.id, startsAt: row.session.startsAt, endsAt: row.session.endsAt, status: "PUBLICADA", capacity: row.session.capacity, mapId: row.session.mapId, salesStartsAt: row.session.salesStartsAt, salesEndsAt: row.session.salesEndsAt, location: row.location ? { name: row.location.name, address: row.location.address, room: row.location.room, instructions: row.location.instructions, accessibility: row.location.accessibility } : null, availability: available ? "available" : "sold_out", ticketTypes: publicTicketTypes, offers: [] });
     }
     return [...result.values()];
   }

@@ -463,17 +463,15 @@ describe('EventosService contratos de workspace', () => {
     expect(db.updated).toBe(true);
   });
 
-  it("inclui somente as ofertas públicas ativas em cada sessão pública", async () => {
-    const ofertas = { listarPublicas: jest.fn().mockResolvedValue([{ id: "o1", version: 2, name: "A partir de 10", minQuantity: 10, maxQuantity: null, discountPercent: 15 }]) };
+  it("retorna sessões públicas sem ofertas", async () => {
     const db: any = publicSessionsDb([
       [{ id: "t1", eventId: "e1", name: "Inteira", description: null, priceCents: 4500, maxPerOrder: null, eligibility: null, active: true }],
       [{ session: { id: "s1", startsAt: new Date("2026-11-01T10:00:00Z"), endsAt: new Date("2026-11-01T11:00:00Z"), status: "PUBLICADA", capacity: 20, mapId: null, salesStartsAt: null, salesEndsAt: null }, location: null, inventory: { status: "DISPONIVEL" } }],
     ]);
-    const instance = new EventosService({ db } as any, { validarPublicacao: jest.fn() } as any, undefined, undefined, ofertas as any);
+    const instance = new EventosService({ db } as any, { validarPublicacao: jest.fn() } as any, undefined, undefined);
     jest.spyOn(instance as any, "getPublicBySlug").mockResolvedValue({ id: "e1" });
 
-    await expect(instance.listarSessoesPublicas("evento")).resolves.toEqual([expect.objectContaining({ id: "s1", offers: [{ id: "o1", version: 2, name: "A partir de 10", minQuantity: 10, maxQuantity: null, discountPercent: 15 }] })]);
-    expect(ofertas.listarPublicas).toHaveBeenCalledWith("e1");
+    await expect(instance.listarSessoesPublicas("evento")).resolves.toEqual([expect.objectContaining({ id: "s1", offers: [] })]);
   });
 
   it("devolve palco, entradas e letras só das fileiras com assento", async () => {

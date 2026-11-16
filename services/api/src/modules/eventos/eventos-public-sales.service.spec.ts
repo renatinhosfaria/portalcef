@@ -591,7 +591,7 @@ describe("EventosPublicSalesService - contratos públicos", () => {
     expect(() => (service as any).validarUrlCheckout("https://evil.example/retorno")).toThrow();
   });
 
-  it("aplica 15% a partir de 10 lugares, mas mantém 9 e aceita 20", async () => {
+  it("ignora ofertas ao reservar novos lugares", async () => {
     const oferta = { id: uuid(90), version: 2, name: "Volume", pricingType: "PERCENTUAL", minQuantity: 10, maxQuantity: null, discountPercent: 15, priceCents: null, active: true };
     const fazer = async (quantidade: number, chave: string) => {
       const banco = criarBancoReserva({ quantidade, precoAdulto: 4500, offers: [oferta] });
@@ -599,30 +599,30 @@ describe("EventosPublicSalesService - contratos públicos", () => {
       return { resultado, banco };
     };
     expect((await fazer(9, "volume-9-123456")).resultado).toMatchObject({ subtotalCents: 40500, discountCents: 0, totalCents: 40500, appliedOffer: null });
-    expect((await fazer(10, "volume-10-123456")).resultado).toMatchObject({ subtotalCents: 45000, offerDiscountCents: 6750, discountCents: 6750, totalCents: 38250, appliedOffer: { id: oferta.id, version: 2 } });
-    expect((await fazer(10, "volume-10-persistido-123456")).banco.order).toMatchObject({ offerDiscountCents: 6750, couponDiscountCents: 0 });
+    expect((await fazer(10, "volume-10-123456")).resultado).toMatchObject({ subtotalCents: 45000, offerDiscountCents: 0, discountCents: 0, totalCents: 45000, appliedOffer: null });
+    expect((await fazer(10, "volume-10-persistido-123456")).banco.order).toMatchObject({ offerDiscountCents: 0, couponDiscountCents: 0 });
     const vinte = await fazer(20, "volume-20-123456");
-    expect(vinte.resultado).toMatchObject({ subtotalCents: 90000, discountCents: 13500, totalCents: 76500 });
+    expect(vinte.resultado).toMatchObject({ subtotalCents: 90000, offerDiscountCents: 0, discountCents: 0, totalCents: 90000 });
     expect(vinte.resultado.items).toHaveLength(20);
   });
 
-  it("calcula o desconto sobre tipos mistos e recusa oferta fixa na compra pública", async () => {
+  it("calcula o subtotal sobre tipos mistos e ignora oferta fixa na compra pública", async () => {
     const ofertaPercentual = { id: uuid(91), version: 1, name: "Volume", pricingType: "PERCENTUAL", minQuantity: 10, maxQuantity: null, discountPercent: 15, priceCents: null, active: true };
     const misto = criarBancoReserva({ quantidade: 10, precoAdulto: 4500, precoCrianca: 2250, offers: [ofertaPercentual], tiposMistos: true });
     const resultadoMisto = await new EventosPublicSalesService({ db: misto } as any).reservarAssentos(entradaReserva(10, "misto-6-4-123456", true));
-    expect(resultadoMisto).toMatchObject({ subtotalCents: 36000, discountCents: 5400, totalCents: 30600 });
-    expect(resultadoMisto.items.reduce((total, item) => total + item.totalPriceCents, 0)).toBe(30600);
+    expect(resultadoMisto).toMatchObject({ subtotalCents: 36000, offerDiscountCents: 0, discountCents: 0, totalCents: 36000, appliedOffer: null });
+    expect(resultadoMisto.items.reduce((total, item) => total + item.totalPriceCents, 0)).toBe(36000);
 
     const ofertaFixa = { id: uuid(92), version: 4, name: "Faixa legada", pricingType: "VALOR_FIXO", minQuantity: 10, maxQuantity: null, discountPercent: null, priceCents: 30000, active: true };
     const fixo = criarBancoReserva({ quantidade: 10, precoAdulto: 4500, offers: [ofertaFixa] });
-    await expect(new EventosPublicSalesService({ db: fixo } as any).reservarAssentos(entradaReserva(10, "fixo-10-123456"))).rejects.toMatchObject({ response: { code: "OFFER_NOT_SUPPORTED_PUBLIC" } });
+    await expect(new EventosPublicSalesService({ db: fixo } as any).reservarAssentos(entradaReserva(10, "fixo-10-123456"))).resolves.toMatchObject({ offerDiscountCents: 0, totalCents: 45000, appliedOffer: null });
   });
 
   it("não aplica oferta VALOR_FIXO que não aparece no contrato público", async () => {
     const ofertaFixa = { id: uuid(96), version: 1, name: "Faixa fixa", pricingType: "VALOR_FIXO", minQuantity: 1, maxQuantity: null, discountPercent: null, priceCents: 100, active: true };
     const banco = criarBancoReserva({ quantidade: 1, precoAdulto: 4500, offers: [ofertaFixa] });
 
-    await expect(new EventosPublicSalesService({ db: banco } as any).reservarAssentos(entradaReserva(1, "fixo-publico-123456"))).rejects.toMatchObject({ response: { code: "OFFER_NOT_SUPPORTED_PUBLIC" } });
+    await expect(new EventosPublicSalesService({ db: banco } as any).reservarAssentos(entradaReserva(1, "fixo-publico-123456"))).resolves.toMatchObject({ offerDiscountCents: 0, totalCents: 4500, appliedOffer: null });
   });
 
   it("recusa checkout quando todas as reservas perderam a posse dos assentos", async () => {
@@ -641,7 +641,7 @@ describe("EventosPublicSalesService - contratos públicos", () => {
     expect(banco.mutations.value).toBe(0);
   });
 
-  it("repete a reserva idempotente com o snapshot persistido", async () => {
+  it("repete a reserva idempotente sem snapshot de oferta", async () => {
     const oferta = { id: uuid(93), version: 3, name: "Volume", pricingType: "PERCENTUAL", minQuantity: 2, maxQuantity: null, discountPercent: 15, priceCents: null, active: true };
     const banco = criarBancoReserva({ quantidade: 2, precoAdulto: 4500, offers: [oferta], repetir: true });
     const servico = new EventosPublicSalesService({ db: banco } as any);
@@ -650,7 +650,7 @@ describe("EventosPublicSalesService - contratos públicos", () => {
     banco.configuracaoAtual = [];
     const segunda = await servico.reservarAssentos(entrada);
     expect(segunda).toEqual(primeira);
-    expect(segunda.appliedOffer).toMatchObject({ id: oferta.id, version: 3 });
+    expect(segunda.appliedOffer).toBeNull();
   });
 
   it("rejeita a corrida de idempotência quando a reserva encontrada pertence a outra sessão", async () => {
@@ -742,31 +742,28 @@ describe("EventosPublicSalesService - contratos públicos", () => {
     expect(banco.colisao.insertAttempts).toBe(1);
   });
 
-  it("explicita a ambiguidade quando existem várias ofertas ativas no evento", async () => {
+  it("ignora várias ofertas ativas ao reservar", async () => {
     const ofertas = [
       { id: uuid(94), version: 1, name: "Dez", pricingType: "PERCENTUAL", minQuantity: 10, maxQuantity: null, discountPercent: 15, priceCents: null, active: true },
       { id: uuid(95), version: 2, name: "Vinte", pricingType: "PERCENTUAL", minQuantity: 20, maxQuantity: null, discountPercent: 20, priceCents: null, active: true },
     ];
     const banco = criarBancoReserva({ quantidade: 10, precoAdulto: 4500, offers: ofertas });
 
-    await expect(new EventosPublicSalesService({ db: banco } as any).reservarAssentos(entradaReserva(10, "oferta-ambigua-123456"))).rejects.toMatchObject({
-      response: { code: "MULTIPLE_ACTIVE_OFFERS" },
-    });
+    await expect(new EventosPublicSalesService({ db: banco } as any).reservarAssentos(entradaReserva(10, "oferta-ambigua-123456"))).resolves.toMatchObject({ offerDiscountCents: 0, totalCents: 45000, appliedOffer: null });
   });
 
-  it("aplica cupom normalizado, recalcula oferta antes do cupom e persiste snapshot", async () => {
+  it("aplica cupom normalizado diretamente sobre o subtotal e persiste snapshot", async () => {
     const expiresAt = new Date(Date.now() + 60_000);
     const db = cupomAplicacaoDb({
-      order: { subtotalCents: 10000, offerDiscountCents: 1000, discountCents: 1000, totalCents: 9000, expiresAt },
-      offers: [{ id: "offer-1", version: 2, name: "Volume", pricingType: "PERCENTUAL", minQuantity: 1, maxQuantity: null, discountPercent: 10, active: true }],
+      order: { subtotalCents: 10000, offerDiscountCents: 0, discountCents: 0, totalCents: 10000, expiresAt },
       coupons: [{ id: "coupon-1", eventId: "event-1", code: " DEZ ", version: 3, name: "Dez por cento", pricingType: "PERCENTUAL", discountPercent: 10, discountCents: null, active: true, startsAt: null, endsAt: null, usageLimit: null }],
     });
 
     const result = await new EventosPublicSalesService({ db } as any).aplicarCupom("ABC123DEF456", { code: " dez " });
 
-    expect(result).toMatchObject({ subtotalCents: 10000, offerDiscountCents: 1000, couponDiscountCents: 900, discountCents: 1900, totalCents: 8100, appliedCoupon: { id: "coupon-1", code: "DEZ", version: 3 } });
-    expect(db.order).toMatchObject({ appliedCouponId: "coupon-1", couponDiscountCents: 900, discountCents: 1900, totalCents: 8100, couponSnapshot: { id: "coupon-1", code: "DEZ", version: 3 } });
-    expect(db.itemRows[0].pricingEvidence).toMatchObject({ allocatedOfferDiscountCents: 1000, allocatedCouponDiscountCents: 900, couponSnapshot: { id: "coupon-1", code: "DEZ" } });
+    expect(result).toMatchObject({ subtotalCents: 10000, offerDiscountCents: 0, couponDiscountCents: 1000, discountCents: 1000, totalCents: 9000, appliedCoupon: { id: "coupon-1", code: "DEZ", version: 3 } });
+    expect(db.order).toMatchObject({ appliedCouponId: "coupon-1", offerDiscountCents: 0, couponDiscountCents: 1000, discountCents: 1000, totalCents: 9000, couponSnapshot: { id: "coupon-1", code: "DEZ", version: 3 } });
+    expect(db.itemRows[0].pricingEvidence).toMatchObject({ allocatedOfferDiscountCents: 0, allocatedCouponDiscountCents: 1000, couponSnapshot: { id: "coupon-1", code: "DEZ" } });
     expect(db.order.expiresAt).toEqual(expiresAt);
   });
 
@@ -793,7 +790,7 @@ describe("EventosPublicSalesService - contratos públicos", () => {
     await service.aplicarCupom("ABC123DEF456", { code: "VINTE" });
     expect(db.order).toMatchObject({ appliedCouponId: "coupon-2", couponSnapshot: { code: "VINTE" } });
     await service.aplicarCupom("ABC123DEF456", { code: "" });
-    expect(db.order).toMatchObject({ appliedCouponId: null, couponSnapshot: null, couponDiscountCents: 0, discountCents: 1000, totalCents: 9000 });
+    expect(db.order).toMatchObject({ appliedCouponId: null, couponSnapshot: null, offerDiscountCents: 0, couponDiscountCents: 0, discountCents: 0, totalCents: 10000 });
     db.order.appliedCoupon = undefined;
     db.order.couponSnapshot = { id: "coupon-2", code: "VINTE", version: 1, pricingType: "PERCENTUAL", discountPercent: 20, discountCents: null };
     db.coupons[1]!.active = false;
@@ -1107,7 +1104,7 @@ function pedidoConsultaOrdenadaDb() {
 function vendaDb(data: any) {
   let selects = 0;
   const order = { id: "order-1", orderNumber: "ABC123DEF456", totalCents: data.ticket?.priceCents ?? 0, expiresAt: new Date(Date.now() + 60_000), buyerEmail: "a@b.com" };
-  const rows = [[], data.session ? [{ event: data.event, session: data.session }] : [], data.ticket ? [data.ticket] : [], data.inventory ? [data.inventory] : [], data.inventory ? [data.inventory] : [], [], [{ item: { ticketTypeId: data.ticket?.id, unitPriceCents: data.ticket?.priceCents, totalPriceCents: data.ticket?.priceCents }, inventory: data.inventory }]];
+  const rows = [[], data.session ? [{ event: data.event, session: data.session }] : [], data.ticket ? [data.ticket] : [], data.inventory ? [data.inventory] : [], data.inventory ? [data.inventory] : [], [{ item: { ticketTypeId: data.ticket?.id, unitPriceCents: data.ticket?.priceCents, totalPriceCents: data.ticket?.priceCents }, inventory: data.inventory }]];
   const db: any = { transaction: async (fn: any) => fn(db), select: () => { const value = rows[selects++] ?? []; const chain: any = { from: () => chain, innerJoin: () => chain, where: async () => value, orderBy: async () => value }; return chain; }, insert: () => ({ values: () => ({ returning: async () => [order] }) }), update: () => ({ set: () => ({ where: () => ({ returning: async () => [{}] }) }) }) };
   return db;
 }
@@ -1145,7 +1142,6 @@ function vendaDbComIngressos(data: any) {
     [{ event: data.event, session: data.session }],
     [data.ticket],
     ...(data.inventories ?? []).flatMap((inventory: any) => [[inventory], [inventory]]),
-    [],
     [{ item: { ticketTypeId: data.ticket.id, unitPriceCents: data.ticket.priceCents, totalPriceCents: data.ticket.priceCents }, inventory: data.inventories?.[0] }],
   ];
   const db: any = {

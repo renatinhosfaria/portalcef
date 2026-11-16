@@ -49,8 +49,8 @@ describe("EventosPublicController", () => {
     expect(Reflect.getMetadata("THROTTLER:TTLstrict", EventosPublicController.prototype.liberar)).toBe(60000);
   });
 
-  it("devolve a oferta percentual ativa no contrato público da sessão", async () => {
-    const sessions = [{ id: "s-ballet", offers: [{ id: "oferta-volume", version: 1, name: "Ballet em grupo", minQuantity: 10, maxQuantity: null, discountPercent: 15 }] }];
+  it("preserva o formato de sessões públicas sem ofertas", async () => {
+    const sessions = [{ id: "s-ballet", offers: [] }];
     const service = { listarSessoesPublicas: jest.fn().mockResolvedValue(sessions) };
     const controller = new EventosPublicController(service as any, {} as any);
 
