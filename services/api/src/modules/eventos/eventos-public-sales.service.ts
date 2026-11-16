@@ -255,20 +255,51 @@ export class EventosPublicSalesService {
         coupon = { id: candidate.id, version: candidate.version, code, name: candidate.name ?? null, pricingType: candidate.pricingType, discountPercent: candidate.discountPercent ?? null, discountCents: candidate.discountCents ?? null, active: true, startsAt: candidate.startsAt ?? null, endsAt: candidate.endsAt ?? null, usageLimit: candidate.usageLimit ?? null, usageLimitPerBuyer: candidate.usageLimitPerBuyer ?? null };
       }
 
-      const items = itemRows.map((row: any, index: number) => ({ seatId: row.inventory?.seatId ?? row.item?.pricingEvidence?.seatId ?? String(index), ticketTypeId: row.item.ticketTypeId, participantIndex: Number(row.item?.pricingEvidence?.participantIndex ?? index), basePriceCents: Number(row.item?.pricingEvidence?.baseUnitPriceCents ?? row.ticket?.priceCents ?? row.item.unitPriceCents + (row.item?.pricingEvidence?.allocatedDiscountCents ?? 0)) }));
+      const items = itemRows.map((row: any, index: number) => ({ seatId: row.inventory?.seatId ?? row.item?.pricingEvidence?.seatId ?? String(index), ticketTypeId: row.item.ticketTypeId, participantIndex: Number(row.item?.pricingEvidence?.participantIndex ?? index), basePriceCents: this.precoBaseHistorico(row) }));
       const preco = calcularPrecoPedido({ items, offers: [], coupon });
       if (preco.totalCents > 0 && preco.totalCents < 100) throw fail("INVALID_AMOUNT", "Valor mínimo para pagamento: R$ 1,00");
       const appliedCoupon = preco.appliedCoupon;
-      const updates = { subtotalCents: preco.subtotalCents, offerDiscountCents: preco.offerDiscountCents, couponDiscountCents: preco.couponDiscountCents, discountCents: preco.discountCents, totalCents: preco.totalCents, appliedOfferId: preco.appliedOffer?.id ?? null, appliedCouponId: appliedCoupon?.id ?? null, couponSnapshot: appliedCoupon ?? null, updatedAt: now };
+      const subtotalCents = Number(order.subtotalCents ?? preco.subtotalCents);
+      const offerDiscountCents = Number(order.offerDiscountCents ?? 0);
+      const updates = { subtotalCents, offerDiscountCents, couponDiscountCents: preco.couponDiscountCents, discountCents: offerDiscountCents + preco.couponDiscountCents, totalCents: preco.totalCents, appliedOfferId: order.appliedOfferId ?? null, appliedCouponId: appliedCoupon?.id ?? null, couponSnapshot: appliedCoupon ?? null, updatedAt: now };
       await tx.update(eventoPedidos).set(updates).where(eq(eventoPedidos.id, order.id));
       for (const [index, row] of itemRows.entries()) {
         const price = preco.items[index]!;
-        const evidence = { ...(row.item?.pricingEvidence ?? {}), source: appliedCoupon ? "eventoCupons" : preco.appliedOffer ? "eventoOfertas" : "eventoTiposIngresso", baseUnitPriceCents: price.baseUnitPriceCents, allocatedDiscountCents: price.allocatedDiscountCents, allocatedOfferDiscountCents: price.allocatedOfferDiscountCents, allocatedCouponDiscountCents: price.allocatedCouponDiscountCents, offerId: preco.appliedOffer?.id ?? null, offerVersion: preco.appliedOffer?.version ?? null, offerSnapshot: preco.appliedOffer ?? null, couponId: appliedCoupon?.id ?? null, couponVersion: appliedCoupon?.version ?? null, couponSnapshot: appliedCoupon ?? null, participantIndex: price.participantIndex, seatId: price.seatId, allocationMethod: "MAIOR_RESTO" };
+        const previousEvidence = row.item?.pricingEvidence ?? {};
+        const allocatedOfferDiscountCents = Number(previousEvidence.allocatedOfferDiscountCents ?? 0);
+        const evidence = {
+          ...previousEvidence,
+          ...(previousEvidence.couponBaseUnitPriceCents == null ? { couponBaseUnitPriceCents: price.baseUnitPriceCents } : {}),
+          source: appliedCoupon ? "eventoCupons" : previousEvidence.source ?? "eventoTiposIngresso",
+          baseUnitPriceCents: previousEvidence.baseUnitPriceCents ?? price.baseUnitPriceCents,
+          allocatedDiscountCents: allocatedOfferDiscountCents + price.allocatedCouponDiscountCents,
+          allocatedOfferDiscountCents,
+          allocatedCouponDiscountCents: price.allocatedCouponDiscountCents,
+          couponId: appliedCoupon?.id ?? null,
+          couponVersion: appliedCoupon?.version ?? null,
+          couponSnapshot: appliedCoupon ?? null,
+          participantIndex: price.participantIndex,
+          seatId: price.seatId,
+          allocationMethod: "MAIOR_RESTO",
+        };
         await tx.update(eventoItensPedido).set({ unitPriceCents: price.unitPriceCents, totalPriceCents: price.totalPriceCents, pricingEvidence: evidence, updatedAt: now }).where(eq(eventoItensPedido.id, row.item.id));
       }
       Object.assign(order, updates, { couponSnapshot: appliedCoupon ?? null });
       return this.pedidoResult(order, tx);
     });
+  }
+
+  private precoBaseHistorico(itemRow: any): number {
+    const item = itemRow?.item ?? itemRow;
+    const evidence = item?.pricingEvidence ?? {};
+    const registrado = evidence.couponBaseUnitPriceCents == null ? Number.NaN : Number(evidence.couponBaseUnitPriceCents);
+    if (Number.isFinite(registrado) && registrado >= 0) return registrado;
+    const totalPersistido = Number(item?.totalPriceCents);
+    if (Number.isFinite(totalPersistido) && totalPersistido >= 0) return totalPersistido;
+    const unitPersistido = Number(item?.unitPriceCents);
+    if (Number.isFinite(unitPersistido) && unitPersistido >= 0) return unitPersistido;
+    const precoIngresso = Number(itemRow?.ticket?.priceCents);
+    return Number.isFinite(precoIngresso) && precoIngresso >= 0 ? precoIngresso : 0;
   }
 
   async finalizarPedidoConvidado(orderNumber: string, raw: unknown): Promise<FinalizacaoPublicaResult> {
