@@ -39,3 +39,16 @@ Atualizado em: 2026-11-16
 - `pnpm --filter @essencia/eventos-admin typecheck && pnpm --filter @essencia/api typecheck && pnpm --filter @essencia/shared typecheck`: PASS.
 
 Atualizado em: 2026-11-16
+
+## Fix round 2
+
+- Corrigida a rastreabilidade da validação: executado o teste existente `eventos.controller.spec.ts`, em vez do caminho inexistente `eventos-admin.controller.spec.ts`.
+- Adicionado `eventos-ofertas-public.service.spec.ts` com cenário determinístico que retorna somente a oferta percentual ativa e exclui a oferta inativa.
+
+## Verificação da rodada
+
+- `pnpm --filter @essencia/api test -- services/api/src/modules/eventos/eventos-ofertas-public.service.spec.ts services/api/src/modules/eventos/eventos.controller.spec.ts`: PASS — 2 suítes, 11 testes.
+- `pnpm --filter @essencia/eventos-admin test -- 'app/eventos/[id]/ingressos/page.test.ts'`: PASS — 1 arquivo, 8 testes.
+- `pnpm --filter @essencia/eventos-admin typecheck && pnpm --filter @essencia/api typecheck && pnpm --filter @essencia/shared typecheck`: PASS — os três comandos `tsc --noEmit` concluíram com código 0.
+
+Atualizado em: 2026-11-16
