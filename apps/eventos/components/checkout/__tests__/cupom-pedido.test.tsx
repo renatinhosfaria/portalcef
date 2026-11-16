@@ -34,11 +34,33 @@ const pedido: PedidoPublicoResult = {
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
 describe("CupomPedido", () => {
+  it("começa recolhido e abre o campo já focado ao clicar em \"Tem um cupom?\"", () => {
+    render(<CupomPedido pedido={pedido} onAtualizar={vi.fn()} />);
+
+    const abrir = screen.getByRole("button", { name: "Tem um cupom de desconto?" });
+    expect(abrir.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByLabelText("Cupom de desconto")).toBeNull();
+
+    fireEvent.click(abrir);
+    const campo = screen.getByLabelText("Cupom de desconto");
+    expect(document.activeElement).toBe(campo);
+    expect(screen.queryByRole("button", { name: "Tem um cupom de desconto?" })).toBeNull();
+  });
+
+  it("já mostra o campo aberto quando o pedido tem cupom aplicado", () => {
+    const aplicado = { ...pedido, appliedCoupon: { id: "cupom-1", version: 1, code: "DEZ", name: null, pricingType: "PERCENTUAL" as const, discountPercent: 10, discountCents: null } };
+    render(<CupomPedido pedido={aplicado} onAtualizar={vi.fn()} />);
+
+    expect((screen.getByLabelText("Cupom de desconto") as HTMLInputElement).value).toBe("DEZ");
+    expect(screen.queryByRole("button", { name: "Tem um cupom de desconto?" })).toBeNull();
+  });
+
   it("aplica o código e atualiza o pedido retornado pela API", async () => {
     const atualizado = { ...pedido, couponDiscountCents: 1000, discountCents: 1000, totalCents: 9000, appliedCoupon: { id: "cupom-1", version: 1, code: "DEZ", name: "Dez por cento", pricingType: "PERCENTUAL" as const, discountPercent: 10, discountCents: null } };
     vi.mocked(eventosApi.aplicarCupom).mockResolvedValue(atualizado);
     const onAtualizar = vi.fn();
     render(<CupomPedido pedido={pedido} onAtualizar={onAtualizar} />);
+    fireEvent.click(screen.getByRole("button", { name: "Tem um cupom de desconto?" }));
 
     fireEvent.change(screen.getByLabelText("Cupom de desconto"), { target: { value: " dez " } });
     fireEvent.click(screen.getByRole("button", { name: "Aplicar cupom" }));
@@ -70,6 +92,7 @@ describe("CupomPedido", () => {
   ])("mostra a mensagem retornada para %s", async (code, message) => {
     vi.mocked(eventosApi.aplicarCupom).mockRejectedValue(new EventosApiError(message, 400, code));
     render(<CupomPedido pedido={pedido} onAtualizar={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Tem um cupom de desconto?" }));
     fireEvent.change(screen.getByLabelText("Cupom de desconto"), { target: { value: "teste" } });
     fireEvent.click(screen.getByRole("button", { name: "Aplicar cupom" }));
 

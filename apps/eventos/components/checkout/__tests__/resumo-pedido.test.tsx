@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import React from "react";
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { PedidoPublicoResult, PublicEventDetail, PublicEventSession } from "@essencia/shared/types";
 import { ResumoPedido } from "../resumo-pedido";
 
@@ -10,7 +10,38 @@ const sessao: PublicEventSession = { id: "sessao-1", startsAt: new Date("2026-12
 const evento: PublicEventDetail = { id: "evento-1", slug: "festival", title: "Festival", summary: null, description: null, imageUrl: null, category: null, startsAt: sessao.startsAt, locationName: null, fromPriceCents: 5000, availability: "available", contactEmail: null, contactPhone: null, cancellationPolicy: null };
 const pedido: PedidoPublicoResult = { orderNumber: "PED123456", status: "RESERVADO", eventTitle: evento.title, eventSlug: evento.slug, sessionId: sessao.id, expiresAt: new Date("2026-12-07T18:30:00Z"), session: { startsAt: sessao.startsAt, endsAt: sessao.endsAt }, subtotalCents: 10000, offerDiscountCents: 1000, couponDiscountCents: 500, discountCents: 1500, totalCents: 8500, appliedOffer: { id: "oferta-1", version: 1, name: "Grupo", minQuantity: 2, maxQuantity: null, discountPercent: 10 }, appliedCoupon: { id: "cupom-1", version: 1, code: "DEZ", name: "Dez por cento", pricingType: "PERCENTUAL", discountPercent: 5, discountCents: null }, items: [{ seatId: "seat-1", ticketTypeId: "inteira", unitPriceCents: 8500, totalPriceCents: 8500, rowLabel: "A", seatNumber: "1", ticketTypeName: "Inteira" }] };
 
+afterEach(() => cleanup());
+
 describe("ResumoPedido", () => {
+  it("mostra um único campo de cupom, dentro do resumo e antes do subtotal", () => {
+    render(<ResumoPedido pedido={pedido} evento={evento} sessao={sessao} onAlterar={vi.fn()} onAtualizar={vi.fn()} />);
+
+    const resumo = screen.getByRole("complementary", { name: "Resumo do pedido" });
+    const campos = screen.getAllByLabelText("Cupom de desconto");
+    expect(campos).toHaveLength(1);
+    expect(resumo.contains(campos[0]!)).toBe(true);
+    const subtotal = screen.getByText("Subtotal");
+    expect(campos[0]!.compareDocumentPosition(subtotal) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("não oferece o campo de cupom quando a troca não é mais permitida, mas mantém o desconto", () => {
+    render(<ResumoPedido pedido={pedido} evento={evento} sessao={sessao} onAlterar={vi.fn()} onAtualizar={vi.fn()} permitirCupom={false} />);
+
+    expect(screen.queryByLabelText("Cupom de desconto")).toBeNull();
+    expect(screen.queryByRole("button", { name: /cupom/i })).toBeNull();
+    expect(screen.getByText(/Cupom:/)).toBeTruthy();
+    expect(screen.getByText("-R$ 5,00")).toBeTruthy();
+  });
+
+  it("no celular, abre e fecha os detalhes do pedido pelo botão do resumo", () => {
+    render(<ResumoPedido pedido={pedido} evento={evento} sessao={sessao} onAlterar={vi.fn()} onAtualizar={vi.fn()} />);
+
+    const alternar = screen.getByRole("button", { name: /1 lugar · A1/ });
+    expect(alternar.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(alternar);
+    expect(alternar.getAttribute("aria-expanded")).toBe("true");
+  });
+
   it("mostra oferta, cupom, descontos separados e total retornado", () => {
     render(<ResumoPedido pedido={pedido} evento={evento} sessao={sessao} onAlterar={vi.fn()} onAtualizar={vi.fn()} />);
 

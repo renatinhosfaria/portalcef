@@ -1,13 +1,13 @@
 "use client";
 
-import React from "react";
+import React, { useId, useState } from "react";
 import type { PedidoPublicoResult, PublicEventDetail, PublicEventSession } from "@essencia/shared/types";
 import { formatarDataPublica, formatarMoeda } from "../../lib/eventos-formatters";
 import { CupomPedido } from "./cupom-pedido";
 
-type Props = { pedido: PedidoPublicoResult; evento: PublicEventDetail; sessao: PublicEventSession; mapHref?: string; onAlterar: () => void; onAtualizar?: (pedido: PedidoPublicoResult) => void; alterando?: boolean };
+type Props = { pedido: PedidoPublicoResult; evento: PublicEventDetail; sessao: PublicEventSession; mapHref?: string; onAlterar: () => void; onAtualizar?: (pedido: PedidoPublicoResult) => void; alterando?: boolean; permitirCupom?: boolean };
 
-function ConteudoResumo({ pedido, evento, sessao }: Pick<Props, "pedido" | "evento" | "sessao">): React.JSX.Element {
+function DetalhesResumo({ pedido, evento, sessao }: Pick<Props, "pedido" | "evento" | "sessao">): React.JSX.Element {
   return <>
     {evento.imageUrl && <img src={evento.imageUrl} alt="" className="mb-4 aspect-[16/8] w-full rounded-xl object-cover" />}
     <h2 className="font-display text-xl font-semibold text-[#1f2a24]">{evento.title}</h2>
@@ -16,12 +16,31 @@ function ConteudoResumo({ pedido, evento, sessao }: Pick<Props, "pedido" | "even
     <ul className="mt-4 space-y-2 text-sm text-[#475248]">{pedido.items.map((item) => <li key={item.seatId}>{item.rowLabel}{item.seatNumber} · {item.ticketTypeName} · {formatarMoeda(item.totalPriceCents)}</li>)}</ul>
     {pedido.appliedOffer && <p className="mt-4 text-sm text-[#475248]">Oferta automática: <strong>{pedido.appliedOffer.name}</strong></p>}
     {pedido.appliedCoupon && <p className="mt-1 text-sm text-[#475248]">Cupom: <strong>{pedido.appliedCoupon.code}</strong></p>}
+  </>;
+}
+
+function TotaisResumo({ pedido }: Pick<Props, "pedido">): React.JSX.Element {
+  return <>
     <dl className="mt-4 space-y-1 border-t border-[#e6e9e1] pt-4 text-sm text-[#475248]"><div className="flex justify-between"><dt>Subtotal</dt><dd>{formatarMoeda(pedido.subtotalCents)}</dd></div>{(pedido.appliedOffer || pedido.offerDiscountCents > 0) && <div className="flex justify-between"><dt>Desconto da oferta</dt><dd>{pedido.offerDiscountCents > 0 ? `-${formatarMoeda(pedido.offerDiscountCents)}` : formatarMoeda(0)}</dd></div>}{(pedido.appliedCoupon || pedido.couponDiscountCents > 0) && <div className="flex justify-between"><dt>Desconto do cupom</dt><dd>{pedido.couponDiscountCents > 0 ? `-${formatarMoeda(pedido.couponDiscountCents)}` : formatarMoeda(0)}</dd></div>}<div className="flex justify-between"><dt>Desconto total</dt><dd>{pedido.discountCents > 0 ? `-${formatarMoeda(pedido.discountCents)}` : formatarMoeda(0)}</dd></div><div className="mt-2 flex justify-between text-base font-semibold text-[#1f2a24]"><dt>Total</dt><dd>{formatarMoeda(pedido.totalCents)}</dd></div></dl>
     {pedido.totalCents === 0 && <p role="status" className="mt-3 rounded-lg bg-[#f1f7e9] p-3 text-sm text-[#3f6f12]"><strong>Pedido gratuito</strong> — você não precisará informar pagamento.</p>}
   </>;
 }
 
-export function ResumoPedido({ pedido, evento, sessao, mapHref = "#", onAlterar, onAtualizar = () => undefined, alterando = false }: Props): React.JSX.Element {
+// Um único cartão para celular e computador: no celular os detalhes ficam recolhidos,
+// mas o cupom e os totais ficam sempre à vista para o desconto aparecer na hora.
+export function ResumoPedido({ pedido, evento, sessao, mapHref = "#", onAlterar, onAtualizar = () => undefined, alterando = false, permitirCupom = true }: Props): React.JSX.Element {
+  const [detalhesAbertos, setDetalhesAbertos] = useState(false);
+  const idDetalhes = useId();
   const lugares = pedido.items.map((item) => `${item.rowLabel}${item.seatNumber}`).join(", ");
-  return <aside className="lg:sticky lg:top-6 lg:self-start"><details className="rounded-2xl border border-[#e6e9e1] bg-white shadow-sm lg:hidden"><summary className="cursor-pointer list-none p-4 font-semibold text-[#1f2a24]">{pedido.items.length} {pedido.items.length === 1 ? "lugar" : "lugares"} · {lugares} ▾ · {formatarMoeda(pedido.totalCents)}</summary><div className="border-t border-[#e6e9e1] p-5"><ConteudoResumo pedido={pedido} evento={evento} sessao={sessao} /></div></details><section aria-label="Resumo do pedido" className="hidden rounded-2xl border border-[#e6e9e1] bg-white p-5 shadow-sm lg:block"><ConteudoResumo pedido={pedido} evento={evento} sessao={sessao} /></section><CupomPedido pedido={pedido} onAtualizar={onAtualizar} /><a href={mapHref} aria-disabled={alterando} onClick={(event) => { event.preventDefault(); if (!alterando) onAlterar(); }} className="mt-3 inline-flex min-h-10 items-center font-semibold text-[#3f6f12] underline aria-disabled:opacity-60">{alterando ? "Liberando lugares…" : "Alterar lugares"}</a></aside>;
+  return <aside aria-label="Resumo do pedido" className="lg:sticky lg:top-6 lg:col-start-2 lg:row-start-1 lg:self-start">
+    <div className="rounded-2xl border border-[#e6e9e1] bg-white shadow-sm">
+      <button type="button" aria-expanded={detalhesAbertos} aria-controls={idDetalhes} onClick={() => setDetalhesAbertos((aberto) => !aberto)} className="flex w-full items-center justify-between gap-3 p-4 text-left font-semibold text-[#1f2a24] lg:hidden"><span>{pedido.items.length} {pedido.items.length === 1 ? "lugar" : "lugares"} · {lugares}</span><span className="shrink-0 text-sm text-[#3f6f12]">{detalhesAbertos ? "Ocultar detalhes ▴" : "Ver detalhes ▾"}</span></button>
+      <div className="px-5 pb-5 lg:pt-5">
+        <div id={idDetalhes} className={`${detalhesAbertos ? "block border-t border-[#e6e9e1] pt-4" : "hidden"} lg:block lg:border-t-0 lg:pt-0`}><DetalhesResumo pedido={pedido} evento={evento} sessao={sessao} /></div>
+        {permitirCupom && <CupomPedido pedido={pedido} onAtualizar={onAtualizar} />}
+        <TotaisResumo pedido={pedido} />
+      </div>
+    </div>
+    <a href={mapHref} aria-disabled={alterando} onClick={(event) => { event.preventDefault(); if (!alterando) onAlterar(); }} className="mt-3 inline-flex min-h-10 items-center font-semibold text-[#3f6f12] underline aria-disabled:opacity-60">{alterando ? "Liberando lugares…" : "Alterar lugares"}</a>
+  </aside>;
 }
