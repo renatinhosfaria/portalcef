@@ -64,6 +64,13 @@ describe("catálogo público", () => {
     expect(html).toContain('data-testid="evento-destaque"');
     expect(html).toContain("festa.jpg");
   });
+  it("mostra só a arte do destaque, sem fundo borrado nem altura mínima", () => {
+    const html = renderToStaticMarkup(<EventoDestaque event={evento} />);
+    expect(html).not.toContain("blur");
+    expect(html).not.toContain("min-h-[18rem]");
+    expect((html.match(/festa\.jpg/g) ?? []).length).toBeGreaterThan(0);
+    expect(html).toContain("h-auto w-full");
+  });
   it("mapeia ajuste da imagem para classes Tailwind válidas inclusive no fallback", () => {
     const conter = renderToStaticMarkup(<ImagemPublicaEvento src="https://www.portalcef.com.br/storage/festa.jpg" alt="Festa" ajuste="conter" width={320} height={180} />);
     const cobrir = renderToStaticMarkup(<ImagemPublicaEvento src="https://www.portalcef.com.br/storage/festa.jpg" alt="Festa" ajuste="cobrir" width={320} height={180} />);
