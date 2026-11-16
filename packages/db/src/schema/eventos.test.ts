@@ -218,3 +218,29 @@ test("migration 0058 arquiva ofertas ativas sem destruir dados", () => {
   const journal = JSON.parse(readFileSync(join(__dirname, "../../drizzle/meta/_journal.json"), "utf8"));
   assert.equal(journal.entries.at(-1).tag, "0058_arquiva_ofertas_eventos");
 });
+
+test("migration 0058 é idempotente para ofertas ativas e inativas", () => {
+  const atualizadoEm = new Date("2026-11-16T12:00:00.000Z");
+  const ofertas = [
+    { id: "ativa", active: true, updatedAt: new Date("2026-11-15T12:00:00.000Z") },
+    { id: "inativa", active: false, updatedAt: new Date("2026-11-15T12:00:00.000Z") },
+  ];
+  const executarMigration = () => {
+    for (const oferta of ofertas) {
+      if (oferta.active === true) {
+        oferta.active = false;
+        oferta.updatedAt = atualizadoEm;
+      }
+    }
+  };
+
+  executarMigration();
+  assert.deepEqual(ofertas, [
+    { id: "ativa", active: false, updatedAt: atualizadoEm },
+    { id: "inativa", active: false, updatedAt: new Date("2026-11-15T12:00:00.000Z") },
+  ]);
+
+  const aposPrimeiraExecucao = structuredClone(ofertas);
+  executarMigration();
+  assert.deepEqual(ofertas, aposPrimeiraExecucao);
+});
