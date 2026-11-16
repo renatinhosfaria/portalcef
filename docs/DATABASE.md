@@ -46,6 +46,13 @@ Shop (CEF Shop):
 - `shop_interest_requests`, `shop_interest_items`
 - `shop_settings`
 
+Eventos (descontos e histórico):
+- `evento_cupons` - Cupons configuráveis para novos pedidos, com vigência, limites e versão
+- `evento_cupom_retencoes` - Retenções temporárias durante o checkout
+- `evento_cupom_usos` - Usos confirmados e snapshot do cupom aplicado
+- `evento_ofertas` - Configurações legadas de ofertas, mantidas arquivadas para auditoria
+- `evento_pedidos.offer_discount_cents` e `evento_pedidos.applied_offer_id` - Valores históricos; novos pedidos recebem zero e nulo
+
 ---
 
 ## Tabelas Principais (Core)

@@ -15,24 +15,10 @@ describe("etapa de ingressos", () => {
     expect(source).toContain("window.confirm");
   });
 
-  it("carrega e salva ofertas com credenciais junto da etapa de ingressos", () => {
-    expect(source).toContain("/ofertas");
-    expect(source).toContain('credentials: "include"');
-    expect(source).toContain('method: "PATCH"');
-    expect(source).toContain("OfertaEditor");
-  });
-
-  it("atualiza a versão retornada pela API e mostra o estado do autosave", () => {
-    expect(source).toContain("version");
-    expect(source).toContain("ofertas salvas automaticamente");
-    expect(source).toContain("Oferta arquivada");
-  });
-
-  it("aguarda o GET de ofertas antes de habilitar o editor e preserva o bloqueio em erro", () => {
-    expect(source).toContain("ofertaLoading");
-    expect(source).toContain("Carregando oferta");
-    expect(source).toContain("ofertaError");
-    expect(source).toContain("disabled={ofertaLoading || Boolean(ofertaError) ||");
+  it("remove a configuração administrativa de ofertas", () => {
+    expect(source).not.toContain("/ofertas");
+    expect(source).not.toContain("OfertaEditor");
+    expect(source).not.toContain("Descontos e ofertas");
   });
 
   it("carrega vários cupons e autosalva com versão e conflito", () => {

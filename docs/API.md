@@ -923,7 +923,7 @@ Body:
 
 ### Eventos (público) - Cupons e checkout
 
-As rotas públicas de eventos não exigem autenticação. O pedido mantém o snapshot do cupom aplicado; alterações posteriores no cadastro administrativo não mudam o preço já reservado. A oferta automática por quantidade é calculada antes do cupom, e a resposta sempre separa `offerDiscountCents`, `couponDiscountCents` e `discountCents`.
+As rotas públicas de eventos não exigem autenticação. Para novos pedidos, cupons são o único desconto configurável: a sessão não anuncia ofertas e a aplicação de cupom recalcula o total sobre o subtotal. O pedido mantém o snapshot do cupom aplicado; alterações posteriores no cadastro administrativo não mudam o preço já reservado. `offerDiscountCents` e `appliedOffer` permanecem na resposta apenas para representar o histórico de pedidos antigos.
 
 #### POST `/eventos/public/pedidos/:orderNumber/cupom`
 
@@ -935,9 +935,9 @@ Corpo:
 { "code": "FAMILIA10" }
 ```
 
-Resposta: `PedidoPublicoResult`, contendo `subtotalCents`, `offerDiscountCents`, `couponDiscountCents`, `discountCents`, `totalCents`, `appliedOffer`, `appliedCoupon` e os itens com seus preços recalculados. A chamada é idempotente por pedido e código normalizado.
+Resposta: `PedidoPublicoResult`, contendo `subtotalCents`, `offerDiscountCents` (zero em novos pedidos), `couponDiscountCents`, `discountCents`, `totalCents`, `appliedOffer` (nulo em novos pedidos), `appliedCoupon` e os itens com seus preços recalculados. A chamada é idempotente por pedido e código normalizado.
 
-Erros: `VALIDATION_ERROR` (400), `COUPON_INACTIVE`, `COUPON_NOT_STARTED`, `COUPON_EXPIRED`, `COUPON_USAGE_LIMIT_REACHED` e `INVALID_AMOUNT` (400), `COUPON_NOT_FOUND` e `ORDER_NOT_FOUND` (404), `ORDER_NOT_AVAILABLE` e `OFFER_NOT_SUPPORTED_PUBLIC` (409).
+Erros: `VALIDATION_ERROR` (400), `COUPON_INACTIVE`, `COUPON_NOT_STARTED`, `COUPON_EXPIRED`, `COUPON_USAGE_LIMIT_REACHED` e `INVALID_AMOUNT` (400), `COUPON_NOT_FOUND` e `ORDER_NOT_FOUND` (404), `ORDER_NOT_AVAILABLE` (409). Pedidos históricos podem continuar retornando `offerDiscountCents` e `appliedOffer` do snapshot persistido.
 
 ### Eventos (admin) - Cupons
 

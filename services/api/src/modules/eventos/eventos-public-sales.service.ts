@@ -1,8 +1,8 @@
 import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException, Optional, ServiceUnavailableException, forwardRef } from "@nestjs/common";
-import { and, asc, desc, eq, eventoAceites, eventoCupons, eventoCupomUsos, eventoInventarioAssentos, eventoItensPedido, eventoLocais, eventoMapaAssentos, eventoOfertas, eventoPagamentos, eventoParticipantes, eventoPedidos, eventoPoliticas, eventoReservas, eventoSessoes, eventoTiposIngresso, eventoTokensConsulta, eventos, gt, inArray, isNull, lte, or, schema, type Database } from "@essencia/db";
+import { and, asc, desc, eq, eventoAceites, eventoCupons, eventoCupomUsos, eventoInventarioAssentos, eventoItensPedido, eventoLocais, eventoMapaAssentos, eventoPagamentos, eventoParticipantes, eventoPedidos, eventoPoliticas, eventoReservas, eventoSessoes, eventoTiposIngresso, eventoTokensConsulta, eventos, gt, inArray, isNull, lte, or, schema, type Database } from "@essencia/db";
 import { aplicarCupomSchema, finalizarPedidoSchema, meusIngressosSchema, pagamentoEmbutidoSchema, reservaPublicaSchema, type AplicarCupomInput, type FinalizarPedidoInput, type MeusIngressosInput, type PagamentoEmbutidoInput, type ReservaPublicaInput } from "@essencia/shared/schemas";
 import { normalizarCodigoCupom, type CupomPreco } from "@essencia/shared/types";
-import { calcularPrecoPedido, type OfertaPreco } from "@essencia/shared/eventos/precos";
+import { calcularPrecoPedido } from "@essencia/shared/eventos/precos";
 import type { ConsultaPedidoPublica, FinalizacaoPublicaResult, MeusIngressosResult, PagamentoEmbutidoResult, PedidoComIngressos, PedidoPublicoResult, PoliticaPublica, ReservaPublicaResult } from "@essencia/shared/types";
 import { DatabaseService } from "../../common/database/database.service";
 import { PaymentsService } from "../payments/payments.service";
@@ -109,48 +109,9 @@ export class EventosPublicSalesService {
       }
       for (const requested of input.seats) selected.push({ inventory: inventoryBySeat.get(requested.seatId), ticket: ticketById.get(requested.ticketTypeId), requested });
 
-      const rawOffers = await this.lockRows<any[]>(tx.select().from(eventoOfertas).where(and(eq(eventoOfertas.eventId, event.id), eq(eventoOfertas.active, true))));
-      const activeOffers = rawOffers.filter((candidate: any) => candidate.active);
-      if (activeOffers.length > 1) {
-        throw new ConflictException({ code: "MULTIPLE_ACTIVE_OFFERS", message: "Mais de uma oferta ativa para o evento" });
-      }
-      const quantidade = selected.length;
-      const ofertaFixaAplicavel = activeOffers.find((candidate: any) => {
-        if (candidate.pricingType !== "VALOR_FIXO") return false;
-        const inRange = quantidade >= candidate.minQuantity && (candidate.maxQuantity === null || candidate.maxQuantity === undefined || quantidade <= candidate.maxQuantity);
-        if (!inRange) return false;
-        const compatible = candidate.compatibleTicketTypeIds as string[] | null | undefined;
-        return !compatible || selected.every((item) => compatible.includes(item.ticket.id));
-      });
-      if (ofertaFixaAplicavel) {
-        throw fail("OFFER_NOT_SUPPORTED_PUBLIC", "A oferta de valor fixo não está disponível na compra pública");
-      }
-      // O contrato público expõe apenas descontos percentuais; ofertas de valor
-      // fixo permanecem administrativas e não podem alterar um total que a UI
-      // não consegue calcular.
-      const offers: OfertaPreco[] = activeOffers
-        .filter((candidate: any) => candidate.pricingType === "PERCENTUAL")
-        .filter((candidate: any) => {
-          const inRange = quantidade >= candidate.minQuantity && (candidate.maxQuantity === null || candidate.maxQuantity === undefined || quantidade <= candidate.maxQuantity);
-          if (!inRange) return false;
-          if (candidate.pricingType === "PERCENTUAL") return true;
-          const compatible = candidate.compatibleTicketTypeIds as string[] | null | undefined;
-          return !compatible || selected.every((item) => compatible.includes(item.ticket.id));
-        })
-        .map((candidate: any) => ({
-          id: candidate.id,
-          version: candidate.version,
-          name: candidate.name,
-          pricingType: candidate.pricingType,
-          minQuantity: candidate.minQuantity,
-          maxQuantity: candidate.maxQuantity ?? null,
-          priceCents: candidate.priceCents ?? null,
-          discountPercent: candidate.discountPercent ?? null,
-          active: candidate.active,
-        }));
       const preco = calcularPrecoPedido({
         items: selected.map((item) => ({ seatId: item.requested.seatId, ticketTypeId: item.ticket.id, participantIndex: item.requested.participantIndex, basePriceCents: item.ticket.priceCents })),
-        offers,
+        offers: [],
       });
       if (preco.totalCents < 100) throw fail("INVALID_AMOUNT", "Valor mínimo para pagamento: R$ 1,00");
 
@@ -294,30 +255,73 @@ export class EventosPublicSalesService {
         coupon = { id: candidate.id, version: candidate.version, code, name: candidate.name ?? null, pricingType: candidate.pricingType, discountPercent: candidate.discountPercent ?? null, discountCents: candidate.discountCents ?? null, active: true, startsAt: candidate.startsAt ?? null, endsAt: candidate.endsAt ?? null, usageLimit: candidate.usageLimit ?? null, usageLimitPerBuyer: candidate.usageLimitPerBuyer ?? null };
       }
 
-      const rawOffers = await tx.select().from(eventoOfertas).where(and(eq(eventoOfertas.eventId, order.eventId), eq(eventoOfertas.active, true)));
-      const activeOffers = (rawOffers as any[]).filter((candidate) => candidate.active);
-      if (activeOffers.length > 1) throw new ConflictException({ code: "MULTIPLE_ACTIVE_OFFERS", message: "Mais de uma oferta ativa para o evento" });
-      const quantidade = itemRows.reduce((total, row) => total + Number(row.item?.quantity ?? 1), 0);
-      const ofertaAtiva = activeOffers[0];
-      const ofertaCompativel = !ofertaAtiva?.compatibleTicketTypeIds || itemRows.every((row: any) => ofertaAtiva.compatibleTicketTypeIds.includes(row.item.ticketTypeId));
-      if (ofertaAtiva?.pricingType === "VALOR_FIXO" && ofertaCompativel && quantidade >= ofertaAtiva.minQuantity && (ofertaAtiva.maxQuantity === null || ofertaAtiva.maxQuantity === undefined || quantidade <= ofertaAtiva.maxQuantity)) {
-        throw fail("OFFER_NOT_SUPPORTED_PUBLIC", "A oferta de valor fixo não está disponível na compra pública");
-      }
-      const offers: OfertaPreco[] = activeOffers.filter((candidate) => candidate.pricingType === "PERCENTUAL").map((candidate) => ({ id: candidate.id, version: candidate.version, name: candidate.name, pricingType: candidate.pricingType, minQuantity: candidate.minQuantity, maxQuantity: candidate.maxQuantity ?? null, priceCents: candidate.priceCents ?? null, discountPercent: candidate.discountPercent ?? null, active: true }));
-      const items = itemRows.map((row: any, index: number) => ({ seatId: row.inventory?.seatId ?? row.item?.pricingEvidence?.seatId ?? String(index), ticketTypeId: row.item.ticketTypeId, participantIndex: Number(row.item?.pricingEvidence?.participantIndex ?? index), basePriceCents: Number(row.item?.pricingEvidence?.baseUnitPriceCents ?? row.ticket?.priceCents ?? row.item.unitPriceCents + (row.item?.pricingEvidence?.allocatedDiscountCents ?? 0)) }));
-      const preco = calcularPrecoPedido({ items, offers, coupon });
+      const items = itemRows.map((row: any, index: number) => ({ seatId: row.inventory?.seatId ?? row.item?.pricingEvidence?.seatId ?? String(index), ticketTypeId: row.item.ticketTypeId, participantIndex: Number(row.item?.pricingEvidence?.participantIndex ?? index), basePriceCents: this.precoBaseHistorico(row) }));
+      const preco = calcularPrecoPedido({ items, offers: [], coupon });
       if (preco.totalCents > 0 && preco.totalCents < 100) throw fail("INVALID_AMOUNT", "Valor mínimo para pagamento: R$ 1,00");
       const appliedCoupon = preco.appliedCoupon;
-      const updates = { subtotalCents: preco.subtotalCents, offerDiscountCents: preco.offerDiscountCents, couponDiscountCents: preco.couponDiscountCents, discountCents: preco.discountCents, totalCents: preco.totalCents, appliedOfferId: preco.appliedOffer?.id ?? null, appliedCouponId: appliedCoupon?.id ?? null, couponSnapshot: appliedCoupon ?? null, updatedAt: now };
+      const subtotalCents = Number(order.subtotalCents ?? preco.subtotalCents);
+      const offerDiscountCents = Number(order.offerDiscountCents ?? 0);
+      const updates = { subtotalCents, offerDiscountCents, couponDiscountCents: preco.couponDiscountCents, discountCents: offerDiscountCents + preco.couponDiscountCents, totalCents: preco.totalCents, appliedOfferId: order.appliedOfferId ?? null, appliedCouponId: appliedCoupon?.id ?? null, couponSnapshot: appliedCoupon ?? null, updatedAt: now };
       await tx.update(eventoPedidos).set(updates).where(eq(eventoPedidos.id, order.id));
       for (const [index, row] of itemRows.entries()) {
         const price = preco.items[index]!;
-        const evidence = { ...(row.item?.pricingEvidence ?? {}), source: appliedCoupon ? "eventoCupons" : preco.appliedOffer ? "eventoOfertas" : "eventoTiposIngresso", baseUnitPriceCents: price.baseUnitPriceCents, allocatedDiscountCents: price.allocatedDiscountCents, allocatedOfferDiscountCents: price.allocatedOfferDiscountCents, allocatedCouponDiscountCents: price.allocatedCouponDiscountCents, offerId: preco.appliedOffer?.id ?? null, offerVersion: preco.appliedOffer?.version ?? null, offerSnapshot: preco.appliedOffer ?? null, couponId: appliedCoupon?.id ?? null, couponVersion: appliedCoupon?.version ?? null, couponSnapshot: appliedCoupon ?? null, participantIndex: price.participantIndex, seatId: price.seatId, allocationMethod: "MAIOR_RESTO" };
+        const previousEvidence = row.item?.pricingEvidence ?? {};
+        const allocatedOfferDiscountCents = this.alocacaoOfertaHistorica(row);
+        const evidence = {
+          ...previousEvidence,
+          ...(previousEvidence.couponBaseUnitPriceCents == null ? { couponBaseUnitPriceCents: price.baseUnitPriceCents } : {}),
+          source: appliedCoupon ? "eventoCupons" : previousEvidence.source ?? "eventoTiposIngresso",
+          baseUnitPriceCents: previousEvidence.baseUnitPriceCents ?? price.baseUnitPriceCents,
+          allocatedDiscountCents: allocatedOfferDiscountCents + price.allocatedCouponDiscountCents,
+          allocatedOfferDiscountCents,
+          allocatedCouponDiscountCents: price.allocatedCouponDiscountCents,
+          couponId: appliedCoupon?.id ?? null,
+          couponVersion: appliedCoupon?.version ?? null,
+          couponSnapshot: appliedCoupon ?? null,
+          participantIndex: price.participantIndex,
+          seatId: price.seatId,
+          allocationMethod: "MAIOR_RESTO",
+        };
         await tx.update(eventoItensPedido).set({ unitPriceCents: price.unitPriceCents, totalPriceCents: price.totalPriceCents, pricingEvidence: evidence, updatedAt: now }).where(eq(eventoItensPedido.id, row.item.id));
       }
       Object.assign(order, updates, { couponSnapshot: appliedCoupon ?? null });
       return this.pedidoResult(order, tx);
     });
+  }
+
+  private alocacaoOfertaHistorica(itemRow: any): number {
+    const item = itemRow?.item ?? itemRow;
+    const evidence = item?.pricingEvidence ?? {};
+    const registrado = Number(evidence.allocatedOfferDiscountCents);
+    if (Number.isFinite(registrado) && registrado >= 0) return registrado;
+
+    const baseUnitPriceCents = Number(evidence.baseUnitPriceCents);
+    const couponBaseUnitPriceCents = Number(evidence.couponBaseUnitPriceCents);
+    if (Number.isFinite(baseUnitPriceCents) && baseUnitPriceCents >= 0 && Number.isFinite(couponBaseUnitPriceCents) && couponBaseUnitPriceCents >= 0) {
+      return Math.max(0, baseUnitPriceCents - couponBaseUnitPriceCents);
+    }
+
+    const allocatedDiscountCents = Number(evidence.allocatedDiscountCents);
+    const allocatedCouponDiscountCents = Number(evidence.allocatedCouponDiscountCents);
+    if (Number.isFinite(allocatedDiscountCents) && allocatedDiscountCents >= 0 && Number.isFinite(allocatedCouponDiscountCents) && allocatedCouponDiscountCents >= 0) {
+      return Math.max(0, allocatedDiscountCents - allocatedCouponDiscountCents);
+    }
+
+    const possuiCupomPersistido = evidence.couponId != null || evidence.couponSnapshot != null;
+    return !possuiCupomPersistido && Number.isFinite(allocatedDiscountCents) && allocatedDiscountCents >= 0 ? allocatedDiscountCents : 0;
+  }
+
+  private precoBaseHistorico(itemRow: any): number {
+    const item = itemRow?.item ?? itemRow;
+    const evidence = item?.pricingEvidence ?? {};
+    const registrado = evidence.couponBaseUnitPriceCents == null ? Number.NaN : Number(evidence.couponBaseUnitPriceCents);
+    if (Number.isFinite(registrado) && registrado >= 0) return registrado;
+    const totalPersistido = Number(item?.totalPriceCents);
+    if (Number.isFinite(totalPersistido) && totalPersistido >= 0) return totalPersistido;
+    const unitPersistido = Number(item?.unitPriceCents);
+    if (Number.isFinite(unitPersistido) && unitPersistido >= 0) return unitPersistido;
+    const precoIngresso = Number(itemRow?.ticket?.priceCents);
+    return Number.isFinite(precoIngresso) && precoIngresso >= 0 ? precoIngresso : 0;
   }
 
   async finalizarPedidoConvidado(orderNumber: string, raw: unknown): Promise<FinalizacaoPublicaResult> {

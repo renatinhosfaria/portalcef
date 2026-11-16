@@ -37,28 +37,6 @@ export const meusIngressosSchema = z.union([
   z.object({ orderNumber: z.string().trim().min(6).max(32), email: z.string().trim().email() }).strict(),
   z.object({ email: z.string().trim().email(), phone: z.string().trim().min(8).max(30) }).strict(),
 ]);
-export const atualizarOfertaSchema = z.object({
-  id: z.string().uuid().optional(),
-  version: z.number().int().positive().optional(),
-  name: z.string().trim().min(1).max(200),
-  pricingType: z.enum(["PERCENTUAL", "VALOR_FIXO"]),
-  minQuantity: z.number().int().positive(),
-  maxQuantity: z.number().int().positive().nullable().optional(),
-  priceCents: z.number().int().nonnegative().nullable().optional(),
-  discountPercent: z.number().int().min(0).max(100).nullable().optional(),
-  compatibleTicketTypeIds: z.array(z.string().trim().min(1)).nullable().optional(),
-  active: z.boolean().optional(),
-}).strict().superRefine((value, context) => {
-  if (value.maxQuantity !== null && value.maxQuantity !== undefined && value.maxQuantity < value.minQuantity) {
-    context.addIssue({ code: z.ZodIssueCode.custom, path: ["maxQuantity"], message: "A quantidade máxima deve ser maior ou igual à mínima" });
-  }
-  if (value.pricingType === "PERCENTUAL" && (value.discountPercent === null || value.discountPercent === undefined)) {
-    context.addIssue({ code: z.ZodIssueCode.custom, path: ["discountPercent"], message: "Informe o percentual da oferta" });
-  }
-  if (value.pricingType === "VALOR_FIXO" && (value.priceCents === null || value.priceCents === undefined)) {
-    context.addIssue({ code: z.ZodIssueCode.custom, path: ["priceCents"], message: "Informe o preço total da faixa" });
-  }
-});
 
 const date = z.coerce.date();
 export const criarEventoSchema = z.object({
@@ -101,7 +79,6 @@ export type ReservaPublicaInput = z.infer<typeof reservaPublicaSchema>;
 export type FinalizarPedidoInput = z.infer<typeof finalizarPedidoSchema>;
 export type PagamentoEmbutidoInput = z.infer<typeof pagamentoEmbutidoSchema>;
 export type MeusIngressosInput = z.infer<typeof meusIngressosSchema>;
-export type AtualizarOfertaInput = z.infer<typeof atualizarOfertaSchema>;
 export type EmitirCortesiasInput = z.infer<typeof emitirCortesiasSchema>;
 export type CancelarCortesiaInput = z.infer<typeof cancelarCortesiaSchema>;
 export type JuntarAlunasInput = z.infer<typeof juntarAlunasSchema>;

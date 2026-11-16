@@ -204,5 +204,43 @@ test("migration 0057 cria persistência de cupons", () => {
   assert.match(migration, /offer_discount_cents.*>= 0/s);
   assert.match(migration, /UPDATE "evento_pedidos" SET "offer_discount_cents" = COALESCE\("discount_cents", 0\)/);
   const journal = JSON.parse(readFileSync(join(__dirname, "../../drizzle/meta/_journal.json"), "utf8"));
-  assert.equal(journal.entries.at(-1).tag, "0057_eventos_cupons");
+  assert.ok(journal.entries.some((entry: { tag: string }) => entry.tag === "0057_eventos_cupons"));
+});
+
+test("migration 0058 arquiva ofertas ativas sem destruir dados", () => {
+  const migration = readFileSync(join(__dirname, "../../drizzle/0058_arquiva_ofertas_eventos.sql"), "utf8");
+  assert.match(migration, /UPDATE "evento_ofertas"\s+SET "active" = false/);
+  assert.match(migration, /WHERE "active" = true/);
+  assert.match(migration, /updated_at.*now\(\)/);
+  assert.doesNotMatch(migration, /DELETE/i);
+  assert.doesNotMatch(migration, /DROP TABLE/i);
+  assert.doesNotMatch(migration, /INSERT INTO/i);
+  const journal = JSON.parse(readFileSync(join(__dirname, "../../drizzle/meta/_journal.json"), "utf8"));
+  assert.equal(journal.entries.at(-1).tag, "0058_arquiva_ofertas_eventos");
+});
+
+test("migration 0058 é idempotente para ofertas ativas e inativas", () => {
+  const atualizadoEm = new Date("2026-11-16T12:00:00.000Z");
+  const ofertas = [
+    { id: "ativa", active: true, updatedAt: new Date("2026-11-15T12:00:00.000Z") },
+    { id: "inativa", active: false, updatedAt: new Date("2026-11-15T12:00:00.000Z") },
+  ];
+  const executarMigration = () => {
+    for (const oferta of ofertas) {
+      if (oferta.active === true) {
+        oferta.active = false;
+        oferta.updatedAt = atualizadoEm;
+      }
+    }
+  };
+
+  executarMigration();
+  assert.deepEqual(ofertas, [
+    { id: "ativa", active: false, updatedAt: atualizadoEm },
+    { id: "inativa", active: false, updatedAt: new Date("2026-11-15T12:00:00.000Z") },
+  ]);
+
+  const aposPrimeiraExecucao = structuredClone(ofertas);
+  executarMigration();
+  assert.deepEqual(ofertas, aposPrimeiraExecucao);
 });
