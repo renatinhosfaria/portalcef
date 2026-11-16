@@ -17,7 +17,7 @@ export function ResumoLugares({ selection, ticketTypes, offers = [], onChangeTic
   const ofertaAplicada = offers.find((item) => selection.length >= item.minQuantity && (item.maxQuantity == null || selection.length <= item.maxQuantity));
   const oferta = ofertaAplicada ?? offers.find((item) => selection.length < item.minQuantity);
   const progresso = ofertaAplicada ? 100 : oferta ? Math.min(100, (selection.length / oferta.minQuantity) * 100) : 0;
-  return <section id="resumo-lugares" aria-label="Resumo dos lugares" className="rounded-2xl border border-[#e6e9e1] bg-white p-5 shadow-sm">
+  return <section id="resumo-lugares" aria-label="Resumo dos lugares" className="scroll-mt-4 rounded-2xl border border-[#e6e9e1] bg-white p-5 shadow-sm">
     <div className="flex items-center justify-between gap-3"><h2 className="font-display text-xl font-semibold text-[#1f2a24]">Seus lugares</h2><span className="rounded-full bg-[#eff4e8] px-2.5 py-1 text-xs font-semibold text-[#3f6f12]">{selection.length}</span></div>
     {!selection.length ? <p className="mt-4 text-sm text-[#647066]">Escolha um lugar no mapa para continuar.</p> : <>
       <ul className="mt-4 space-y-3">

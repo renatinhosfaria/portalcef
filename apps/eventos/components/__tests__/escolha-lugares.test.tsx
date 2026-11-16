@@ -101,4 +101,26 @@ describe("EscolhaLugares", () => {
     expect(screen.getByRole("button", { name: /Selecionar G19.*acessível/ })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Selecionar G20/ })).toBeNull();
   });
+
+  it("no celular, mostra a escolha Inteira/Meia na própria página, sem ficar escondida", () => {
+    render(<EscolhaLugares evento={evento} sessao={sessao} map={mapa} />);
+    fireEvent.click(screen.getByRole("button", { name: /Fileira G, assento 19/ }));
+    const resumos = screen.getAllByRole("region", { name: /Resumo dos lugares/ });
+    expect(resumos).toHaveLength(1);
+    for (let elemento: HTMLElement | null = resumos[0]!; elemento; elemento = elemento.parentElement) {
+      expect(elemento.className.toString().split(/\s+/)).not.toContain("hidden");
+    }
+  });
+
+  it("no celular, a barra inferior avisa que falta o tipo e leva até a escolha", () => {
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    render(<EscolhaLugares evento={evento} sessao={sessao} map={mapa} />);
+    fireEvent.click(screen.getByRole("button", { name: /Fileira G, assento 19/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Escolha Inteira ou Meia/ }));
+    expect(scrollIntoView).toHaveBeenCalled();
+    const resumo = screen.getByRole("region", { name: /Resumo dos lugares/ });
+    fireEvent.click(within(resumo).getByRole("radio", { name: /Meia-entrada/ }));
+    expect(screen.queryByRole("button", { name: /Escolha Inteira ou Meia/ })).toBeNull();
+  });
 });
