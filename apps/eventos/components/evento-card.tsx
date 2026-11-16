@@ -7,9 +7,7 @@ import { ImagemPublicaEvento } from "./imagem-publica-evento";
 export function EventoCard({ event }: { event: PublicEventCard }): React.JSX.Element {
   const disponivel = event.availability === "available";
   const conteudo = <>
-    <div className="relative aspect-[16/9] overflow-hidden bg-[var(--surface-muted)]">
-      <ImagemPublicaEvento src={event.imageUrl} alt={event.title} fill className="h-full w-full object-cover transition duration-300 group-hover:scale-105" sizes="(min-width: 1024px) 33vw, (min-width: 768px) 50vw, 100vw" />
-    </div>
+    <ImagemPublicaEvento src={event.imageUrl} alt={event.title} width={1600} height={900} ajuste="conter" className={event.imageUrl ? "h-auto w-full" : "aspect-video w-full"} sizes="(min-width: 1024px) 33vw, (min-width: 768px) 50vw, 100vw" />
     <div className="flex flex-1 flex-col p-5">
       <div className="flex items-center justify-between gap-3 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--brand-green-dark)]"><span>{event.category ?? "Evento"}</span><span>{rotuloDisponibilidade(event.availability)}</span></div>
       <h2 className="mt-3 font-display text-2xl font-semibold">{event.title}</h2>

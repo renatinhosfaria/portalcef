@@ -88,6 +88,13 @@ describe("catálogo público", () => {
     expect(html).toContain('href="/evento/festa-junina"');
     for (const text of ["Uma tarde especial", "Cultura", "Pátio central", "Sex, 19 jun · 23h", "R$ 12,50", "Disponível"]) expect(html).toContain(text);
   });
+  it("mostra a arte do cartão inteira, sem corte nem caixa com fundo", () => {
+    const html = renderToStaticMarkup(<EventoCard event={evento} />);
+    expect(html).toContain("object-contain");
+    expect(html).not.toContain("object-cover");
+    expect(html).not.toContain("aspect-[16/9]");
+    expect(html).toContain("h-auto w-full");
+  });
   it("usa fallback quando não há imagem e evita compra em estados indisponíveis", () => {
     for (const availability of ["sold_out", "unavailable"] as const) {
       const html = renderToStaticMarkup(<EventoCard event={{ ...evento, imageUrl: null, availability }} />);
