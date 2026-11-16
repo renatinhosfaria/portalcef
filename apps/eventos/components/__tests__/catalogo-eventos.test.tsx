@@ -17,10 +17,10 @@ const evento: PublicEventCard = {
 
 describe("formatadores públicos de eventos", () => {
   it("formata data e horário por extenso no fuso de São Paulo", () => {
-    expect(formatarDataHoraExtenso("2026-12-07T19:00:00Z", "2026-12-07T22:00:00Z")).toBe("Segunda, 7 de dezembro de 2026 · 16h às 19h");
+    expect(formatarDataHoraExtenso("2026-12-07T22:00:00Z", "2026-12-08T01:00:00Z")).toBe("Segunda, 7 de dezembro de 2026 · 19h");
   });
   it("formata data curta, moeda e rótulo curto de assento", () => {
-    expect(formatarDataCurta("2026-12-07T19:00:00Z")).toBe("Seg, 7 dez · 16h");
+    expect(formatarDataCurta("2026-12-07T22:00:00Z")).toBe("Seg, 7 dez · 19h");
     expect(formatarMoeda(2250)).toBe("R$ 22,50");
     expect(rotuloCurto({ rowLabel: "G", seatNumber: "21" })).toBe("G21");
   });

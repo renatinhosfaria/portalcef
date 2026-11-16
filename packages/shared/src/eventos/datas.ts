@@ -22,10 +22,9 @@ export function hora(value: Date): string {
   return `${hour}h${minute === 0 ? "" : String(minute).padStart(2, "0")}`;
 }
 
-export function formatarDataHoraExtenso(inicio: Date | string, fim?: Date | string | null): string {
+export function formatarDataHoraExtenso(inicio: Date | string, _fim?: Date | string | null): string {
   const dataInicio = dataValida(inicio);
   if (!dataInicio) return "Data a confirmar";
   const partes = partesNoFuso(dataInicio);
-  const dataFim = dataValida(fim);
-  return `${DIAS_LONGOS[partes.weekday]}, ${partes.day} de ${MESES_LONGOS[partes.month - 1]} de ${partes.year} · ${hora(dataInicio)}${dataFim ? ` às ${hora(dataFim)}` : ""}`;
+  return `${DIAS_LONGOS[partes.weekday]}, ${partes.day} de ${MESES_LONGOS[partes.month - 1]} de ${partes.year} · ${hora(dataInicio)}`;
 }

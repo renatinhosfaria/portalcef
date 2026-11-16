@@ -60,7 +60,7 @@ export function SessoesEvento({ eventSlug, sessions, mostrarAcoes = true }: { ev
       const tipos = session.ticketTypes ?? [];
       const vendavel = sessaoVendavel(session);
       return <article key={session.id} className="rounded-xl border bg-white p-4 shadow-sm">
-        <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xl font-semibold">{horario(session.startsAt)}{session.endsAt ? `–${horario(session.endsAt)}` : ""}</p><p className="text-sm text-slate-600">{session.location?.name ?? "Local a confirmar"}{session.location?.room ? ` · ${session.location.room}` : ""}</p></div><span className="rounded-full bg-slate-100 px-3 py-1 text-sm">{session.availability === "sold_out" ? "Esgotada" : rotuloDisponibilidade(session.availability)}</span></div>
+        <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xl font-semibold">{horario(session.startsAt)}</p><p className="text-sm text-slate-600">{session.location?.name ?? "Local a confirmar"}{session.location?.room ? ` · ${session.location.room}` : ""}</p></div><span className="rounded-full bg-slate-100 px-3 py-1 text-sm">{session.availability === "sold_out" ? "Esgotada" : rotuloDisponibilidade(session.availability)}</span></div>
         {session.location?.address && <p className="mt-2 text-sm text-slate-600">{session.location.address}</p>}
         {session.location?.instructions && <p className="mt-2 text-sm text-slate-700"><strong>Instruções:</strong> {session.location.instructions}</p>}
         {session.location?.accessibility && <p className="mt-2 text-sm text-slate-700"><strong>Acessibilidade:</strong> {session.location.accessibility}</p>}

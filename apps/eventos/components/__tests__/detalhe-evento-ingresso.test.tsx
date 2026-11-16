@@ -37,10 +37,10 @@ describe("caminho público de ingresso", () => {
   });
 
   it("renderiza sessões com datas ISO vindas do JSON da API", () => {
-    const sessaoWire = criarSessao({ startsAt: "2026-01-02T15:00:00.000Z" as unknown as Date, endsAt: "2026-01-02T17:00:00.000Z" as unknown as Date });
+    const sessaoWire = criarSessao({ startsAt: "2026-01-02T22:00:00.000Z" as unknown as Date, endsAt: "2026-01-03T01:00:00.000Z" as unknown as Date });
     const html = renderToStaticMarkup(<DetalheEvento event={evento} sessions={[sessaoWire]} />);
-    expect(html).toContain("12:00");
-    expect(html).toContain("14:00");
+    expect(html).toContain("19:00");
+    expect(html).not.toContain("22:00");
   });
 
   it("exibe janela de venda e orienta os tipos de ingresso", () => {
