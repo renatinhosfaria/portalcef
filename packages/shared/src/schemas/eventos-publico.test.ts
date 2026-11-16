@@ -39,7 +39,7 @@ describe("schemas públicos de eventos", () => {
     }).success).toBe(false);
   });
 
-  it("aceita a aluna que convidou como texto opcional por participante", () => {
+  it("exige a aluna que convidou em cada participante", () => {
     const base = {
       buyer: { name: "Ana Maria", email: "ana@example.com", phone: "11999999999" },
       acceptances: ["PRIVACIDADE", "COMPRA", "CANCELAMENTO_REEMBOLSO", "ACESSIBILIDADE", "CONTATO"].map((type) => ({ type, version: 1 })),
@@ -49,8 +49,9 @@ describe("schemas públicos de eventos", () => {
 
     const preenchido = finalizarPedidoSchema.parse({ ...base, participants: [participante("  Beatriz Santos ")] });
     expect(preenchido.participants[0]?.studentName).toBe("Beatriz Santos");
-    expect(finalizarPedidoSchema.parse({ ...base, participants: [participante()] }).participants[0]?.studentName).toBeUndefined();
-    expect(finalizarPedidoSchema.parse({ ...base, participants: [participante("   ")] }).participants[0]?.studentName).toBeUndefined();
+    expect(finalizarPedidoSchema.safeParse({ ...base, participants: [participante()] }).success).toBe(false);
+    expect(finalizarPedidoSchema.safeParse({ ...base, participants: [participante("   ")] }).success).toBe(false);
+    expect(finalizarPedidoSchema.safeParse({ ...base, participants: [participante("B")] }).success).toBe(false);
     expect(finalizarPedidoSchema.safeParse({ ...base, participants: [participante("a".repeat(201))] }).success).toBe(false);
   });
 });

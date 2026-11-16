@@ -69,13 +69,14 @@ describe("FluxoCheckout", () => {
     fireEvent.change(screen.getByLabelText("Celular (WhatsApp)"), { target: { value: "34999999999" } });
     fireEvent.change(screen.getByLabelText("Nome de quem vai sentar no lugar G19"), { target: { value: "Ana Silva" } });
     fireEvent.change(screen.getByLabelText("Nome de quem vai sentar no lugar G20"), { target: { value: "Bia Silva" } });
+    fireEvent.change(screen.getByLabelText("Aluna que convidou, lugar G19"), { target: { value: "Beatriz Santos" } });
     fireEvent.click(screen.getByRole("checkbox", { name: "Li e aceito as políticas do evento" }));
     fireEvent.click(screen.getByRole("button", { name: "Ir para o pagamento" }));
 
     await waitFor(() => expect(eventosApi.iniciarPagamento).toHaveBeenCalled());
     expect(eventosApi.finalizarPedido).toHaveBeenCalledWith(pedido.orderNumber, expect.objectContaining({
       buyer: { name: "Ana Silva", email: "ana@example.com", phone: "34999999999" },
-      participants: [{ participantIndex: 0, fullName: "Ana Silva", type: "CONVIDADO" }, { participantIndex: 1, fullName: "Bia Silva", type: "CONVIDADO" }],
+      participants: [{ participantIndex: 0, fullName: "Ana Silva", type: "CONVIDADO", studentName: "Beatriz Santos" }, { participantIndex: 1, fullName: "Bia Silva", type: "CONVIDADO", studentName: "Beatriz Santos" }],
       acceptances: politicas.map(({ type, version }) => ({ type, version })),
     }));
     const returnUrl = vi.mocked(eventosApi.iniciarPagamento).mock.calls[0]?.[1].returnUrl;
@@ -93,6 +94,7 @@ describe("FluxoCheckout", () => {
     fireEvent.change(screen.getByLabelText("Celular (WhatsApp)"), { target: { value: "34999999999" } });
     fireEvent.change(screen.getByLabelText("Nome de quem vai sentar no lugar G19"), { target: { value: "Ana Silva" } });
     fireEvent.change(screen.getByLabelText("Nome de quem vai sentar no lugar G20"), { target: { value: "Bia Silva" } });
+    fireEvent.change(screen.getByLabelText("Aluna que convidou, lugar G19"), { target: { value: "Beatriz Santos" } });
     fireEvent.click(screen.getByRole("checkbox", { name: "Li e aceito as políticas do evento" }));
     fireEvent.click(screen.getByRole("button", { name: "Ir para o pagamento" }));
 
@@ -106,25 +108,27 @@ describe("FluxoCheckout", () => {
     fireEvent.change(screen.getByLabelText("Celular (WhatsApp)"), { target: { value: "34999999999" } });
     fireEvent.change(screen.getByLabelText("Nome de quem vai sentar no lugar G19"), { target: { value: "Ana Silva" } });
     fireEvent.change(screen.getByLabelText("Nome de quem vai sentar no lugar G20"), { target: { value: "Bia Silva" } });
+    fireEvent.change(screen.getByLabelText("Aluna que convidou, lugar G19"), { target: { value: "Beatriz Santos" } });
     fireEvent.click(screen.getByRole("checkbox", { name: "Li e aceito as políticas do evento" }));
   }
 
-  it("a aluna que convidou é opcional e não entra no envio quando fica em branco", async () => {
+  it("exige a aluna que convidou em cada lugar antes de enviar", () => {
     render(<FluxoCheckout pedido={pedido} evento={evento} sessao={sessao} politicas={politicas} publishableKey="pk_test" />);
-    expect((screen.getByLabelText("Aluna que convidou, lugar G19 (opcional)") as HTMLInputElement).required).toBe(false);
+    expect((screen.getByLabelText("Aluna que convidou, lugar G19") as HTMLInputElement).required).toBe(true);
     preencherObrigatorios();
+    fireEvent.change(screen.getByLabelText("Aluna que convidou, lugar G19"), { target: { value: "" } });
+    fireEvent.change(screen.getByLabelText("Aluna que convidou, lugar G20"), { target: { value: "  " } });
     fireEvent.click(screen.getByRole("button", { name: "Ir para o pagamento" }));
 
-    await waitFor(() => expect(eventosApi.finalizarPedido).toHaveBeenCalled());
-    const enviados = vi.mocked(eventosApi.finalizarPedido).mock.calls[0]![1].participants;
-    expect(enviados.every((participante) => !("studentName" in participante))).toBe(true);
+    expect(screen.getByRole("alert").textContent).toContain("aluna que convidou");
+    expect(eventosApi.finalizarPedido).not.toHaveBeenCalled();
   });
 
   it("sugere a aluna do primeiro lugar nos seguintes e envia a de cada ingresso", async () => {
     render(<FluxoCheckout pedido={pedido} evento={evento} sessao={sessao} politicas={politicas} publishableKey="pk_test" />);
     preencherObrigatorios();
-    const primeira = screen.getByLabelText("Aluna que convidou, lugar G19 (opcional)") as HTMLInputElement;
-    const segunda = screen.getByLabelText("Aluna que convidou, lugar G20 (opcional)") as HTMLInputElement;
+    const primeira = screen.getByLabelText("Aluna que convidou, lugar G19") as HTMLInputElement;
+    const segunda = screen.getByLabelText("Aluna que convidou, lugar G20") as HTMLInputElement;
 
     fireEvent.change(primeira, { target: { value: "  Beatriz Santos " } });
     expect(segunda.value).toBe("  Beatriz Santos ");
@@ -189,6 +193,7 @@ describe("FluxoCheckout", () => {
     fireEvent.change(screen.getByLabelText("Celular (WhatsApp)"), { target: { value: "34999999999" } });
     fireEvent.change(screen.getByLabelText("Nome de quem vai sentar no lugar G19"), { target: { value: "Ana Silva" } });
     fireEvent.change(screen.getByLabelText("Nome de quem vai sentar no lugar G20"), { target: { value: "Bia Silva" } });
+    fireEvent.change(screen.getByLabelText("Aluna que convidou, lugar G19"), { target: { value: "Beatriz Santos" } });
     fireEvent.click(screen.getByRole("checkbox", { name: "Li e aceito as políticas do evento" }));
     fireEvent.click(screen.getByRole("button", { name: "Ir para o pagamento" }));
     await waitFor(() => expect(eventosApi.liberarPedido).toHaveBeenCalledTimes(1));
@@ -220,6 +225,7 @@ describe("FluxoCheckout", () => {
     fireEvent.change(screen.getByLabelText("Celular (WhatsApp)"), { target: { value: "34999999999" } });
     fireEvent.change(screen.getByLabelText("Nome de quem vai sentar no lugar G19"), { target: { value: "Ana Silva" } });
     fireEvent.change(screen.getByLabelText("Nome de quem vai sentar no lugar G20"), { target: { value: "Bia Silva" } });
+    fireEvent.change(screen.getByLabelText("Aluna que convidou, lugar G19"), { target: { value: "Beatriz Santos" } });
     fireEvent.click(screen.getByRole("checkbox", { name: "Li e aceito as políticas do evento" }));
     const enviar = screen.getByRole("button", { name: "Ir para o pagamento" });
     fireEvent.click(enviar);
@@ -245,6 +251,7 @@ describe("FluxoCheckout", () => {
       fireEvent.change(screen.getByLabelText("Celular (WhatsApp)"), { target: { value: "34999999999" } });
       fireEvent.change(screen.getByLabelText("Nome de quem vai sentar no lugar G19"), { target: { value: "Ana Silva" } });
       fireEvent.change(screen.getByLabelText("Nome de quem vai sentar no lugar G20"), { target: { value: "Bia Silva" } });
+    fireEvent.change(screen.getByLabelText("Aluna que convidou, lugar G19"), { target: { value: "Beatriz Santos" } });
       fireEvent.click(screen.getByRole("checkbox", { name: "Li e aceito as políticas do evento" }));
       fireEvent.click(screen.getByRole("button", { name: "Ir para o pagamento" }));
       vi.advanceTimersByTime(1100);
@@ -275,6 +282,7 @@ describe("FluxoCheckout", () => {
     fireEvent.change(screen.getByLabelText("Celular (WhatsApp)"), { target: { value: "34999999999" } });
     fireEvent.change(screen.getByLabelText("Nome de quem vai sentar no lugar G19"), { target: { value: "Ana Silva" } });
     fireEvent.change(screen.getByLabelText("Nome de quem vai sentar no lugar G20"), { target: { value: "Bia Silva" } });
+    fireEvent.change(screen.getByLabelText("Aluna que convidou, lugar G19"), { target: { value: "Beatriz Santos" } });
     fireEvent.click(screen.getByRole("checkbox", { name: "Li e aceito as políticas do evento" }));
     fireEvent.click(screen.getByRole("button", { name: "Ir para o pagamento" }));
 

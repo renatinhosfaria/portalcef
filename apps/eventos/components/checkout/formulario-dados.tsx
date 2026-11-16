@@ -6,7 +6,7 @@ import { PoliticasAceite } from "./politicas-aceite";
 
 type DadosCheckout = {
   buyer: { name: string; email: string; phone: string };
-  participants: Array<{ participantIndex: number; fullName: string; type: "CONVIDADO"; studentName?: string }>;
+  participants: Array<{ participantIndex: number; fullName: string; type: "CONVIDADO"; studentName: string }>;
   aceitouPoliticas: boolean;
 };
 
@@ -28,12 +28,13 @@ export function FormularioDados({ items, politicas, onEnviar, bloqueado = false 
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const buyer = { name: String(form.get("buyerName") ?? "").trim(), email: String(form.get("buyerEmail") ?? "").trim(), phone: String(form.get("buyerPhone") ?? "").trim() };
-    const participants = itensOrdenados.map((item, index) => { const participantIndex = item.participantIndex ?? index; const studentName = alunaDe(participantIndex).trim(); return { participantIndex, fullName: String(form.get(`participant-${participantIndex}`) ?? "").trim(), type: "CONVIDADO" as const, ...(studentName ? { studentName } : {}) }; });
+    const participants = itensOrdenados.map((item, index) => { const participantIndex = item.participantIndex ?? index; const studentName = alunaDe(participantIndex).trim(); return { participantIndex, fullName: String(form.get(`participant-${participantIndex}`) ?? "").trim(), type: "CONVIDADO" as const, studentName }; });
     const proximasFaltas = [
       buyer.name.length < 2 ? "nome completo" : "",
       !/^\S+@\S+\.\S+$/.test(buyer.email) ? "e-mail" : "",
       buyer.phone.replace(/\D/g, "").length < 8 ? "celular" : "",
       participants.some((participant) => participant.fullName.length < 2) ? "nomes dos participantes" : "",
+      participants.some((participant) => participant.studentName.length < 2) ? "aluna que convidou" : "",
       !aceito ? "aceite das políticas" : "",
     ].filter(Boolean);
     setFaltas(proximasFaltas);
@@ -49,8 +50,8 @@ export function FormularioDados({ items, politicas, onEnviar, bloqueado = false 
       <label className="block text-sm font-semibold">E-mail<input required name="buyerEmail" type="email" autoComplete="email" className="mt-1 min-h-11 w-full rounded-lg border border-[#d9ddcf] p-3 font-normal" /></label>
       <label className="block text-sm font-semibold">Celular (WhatsApp)<input required name="buyerPhone" type="tel" inputMode="tel" autoComplete="tel" className="mt-1 min-h-11 w-full rounded-lg border border-[#d9ddcf] p-3 font-normal" /></label>
     </fieldset>
-    <fieldset className="space-y-4"><legend className="font-display text-xl font-semibold text-[#1f2a24]">Quem vai sentar em cada lugar</legend><p className="text-sm text-[#647066]">Se uma aluna convidou você, escreva o nome completo dela. É opcional.</p>
-      {itensOrdenados.map((item, index) => { const participantIndex = item.participantIndex ?? index; const rotulo = `${item.rowLabel}${item.seatNumber}`; return <div key={`${item.seatId}-${participantIndex}`}><label className="block text-sm font-semibold">Nome de quem vai sentar no lugar {rotulo}<input required name={`participant-${participantIndex}`} className="mt-1 min-h-11 w-full rounded-lg border border-[#d9ddcf] p-3 font-normal" /></label><label className="mt-2 block text-sm text-[#3d4a41]">Aluna que convidou <span className="text-[#647066]">(opcional)</span><input name={`student-${participantIndex}`} aria-label={`Aluna que convidou, lugar ${rotulo} (opcional)`} maxLength={200} autoComplete="off" value={alunaDe(participantIndex)} onChange={(evento) => { const valor = evento.target.value; setAlunas((atuais) => ({ ...atuais, [participantIndex]: valor })); }} className="mt-1 min-h-11 w-full rounded-lg border border-[#d9ddcf] p-3 font-normal" /></label>{/meia/i.test(item.ticketTypeName) && <p className="mt-1 text-xs text-[#647066]">Leve o documento que dá direito ao desconto.</p>}</div>; })}
+    <fieldset className="space-y-4"><legend className="font-display text-xl font-semibold text-[#1f2a24]">Quem vai sentar em cada lugar</legend><p className="text-sm text-[#647066]">Em cada lugar, escreva também o nome completo da aluna que convidou você.</p>
+      {itensOrdenados.map((item, index) => { const participantIndex = item.participantIndex ?? index; const rotulo = `${item.rowLabel}${item.seatNumber}`; return <div key={`${item.seatId}-${participantIndex}`}><label className="block text-sm font-semibold">Nome de quem vai sentar no lugar {rotulo}<input required name={`participant-${participantIndex}`} className="mt-1 min-h-11 w-full rounded-lg border border-[#d9ddcf] p-3 font-normal" /></label><label className="mt-2 block text-sm font-semibold">Aluna que convidou<input required name={`student-${participantIndex}`} aria-label={`Aluna que convidou, lugar ${rotulo}`} maxLength={200} autoComplete="off" value={alunaDe(participantIndex)} onChange={(evento) => { const valor = evento.target.value; setAlunas((atuais) => ({ ...atuais, [participantIndex]: valor })); }} className="mt-1 min-h-11 w-full rounded-lg border border-[#d9ddcf] p-3 font-normal" /></label>{/meia/i.test(item.ticketTypeName) && <p className="mt-1 text-xs text-[#647066]">Leve o documento que dá direito ao desconto.</p>}</div>; })}
     </fieldset>
     <PoliticasAceite politicas={politicas} aceito={aceito} onAceitar={setAceito} />
     <button type="submit" disabled={enviando} className="min-h-12 rounded-xl bg-[#3f6f12] px-5 py-3 font-semibold text-white disabled:cursor-wait disabled:opacity-60">{enviando ? "Preparando pagamento…" : "Ir para o pagamento"}</button>

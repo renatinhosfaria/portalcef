@@ -310,15 +310,16 @@ describe("EventosPublicSalesService - contratos públicos", () => {
     expect(confirmacao.confirmarPedido).not.toHaveBeenCalled();
   });
 
-  it("finalização grava a aluna que convidou no participante e aceita o campo vazio", async () => {
+  it("finalização grava a aluna que convidou no participante e recusa o campo vazio", async () => {
     const comAluna = pedidoFinalizacaoDb();
     const entrada = entradaFinalizacao();
     await new EventosPublicSalesService({ db: comAluna } as any).finalizarPedidoConvidado("ABC123DEF456", { ...entrada, participants: [{ ...entrada.participants[0]!, studentName: "Beatriz Santos" }] });
     expect(comAluna.participants).toEqual([expect.objectContaining({ fullName: "Participante", studentName: "Beatriz Santos" })]);
 
     const semAluna = pedidoFinalizacaoDb();
-    await new EventosPublicSalesService({ db: semAluna } as any).finalizarPedidoConvidado("ABC123DEF456", entradaFinalizacao());
-    expect(semAluna.participants).toEqual([expect.objectContaining({ fullName: "Participante", studentName: null })]);
+    const { studentName: _ignorada, ...participanteSemAluna } = entrada.participants[0]!;
+    await expect(new EventosPublicSalesService({ db: semAluna } as any).finalizarPedidoConvidado("ABC123DEF456", { ...entrada, participants: [participanteSemAluna] as any })).rejects.toMatchObject({ response: { code: "VALIDATION_ERROR" } });
+    expect(semAluna.participants ?? []).toEqual([]);
   });
 
   it("finalização devolve acesso e guarda só o hash com validade de 30 dias após o fim da sessão", async () => {
@@ -565,7 +566,7 @@ describe("EventosPublicSalesService - contratos públicos", () => {
 
     await expect(new EventosPublicSalesService({ db } as any).finalizarPedidoConvidado("ABC123DEF456", {
       buyer: { name: "Ana", email: "ana@example.com", phone: "11999999999" },
-      participants: [{ participantIndex: 0, fullName: "Ana", type: "CONVIDADO" }],
+      participants: [{ participantIndex: 0, fullName: "Ana", type: "CONVIDADO", studentName: "Aluna Convidante" }],
       acceptances: [
         { type: "PRIVACIDADE", version: 1 },
         { type: "COMPRA", version: 1 },
@@ -1053,7 +1054,7 @@ function corridaIdempotenciaDb(config: { seatId: string }) {
 function entradaFinalizacao() {
   return {
     buyer: { name: "  Ana Maria  ", email: " ANA@EXAMPLE.COM ", phone: "+55 (11) 99999-9999" },
-    participants: [{ participantIndex: 0, fullName: "Participante", type: "CONVIDADO" as const }],
+    participants: [{ participantIndex: 0, fullName: "Participante", type: "CONVIDADO" as const, studentName: "Aluna Convidante" }],
     acceptances: ["PRIVACIDADE", "COMPRA", "CANCELAMENTO_REEMBOLSO", "ACESSIBILIDADE", "CONTATO"].map((type) => ({ type, version: 1 })),
     idempotencyKey: "finalizacao-nova-123456",
   };
