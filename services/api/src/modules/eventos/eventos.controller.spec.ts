@@ -29,6 +29,12 @@ describe('eventos workspace contracts', () => {
     expect(proto.updateDefaultMap).toBeUndefined();
   });
 
+  it('não expõe rotas administrativas de ofertas', () => {
+    const proto = (EventosAdminController as any).prototype;
+    expect(proto.offers).toBeUndefined();
+    expect(proto.updateOffers).toBeUndefined();
+  });
+
   it('aceita apenas o campo file e rejeita versão inválida no multipart', async () => {
     const service = { atualizarImagem: jest.fn() };
     const controller = new EventosAdminController(service as any, {} as any);

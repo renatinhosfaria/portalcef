@@ -6,7 +6,6 @@ import { DatabaseService } from "../../common/database/database.service";
 import { RASTER_IMAGE_MIME_TYPES, StorageService } from "../../common/storage/storage.service";
 import { EventosRulesService } from "./eventos-rules.service";
 import { MapasService } from "./mapas/mapas.service";
-import { EventosOfertasService } from "./eventos-ofertas.service";
 import { montarAssentosDaSessao, montarLayoutPublico } from "./montar-mapa-sessao";
 
 type DbTransaction = Parameters<Database["transaction"]>[0] extends (tx: infer T) => unknown ? T : never;
@@ -22,7 +21,7 @@ export function assertSchoolScope(actor: EventoActor, schoolId: string) {
 
 @Injectable()
 export class EventosService {
-  constructor(private readonly database: DatabaseService, private readonly rules: EventosRulesService, @Optional() @Inject(StorageService) private readonly storage: StorageService | undefined, @Optional() @Inject(MapasService) private readonly mapas: MapasService | undefined, @Optional() @Inject(EventosOfertasService) private readonly ofertas: EventosOfertasService | undefined = undefined) {}
+  constructor(private readonly database: DatabaseService, private readonly rules: EventosRulesService, @Optional() @Inject(StorageService) private readonly storage: StorageService | undefined, @Optional() @Inject(MapasService) private readonly mapas: MapasService | undefined, @Optional() private readonly ofertas: { listarPublicas(eventId: string): Promise<OfertaPrecoPublica[]> } | undefined = undefined) {}
   private get db(): Database { return this.database.db; }
   private normalizeSlug(slug: string) { return slug.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""); }
   private resumo(event: typeof eventos.$inferSelect): EventoResumo { return { id: event.id, schoolId: event.schoolId, slug: event.slug, title: event.title, status: event.status as EventoResumo["status"], publishedAt: event.publishedAt, plannedPublicationAt: event.plannedPublicationAt }; }
