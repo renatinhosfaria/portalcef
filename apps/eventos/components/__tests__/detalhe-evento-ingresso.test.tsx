@@ -148,7 +148,10 @@ describe("caminho público de ingresso", () => {
     const ofertaFixa: OfertaPrecoPublica = { id: "grupo-fixo", version: 1, name: "Grupo", minQuantity: 5, maxQuantity: null, discountPercent: null };
     const html = renderToStaticMarkup(<DetalheEvento event={{ ...evento, imageUrl: "https://www.portalcef.com.br/storage/festival.jpg" }} sessions={[criarSessao({ startsAt: "2026-01-02T15:00:00.000Z" as unknown as Date, ticketTypes: [{ id: "meia", name: "Meia-entrada", description: null, priceCents: 500, maxPerOrder: null, eligibility: "Estudantes" }], offers: [ofertaFixa] })]} />);
     expect(html).toContain("object-contain");
-    expect(html).toContain("aspect-[16/9]");
+    expect(html).toContain("h-auto w-full");
+    expect(html).not.toContain("aspect-[16/9]");
+    expect(html.slice(0, html.indexOf("</header>"))).not.toContain("blur");
+    expect(html.indexOf("festival.jpg")).toBeLessThan(html.indexOf("<h1"));
     expect(html).toContain("Sexta, 2 de janeiro de 2026 · 12h");
     expect(html).toContain("Rua A");
     expect(html).toContain("Assentos numerados");
