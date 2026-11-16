@@ -175,6 +175,11 @@ O script sempre executa lint, typecheck, Buildx Bake com `--load`, build da
 landing page do Compose, `up` com `IMAGE_TAG` explícito e `health-check.sh`.
 Ele recusa árvore de trabalho suja para manter o SHA do rollback confiável.
 
+Só as apps alteradas desde a versão em produção são reconstruídas (alterações em
+`packages/`, lockfile ou Docker forçam build completo; `--completo` força também).
+Após o health check, o script apaga imagens fora das 3 últimas versões publicadas
+(`.deploy/historico`) e limita o cache de build. Detalhes em `docs/DEPLOYMENT.md`.
+
 ### Três armadilhas que já derrubaram a produção
 
 **1. `--env-file .env.docker` é obrigatório.** O compose lê `.env` por padrão, e

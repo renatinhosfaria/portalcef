@@ -374,6 +374,24 @@ rollback automático de código ou banco; migrations devem ser compatíveis com
 a versão ainda em execução. A `landing-mae` também recebe `IMAGE_TAG`, portanto
 acompanha a versão escolhida no rollback.
 
+**Build seletivo.** O script lê a versão em produção (tag da imagem do container
+`essencia-api`) e compara com o commit atual. Só as apps alteradas em `apps/<app>`,
+`services/api` ou `landing-mae-por-inteiro` são reconstruídas; as outras recebem a
+tag nova apontando para a imagem que já está em produção. Lint, typecheck e testes
+rodam só nos pacotes afetados (`--filter=...[<versão em produção>]`). Qualquer
+alteração em `packages/`, `pnpm-lock.yaml`, `docker/`, `docker-bake.hcl`,
+`package.json` ou outro arquivo desconhecido força o build completo, assim como
+imagem base ausente ou commit desconhecido. Para forçar: `./scripts/deploy.sh --completo`.
+Arquivos que não entram nas imagens (`docs/`, `scripts/`, `.github/`, `*.md` na raiz)
+não disparam build.
+
+**Limpeza automática.** Depois do health check, o script registra a versão em
+`.deploy/historico` (fora do git) e remove as imagens `essencia-*` que não são das
+3 últimas versões publicadas nem `latest`. Também limita o cache do BuildKit a
+20 GB (`LIMITE_CACHE_BUILD`). Falhas na limpeza só geram aviso. Com menos de 3
+versões no histórico, nenhuma imagem é removida. Sem essa limpeza o disco lotou
+em 16/11/2026 (1.110 imagens, 141 GB).
+
 ### migrate.sh
 
 Aplica migrations no container da API, criando backup antes e abortando se o

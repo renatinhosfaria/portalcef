@@ -50,3 +50,6 @@ tmpclaude-*
 worktrees/
 .worktrees/
 .claude/settings.local.json
+
+# Histórico local de versões publicadas (scripts/deploy.sh)
+.deploy/
