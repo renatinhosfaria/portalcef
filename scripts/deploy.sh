@@ -175,7 +175,7 @@ calcular_alvos() {
   while IFS= read -r arquivo; do
     [[ -z "$arquivo" ]] && continue
     case "$arquivo" in
-      docs/*|scripts/*|.github/*|.agent/*|.context/*|.claude/*|.superpowers/*|docker-compose.dev.yml)
+      docs/*|scripts/*|.github/*|.agent/*|.context/*|.claude/*|.superpowers/*|.gitignore|docker-compose.dev.yml)
         ;;
       apps/*/*)
         nome="${arquivo#apps/}"

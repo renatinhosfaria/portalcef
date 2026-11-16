@@ -382,7 +382,7 @@ rodam só nos pacotes afetados (`--filter=...[<versão em produção>]`). Qualqu
 alteração em `packages/`, `pnpm-lock.yaml`, `docker/`, `docker-bake.hcl`,
 `package.json` ou outro arquivo desconhecido força o build completo, assim como
 imagem base ausente ou commit desconhecido. Para forçar: `./scripts/deploy.sh --completo`.
-Arquivos que não entram nas imagens (`docs/`, `scripts/`, `.github/`, `*.md` na raiz)
+Arquivos que não entram nas imagens (`docs/`, `scripts/`, `.github/`, `.gitignore`, `*.md` na raiz)
 não disparam build.
 
 **Limpeza automática.** Depois do health check, o script registra a versão em

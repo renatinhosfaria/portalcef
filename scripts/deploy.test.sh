@@ -127,7 +127,7 @@ unset FALHA_TESTE
 rm -rf "$DIRETORIO_TESTE/.deploy"
 export TAG_PRODUCAO=def5678
 
-export ARQUIVOS_ALTERADOS='apps/eventos-admin/src/pagina.tsx\nservices/api/src/servico.ts\ndocs/DEPLOYMENT.md\nREADME.md\nscripts/deploy.sh\n.superpowers/sdd/plano.md\n'
+export ARQUIVOS_ALTERADOS='apps/eventos-admin/src/pagina.tsx\nservices/api/src/servico.ts\ndocs/DEPLOYMENT.md\nREADME.md\nscripts/deploy.sh\n.superpowers/sdd/plano.md\n.gitignore\n'
 executar || falhar 'deploy seletivo deveria passar'
 contem_linha "$BAKE_COMPLETO eventos-admin api"
 contem 'pnpm turbo lint --filter=...[def5678]'
