@@ -2,7 +2,7 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { PedidoComIngressos } from "@essencia/shared/types";
-import { compartilharOuBaixar, gerarPdfIngressos, nomeArquivoIngresso } from "./pdf-ingresso";
+import { compartilharOuBaixar, gerarPdfIngressos, gerarPdfLoteIngressos, nomeArquivoIngresso } from "./pdf-ingresso";
 
 const pedido: PedidoComIngressos = {
   orderNumber: "G21",
@@ -40,6 +40,18 @@ describe("PDF dos ingressos", () => {
     const blob = await gerarPdfIngressos(pedido, [pedido.tickets[0]!], { carregarArte: async () => { throw new Error("falha"); } });
     expect(blob.type).toBe("application/pdf");
     expect(blob.size).toBeGreaterThan(100);
+  });
+
+  it("junta ingressos de pedidos diferentes num único PDF, uma página por ingresso", async () => {
+    const outroPedido: PedidoComIngressos = { ...pedido, orderNumber: "G22", tickets: [{ ...pedido.tickets[0]!, numero: "ZZZZ1111", qrPayload: "qr-3" }] };
+    const carregarArte = vi.fn(async () => null);
+    const blob = await gerarPdfLoteIngressos([{ pedido, ingressos: pedido.tickets }, { pedido: outroPedido, ingressos: outroPedido.tickets }], { carregarArte, variante: "CORTESIA" });
+    expect(blob.type).toBe("application/pdf");
+    const texto = await new Promise<string>((resolve) => { const leitor = new FileReader(); leitor.onload = () => resolve(String(leitor.result)); leitor.readAsText(blob); });
+    expect(texto.match(/\/Type \/Page\b/g)?.length).toBe(3);
+    expect(texto).toContain("G21");
+    expect(texto).toContain("G22");
+    expect(carregarArte).toHaveBeenCalledTimes(1);
   });
 
   it("forma o nome de um ingresso ou do conjunto", () => {

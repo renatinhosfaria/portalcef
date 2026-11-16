@@ -21,45 +21,65 @@ function textoIngresso(pedido: PedidoComIngressos, ingresso: IngressoPublico): s
   ];
 }
 
+export type ItemLotePdf = { pedido: PedidoComIngressos; ingressos: IngressoPublico[] };
+
 export async function gerarPdfIngressos(pedido: PedidoComIngressos, ingressos: IngressoPublico[], opcoes: OpcoesPdfIngresso): Promise<Blob> {
+  return gerarPdfLoteIngressos([{ pedido, ingressos }], opcoes);
+}
+
+/** Gera um único PDF com os ingressos de vários pedidos, uma página por ingresso. */
+export async function gerarPdfLoteIngressos(itens: ItemLotePdf[], opcoes: OpcoesPdfIngresso): Promise<Blob> {
   const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a5" });
   const largura = pdf.internal.pageSize.getWidth();
-  const { carregarArte } = opcoes;
   const variante = opcoes.variante ?? "INGRESSO";
+  // A arte costuma ser a mesma para todas as páginas: carrega uma vez por URL.
+  const artes = new Map<string, Promise<string | null>>();
+  const carregarArte = (url: string): Promise<string | null> => {
+    let arte = artes.get(url);
+    if (!arte) {
+      arte = opcoes.carregarArte(url).catch(() => null);
+      artes.set(url, arte);
+    }
+    return arte;
+  };
 
-  for (const [indice, ingresso] of ingressos.entries()) {
-    if (indice > 0) pdf.addPage("a5", "portrait");
-    pdf.setFillColor(247, 250, 242);
-    pdf.roundedRect(10, 10, largura - 20, 190, 5, 5, "F");
-    pdf.setTextColor(31, 42, 36);
-    pdf.setFontSize(18);
-    pdf.text(variante === "CORTESIA" ? "Ingresso · Cortesia" : "Ingresso", 16, 24);
-    pdf.setFontSize(13);
-    pdf.text(textoIngresso(pedido, ingresso), 16, 36, { maxWidth: largura - 48, lineHeightFactor: 1.65 });
+  let primeiraPagina = true;
+  for (const { pedido, ingressos } of itens) {
+    for (const ingresso of ingressos) {
+      if (!primeiraPagina) pdf.addPage("a5", "portrait");
+      primeiraPagina = false;
+      pdf.setFillColor(247, 250, 242);
+      pdf.roundedRect(10, 10, largura - 20, 190, 5, 5, "F");
+      pdf.setTextColor(31, 42, 36);
+      pdf.setFontSize(18);
+      pdf.text(variante === "CORTESIA" ? "Ingresso · Cortesia" : "Ingresso", 16, 24);
+      pdf.setFontSize(13);
+      pdf.text(textoIngresso(pedido, ingresso), 16, 36, { maxWidth: largura - 48, lineHeightFactor: 1.65 });
 
-    if (pedido.event.imageUrl) {
-      try {
-        const arte = await carregarArte(pedido.event.imageUrl);
-        if (arte) pdf.addImage(arte, "JPEG", largura - 52, 16, 36, 24, undefined, "FAST");
-      } catch {
-        // A arte é opcional: o ingresso continua válido sem ela.
+      if (pedido.event.imageUrl) {
+        try {
+          const arte = await carregarArte(pedido.event.imageUrl);
+          if (arte) pdf.addImage(arte, "JPEG", largura - 52, 16, 36, 24, undefined, "FAST");
+        } catch {
+          // A arte é opcional: o ingresso continua válido sem ela.
+        }
       }
-    }
 
-    pdf.setDrawColor(63, 111, 18);
-    pdf.rect(16, 120, largura - 32, 46);
-    try {
-      const qr = await QRCode.toDataURL(ingresso.qrPayload, { margin: 1, width: 180 });
-      pdf.addImage(qr, "PNG", 22, 124, 30, 30, undefined, "FAST");
-    } catch {
-      // O número continua sendo uma alternativa válida se o QR falhar.
+      pdf.setDrawColor(63, 111, 18);
+      pdf.rect(16, 120, largura - 32, 46);
+      try {
+        const qr = await QRCode.toDataURL(ingresso.qrPayload, { margin: 1, width: 180 });
+        pdf.addImage(qr, "PNG", 22, 124, 30, 30, undefined, "FAST");
+      } catch {
+        // O número continua sendo uma alternativa válida se o QR falhar.
+      }
+      pdf.setFontSize(10);
+      pdf.text("Na entrada, mostre o QR code ou informe o número.", 58, 132, { maxWidth: largura - 76 });
+      pdf.setFontSize(16);
+      pdf.text(formatarNumeroIngresso(ingresso.numero), 22, 150);
+      pdf.setFontSize(9);
+      pdf.text(`Pedido nº ${pedido.orderNumber}`, 22, 160);
     }
-    pdf.setFontSize(10);
-    pdf.text("Na entrada, mostre o QR code ou informe o número.", 58, 132, { maxWidth: largura - 76 });
-    pdf.setFontSize(16);
-    pdf.text(formatarNumeroIngresso(ingresso.numero), 22, 150);
-    pdf.setFontSize(9);
-    pdf.text(`Pedido nº ${pedido.orderNumber}`, 22, 160);
   }
 
   return pdf.output("blob");
