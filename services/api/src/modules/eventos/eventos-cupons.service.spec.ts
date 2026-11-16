@@ -11,6 +11,14 @@ const evento = (extra: Record<string, unknown> = {}) => ({ id: "e1", schoolId: "
 const cupom = (extra: Record<string, unknown> = {}) => ({ id: "c1", eventId: "e1", code: "DEZ", name: "Dez por cento", pricingType: "PERCENTUAL", discountPercent: 10, discountCents: null, startsAt: null, endsAt: null, usageLimit: 10, usageLimitPerBuyer: 1, version: 1, active: true, ...extra });
 
 describe("EventosCuponsService", () => {
+  beforeAll(() => {
+    jest.useFakeTimers().setSystemTime(new Date("2026-11-13T12:00:00Z"));
+  });
+
+  afterAll(() => {
+    jest.useRealTimers();
+  });
+
   it("expõe as rotas administrativas de cupons com o contrato de proteção", () => {
     const proto = EventosAdminController.prototype as any;
     expect(typeof proto.coupons).toBe("function");
