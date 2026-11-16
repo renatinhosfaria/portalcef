@@ -807,6 +807,31 @@ describe("EventosPublicSalesService - contratos públicos", () => {
     expect(db.itemRows[0].pricingEvidence).toMatchObject({ couponBaseUnitPriceCents: 4000, allocatedOfferDiscountCents: 1000, offerSnapshot: { pricingType: "VALOR_FIXO" } });
   });
 
+  it("preserva a alocação da oferta no formato histórico sem allocatedOfferDiscountCents", async () => {
+    const db = cupomAplicacaoDb({
+      order: { subtotalCents: 10000, offerDiscountCents: 1000, discountCents: 1000, totalCents: 9000, appliedOfferId: "offer-old" },
+      coupons: [{ id: "coupon-1", eventId: "event-1", code: "DEZ", version: 1, pricingType: "PERCENTUAL", discountPercent: 10, discountCents: null, active: true, startsAt: null, endsAt: null, usageLimit: null }],
+    });
+    db.itemRows[0]!.pricingEvidence = {
+      source: "eventoOfertas",
+      baseUnitPriceCents: 10000,
+      allocatedDiscountCents: 1000,
+      offerId: "offer-old",
+      offerVersion: 1,
+      offerSnapshot: { id: "offer-old", version: 1, name: "Antiga", minQuantity: 1, maxQuantity: null, discountPercent: 10 },
+      participantIndex: 0,
+    };
+    const service = new EventosPublicSalesService({ db } as any);
+
+    await service.aplicarCupom("ABC123DEF456", { code: "DEZ" });
+    expect(db.itemRows[0]).toMatchObject({ unitPriceCents: 8100, totalPriceCents: 8100 });
+    expect(db.itemRows[0].pricingEvidence).toMatchObject({ allocatedDiscountCents: 1900, allocatedOfferDiscountCents: 1000, allocatedCouponDiscountCents: 900 });
+
+    await service.aplicarCupom("ABC123DEF456", { code: "" });
+    expect(db.itemRows[0]).toMatchObject({ unitPriceCents: 9000, totalPriceCents: 9000 });
+    expect(db.itemRows[0].pricingEvidence).toMatchObject({ allocatedDiscountCents: 1000, allocatedOfferDiscountCents: 1000, allocatedCouponDiscountCents: 0, offerId: "offer-old", offerSnapshot: { id: "offer-old" } });
+  });
+
   it("usa o preço líquido persistido em pedido legado sem snapshot de oferta", async () => {
     const db = cupomAplicacaoDb({
       order: { subtotalCents: 10000, offerDiscountCents: 0, discountCents: 0, totalCents: 8000 },

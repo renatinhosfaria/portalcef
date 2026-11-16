@@ -266,7 +266,7 @@ export class EventosPublicSalesService {
       for (const [index, row] of itemRows.entries()) {
         const price = preco.items[index]!;
         const previousEvidence = row.item?.pricingEvidence ?? {};
-        const allocatedOfferDiscountCents = Number(previousEvidence.allocatedOfferDiscountCents ?? 0);
+        const allocatedOfferDiscountCents = this.alocacaoOfertaHistorica(row);
         const evidence = {
           ...previousEvidence,
           ...(previousEvidence.couponBaseUnitPriceCents == null ? { couponBaseUnitPriceCents: price.baseUnitPriceCents } : {}),
@@ -287,6 +287,28 @@ export class EventosPublicSalesService {
       Object.assign(order, updates, { couponSnapshot: appliedCoupon ?? null });
       return this.pedidoResult(order, tx);
     });
+  }
+
+  private alocacaoOfertaHistorica(itemRow: any): number {
+    const item = itemRow?.item ?? itemRow;
+    const evidence = item?.pricingEvidence ?? {};
+    const registrado = Number(evidence.allocatedOfferDiscountCents);
+    if (Number.isFinite(registrado) && registrado >= 0) return registrado;
+
+    const baseUnitPriceCents = Number(evidence.baseUnitPriceCents);
+    const couponBaseUnitPriceCents = Number(evidence.couponBaseUnitPriceCents);
+    if (Number.isFinite(baseUnitPriceCents) && baseUnitPriceCents >= 0 && Number.isFinite(couponBaseUnitPriceCents) && couponBaseUnitPriceCents >= 0) {
+      return Math.max(0, baseUnitPriceCents - couponBaseUnitPriceCents);
+    }
+
+    const allocatedDiscountCents = Number(evidence.allocatedDiscountCents);
+    const allocatedCouponDiscountCents = Number(evidence.allocatedCouponDiscountCents);
+    if (Number.isFinite(allocatedDiscountCents) && allocatedDiscountCents >= 0 && Number.isFinite(allocatedCouponDiscountCents) && allocatedCouponDiscountCents >= 0) {
+      return Math.max(0, allocatedDiscountCents - allocatedCouponDiscountCents);
+    }
+
+    const possuiCupomPersistido = evidence.couponId != null || evidence.couponSnapshot != null;
+    return !possuiCupomPersistido && Number.isFinite(allocatedDiscountCents) && allocatedDiscountCents >= 0 ? allocatedDiscountCents : 0;
   }
 
   private precoBaseHistorico(itemRow: any): number {
