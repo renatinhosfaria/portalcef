@@ -407,6 +407,13 @@
       "when": 1794501000000,
       "tag": "0057_eventos_cupons",
       "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1794832158000,
+      "tag": "0058_arquiva_ofertas_eventos",
+      "breakpoints": true
     }
   ]
 }
