@@ -7,7 +7,8 @@ import * as eventosApi from "../../lib/eventos-api";
 import { EscolhaLugares } from "../escolha/escolha-lugares";
 
 const routerPush = vi.hoisted(() => vi.fn());
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push: routerPush }) }));
+const parametrosAtuais = vi.hoisted(() => vi.fn<() => URLSearchParams | null>(() => null));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: routerPush }), useSearchParams: parametrosAtuais }));
 
 vi.mock("../../lib/eventos-api", async () => {
   const actual = await vi.importActual<typeof import("../../lib/eventos-api")>("../../lib/eventos-api");
@@ -19,7 +20,7 @@ const sessao: PublicEventSession = { id: "sessao", startsAt: new Date("2026-12-0
 const mapa: PublicMap = { sessionId: "sessao", mapId: "mapa", seats: Array.from({ length: 21 }, (_, index) => ({ id: `s-${index + 1}`, sessionId: "sessao", rowLabel: "G", seatNumber: String(index + 19), x: index * 10, y: 0, width: 8, height: 8, category: "COMUM", accessible: false, state: "available" as const })) };
 const ofertaVolume = { id: "oferta", version: 1, name: "Grupo", minQuantity: 10, maxQuantity: null, discountPercent: 15 } as const;
 
-afterEach(cleanup);
+afterEach(() => { cleanup(); parametrosAtuais.mockReturnValue(null); });
 
 describe("EscolhaLugares", () => {
   it("seleciona lugares, exige tipo quando há dois e permite o 21º", () => {
@@ -304,6 +305,41 @@ it("sessão só com combos não os atribui automaticamente a um assento",()=>{
     expect(JSON.parse(sessionStorage.getItem(`eventos:selecao:${id}`)!).assentos).toHaveLength(10);
     fireEvent.click(screen.getByRole("button",{name:"Tentar novamente"}));
     await waitFor(()=>expect(screen.getByRole("button",{name:"Desfazer pacote Combo 10"})).toBeTruthy());
+  });
+
+  it("retoma a reserva da URL atual quando Voltar reutiliza a página sem parâmetros do servidor", async () => {
+    const id="00000000-0000-4000-8000-000000000041";
+    guardarPacotes(id);
+    parametrosAtuais.mockReturnValue(new URLSearchParams({selecao:id,orderNumber:"RESERVA123456"}));
+    vi.mocked(eventosApi.consultarPedido).mockResolvedValue(pedidoDePacotes());
+    const combo={...sessao.ticketTypes[0]!,id:"combo",name:"Combo 10",lugaresPorPacote:10,priceCents:38000};
+    render(<EscolhaLugares evento={evento} sessao={{...sessao,ticketTypes:[combo]}} map={{...mapa,seats:mapa.seats.map((s,i)=>i<10?{...s,state:"reserved" as const}:s)}}/>);
+    await waitFor(()=>expect(screen.getByText(/Você já tem uma reserva ativa/)).toBeTruthy());
+    expect(screen.getByRole("complementary",{name:"Resumo do pedido"}).textContent).toContain("10 lugares");
+    fireEvent.click(screen.getAllByRole("button",{name:"Continuar compra"})[0]!);
+    expect(routerPush).toHaveBeenCalledWith("/checkout?pedido=RESERVA123456&slug=festival&sessionId=sessao");
+    expect(eventosApi.reservarAssentos).not.toHaveBeenCalled();
+    expect(JSON.parse(sessionStorage.getItem(`eventos:selecao:${id}`)!).assentos).toHaveLength(10);
+  });
+
+  it("mantém os grupos editáveis após retirar o pedido da URL durante a liberação", async () => {
+    const id="00000000-0000-4000-8000-000000000042";
+    guardarPacotes(id);
+    parametrosAtuais.mockReturnValue(new URLSearchParams({selecao:id,orderNumber:"RESERVA123456"}));
+    vi.mocked(eventosApi.consultarPedido).mockResolvedValue(pedidoDePacotes());
+    vi.mocked(eventosApi.liberarPedido).mockResolvedValue(undefined);
+    vi.mocked(eventosApi.obterMapaSessao).mockResolvedValue(mapa);
+    const combo={...sessao.ticketTypes[0]!,id:"combo",name:"Combo 10",lugaresPorPacote:10,priceCents:38000};
+    const props={evento,sessao:{...sessao,ticketTypes:[combo]},map:{...mapa,seats:mapa.seats.map((s,i)=>i<10?{...s,state:"reserved" as const}:s)},rascunhoId:id,pedidoRetomada:"RESERVA123456"};
+    const {rerender}=render(<EscolhaLugares {...props}/>);
+    await waitFor(()=>expect(screen.getByText(/Você já tem uma reserva ativa/)).toBeTruthy());
+    fireEvent.click(screen.getByRole("link",{name:"Alterar lugares"}));
+    await waitFor(()=>expect(screen.getByRole("button",{name:"Desfazer pacote Combo 10"})).toBeTruthy());
+    parametrosAtuais.mockReturnValue(new URLSearchParams({selecao:id}));
+    rerender(<EscolhaLugares {...props}/>);
+    await waitFor(()=>expect(screen.getByRole("button",{name:"Desfazer pacote Combo 10"})).toBeTruthy());
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.getAllByRole("button",{name:"Continuar"}).every(b=>!(b as HTMLButtonElement).disabled)).toBe(true);
   });
 
 });
