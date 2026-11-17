@@ -100,6 +100,12 @@
       "import": "./src/eventos/datas.ts",
       "require": "./dist/eventos/datas.js",
       "default": "./dist/eventos/datas.js"
+    },
+    "./eventos/pacotes": {
+      "types": "./dist/eventos/pacotes.d.ts",
+      "import": "./src/eventos/pacotes.ts",
+      "require": "./dist/eventos/pacotes.js",
+      "default": "./dist/eventos/pacotes.js"
     }
   },
   "scripts": {
