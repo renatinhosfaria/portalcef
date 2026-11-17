@@ -11,7 +11,7 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ push: routerPush }) }));
 
 vi.mock("../../lib/eventos-api", async () => {
   const actual = await vi.importActual<typeof import("../../lib/eventos-api")>("../../lib/eventos-api");
-  return { ...actual, reservarAssentos: vi.fn(), obterMapaSessao: vi.fn() };
+  return { ...actual, reservarAssentos: vi.fn(), obterMapaSessao: vi.fn(), consultarPedido: vi.fn(), liberarPedido: vi.fn() };
 });
 
 const evento: PublicEventDetail = { id: "evento", slug: "festival", title: "Festival", summary: "Resumo", description: null, imageUrl: null, category: "Música", startsAt: new Date("2026-12-07T19:00:00Z"), locationName: "Auditório", fromPriceCents: 4500, availability: "available", contactEmail: null, contactPhone: null, cancellationPolicy: null };
@@ -204,6 +204,106 @@ it("sessão só com combos não os atribui automaticamente a um assento",()=>{
     fireEvent.click(screen.getByRole("button",{name:/Fileira G, assento 20/}));
     await waitFor(()=>expect(JSON.parse(sessionStorage.getItem(`eventos:selecao:${segundo}`)!).assentos).toHaveLength(1));
     expect(JSON.parse(sessionStorage.getItem(`eventos:selecao:${primeiro}`)!).assentos).toHaveLength(1);
+  });
+
+  function guardarPacotes(id:string, quantidade=10) {
+    const assentos=mapa.seats.slice(0,quantidade).map((s,i)=>({seatId:s.id,ticketTypeId:"combo",pacoteId:i<10?"p1":"p2"}));
+    sessionStorage.setItem(`eventos:selecao:${id}`,JSON.stringify({versao:1,sessionId:sessao.id,assentos}));
+    return assentos;
+  }
+  function pedidoDePacotes(quantidade=10) {
+    return {orderNumber:"RESERVA123456",status:"RESERVADO",eventTitle:evento.title,eventSlug:evento.slug,sessionId:sessao.id,expiresAt:new Date(Date.now()+60_000),session:{startsAt:sessao.startsAt,endsAt:sessao.endsAt},subtotalCents:quantidade/10*38000,totalCents:quantidade/10*38000,offerDiscountCents:0,couponDiscountCents:0,discountCents:0,appliedOffer:null,appliedCoupon:null,items:mapa.seats.slice(0,quantidade).map((s,i)=>({seatId:s.id,ticketTypeId:"combo",participantIndex:i,unitPriceCents:3800,totalPriceCents:3800,rowLabel:s.rowLabel,seatNumber:s.seatNumber,ticketTypeName:"Combo 10",pacote:{id:i<10?"p1":"p2",lugaresPorPacote:10,precoPacoteCentavos:38000,versaoTipo:1,nomeTipo:"Combo 10"}}))};
+  }
+  it("preserva rascunho quando lugares reservados ainda não puderam ser atribuídos à própria compra",async()=>{
+    const id="00000000-0000-4000-8000-000000000027";
+    guardarPacotes(id);
+    const combo={...sessao.ticketTypes[0]!,id:"combo",name:"Combo 10",lugaresPorPacote:10,priceCents:38000};
+    render(<EscolhaLugares evento={evento} sessao={{...sessao,ticketTypes:[combo]}} map={{...mapa,seats:mapa.seats.map((s,i)=>i<10?{...s,state:"reserved" as const}:s)}} rascunhoId={id}/>);
+    await waitFor(()=>expect(screen.getByRole("alert")).toBeTruthy());
+    expect(JSON.parse(sessionStorage.getItem(`eventos:selecao:${id}`)!).assentos).toHaveLength(10);
+  });
+  it("retoma a própria reserva sem tratá-la como perda nem criar outro pedido",async()=>{
+    const id="00000000-0000-4000-8000-000000000028";
+    guardarPacotes(id);
+    vi.mocked(eventosApi.consultarPedido).mockResolvedValue(pedidoDePacotes());
+    const combo={...sessao.ticketTypes[0]!,id:"combo",name:"Combo 10",lugaresPorPacote:10,priceCents:38000};
+    render(<EscolhaLugares evento={evento} sessao={{...sessao,ticketTypes:[combo]}} map={{...mapa,seats:mapa.seats.map((s,i)=>i<10?{...s,state:"reserved" as const}:s)}} rascunhoId={id} pedidoRetomada="RESERVA123456"/>);
+    await waitFor(()=>expect(screen.getByText(/Você já tem uma reserva ativa/)).toBeTruthy());
+    expect(JSON.parse(sessionStorage.getItem(`eventos:selecao:${id}`)!).assentos).toHaveLength(10);
+    fireEvent.click(screen.getAllByRole("button",{name:"Continuar compra"})[0]!);
+    expect(routerPush).toHaveBeenCalledWith("/checkout?pedido=RESERVA123456&slug=festival&sessionId=sessao");
+    expect(eventosApi.reservarAssentos).not.toHaveBeenCalled();
+    expect(eventosApi.liberarPedido).not.toHaveBeenCalled();
+  });
+  it("alteração da reserva retomada só libera após salvar e mantém os grupos",async()=>{
+    const id="00000000-0000-4000-8000-000000000029";
+    guardarPacotes(id);
+    vi.mocked(eventosApi.consultarPedido).mockResolvedValue(pedidoDePacotes());
+    vi.mocked(eventosApi.liberarPedido).mockResolvedValue(undefined);
+    vi.mocked(eventosApi.obterMapaSessao).mockResolvedValue(mapa);
+    const combo={...sessao.ticketTypes[0]!,id:"combo",name:"Combo 10",lugaresPorPacote:10,priceCents:38000};
+    render(<EscolhaLugares evento={evento} sessao={{...sessao,ticketTypes:[combo]}} map={{...mapa,seats:mapa.seats.map((s,i)=>i<10?{...s,state:"reserved" as const}:s)}} rascunhoId={id} pedidoRetomada="RESERVA123456"/>);
+    await waitFor(()=>expect(screen.getByText(/Você já tem uma reserva ativa/)).toBeTruthy());
+    fireEvent.click(screen.getByRole("link",{name:"Alterar lugares"}));
+    await waitFor(()=>expect(eventosApi.liberarPedido).toHaveBeenCalledWith("RESERVA123456"));
+    await waitFor(()=>expect(screen.getByRole("button",{name:"Desfazer pacote Combo 10"})).toBeTruthy());
+    expect(JSON.parse(sessionStorage.getItem(`eventos:selecao:${id}`)!).assentos).toHaveLength(10);
+  });
+  it("perda de um pacote inteiro na restauração exige revisão explícita",async()=>{
+    const id="00000000-0000-4000-8000-000000000030";
+    guardarPacotes(id,20);
+    const combo={...sessao.ticketTypes[0]!,id:"combo",name:"Combo 10",lugaresPorPacote:10,priceCents:38000};
+    render(<EscolhaLugares evento={evento} sessao={{...sessao,ticketTypes:[combo]}} map={{...mapa,seats:mapa.seats.map((s,i)=>i<10?{...s,state:"sold" as const}:s)}} rascunhoId={id}/>);
+    await waitFor(()=>expect(screen.getByRole("alert").textContent).toMatch(/restaurar|indisponíveis|revis/i));
+    expect(screen.getAllByRole("button",{name:"Continuar"}).every(b=>(b as HTMLButtonElement).disabled)).toBe(true);
+    expect(JSON.parse(sessionStorage.getItem(`eventos:selecao:${id}`)!).assentos).toHaveLength(20);
+    fireEvent.click(screen.getByRole("button",{name:"Confirmar seleção restante"}));
+    expect(screen.getAllByRole("button",{name:"Continuar"}).every(b=>!(b as HTMLButtonElement).disabled)).toBe(true);
+    await waitFor(()=>expect(JSON.parse(sessionStorage.getItem(`eventos:selecao:${id}`)!).assentos).toHaveLength(10));
+  });
+
+  it("não libera a reserva se o navegador não conseguir salvar a seleção",async()=>{
+    const id="00000000-0000-4000-8000-000000000031";
+    guardarPacotes(id);
+    vi.mocked(eventosApi.consultarPedido).mockResolvedValue(pedidoDePacotes());
+    const combo={...sessao.ticketTypes[0]!,id:"combo",name:"Combo 10",lugaresPorPacote:10,priceCents:38000};
+    render(<EscolhaLugares evento={evento} sessao={{...sessao,ticketTypes:[combo]}} map={mapa} rascunhoId={id} pedidoRetomada="RESERVA123456"/>);
+    await waitFor(()=>expect(screen.getByText(/Você já tem uma reserva ativa/)).toBeTruthy());
+    const gravar=vi.spyOn(Storage.prototype,"setItem").mockImplementation(()=>{throw new Error("Armazenamento indisponível");});
+    try {
+      fireEvent.click(screen.getByRole("link",{name:"Alterar lugares"}));
+      await waitFor(()=>expect(screen.getByRole("alert")).toBeTruthy());
+      expect(eventosApi.liberarPedido).not.toHaveBeenCalled();
+      expect(JSON.parse(sessionStorage.getItem(`eventos:selecao:${id}`)!).assentos).toHaveLength(10);
+    } finally { gravar.mockRestore(); }
+  });
+  it("não assume como própria uma reserva de outra composição",async()=>{
+    const id="00000000-0000-4000-8000-000000000032";
+    guardarPacotes(id);
+    vi.mocked(eventosApi.consultarPedido).mockResolvedValue({...pedidoDePacotes(),sessionId:"outra-sessao"});
+    const combo={...sessao.ticketTypes[0]!,id:"combo",name:"Combo 10",lugaresPorPacote:10,priceCents:38000};
+    render(<EscolhaLugares evento={evento} sessao={{...sessao,ticketTypes:[combo]}} map={{...mapa,seats:mapa.seats.map((s,i)=>i<10?{...s,state:"reserved" as const}:s)}} rascunhoId={id} pedidoRetomada="RESERVA123456"/>);
+    await waitFor(()=>expect(screen.getByRole("alert")).toBeTruthy());
+    expect(screen.queryByText(/Você já tem uma reserva ativa/)).toBeNull();
+    expect(eventosApi.liberarPedido).not.toHaveBeenCalled();
+    expect(JSON.parse(sessionStorage.getItem(`eventos:selecao:${id}`)!).assentos).toHaveLength(10);
+  });
+
+  it("mantém a recuperação bloqueada se o mapa falhar depois de liberar a reserva",async()=>{
+    const id="00000000-0000-4000-8000-000000000033";
+    guardarPacotes(id);
+    vi.mocked(eventosApi.consultarPedido).mockResolvedValue(pedidoDePacotes());
+    vi.mocked(eventosApi.liberarPedido).mockResolvedValue(undefined);
+    vi.mocked(eventosApi.obterMapaSessao).mockRejectedValueOnce(new Error("Mapa indisponível")).mockResolvedValue(mapa);
+    const combo={...sessao.ticketTypes[0]!,id:"combo",name:"Combo 10",lugaresPorPacote:10,priceCents:38000};
+    render(<EscolhaLugares evento={evento} sessao={{...sessao,ticketTypes:[combo]}} map={mapa} rascunhoId={id} pedidoRetomada="RESERVA123456"/>);
+    await waitFor(()=>expect(screen.getByText(/Você já tem uma reserva ativa/)).toBeTruthy());
+    fireEvent.click(screen.getByRole("link",{name:"Alterar lugares"}));
+    await waitFor(()=>expect(screen.getByRole("alert")).toBeTruthy());
+    expect(screen.getAllByRole("button",{name:"Continuar compra"}).every(b=>(b as HTMLButtonElement).disabled)).toBe(true);
+    expect(JSON.parse(sessionStorage.getItem(`eventos:selecao:${id}`)!).assentos).toHaveLength(10);
+    fireEvent.click(screen.getByRole("button",{name:"Tentar novamente"}));
+    await waitFor(()=>expect(screen.getByRole("button",{name:"Desfazer pacote Combo 10"})).toBeTruthy());
   });
 
 });

@@ -74,4 +74,11 @@ describe("página de assentos da sessão", () => {
     expect(html).toContain("O lugar A1 acabou de ser escolhido por outra pessoa");
     expect(html).toContain('aria-live="polite"');
   });
+  it("permite recuperar reserva pelo número mesmo se os últimos lugares estiverem reservados", async () => {
+    api.listarSessoesPublicasServidor.mockResolvedValue([{ ...sessao, availability: "sold_out" }]);
+    const elemento = await Page({params: Promise.resolve({slug:"ballet",sessionId:"sessao-1"}),searchParams:Promise.resolve({selecao:"00000000-0000-4000-8000-000000000028",orderNumber:"RESERVA123456"})});
+    expect(elemento.props.pedidoRetomada).toBe("RESERVA123456");
+    expect(renderToStaticMarkup(elemento)).toContain("Escolha seus lugares");
+  });
+
 });
