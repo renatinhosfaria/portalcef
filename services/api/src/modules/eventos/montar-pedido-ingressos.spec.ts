@@ -23,3 +23,11 @@ describe("montarIngressosDoPedido", () => {
     ]);
   });
 });
+
+
+it.each([true, false])("mantém nome histórico de pacote quando presente (%s)", async (historico) => {
+  const linhas = [{ ticket: { numero: "TEST1234", qrPayload: "qr-individual", status: "EMITIDO" }, item: { pricingEvidence: historico ? { pacote: { nomeTipo: "Combo histórico" } } : {} }, seat: { rowLabel: "A", seatNumber: "1" }, ticketType: { name: "Nome atual" }, participant: { fullName: "Pessoa Teste" } }];
+  const consulta: any = { from: () => consulta, innerJoin: () => consulta, where: async () => linhas };
+  const resultado = await montarIngressosDoPedido({ select: () => consulta }, "pedido");
+  expect(resultado[0]).toMatchObject({ numero: "TEST1234", qrPayload: "qr-individual", ticketTypeName: historico ? "Combo histórico" : "Nome atual", participantName: "Pessoa Teste" });
+});

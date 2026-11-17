@@ -16,7 +16,7 @@ export async function montarIngressosDoPedido(db: any, orderId: string): Promise
     qrPayload: row.ticket?.qrPayload,
     rowLabel: row.seat?.rowLabel ?? row.inventory?.rowLabel ?? "",
     seatNumber: row.seat?.seatNumber ?? row.inventory?.seatNumber ?? "",
-    ticketTypeName: row.ticketType?.name ?? row.item?.ticketTypeName ?? "",
+    ticketTypeName: row.item?.pricingEvidence?.pacote?.nomeTipo ?? row.ticketType?.name ?? row.item?.ticketTypeName ?? "",
     participantName: row.participant?.fullName ?? "",
     status: row.ticket?.status,
   }));

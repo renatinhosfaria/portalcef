@@ -191,4 +191,19 @@ it("sessão só com combos não os atribui automaticamente a um assento",()=>{
     expect(screen.getAllByRole("radio").every(r=>!(r as HTMLInputElement).checked)).toBe(true);
   });
 
+  it("ao trocar referência de rascunho, salva as novas edições no rascunho correto",async()=>{
+    const primeiro="00000000-0000-4000-8000-000000000017", segundo="00000000-0000-4000-8000-000000000018";
+    const dados=(n:number)=>({versao:1,sessionId:sessao.id,assentos:mapa.seats.slice(0,n).map(s=>({seatId:s.id,ticketTypeId:"inteira"}))});
+    sessionStorage.setItem(`eventos:selecao:${primeiro}`,JSON.stringify(dados(1)));
+    sessionStorage.setItem(`eventos:selecao:${segundo}`,JSON.stringify(dados(2)));
+    const props={evento,sessao:{...sessao,ticketTypes:[sessao.ticketTypes[0]!] },map:mapa};
+    const {rerender}=render(<EscolhaLugares {...props} rascunhoId={primeiro}/>);
+    await waitFor(()=>expect(screen.getAllByRole("radiogroup")).toHaveLength(1));
+    rerender(<EscolhaLugares {...props} rascunhoId={segundo}/>);
+    await waitFor(()=>expect(screen.getAllByRole("radiogroup")).toHaveLength(2));
+    fireEvent.click(screen.getByRole("button",{name:/Fileira G, assento 20/}));
+    await waitFor(()=>expect(JSON.parse(sessionStorage.getItem(`eventos:selecao:${segundo}`)!).assentos).toHaveLength(1));
+    expect(JSON.parse(sessionStorage.getItem(`eventos:selecao:${primeiro}`)!).assentos).toHaveLength(1);
+  });
+
 });

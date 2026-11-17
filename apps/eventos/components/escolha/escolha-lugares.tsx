@@ -46,6 +46,8 @@ export function EscolhaLugares({ evento, sessao, map: mapaInicial, initialSelect
   const [selection, setSelection] = useState(() => normalizarSelecao(mapaInicial, initialSelection, indisponiveisIniciais, sessao.ticketTypes));
   const [unavailableSeatIds, setUnavailableSeatIds] = useState<string[]>(indisponiveisIniciais);
   const rascunhoIdRef = useRef(rascunhoId);
+  const ultimaRestauracaoRef = useRef<string | undefined>(undefined);
+  const pularGravacaoRef = useRef(false);
   const [restaurando, setRestaurando] = useState(Boolean(rascunhoId));
   const [selectionInvalid, setSelectionInvalid] = useState(initialSelectionInvalid);
   const [modoLista, setModoLista] = useState(false);
@@ -60,14 +62,18 @@ export function EscolhaLugares({ evento, sessao, map: mapaInicial, initialSelect
   const resumo = <ResumoLugares selection={selection} ticketTypes={sessao.ticketTypes} offers={sessao.offers} onAdicionarPacote={(tipoId) => { setSelectionInvalid(false); setSelection(current => adicionarPacote(current, sessao.ticketTypes, tipoId, globalThis.crypto.randomUUID())); }} onDesfazerPacote={(id) => { setSelectionInvalid(false); setSelection(current => desfazerPacote(current, id)); }} onChangeTicketType={(seatId, ticketTypeId) => { setSelectionInvalid(false); setSelection((current) => current.map((item) => item.seatId === seatId ? { ...item, ticketTypeId } : item)); }} />;
 
   useEffect(() => {
-    if (!rascunhoId) return;
+    const chave = JSON.stringify([sessao.id, rascunhoId]);
+    if (!rascunhoId || ultimaRestauracaoRef.current === chave) return;
+    ultimaRestauracaoRef.current = chave;
+    pularGravacaoRef.current = true;
     const salvo = lerRascunhoSelecao(rascunhoId, sessao.id);
-    if (salvo) setSelection(normalizarSelecao(mapaInicial, salvo.assentos, indisponiveisIniciais, sessao.ticketTypes));
+    if (salvo) { rascunhoIdRef.current = rascunhoId; setSelection(normalizarSelecao(mapaInicial, salvo.assentos, indisponiveisIniciais, sessao.ticketTypes)); }
     else { rascunhoIdRef.current = undefined; setSelectionInvalid(true); }
     setRestaurando(false);
-  }, [rascunhoId, sessao.id]);
+  }, [rascunhoId, sessao.id, mapaInicial, indisponiveisIniciais, sessao.ticketTypes]);
 
   useEffect(() => {
+    if (pularGravacaoRef.current) { pularGravacaoRef.current = false; return; }
     if (restaurando || !rascunhoIdRef.current) return;
     try { salvarRascunhoSelecao({ versao: 1, sessionId: sessao.id, assentos: selection }, rascunhoIdRef.current); }
     catch (error) { setReservationError(error instanceof Error ? error.message : "Não foi possível guardar a seleção."); }

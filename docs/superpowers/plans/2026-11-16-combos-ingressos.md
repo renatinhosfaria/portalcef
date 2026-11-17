@@ -1,6 +1,6 @@
 # Plano de implementação — combos de ingressos
 
-> **Para agentes executores:** SUB-SKILL OBRIGATÓRIA: usar `superpowers:subagent-driven-development` ou `superpowers:executing-plans` para executar tarefa a tarefa. Os passos usam caixas de seleção para registrar o progresso. A execução ainda depende da escolha de método pelo Renato.
+> **Para agentes executores:** SUB-SKILL OBRIGATÓRIA: usar `superpowers:subagent-driven-development` ou `superpowers:executing-plans` para executar tarefa a tarefa. Os passos usam caixas de seleção para registrar o progresso. Método aprovado por Renato: execução direta nesta conversa, com revisão independente ao final.
 
 **Objetivo:** vender pacotes opcionais com quantidade de lugares configurável, combináveis com avulsos, sem teto global de assentos e com um ingresso e QR Code para cada lugar.
 
@@ -207,4 +207,4 @@ O resultado desta execução será código revisável, testes e migration versio
 - Remoção do teto e restauração sem truncamento: tarefas 1, 6 e 7; limites opcionais por tipo: tarefas 3, 4 e 6.
 - Checkout, rascunhos, consulta, preços e cupons: tarefas 4, 5, 7 e 8.
 - QR Code por assento e regressões de cortesia: tarefa 9; consumo operacional de QR tem a limitação explicitada acima.
-- As cinco condições do foco de revisão têm casos de teste nas tarefas indicadas. Não há implementação autorizada por este documento sozinho: Renato pediu a preparação do plano e escolherá a execução após lê-lo.
+- As cinco condições do foco de revisão têm casos de teste nas tarefas indicadas. Renato aprovou este plano e autorizou a execução direta nesta conversa, com revisão independente ao final; deploy permanece fora desta etapa.
