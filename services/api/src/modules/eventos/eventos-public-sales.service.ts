@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, Inject, Injectable, NotFoundExc
 import { and, asc, desc, eq, eventoAceites, eventoCupons, eventoCupomUsos, eventoInventarioAssentos, eventoItensPedido, eventoLocais, eventoMapaAssentos, eventoPagamentos, eventoParticipantes, eventoPedidos, eventoPoliticas, eventoReservas, eventoSessoes, eventoTiposIngresso, eventoTokensConsulta, eventos, gt, inArray, isNull, lte, or, schema, type Database } from "@essencia/db";
 import { aplicarCupomSchema, finalizarPedidoSchema, meusIngressosSchema, pagamentoEmbutidoSchema, reservaPublicaSchema, type AplicarCupomInput, type FinalizarPedidoInput, type MeusIngressosInput, type PagamentoEmbutidoInput, type ReservaPublicaInput } from "@essencia/shared/schemas";
 import { normalizarCodigoCupom, type CupomPreco } from "@essencia/shared/types";
+import { assinaturaComposicaoPacotes, ErroComposicaoPacotes, montarItensPrecoPacotes } from "@essencia/shared/eventos/pacotes";
 import { calcularPrecoPedido } from "@essencia/shared/eventos/precos";
 import type { ConsultaPedidoPublica, FinalizacaoPublicaResult, MeusIngressosResult, PagamentoEmbutidoResult, PedidoComIngressos, PedidoPublicoResult, PoliticaPublica, ReservaPublicaResult } from "@essencia/shared/types";
 import { DatabaseService } from "../../common/database/database.service";
@@ -79,6 +80,14 @@ export class EventosPublicSalesService {
         ticketById.set(ticketTypeId, ticket);
       }
 
+      let itensBase: ReturnType<typeof montarItensPrecoPacotes>;
+      try {
+        itensBase = montarItensPrecoPacotes(input.seats, [...ticketById.values()]);
+      } catch (error) {
+        if (error instanceof ErroComposicaoPacotes) throw fail(error.codigo, error.message);
+        throw error;
+      }
+
       const selected: Array<{ inventory: any; ticket: any; requested: ReservaPublicaInput["seats"][number] }> = [];
       const inventoryBySeat = new Map<string, any>();
       const orderedRequests = [...input.seats].sort((left, right) => left.seatId.localeCompare(right.seatId));
@@ -110,7 +119,7 @@ export class EventosPublicSalesService {
       for (const requested of input.seats) selected.push({ inventory: inventoryBySeat.get(requested.seatId), ticket: ticketById.get(requested.ticketTypeId), requested });
 
       const preco = calcularPrecoPedido({
-        items: selected.map((item) => ({ seatId: item.requested.seatId, ticketTypeId: item.ticket.id, participantIndex: item.requested.participantIndex, basePriceCents: item.ticket.priceCents })),
+        items: itensBase,
         offers: [],
       });
       if (preco.totalCents < 100) throw fail("INVALID_AMOUNT", "Valor mínimo para pagamento: R$ 1,00");
@@ -166,7 +175,7 @@ export class EventosPublicSalesService {
         const updated = typeof updateQuery.returning === "function" ? await updateQuery.returning() : await updateQuery;
         if (Array.isArray(updated) && !updated.length) throw new ConflictException({ code: "SEAT_UNAVAILABLE", message: "Assento indisponível" });
         await tx.insert(eventoReservas).values({ orderId: order.id, inventorySeatId: item.inventory.id, idempotencyKey: `${input.idempotencyKey}:${item.requested.seatId}`, status: "ATIVA", expiresAt });
-        await tx.insert(eventoItensPedido).values({ orderId: order.id, inventorySeatId: item.inventory.id, ticketTypeId: item.ticket.id, quantity: 1, unitPriceCents: price.unitPriceCents, totalPriceCents: price.totalPriceCents, pricingEvidence: { source: preco.appliedOffer ? "eventoOfertas" : "eventoTiposIngresso", baseUnitPriceCents: price.baseUnitPriceCents, allocatedDiscountCents: price.allocatedDiscountCents, offerId: preco.appliedOffer?.id ?? null, offerVersion: preco.appliedOffer?.version ?? null, offerSnapshot: preco.appliedOffer, ticketTypeVersion: item.ticket.version, participantIndex: item.requested.participantIndex, seatId: item.requested.seatId, allocationMethod: "MAIOR_RESTO" } });
+        await tx.insert(eventoItensPedido).values({ orderId: order.id, inventorySeatId: item.inventory.id, ticketTypeId: item.ticket.id, quantity: 1, unitPriceCents: price.unitPriceCents, totalPriceCents: price.totalPriceCents, pricingEvidence: { ...(itensBase[indice]?.pacote ? { pacote: itensBase[indice]!.pacote } : {}), source: preco.appliedOffer ? "eventoOfertas" : "eventoTiposIngresso", baseUnitPriceCents: price.baseUnitPriceCents, allocatedDiscountCents: price.allocatedDiscountCents, offerId: preco.appliedOffer?.id ?? null, offerVersion: preco.appliedOffer?.version ?? null, offerSnapshot: preco.appliedOffer, ticketTypeVersion: item.ticket.version, participantIndex: item.requested.participantIndex, seatId: item.requested.seatId, allocationMethod: "MAIOR_RESTO" } });
       }
       return this.reservaResult(tx, order);
     };
@@ -189,13 +198,9 @@ export class EventosPublicSalesService {
     if (order.sessionId && order.sessionId !== input.sessionId) return false;
     const rows = await db.select({ item: eventoItensPedido, inventory: eventoInventarioAssentos }).from(eventoItensPedido).innerJoin(eventoInventarioAssentos, eq(eventoInventarioAssentos.id, eventoItensPedido.inventorySeatId)).where(eq(eventoItensPedido.orderId, order.id));
     if (!rows.length) return false;
-    const assinatura = (seat: { seatId: string; ticketTypeId: string; participantIndex: number }) => `${seat.seatId}|${seat.ticketTypeId}|${seat.participantIndex}`;
-    const persisted = rows.map((row: any) => {
-      const participantIndex = row.item?.pricingEvidence?.participantIndex;
-      return participantIndex === undefined ? null : assinatura({ seatId: row.inventory?.seatId, ticketTypeId: row.item?.ticketTypeId, participantIndex });
-    }).filter(Boolean).sort();
-    const requested = input.seats.map((seat) => assinatura(seat)).sort();
-    return persisted.length === requested.length && persisted.every((value: string, index: number) => value === requested[index]);
+    const persisted = rows.map((row: any) => ({ seatId: row.inventory?.seatId, ticketTypeId: row.item?.ticketTypeId, participantIndex: row.item?.pricingEvidence?.participantIndex, ...(row.item?.pricingEvidence?.pacote?.id ? { pacoteId: row.item.pricingEvidence.pacote.id } : {}) }));
+    if (persisted.length !== input.seats.length || persisted.some((seat: any) => typeof seat.seatId !== "string" || typeof seat.ticketTypeId !== "string" || !Number.isInteger(seat.participantIndex))) return false;
+    return assinaturaComposicaoPacotes(input.sessionId, persisted) === assinaturaComposicaoPacotes(input.sessionId, input.seats);
   }
 
   private async reservaResult(db: any, order: any): Promise<ReservaPublicaResult> {
@@ -212,7 +217,7 @@ export class EventosPublicSalesService {
       totalCents: order.totalCents,
       appliedOffer: snapshot,
       appliedCoupon: order.couponSnapshot ?? order.appliedCoupon ?? rows.find((row: any) => row.item?.pricingEvidence?.couponSnapshot)?.item?.pricingEvidence?.couponSnapshot ?? null,
-      items: rows.map((row: any) => ({ seatId: row.inventory?.seatId, ticketTypeId: row.item?.ticketTypeId, unitPriceCents: row.item?.unitPriceCents, totalPriceCents: row.item?.totalPriceCents })),
+      items: rows.map((row: any) => ({ ...(row.item?.pricingEvidence?.pacote ? { pacote: row.item.pricingEvidence.pacote } : {}), seatId: row.inventory?.seatId, ticketTypeId: row.item?.ticketTypeId, unitPriceCents: row.item?.unitPriceCents, totalPriceCents: row.item?.totalPriceCents })),
     };
   }
 
@@ -545,7 +550,7 @@ export class EventosPublicSalesService {
   }
 
   async consultarPedido(orderNumber: string, db: any = this.db): Promise<ConsultaPedidoPublica> { const order = await this.getOrder(orderNumber, db); if (order.expiresAt && order.expiresAt <= new Date() && !["CONFIRMADO", "USADO"].includes(order.status)) throw new NotFoundException({ code: "ORDER_NOT_FOUND", message: "Pedido não encontrado" }); return this.pedidoResult(order, db); }
-  private async pedidoResult(order: any, db: any): Promise<PedidoPublicoResult> { if (order.event?.status !== "PUBLICADO" || order.session?.status !== "PUBLICADA") throw new NotFoundException({ code: "ORDER_NOT_FOUND", message: "Pedido não encontrado" }); const itemsQuery = db.select({ item: eventoItensPedido, inventory: eventoInventarioAssentos, seat: eventoMapaAssentos, ticket: eventoTiposIngresso }).from(eventoItensPedido).innerJoin(eventoInventarioAssentos, eq(eventoInventarioAssentos.id, eventoItensPedido.inventorySeatId)).innerJoin(eventoMapaAssentos, eq(eventoMapaAssentos.id, eventoInventarioAssentos.seatId)).innerJoin(eventoTiposIngresso, eq(eventoTiposIngresso.id, eventoItensPedido.ticketTypeId)).where(eq(eventoItensPedido.orderId, order.id)); const rows = typeof itemsQuery.orderBy === "function" ? await itemsQuery.orderBy(asc(eventoItensPedido.createdAt)) : await itemsQuery; const orderedRows = [...rows].sort((left: any, right: any) => (left.item?.pricingEvidence?.participantIndex ?? Number.MAX_SAFE_INTEGER) - (right.item?.pricingEvidence?.participantIndex ?? Number.MAX_SAFE_INTEGER)); const snapshot = order.appliedOffer ?? orderedRows.find((row: any) => row.item?.pricingEvidence?.offerSnapshot)?.item?.pricingEvidence?.offerSnapshot ?? null; const couponSnapshot = order.couponSnapshot ?? order.appliedCoupon ?? orderedRows.find((row: any) => row.item?.pricingEvidence?.couponSnapshot)?.item?.pricingEvidence?.couponSnapshot ?? null; return { orderNumber: order.orderNumber, status: order.status, eventTitle: order.event?.title ?? "", eventSlug: order.event?.slug ?? "", sessionId: order.session?.id ?? order.sessionId, expiresAt: order.expiresAt ?? null, session: { startsAt: order.session?.startsAt, endsAt: order.session?.endsAt }, subtotalCents: order.subtotalCents ?? order.totalCents, offerDiscountCents: order.offerDiscountCents ?? order.discountCents ?? 0, couponDiscountCents: order.couponDiscountCents ?? 0, discountCents: order.discountCents ?? 0, totalCents: order.totalCents, appliedOffer: snapshot, appliedCoupon: couponSnapshot, items: orderedRows.map((row: any) => ({ seatId: row.inventory?.seatId, ticketTypeId: row.item?.ticketTypeId, participantIndex: row.item?.pricingEvidence?.participantIndex, unitPriceCents: row.item?.unitPriceCents, totalPriceCents: row.item?.totalPriceCents, rowLabel: row.seat?.rowLabel ?? row.inventory?.rowLabel ?? "", seatNumber: row.seat?.seatNumber ?? row.inventory?.seatNumber ?? "", ticketTypeName: row.ticket?.name ?? row.item?.ticketTypeName ?? "" })) }; }
+  private async pedidoResult(order: any, db: any): Promise<PedidoPublicoResult> { if (order.event?.status !== "PUBLICADO" || order.session?.status !== "PUBLICADA") throw new NotFoundException({ code: "ORDER_NOT_FOUND", message: "Pedido não encontrado" }); const itemsQuery = db.select({ item: eventoItensPedido, inventory: eventoInventarioAssentos, seat: eventoMapaAssentos, ticket: eventoTiposIngresso }).from(eventoItensPedido).innerJoin(eventoInventarioAssentos, eq(eventoInventarioAssentos.id, eventoItensPedido.inventorySeatId)).innerJoin(eventoMapaAssentos, eq(eventoMapaAssentos.id, eventoInventarioAssentos.seatId)).innerJoin(eventoTiposIngresso, eq(eventoTiposIngresso.id, eventoItensPedido.ticketTypeId)).where(eq(eventoItensPedido.orderId, order.id)); const rows = typeof itemsQuery.orderBy === "function" ? await itemsQuery.orderBy(asc(eventoItensPedido.createdAt)) : await itemsQuery; const orderedRows = [...rows].sort((left: any, right: any) => (left.item?.pricingEvidence?.participantIndex ?? Number.MAX_SAFE_INTEGER) - (right.item?.pricingEvidence?.participantIndex ?? Number.MAX_SAFE_INTEGER)); const snapshot = order.appliedOffer ?? orderedRows.find((row: any) => row.item?.pricingEvidence?.offerSnapshot)?.item?.pricingEvidence?.offerSnapshot ?? null; const couponSnapshot = order.couponSnapshot ?? order.appliedCoupon ?? orderedRows.find((row: any) => row.item?.pricingEvidence?.couponSnapshot)?.item?.pricingEvidence?.couponSnapshot ?? null; return { orderNumber: order.orderNumber, status: order.status, eventTitle: order.event?.title ?? "", eventSlug: order.event?.slug ?? "", sessionId: order.session?.id ?? order.sessionId, expiresAt: order.expiresAt ?? null, session: { startsAt: order.session?.startsAt, endsAt: order.session?.endsAt }, subtotalCents: order.subtotalCents ?? order.totalCents, offerDiscountCents: order.offerDiscountCents ?? order.discountCents ?? 0, couponDiscountCents: order.couponDiscountCents ?? 0, discountCents: order.discountCents ?? 0, totalCents: order.totalCents, appliedOffer: snapshot, appliedCoupon: couponSnapshot, items: orderedRows.map((row: any) => ({ ...(row.item?.pricingEvidence?.pacote ? { pacote: row.item.pricingEvidence.pacote } : {}), seatId: row.inventory?.seatId, ticketTypeId: row.item?.ticketTypeId, participantIndex: row.item?.pricingEvidence?.participantIndex, unitPriceCents: row.item?.unitPriceCents, totalPriceCents: row.item?.totalPriceCents, rowLabel: row.seat?.rowLabel ?? row.inventory?.rowLabel ?? "", seatNumber: row.seat?.seatNumber ?? row.inventory?.seatNumber ?? "", ticketTypeName: row.ticket?.name ?? row.item?.ticketTypeName ?? "" })) }; }
   private async getOrder(orderNumber: string, db: any, lock = false): Promise<any> { let query = db.select({ order: eventoPedidos, event: eventos, session: eventoSessoes, location: eventoLocaisTabela }).from(eventoPedidos).innerJoin(eventos, eq(eventos.id, eventoPedidos.eventId)).innerJoin(eventoSessoes, eq(eventoSessoes.id, eventoPedidos.sessionId)); if (typeof query.leftJoin === "function") query = query.leftJoin(eventoLocaisTabela, eq(eventoLocaisTabela.id, eventoSessoes.locationId)); query = query.where(eq(eventoPedidos.orderNumber, orderNumber)); const result = await this.first<any>(lock ? await this.lockRows(query, [eventoPedidos, eventos, eventoSessoes]) : query); if (!result) throw new NotFoundException({ code: "ORDER_NOT_FOUND", message: "Pedido não encontrado" }); return result.order ? { ...result.order, event: result.event, session: result.session, location: result.location } : result; }
   private updatedExactlyOne(result: any): boolean { if (typeof result?.count === "number") return result.count === 1; return Array.isArray(result) ? result.length === 1 : result?.rowCount === 1; }
 

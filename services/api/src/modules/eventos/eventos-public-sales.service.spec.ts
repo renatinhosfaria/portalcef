@@ -194,7 +194,7 @@ describe("EventosPublicSalesService - contratos públicos", () => {
   });
 
   it("usa o preço persistido do ingresso e retorna itens da reserva", async () => {
-    const db = vendaDb({ event: { id: "e1", status: "PUBLICADO" }, session: { id: "s1", status: "PUBLICADA" }, inventory: { id: "i1", status: "DISPONIVEL", seatId: "seat-1" }, ticket: { id: "t1", priceCents: 1250, maxPerOrder: 1, version: 1 } });
+    const db = vendaDb({ event: { id: "e1", status: "PUBLICADO" }, session: { id: "s1", status: "PUBLICADA" }, inventory: { id: "i1", status: "DISPONIVEL", seatId: "seat-1" }, ticket: { id: uuid(3), priceCents: 1250, maxPerOrder: 1, version: 1 } });
     const result = await new EventosPublicSalesService({ db } as any).reservarAssentos({ sessionId: "00000000-0000-4000-8000-000000000001", seats: [{ seatId: "00000000-0000-4000-8000-000000000002", ticketTypeId: "00000000-0000-4000-8000-000000000003", participantIndex: 0 }], buyer: { name: "Ana", email: "a@b.com", phone: "11999999999" }, idempotencyKey: "price-123456" });
     expect(result.totalCents).toBe(1250);
     expect(result.subtotalCents).toBe(1250);
@@ -520,7 +520,7 @@ describe("EventosPublicSalesService - contratos públicos", () => {
       event: { id: "e1", status: "PUBLICADO" },
       session: { id: "s1", status: "PUBLICADA" },
       inventories: [{ id: "i1", status: "DISPONIVEL", seatId: "seat-1" }],
-      ticket: { id: "t1", priceCents: 1250, maxPerOrder: 1, version: 1 },
+      ticket: { id: uuid(3), priceCents: 1250, maxPerOrder: 1, version: 1 },
     });
 
     const result = await new EventosPublicSalesService({ db } as any).reservarAssentos({
@@ -922,12 +922,12 @@ function criarBancoReservaComColisao(buyerEmail: string) {
   return criarBancoReserva({ quantidade: 1, precoAdulto: 1250, offers: [], colisao: { buyerEmail } });
 }
 
-function criarBancoReserva(config: { quantidade: number; precoAdulto: number; precoCrianca?: number; offers: any[]; tiposMistos?: boolean; repetir?: boolean; colisao?: { buyerEmail: string }; takeover?: boolean; takeoverMultiassento?: boolean; statusInicial?: string; tiposInternos?: boolean }) {
+function criarBancoReserva(config: { quantidade: number; lugaresPorPacote?: number; limitePacote?: number; precoAdulto: number; precoCrianca?: number; offers: any[]; tiposMistos?: boolean; repetir?: boolean; colisao?: { buyerEmail: string }; takeover?: boolean; takeoverMultiassento?: boolean; statusInicial?: string; tiposInternos?: boolean }) {
   const event = { id: uuid(10), status: "PUBLICADO" };
   const session = { id: uuid(1), status: "PUBLICADA" };
   const tickets = [
-    { id: uuid(2), eventId: event.id, priceCents: config.precoAdulto, maxPerOrder: null, version: 1, active: true, internal: config.tiposInternos ?? false },
-    { id: uuid(3), eventId: event.id, priceCents: config.precoCrianca ?? config.precoAdulto, maxPerOrder: null, version: 1, active: true, internal: config.tiposInternos ?? false },
+    { id: uuid(2), name: "Combo", lugaresPorPacote: config.lugaresPorPacote ?? 1, eventId: event.id, priceCents: config.precoAdulto, maxPerOrder: config.limitePacote ?? null, version: 1, active: true, internal: config.tiposInternos ?? false },
+    { id: uuid(3), name: "Inteira", lugaresPorPacote: 1, eventId: event.id, priceCents: config.precoCrianca ?? config.precoAdulto, maxPerOrder: null, version: 1, active: true, internal: config.tiposInternos ?? false },
   ];
   const oldOrder: any = { id: uuid(499), orderNumber: "OLD123456789", eventId: event.id, sessionId: session.id, status: "RESERVADO", expiresAt: new Date(Date.now() - 60_000) };
   const oldReservations: any[] = [];
@@ -955,6 +955,8 @@ function criarBancoReserva(config: { quantidade: number; precoAdulto: number; pr
     inventariosAntigos: inventories,
     pagamentoAntigo: { id: "payment-old", orderId: oldOrder.id, status: "PENDENTE" },
     itemRows,
+    tiposIngresso: tickets,
+    reservasCriadas: [] as any[],
     mutations,
     lockSequence: [] as string[],
     colisao: { order: collisionOrder, insertAttempts: 0 },
@@ -1029,6 +1031,7 @@ function criarBancoReserva(config: { quantidade: number; precoAdulto: number; pr
         }
         if (insertCalls === 1) { Object.assign(order, payload); banco.jaCriado = true; return { returning: async () => [order] }; }
         if (payload.ticketTypeId) itemRows.push(payload);
+        if (payload.inventorySeatId && payload.expiresAt) banco.reservasCriadas.push(payload);
         return Promise.resolve([]);
       } };
     },
@@ -1377,3 +1380,46 @@ function erroUnicoDrizzle(constraint: string, code = "23505") {
   const original = Object.assign(new Error("duplicate key value violates unique constraint"), { code, constraint_name: constraint });
   return Object.assign(new Error("Failed query: insert into ..."), { query: "insert into ...", params: [], cause: original });
 }
+
+
+describe("reserva de pacotes completos", () => {
+  function entrada(quantidade: number, avulso = false) {
+    const input = entradaReserva(quantidade,"reserva-pacotes-123456");
+    return {...input,seats:input.seats.map((s,i)=>({...s,ticketTypeId:avulso&&i===quantidade-1?uuid(3):uuid(2),...(avulso&&i===quantidade-1?{}:{pacoteId:uuid(800+Math.floor(i/10))})}))};
+  }
+  it.each([[10,false,38000],[11,true,42500],[30,false,114000]] as const)("cobra pacotes uma vez para %s assentos", async (quantidade,avulso,total) => {
+    const db = criarBancoReserva({quantidade,precoAdulto:38000,precoCrianca:4500,lugaresPorPacote:10,offers:[]});
+    const resultado = await new EventosPublicSalesService({db} as any).reservarAssentos(entrada(quantidade,avulso));
+    expect(resultado.subtotalCents).toBe(total);
+    expect(resultado.totalCents).toBe(total);
+    expect(db.itemRows).toHaveLength(quantidade);
+    expect(db.reservasCriadas).toHaveLength(quantidade);
+    expect(db.itemRows[0]).toMatchObject({quantity:1,unitPriceCents:3800,pricingEvidence:{baseUnitPriceCents:3800,pacote:{lugaresPorPacote:10,precoPacoteCentavos:38000}}});
+    expect(resultado.items[0]?.pacote).toMatchObject({lugaresPorPacote:10,precoPacoteCentavos:38000});
+  });
+  it.each(["parcial","misto","duplicado","limite"])("recusa grupo %s sem gravar pedido",async (caso)=>{
+    const quantidade = caso === "parcial" ? 9 : 10;
+    const db = criarBancoReserva({quantidade,precoAdulto:38000,precoCrianca:4500,lugaresPorPacote:10,limitePacote:caso==="limite"?9:undefined,offers:[]});
+    const input = entrada(quantidade);
+    if(caso==="misto") input.seats[9]!.ticketTypeId=uuid(3);
+    if(caso==="duplicado") input.seats[9]!.seatId=input.seats[0]!.seatId;
+    await expect(new EventosPublicSalesService({db} as any).reservarAssentos(input)).rejects.toThrow();
+    expect(db.mutations.value).toBe(0);
+    expect(db.itemRows).toHaveLength(0);
+  });
+  it("repete grupos equivalentes e detecta composição realmente diferente",async()=>{
+    const db=criarBancoReserva({quantidade:20,precoAdulto:38000,lugaresPorPacote:10,offers:[],repetir:true});
+    const instancia=new EventosPublicSalesService({db} as any);
+    const input=entrada(20);
+    await instancia.reservarAssentos(input);
+    db.tiposIngresso[0].lugaresPorPacote=30;
+    db.tiposIngresso[0].priceCents=100000;
+    const equivalente={...input,seats:input.seats.map(s=>({...s,pacoteId:s.pacoteId===uuid(800)?uuid(900):uuid(901)})).reverse()};
+    const repetido=await instancia.reservarAssentos(equivalente);
+    expect(repetido.totalCents).toBe(76000);
+    expect(repetido.items[0]?.pacote?.lugaresPorPacote).toBe(10);
+    const trocado={...input,seats:input.seats.map((s,i)=>({...s,pacoteId:i===0?uuid(801):i===10?uuid(800):s.pacoteId}))};
+    await expect(instancia.reservarAssentos(trocado)).rejects.toMatchObject({response:{code:"IDEMPOTENCY_CONFLICT"}});
+    expect(db.itemRows).toHaveLength(20);
+  });
+});
