@@ -223,7 +223,7 @@ async function exercitarViewport(browser, nome, viewport, apiPort, baseUrl) {
   await pagina.getByLabel("Celular (WhatsApp)").fill("34999999999");
   const participantes = pagina.locator('input[name^="participant-"]');
   for (let indice = 0; indice < await participantes.count(); indice += 1) await participantes.nth(indice).fill(indice === 0 ? "Ana Souza" : "Bruno Souza");
-  await pagina.getByLabel("Aluna que convidou, lugar A1").fill("Beatriz Souza");
+  await pagina.getByLabel("Nome da criança que irá prestigiar, lugar A1").fill("Beatriz Souza");
   await pagina.locator('input[aria-label="Li e aceito as políticas do evento"]').check();
   await pagina.getByRole("button", { name: "Ir para o pagamento" }).click();
   await pagina.waitForTimeout(3000);

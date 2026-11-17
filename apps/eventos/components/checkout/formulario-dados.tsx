@@ -16,7 +16,7 @@ export function FormularioDados({ items, politicas, onEnviar, bloqueado = false 
   const [aceito, setAceito] = useState(false);
   const [faltas, setFaltas] = useState<string[]>([]);
   const [enviando, setEnviando] = useState(false);
-  // Aluna que convidou, por participantIndex. Só entram aqui os campos que a pessoa editou;
+  // Nome da criança que irá prestigiar, por participantIndex. Só entram aqui os campos que a pessoa editou;
   // os demais acompanham o primeiro lugar, para a família não redigitar o mesmo nome.
   const [alunas, setAlunas] = useState<Record<number, string>>({});
   const itensOrdenados = [...items].sort((a, b) => (a.participantIndex ?? Number.MAX_SAFE_INTEGER) - (b.participantIndex ?? Number.MAX_SAFE_INTEGER));
@@ -34,7 +34,7 @@ export function FormularioDados({ items, politicas, onEnviar, bloqueado = false 
       !/^\S+@\S+\.\S+$/.test(buyer.email) ? "e-mail" : "",
       buyer.phone.replace(/\D/g, "").length < 8 ? "celular" : "",
       participants.some((participant) => participant.fullName.length < 2) ? "nomes dos participantes" : "",
-      participants.some((participant) => participant.studentName.length < 2) ? "aluna que convidou" : "",
+      participants.some((participant) => participant.studentName.length < 2) ? "nome da criança que irá prestigiar" : "",
       !aceito ? "aceite das políticas" : "",
     ].filter(Boolean);
     setFaltas(proximasFaltas);
@@ -50,8 +50,8 @@ export function FormularioDados({ items, politicas, onEnviar, bloqueado = false 
       <label className="block text-sm font-semibold">E-mail<input required name="buyerEmail" type="email" autoComplete="email" className="mt-1 min-h-11 w-full rounded-lg border border-[#d9ddcf] p-3 font-normal" /></label>
       <label className="block text-sm font-semibold">Celular (WhatsApp)<input required name="buyerPhone" type="tel" inputMode="tel" autoComplete="tel" className="mt-1 min-h-11 w-full rounded-lg border border-[#d9ddcf] p-3 font-normal" /></label>
     </fieldset>
-    <fieldset className="space-y-4"><legend className="font-display text-xl font-semibold text-[#1f2a24]">Quem vai sentar em cada lugar</legend><p className="text-sm text-[#647066]">Em cada lugar, escreva também o nome completo da aluna que convidou você.</p>
-      {itensOrdenados.map((item, index) => { const participantIndex = item.participantIndex ?? index; const rotulo = `${item.rowLabel}${item.seatNumber}`; return <div key={`${item.seatId}-${participantIndex}`}><label className="block text-sm font-semibold">Nome de quem vai sentar no lugar {rotulo}<input required name={`participant-${participantIndex}`} className="mt-1 min-h-11 w-full rounded-lg border border-[#d9ddcf] p-3 font-normal" /></label><label className="mt-2 block text-sm font-semibold">Aluna que convidou<input required name={`student-${participantIndex}`} aria-label={`Aluna que convidou, lugar ${rotulo}`} maxLength={200} autoComplete="off" value={alunaDe(participantIndex)} onChange={(evento) => { const valor = evento.target.value; setAlunas((atuais) => ({ ...atuais, [participantIndex]: valor })); }} className="mt-1 min-h-11 w-full rounded-lg border border-[#d9ddcf] p-3 font-normal" /></label>{/meia/i.test(item.ticketTypeName) && <p className="mt-1 text-xs text-[#647066]">Leve o documento que dá direito ao desconto.</p>}</div>; })}
+    <fieldset className="space-y-4"><legend className="font-display text-xl font-semibold text-[#1f2a24]">Quem vai sentar em cada lugar</legend><p className="text-sm text-[#647066]">Em cada lugar, escreva também o nome completo da criança que irá prestigiar.</p>
+      {itensOrdenados.map((item, index) => { const participantIndex = item.participantIndex ?? index; const rotulo = `${item.rowLabel}${item.seatNumber}`; return <div key={`${item.seatId}-${participantIndex}`}><label className="block text-sm font-semibold">Nome de quem vai sentar no lugar {rotulo}<input required name={`participant-${participantIndex}`} className="mt-1 min-h-11 w-full rounded-lg border border-[#d9ddcf] p-3 font-normal" /></label><label className="mt-2 block text-sm font-semibold">Nome da criança que irá prestigiar<input required name={`student-${participantIndex}`} aria-label={`Nome da criança que irá prestigiar, lugar ${rotulo}`} maxLength={200} autoComplete="off" value={alunaDe(participantIndex)} onChange={(evento) => { const valor = evento.target.value; setAlunas((atuais) => ({ ...atuais, [participantIndex]: valor })); }} className="mt-1 min-h-11 w-full rounded-lg border border-[#d9ddcf] p-3 font-normal" /></label>{/meia/i.test(item.ticketTypeName) && <p className="mt-1 text-xs text-[#647066]">Leve o documento que dá direito ao desconto.</p>}</div>; })}
     </fieldset>
     <PoliticasAceite politicas={politicas} aceito={aceito} onAceitar={setAceito} />
     <button type="submit" disabled={enviando} className="min-h-12 rounded-xl bg-[#3f6f12] px-5 py-3 font-semibold text-white disabled:cursor-wait disabled:opacity-60">{enviando ? "Preparando pagamento…" : "Ir para o pagamento"}</button>
