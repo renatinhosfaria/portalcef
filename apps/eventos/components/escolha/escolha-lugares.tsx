@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import type { PedidoPublicoResult, PublicEventDetail, PublicEventSession, PublicMap } from "@essencia/shared/types";
 import { assinaturaComposicaoPacotes } from "@essencia/shared/eventos/pacotes";
 import { adicionarPacote, desfazerPacote, removerAssentos, selecaoCompleta } from "../../lib/composicao-pacotes";
@@ -44,8 +44,11 @@ function normalizarSelecao(map: PublicMap, initial: AssentoSelecionado[], unavai
   });
 }
 
-export function EscolhaLugares({ evento, sessao, map: mapaInicial, initialSelection = [], unavailableSeatIds: indisponiveisIniciais = IDS_VAZIOS, initialSelectionInvalid = false, rascunhoId, pedidoRetomada }: { evento: PublicEventDetail; sessao: PublicEventSession; map: PublicMap; initialSelection?: AssentoSelecionado[]; unavailableSeatIds?: string[]; initialSelectionInvalid?: boolean; rascunhoId?: string; pedidoRetomada?: string }): React.JSX.Element {
+export function EscolhaLugares({ evento, sessao, map: mapaInicial, initialSelection = [], unavailableSeatIds: indisponiveisIniciais = IDS_VAZIOS, initialSelectionInvalid = false, rascunhoId: rascunhoRecebido, pedidoRetomada: pedidoRecebido }: { evento: PublicEventDetail; sessao: PublicEventSession; map: PublicMap; initialSelection?: AssentoSelecionado[]; unavailableSeatIds?: string[]; initialSelectionInvalid?: boolean; rascunhoId?: string; pedidoRetomada?: string }): React.JSX.Element {
   const router = useRouter();
+  const parametrosAtuais = useSearchParams();
+  const rascunhoId = parametrosAtuais ? parametrosAtuais.get("selecao") ?? undefined : rascunhoRecebido;
+  const pedidoRetomada = parametrosAtuais ? parametrosAtuais.get("orderNumber") ?? undefined : pedidoRecebido;
   const { mapa: map, atualizarAgora } = useDisponibilidadeAoVivo(sessao.id, mapaInicial);
   const [selection, setSelection] = useState(() => normalizarSelecao(mapaInicial, initialSelection, indisponiveisIniciais, sessao.ticketTypes));
   const [unavailableSeatIds, setUnavailableSeatIds] = useState<string[]>(indisponiveisIniciais);
@@ -174,6 +177,8 @@ export function EscolhaLugares({ evento, sessao, map: mapaInicial, initialSelect
       setSelectionInvalid(recuperados.length !== selection.length);
       setUnavailableSeatIds([]);
       const url = new URL(window.location.href);
+      // A liberação já restaurou os lugares com o mapa atualizado; não reaplicar o mapa antigo ao mudar a URL.
+      ultimaRestauracaoRef.current = JSON.stringify([sessao.id, rascunhoIdRef.current, undefined, tentativaRestauracao]);
       url.searchParams.delete("orderNumber");
       url.searchParams.delete("reservationId");
       url.searchParams.set("selecao", rascunhoIdRef.current);

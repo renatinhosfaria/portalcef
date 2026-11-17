@@ -8,7 +8,7 @@ import * as eventosApi from "../../lib/eventos-api";
 import { EscolhaLugares } from "../escolha/escolha-lugares";
 
 const routerPush = vi.hoisted(() => vi.fn());
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push: routerPush }) }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: routerPush }), useSearchParams: () => null }));
 
 const sessionId = "00000000-0000-4000-8000-000000000001";
 const seatId = "00000000-0000-4000-8000-000000000002";

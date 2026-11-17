@@ -8,7 +8,7 @@ import { EscolhaLugares } from "../escolha/escolha-lugares";
 import { lugaresPerdidos, useDisponibilidadeAoVivo } from "../escolha/use-disponibilidade-ao-vivo";
 
 const routerPush = vi.hoisted(() => vi.fn());
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push: routerPush }) }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: routerPush }), useSearchParams: () => null }));
 
 vi.mock("../../lib/eventos-api", async () => {
   const actual = await vi.importActual<typeof import("../../lib/eventos-api")>("../../lib/eventos-api");
