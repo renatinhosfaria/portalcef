@@ -252,7 +252,7 @@ export class EventosService {
       const prior = byId.get(row.event.id);
       const available = this.salesAvailability(row.session, now) === "available" && (row.inventory?.status === "DISPONIVEL" || row.inventory?.status === "LIBERADO");
       const price = row.ticket?.priceCents ?? null;
-      if (price != null) {
+      if (price != null && (row.ticket?.lugaresPorPacote ?? 1) === 1) {
         menorPrecoQualquer.set(row.event.id, Math.min(menorPrecoQualquer.get(row.event.id) ?? price, price));
         if (!ehMeiaEntrada(row.ticket?.name)) menorPrecoPadrao.set(row.event.id, Math.min(menorPrecoPadrao.get(row.event.id) ?? price, price));
       }

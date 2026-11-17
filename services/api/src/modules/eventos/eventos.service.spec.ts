@@ -531,6 +531,14 @@ describe('EventosService contratos de workspace', () => {
     const inteira = () => ({ id: 'ticket-inteira', eventId: 'e1', name: 'Inteira', description: null, priceCents: 4500, maxPerOrder: null, eligibility: null, version: 1, internal: false, active: true });
     const cortesia = () => ({ id: 'ticket-cortesia', eventId: 'e1', name: 'Cortesia', description: null, priceCents: 0, maxPerOrder: null, eligibility: null, version: 1, internal: true, active: true });
 
+
+    it('o preço principal público considera só avulsos',async()=>{
+      const combo={...inteira(),id:'combo',name:'Combo inteira',lugaresPorPacote:10,priceCents:1000};
+      const db=tiposDb({tipos:[inteira(),combo],event:event({status:'PUBLICADO',slug:'ballet'})});
+      await expect(service(db).listarPublicados(new Date('2026-11-09T12:00:00Z'))).resolves.toEqual([expect.objectContaining({fromPriceCents:4500})]);
+      const somentePacotes=tiposDb({tipos:[combo],event:event({status:'PUBLICADO',slug:'ballet'})});
+      await expect(service(somentePacotes).listarPublicados(new Date('2026-11-09T12:00:00Z'))).resolves.toEqual([expect.objectContaining({fromPriceCents:null})]);
+    });
     it('listarPublicados e getPublicBySlug não devolvem o tipo interno', async () => {
       const db = tiposDb({ tipos: [inteira(), cortesia()], event: event({ status: 'PUBLICADO', slug: 'ballet' }) });
 

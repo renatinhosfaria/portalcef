@@ -64,4 +64,13 @@ describe("ResumoPedido", () => {
     expect(screen.getAllByText("R$ 0,00").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Pedido gratuito").length).toBeGreaterThan(0);
   });
+  it("agrupa pacotes pelo preço histórico sem apresentar o rateio como oferta avulsa",()=>{
+    const itens=Array.from({length:20},(_,i)=>({seatId:`s-${i}`,ticketTypeId:"combo",participantIndex:i,unitPriceCents:3800,totalPriceCents:3800,rowLabel:"A",seatNumber:String(i+1),ticketTypeName:"Nome alterado",pacote:{id:i<10?"p1":"p2",lugaresPorPacote:10,precoPacoteCentavos:38000,versaoTipo:1,nomeTipo:"Combo original"}}));
+    render(<ResumoPedido pedido={{...pedido,items:itens,subtotalCents:76000,totalCents:76000,offerDiscountCents:0,couponDiscountCents:0,discountCents:0,appliedOffer:null,appliedCoupon:null}} evento={evento} sessao={sessao} onAlterar={vi.fn()}/>);
+    expect(screen.getByText("2 pacotes · Combo original")).toBeTruthy();
+    expect(screen.getByText("20 lugares · R$ 760,00")).toBeTruthy();
+    expect(screen.queryByText(/R\$ 38,00/)).toBeNull();
+    expect(screen.queryByText(/Nome alterado/)).toBeNull();
+  });
+
 });

@@ -222,4 +222,12 @@ describe("caminho público de ingresso", () => {
   });
 
 
+  it("identifica preço do pacote na sessão e não o anuncia como avulso",()=>{
+    const combo={id:"combo",name:"Combo 10",description:null,eligibility:null,maxPerOrder:null,lugaresPorPacote:10,priceCents:38000};
+    const sessao=criarSessao({ticketTypes:[combo]});
+    expect(renderToStaticMarkup(<DetalheEvento event={evento} sessions={[sessao]}/>)).toContain("Consulte os pacotes");
+    expect(renderToStaticMarkup(<CaixaCompra event={evento} sessions={[sessao]}/>)).toContain("Pacote de 10 lugares");
+    expect(renderToStaticMarkup(<SessoesEvento eventSlug="festival" sessions={[sessao]}/>)).toContain("Pacote de 10 lugares");
+  });
+
 });

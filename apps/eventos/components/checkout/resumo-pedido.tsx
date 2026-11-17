@@ -1,19 +1,35 @@
 "use client";
 
 import React, { useId, useState } from "react";
-import type { PedidoPublicoResult, PublicEventDetail, PublicEventSession } from "@essencia/shared/types";
+import type { EvidenciaPacote, PedidoPublicoResult, PublicEventDetail, PublicEventSession } from "@essencia/shared/types";
 import { formatarDataPublica, formatarMoeda } from "../../lib/eventos-formatters";
 import { CupomPedido } from "./cupom-pedido";
 
 type Props = { pedido: PedidoPublicoResult; evento: PublicEventDetail; sessao: PublicEventSession; mapHref?: string; onAlterar: () => void; onAtualizar?: (pedido: PedidoPublicoResult) => void; alterando?: boolean; permitirCupom?: boolean };
 
 function DetalhesResumo({ pedido, evento, sessao }: Pick<Props, "pedido" | "evento" | "sessao">): React.JSX.Element {
+  const pacotes = new Map<string, { evidencia: EvidenciaPacote; grupos: Set<string>; itens: PedidoPublicoResult["items"] }>();
+  for (const item of pedido.items) {
+    if (!item.pacote) continue;
+    const evidencia = item.pacote;
+    const chave = JSON.stringify([item.ticketTypeId, evidencia.versaoTipo, evidencia.lugaresPorPacote, evidencia.precoPacoteCentavos, evidencia.nomeTipo]);
+    const grupo = pacotes.get(chave) ?? { evidencia, grupos: new Set<string>(), itens: [] };
+    grupo.grupos.add(evidencia.id);
+    grupo.itens.push(item);
+    pacotes.set(chave, grupo);
+  }
   return <>
     {evento.imageUrl && <img src={evento.imageUrl} alt="" className="mb-4 aspect-[16/8] w-full rounded-xl object-cover" />}
     <h2 className="font-display text-xl font-semibold text-[#1f2a24]">{evento.title}</h2>
     <p className="mt-2 text-sm text-[#647066]">{formatarDataPublica(sessao.startsAt, { weekday: "long", hour: "2-digit", minute: "2-digit" })}</p>
     <p className="text-sm text-[#647066]">{evento.locationName ?? sessao.location?.name ?? "Local a confirmar"}</p>
-    <ul className="mt-4 space-y-2 text-sm text-[#475248]">{pedido.items.map((item) => <li key={item.seatId}>{item.rowLabel}{item.seatNumber} · {item.ticketTypeName} · {formatarMoeda(item.totalPriceCents)}</li>)}</ul>
+    <ul className="mt-4 space-y-2 text-sm text-[#475248]">{pedido.items.filter(item => !item.pacote).map((item) => <li key={item.seatId}>{item.rowLabel}{item.seatNumber} · {item.ticketTypeName} · {formatarMoeda(item.totalPriceCents)}</li>)}</ul>
+    {[...pacotes].map(([chave, grupo]) => <div key={chave} className="mt-4 rounded-xl border border-[#d9ddcf] p-3 text-sm">
+      <p className="font-semibold">{`${grupo.grupos.size} ${grupo.grupos.size === 1 ? "pacote" : "pacotes"} · ${grupo.evidencia.nomeTipo}`}</p>
+      <p className="mt-1">{`${grupo.itens.length} lugares · ${formatarMoeda(grupo.itens.reduce((soma, item) => soma + item.totalPriceCents, 0))}`}</p>
+      <p className="mt-1 text-[#647066]">{`Preço por pacote: ${formatarMoeda(grupo.evidencia.precoPacoteCentavos)} (antes do cupom)`}</p>
+      <p className="mt-1 text-[#647066]">Lugares: {grupo.itens.map(item => `${item.rowLabel}${item.seatNumber}`).join(", ")}</p>
+    </div>)}
     {pedido.appliedOffer && <p className="mt-4 text-sm text-[#475248]">Oferta automática: <strong>{pedido.appliedOffer.name}</strong></p>}
     {pedido.appliedCoupon && <p className="mt-1 text-sm text-[#475248]">Cupom: <strong>{pedido.appliedCoupon.code}</strong></p>}
   </>;

@@ -26,9 +26,10 @@ export function formatarPrecoPublico(cents: number | null): string {
   return formatarMoeda(cents);
 }
 
-export function precoPrincipalPublico(tipos: Pick<PublicEventTicketType, "name" | "priceCents">[]): number | null {
-  const padroes = tipos.filter((tipo) => !tipo.name.normalize("NFKD").replace(/\p{Diacritic}/gu, "").toLowerCase().includes("meia"));
-  const precos = (padroes.length ? padroes : tipos).map((tipo) => tipo.priceCents);
+export function precoPrincipalPublico(tipos: Pick<PublicEventTicketType, "name" | "priceCents" | "lugaresPorPacote">[]): number | null {
+  const avulsos = tipos.filter(tipo => (tipo.lugaresPorPacote ?? 1) === 1);
+  const padroes = avulsos.filter((tipo) => !tipo.name.normalize("NFKD").replace(/\p{Diacritic}/gu, "").toLowerCase().includes("meia"));
+  const precos = (padroes.length ? padroes : avulsos).map((tipo) => tipo.priceCents);
   return precos.length ? Math.min(...precos) : null;
 }
 
