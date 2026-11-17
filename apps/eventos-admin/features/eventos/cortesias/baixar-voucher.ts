@@ -1,5 +1,5 @@
 import type { CortesiaResumo, PedidoComIngressos } from "@essencia/shared/types";
-import { gerarPdfIngressos, gerarPdfLoteIngressos, nomeArquivoIngresso } from "@essencia/components/eventos/pdf-ingresso";
+import { compartilharOuBaixar, gerarPdfIngressos, gerarPdfLoteIngressos, nomeArquivoIngresso } from "@essencia/components/eventos/pdf-ingresso";
 import { obterVoucher } from "./api-cortesias";
 
 const BUSCAS_SIMULTANEAS = 5;
@@ -13,12 +13,6 @@ export async function carregarArteAdmin(imageUrl: string): Promise<string | null
   } catch { return null; }
 }
 
-function dispararDownload(arquivo: File): void {
-  const url = URL.createObjectURL(arquivo);
-  const link = document.createElement("a");
-  link.href = url; link.download = arquivo.name; link.rel = "noopener"; document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url);
-}
-
 function slug(texto: string): string {
   return texto.normalize("NFD").replace(/[̀-ͯ]/g, "").toLocaleLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 }
@@ -30,20 +24,20 @@ export function nomeArquivoCortesias(cortesias: Pick<CortesiaResumo, "grupo">[])
   return grupos.size === 1 && grupo ? `cortesias-${grupo}-${cortesias.length}.pdf` : `cortesias-${cortesias.length}.pdf`;
 }
 
-export async function baixarVoucher(eventId: string, cortesia: CortesiaResumo): Promise<void> {
+export async function compartilharVoucher(eventId: string, cortesia: CortesiaResumo): Promise<void> {
   const pedido = await obterVoucher(eventId, cortesia.orderId);
   const ingresso = pedido.tickets[0];
   const blob = await gerarPdfIngressos(pedido, pedido.tickets, { carregarArte: carregarArteAdmin, variante: "CORTESIA" });
-  dispararDownload(new File([blob], nomeArquivoIngresso(pedido, ingresso), { type: "application/pdf" }));
+  await compartilharOuBaixar(new File([blob], nomeArquivoIngresso(pedido, ingresso), { type: "application/pdf" }));
 }
 
 /** Junta as cortesias escolhidas num único PDF, uma página por ingresso. */
-export async function baixarCortesiasAgrupadas(eventId: string, cortesias: CortesiaResumo[]): Promise<void> {
+export async function compartilharCortesiasAgrupadas(eventId: string, cortesias: CortesiaResumo[]): Promise<void> {
   const pedidos: PedidoComIngressos[] = [];
   for (let inicio = 0; inicio < cortesias.length; inicio += BUSCAS_SIMULTANEAS) {
     const fatia = cortesias.slice(inicio, inicio + BUSCAS_SIMULTANEAS);
     pedidos.push(...(await Promise.all(fatia.map((cortesia) => obterVoucher(eventId, cortesia.orderId)))));
   }
   const blob = await gerarPdfLoteIngressos(pedidos.map((pedido) => ({ pedido, ingressos: pedido.tickets })), { carregarArte: carregarArteAdmin, variante: "CORTESIA" });
-  dispararDownload(new File([blob], nomeArquivoCortesias(cortesias), { type: "application/pdf" }));
+  await compartilharOuBaixar(new File([blob], nomeArquivoCortesias(cortesias), { type: "application/pdf" }));
 }

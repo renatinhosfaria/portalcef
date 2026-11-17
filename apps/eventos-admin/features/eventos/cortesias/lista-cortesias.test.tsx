@@ -12,7 +12,7 @@ const criar = (parcial: Partial<CortesiaResumo> = {}): CortesiaResumo => ({ orde
 describe("ListaCortesias", () => {
   it("mostra colunas, busca sem acentos e filtra por sessão", () => {
     const outra = criar({ orderId: "pedido-2", session: { id: "sessao-2", startsAt: new Date("2026-12-13T20:00:00Z") }, participantName: "Maria Souza", grupo: "Convidados" });
-    render(<ListaCortesias cortesias={[criar(), outra]} sessoes={[{ id: "sessao-1", startsAt: "2026-12-12T20:00:00Z", apta: true }, { id: "sessao-2", startsAt: "2026-12-13T20:00:00Z", apta: true }]} aoBaixar={vi.fn()} aoBaixarAgrupadas={vi.fn()} aoCancelar={vi.fn()} />);
+    render(<ListaCortesias cortesias={[criar(), outra]} sessoes={[{ id: "sessao-1", startsAt: "2026-12-12T20:00:00Z", apta: true }, { id: "sessao-2", startsAt: "2026-12-13T20:00:00Z", apta: true }]} aoCompartilhar={vi.fn()} aoCompartilharAgrupadas={vi.fn()} aoCancelar={vi.fn()} />);
     expect(screen.getByText("José Silva")).not.toBeNull();
     expect(screen.getByText("Professores")).not.toBeNull();
     expect(screen.getByText("Número do ingresso")).not.toBeNull();
@@ -34,10 +34,10 @@ describe("ListaCortesias", () => {
   it("desabilita ações conforme a situação e mostra estados vazios", () => {
     const usada = criar({ orderId: "pedido-2", orderNumber: "ORD-2", situacao: "USADA", participantName: "Usada" });
     const cancelada = criar({ orderId: "pedido-3", orderNumber: "ORD-3", situacao: "CANCELADA", participantName: "Cancelada" });
-    render(<ListaCortesias cortesias={[criar(), usada, cancelada]} sessoes={[]} aoBaixar={vi.fn()} aoBaixarAgrupadas={vi.fn()} aoCancelar={vi.fn()} />);
-    expect((screen.getByRole("button", { name: /Baixar PDF.*ORD-1/ }) as HTMLButtonElement).disabled).toBe(false);
+    render(<ListaCortesias cortesias={[criar(), usada, cancelada]} sessoes={[]} aoCompartilhar={vi.fn()} aoCompartilharAgrupadas={vi.fn()} aoCancelar={vi.fn()} />);
+    expect((screen.getByRole("button", { name: /Compartilhar PDF.*ORD-1/ }) as HTMLButtonElement).disabled).toBe(false);
     expect((screen.getByRole("button", { name: /Cancelar.*Usada/ }) as HTMLButtonElement).disabled).toBe(true);
-    expect((screen.getByRole("button", { name: /Baixar PDF.*ORD-3/ }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: /Compartilhar PDF.*ORD-3/ }) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.change(screen.getByLabelText("Buscar cortesias"), { target: { value: "inexistente" } });
     expect(screen.getByText("Nenhuma cortesia encontrada.")).not.toBeNull();
   });
@@ -45,7 +45,7 @@ describe("ListaCortesias", () => {
   it("não mantém motivo nem erro do diálogo ao trocar de cortesia", async () => {
     const outra = criar({ orderId: "pedido-2", orderNumber: "ORD-2", participantName: "Maria Souza" });
     const aoCancelar = vi.fn().mockRejectedValue(new Error("falha"));
-    render(<ListaCortesias cortesias={[criar(), outra]} sessoes={[]} aoBaixar={vi.fn()} aoBaixarAgrupadas={vi.fn()} aoCancelar={aoCancelar} />);
+    render(<ListaCortesias cortesias={[criar(), outra]} sessoes={[]} aoCompartilhar={vi.fn()} aoCompartilharAgrupadas={vi.fn()} aoCancelar={aoCancelar} />);
     fireEvent.click(screen.getByRole("button", { name: "Cancelar José Silva" }));
     fireEvent.change(screen.getByLabelText("Motivo"), { target: { value: "erro de digitação" } });
     fireEvent.click(screen.getByRole("button", { name: "Cancelar cortesia" }));
@@ -56,66 +56,66 @@ describe("ListaCortesias", () => {
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
-  it("baixa o PDF com estado por linha", async () => {
+  it("compartilha o PDF com estado por linha", async () => {
     let concluir: () => void = () => undefined;
-    const aoBaixar = vi.fn(() => new Promise<void>((resolve) => { concluir = resolve; }));
+    const aoCompartilhar = vi.fn(() => new Promise<void>((resolve) => { concluir = resolve; }));
     const outra = criar({ orderId: "pedido-2", orderNumber: "ORD-2", participantName: "Maria Souza" });
-    render(<ListaCortesias cortesias={[criar(), outra]} sessoes={[]} aoBaixar={aoBaixar} aoBaixarAgrupadas={vi.fn()} aoCancelar={vi.fn()} />);
-    fireEvent.click(screen.getByRole("button", { name: /Baixar PDF.*ORD-1/ }));
-    const gerando = await screen.findByRole("button", { name: /Baixar PDF.*ORD-1/ });
+    render(<ListaCortesias cortesias={[criar(), outra]} sessoes={[]} aoCompartilhar={aoCompartilhar} aoCompartilharAgrupadas={vi.fn()} aoCancelar={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: /Compartilhar PDF.*ORD-1/ }));
+    const gerando = await screen.findByRole("button", { name: /Compartilhar PDF.*ORD-1/ });
     expect(gerando.textContent).toBe("Gerando PDF…");
     expect((gerando as HTMLButtonElement).disabled).toBe(true);
-    expect((screen.getByRole("button", { name: /Baixar PDF.*ORD-2/ }) as HTMLButtonElement).disabled).toBe(false);
+    expect((screen.getByRole("button", { name: /Compartilhar PDF.*ORD-2/ }) as HTMLButtonElement).disabled).toBe(false);
     concluir();
-    await waitFor(() => expect(screen.getByRole("button", { name: /Baixar PDF.*ORD-1/ }).textContent).toBe("Baixar PDF"));
+    await waitFor(() => expect(screen.getByRole("button", { name: /Compartilhar PDF.*ORD-1/ }).textContent).toBe("Compartilhar PDF"));
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
   it("mostra alerta quando a geração do PDF falha", async () => {
-    const aoBaixar = vi.fn().mockRejectedValue(new Error("falha"));
-    render(<ListaCortesias cortesias={[criar()]} sessoes={[]} aoBaixar={aoBaixar} aoBaixarAgrupadas={vi.fn()} aoCancelar={vi.fn()} />);
-    fireEvent.click(screen.getByRole("button", { name: /Baixar PDF.*ORD-1/ }));
+    const aoCompartilhar = vi.fn().mockRejectedValue(new Error("falha"));
+    render(<ListaCortesias cortesias={[criar()]} sessoes={[]} aoCompartilhar={aoCompartilhar} aoCompartilharAgrupadas={vi.fn()} aoCancelar={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: /Compartilhar PDF.*ORD-1/ }));
     await waitFor(() => expect(screen.getByRole("alert").textContent).toBe("Não foi possível gerar o PDF."));
-    expect(screen.getByRole("button", { name: /Baixar PDF.*ORD-1/ }).textContent).toBe("Baixar PDF");
+    expect(screen.getByRole("button", { name: /Compartilhar PDF.*ORD-1/ }).textContent).toBe("Compartilhar PDF");
   });
 
-  it("seleciona cortesias e baixa todas num único PDF", async () => {
+  it("seleciona cortesias e compartilha todas num único PDF", async () => {
     const maria = criar({ orderId: "pedido-2", orderNumber: "ORD-2", participantName: "Maria Souza", grupo: "Convidados" });
     const pedro = criar({ orderId: "pedido-3", orderNumber: "ORD-3", participantName: "Pedro Lima" });
     const cancelada = criar({ orderId: "pedido-4", orderNumber: "ORD-4", participantName: "Cancelada", situacao: "CANCELADA" });
     let concluir: () => void = () => undefined;
-    const aoBaixarAgrupadas = vi.fn(() => new Promise<void>((resolve) => { concluir = resolve; }));
-    render(<ListaCortesias cortesias={[criar(), maria, pedro, cancelada]} sessoes={[]} aoBaixar={vi.fn()} aoBaixarAgrupadas={aoBaixarAgrupadas} aoCancelar={vi.fn()} />);
-    const botaoLote = () => screen.getByRole("button", { name: /Baixar selecionadas/ }) as HTMLButtonElement;
+    const aoCompartilharAgrupadas = vi.fn(() => new Promise<void>((resolve) => { concluir = resolve; }));
+    render(<ListaCortesias cortesias={[criar(), maria, pedro, cancelada]} sessoes={[]} aoCompartilhar={vi.fn()} aoCompartilharAgrupadas={aoCompartilharAgrupadas} aoCancelar={vi.fn()} />);
+    const botaoLote = () => screen.getByRole("button", { name: /Compartilhar selecionadas/ }) as HTMLButtonElement;
     expect(botaoLote().disabled).toBe(true);
     expect((screen.getByRole("checkbox", { name: "Selecionar Cancelada" }) as HTMLInputElement).disabled).toBe(true);
 
     fireEvent.change(screen.getByLabelText("Buscar cortesias"), { target: { value: "professores" } });
     fireEvent.click(screen.getByRole("checkbox", { name: "Selecionar todas" }));
-    expect(botaoLote().textContent).toBe("Baixar selecionadas (2)");
+    expect(botaoLote().textContent).toBe("Compartilhar selecionadas (2)");
     fireEvent.change(screen.getByLabelText("Buscar cortesias"), { target: { value: "" } });
     expect((screen.getByRole("checkbox", { name: "Selecionar Maria Souza" }) as HTMLInputElement).checked).toBe(false);
 
     fireEvent.click(botaoLote());
-    expect(aoBaixarAgrupadas).toHaveBeenCalledWith([criar(), pedro]);
+    expect(aoCompartilharAgrupadas).toHaveBeenCalledWith([criar(), pedro]);
     await waitFor(() => expect(botaoLote().textContent).toBe("Gerando PDF…"));
     concluir();
-    await waitFor(() => expect(botaoLote().textContent).toBe("Baixar selecionadas (2)"));
+    await waitFor(() => expect(botaoLote().textContent).toBe("Compartilhar selecionadas (2)"));
 
     fireEvent.click(screen.getByRole("checkbox", { name: "Selecionar José Silva" }));
-    expect(botaoLote().textContent).toBe("Baixar selecionadas (1)");
+    expect(botaoLote().textContent).toBe("Compartilhar selecionadas (1)");
   });
 
   it("mostra alerta quando o PDF agrupado falha", async () => {
-    const aoBaixarAgrupadas = vi.fn().mockRejectedValue(new Error("falha"));
-    render(<ListaCortesias cortesias={[criar()]} sessoes={[]} aoBaixar={vi.fn()} aoBaixarAgrupadas={aoBaixarAgrupadas} aoCancelar={vi.fn()} />);
+    const aoCompartilharAgrupadas = vi.fn().mockRejectedValue(new Error("falha"));
+    render(<ListaCortesias cortesias={[criar()]} sessoes={[]} aoCompartilhar={vi.fn()} aoCompartilharAgrupadas={aoCompartilharAgrupadas} aoCancelar={vi.fn()} />);
     fireEvent.click(screen.getByRole("checkbox", { name: "Selecionar José Silva" }));
-    fireEvent.click(screen.getByRole("button", { name: /Baixar selecionadas/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Compartilhar selecionadas/ }));
     await waitFor(() => expect(screen.getByRole("alert").textContent).toBe("Não foi possível gerar o PDF."));
   });
 
   it("mostra mensagem quando não há cortesias", () => {
-    render(<ListaCortesias cortesias={[]} sessoes={[]} aoBaixar={vi.fn()} aoBaixarAgrupadas={vi.fn()} aoCancelar={vi.fn()} />);
+    render(<ListaCortesias cortesias={[]} sessoes={[]} aoCompartilhar={vi.fn()} aoCompartilharAgrupadas={vi.fn()} aoCancelar={vi.fn()} />);
     expect(screen.getByText("Nenhuma cortesia emitida neste evento")).not.toBeNull();
   });
 });

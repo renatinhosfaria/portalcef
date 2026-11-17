@@ -7,7 +7,7 @@ import { cancelarCortesia, listarCortesias, obterMapaAdmin } from "../../../../f
 
 vi.mock("next/navigation", () => ({ useParams: () => ({ id: "ev-1" }) }));
 vi.mock("../../../../features/eventos/cortesias/api-cortesias", async (importOriginal) => ({ ...(await importOriginal<typeof import("../../../../features/eventos/cortesias/api-cortesias")>()), listarCortesias: vi.fn(), cancelarCortesia: vi.fn(), obterMapaAdmin: vi.fn().mockResolvedValue(null) }));
-vi.mock("../../../../features/eventos/cortesias/baixar-voucher", () => ({ baixarVoucher: vi.fn() }));
+vi.mock("../../../../features/eventos/cortesias/baixar-voucher", () => ({ compartilharVoucher: vi.fn() }));
 
 const AVISO_SEM_SESSAO = "Este evento ainda não tem sessão com mapa confirmado.";
 const AVISO_SEM_CORTESIA = "Nenhuma cortesia emitida neste evento";
