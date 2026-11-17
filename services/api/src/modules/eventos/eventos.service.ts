@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, Inject, Injectable, InternalServerErrorException, NotFoundException, Optional } from "@nestjs/common";
 import { and, asc, eq, eventoAuditorias, eventoCheckins, eventoIngressos, eventoInventarioAssentos, eventoLocais, eventoMapas, eventoOperacoesAdministrativas, eventoPedidos, eventoPoliticas, eventoSessoes, eventoTiposIngresso, eventos, inArray, ne, type Database } from "@essencia/db";
-import type { AtualizarEventoInput, AtualizarLocalEventoInput, CriarEventoInput, CriarSessaoInput, CriarRascunhoInput, EventoListQuery, LocalEventoInput } from "@essencia/shared/schemas";
+import { tipoIngressoAdminSchema } from "@essencia/shared/schemas";
+import type { TipoIngressoAdminInput, AtualizarEventoInput, AtualizarLocalEventoInput, CriarEventoInput, CriarSessaoInput, CriarRascunhoInput, EventoListQuery, LocalEventoInput } from "@essencia/shared/schemas";
 import type { EventoActor, EventoResumo, PublicEventCard, PublicEventDetail, PublicEventSession, PublicMap } from "@essencia/shared/types";
 import { DatabaseService } from "../../common/database/database.service";
 import { RASTER_IMAGE_MIME_TYPES, StorageService } from "../../common/storage/storage.service";
@@ -65,7 +66,7 @@ export class EventosService {
       [event] = await this.db.insert(eventos).values({ ...eventInput, slug, status: "RASCUNHO", publishedAt: null, plannedPublicationAt: input.plannedPublicationAt ?? null, defaultLocationId: input.defaultLocationId ?? null, defaultMapId: null }).returning();
       if (!event) throw new BadRequestException({ code: "EVENT_CREATE_FAILED", message: "Não foi possível criar o evento" });
       for (const session of sessions) await this.criarSessao(event.id, session, actor, false);
-      for (const ticket of ticketTypes) await this.db.insert(eventoTiposIngresso).values({ eventId: event.id, name: ticket.name, description: ticket.description ?? null, priceCents: ticket.priceCents, eligibility: ticket.eligibility ?? null, maxPerOrder: ticket.maxPerOrder ?? null, salesLot: ticket.salesLot ?? null, rules: ticket.rules ?? null });
+      for (const ticket of ticketTypes) await this.db.insert(eventoTiposIngresso).values({ eventId: event.id, name: ticket.name, lugaresPorPacote: ticket.lugaresPorPacote ?? 1, description: ticket.description ?? null, priceCents: ticket.priceCents, eligibility: ticket.eligibility ?? null, maxPerOrder: ticket.maxPerOrder ?? null, salesLot: ticket.salesLot ?? null, rules: ticket.rules ?? null });
       for (const policy of policies) await this.upsertPolitica(event.id, policy, actor);
       await this.audit(event.id, actor, "CRIADO", "evento", event.id);
     } catch (error) {
@@ -271,7 +272,7 @@ export class EventosService {
   async listarSessoesPublicas(slug: string, now = new Date()): Promise<PublicEventSession[]> {
     const detail = await this.getPublicBySlug(slug, now);
     const ticketTypes = await this.db.select().from(eventoTiposIngresso).where(and(eq(eventoTiposIngresso.eventId, detail.id), eq(eventoTiposIngresso.active, true), eq(eventoTiposIngresso.internal, false))).orderBy(asc(eventoTiposIngresso.name));
-    const publicTicketTypes = ticketTypes.map((ticket: typeof eventoTiposIngresso.$inferSelect) => ({ id: ticket.id, name: ticket.name, description: ticket.description, priceCents: ticket.priceCents, maxPerOrder: ticket.maxPerOrder, eligibility: ticket.eligibility }));
+    const publicTicketTypes = ticketTypes.map((ticket: typeof eventoTiposIngresso.$inferSelect) => ({ id: ticket.id, name: ticket.name, lugaresPorPacote: ticket.lugaresPorPacote ?? 1, description: ticket.description, priceCents: ticket.priceCents, maxPerOrder: ticket.maxPerOrder, eligibility: ticket.eligibility }));
     const rows = await this.db.select({ session: eventoSessoes, location: eventoLocais, inventory: eventoInventarioAssentos }).from(eventoSessoes).leftJoin(eventoLocais, eq(eventoLocais.id, eventoSessoes.locationId)).leftJoin(eventoInventarioAssentos, eq(eventoInventarioAssentos.sessionId, eventoSessoes.id)).where(and(eq(eventoSessoes.eventId, detail.id), eq(eventoSessoes.status, "PUBLICADA"))).orderBy(asc(eventoSessoes.startsAt));
     const result = new Map<string, PublicEventSession>();
     for (const row of rows) {
@@ -446,20 +447,20 @@ export class EventosService {
     return this.db.select().from(eventoTiposIngresso).where(and(eq(eventoTiposIngresso.eventId, eventId), eq(eventoTiposIngresso.active, true), eq(eventoTiposIngresso.internal, false))).orderBy(asc(eventoTiposIngresso.name));
   }
 
-  async atualizarIngressos(eventId: string, inputs: Array<{ id?: string; name: string; description?: string | null; priceCents: number; eligibility?: string | null; salesLot?: string | null; rules?: Record<string, unknown> | null; maxPerOrder?: number | null }>, actor: EventoActor) {
+  async atualizarIngressos(eventId: string, inputs: Array<TipoIngressoAdminInput>, actor: EventoActor) {
     const [event] = await this.db.select().from(eventos).where(eq(eventos.id, eventId));
     if (!event) throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Evento não encontrado" });
     this.assertSchoolScope(actor, event.schoolId);
-    if (inputs.some((input) => !input.name?.trim() || !Number.isInteger(input.priceCents) || input.priceCents < 0 || (input.maxPerOrder != null && (!Number.isInteger(input.maxPerOrder) || input.maxPerOrder <= 0)))) throw new BadRequestException({ code: "INVALID_TICKET", message: "Ingresso inválido" });
+    if (inputs.some((input) => !tipoIngressoAdminSchema.omit({ id: true }).safeParse(input).success || !input.name?.trim() || !Number.isInteger(input.priceCents) || input.priceCents < 0 || (input.maxPerOrder != null && (!Number.isInteger(input.maxPerOrder) || input.maxPerOrder <= 0)))) throw new BadRequestException({ code: "INVALID_TICKET", message: "Ingresso inválido" });
     const current = await this.db.select().from(eventoTiposIngresso).where(and(eq(eventoTiposIngresso.eventId, eventId), eq(eventoTiposIngresso.active, true), eq(eventoTiposIngresso.internal, false)));
     const kept = new Set<string>();
     const result = [];
     for (const input of inputs) {
       if (input.id && current.some((ticket: any) => ticket.id === input.id)) {
-        const [updated] = await this.db.update(eventoTiposIngresso).set({ name: input.name.trim(), description: input.description ?? null, priceCents: input.priceCents, eligibility: input.eligibility ?? null, salesLot: input.salesLot ?? null, rules: input.rules ?? null, maxPerOrder: input.maxPerOrder ?? null, version: (current.find((ticket: any) => ticket.id === input.id)?.version ?? 1) + 1, updatedAt: new Date() }).where(and(eq(eventoTiposIngresso.id, input.id), eq(eventoTiposIngresso.eventId, eventId))).returning();
+        const [updated] = await this.db.update(eventoTiposIngresso).set({ ...(input.lugaresPorPacote === undefined ? {} : { lugaresPorPacote: input.lugaresPorPacote }), name: input.name.trim(), description: input.description ?? null, priceCents: input.priceCents, eligibility: input.eligibility ?? null, salesLot: input.salesLot ?? null, rules: input.rules ?? null, maxPerOrder: input.maxPerOrder ?? null, version: (current.find((ticket: any) => ticket.id === input.id)?.version ?? 1) + 1, updatedAt: new Date() }).where(and(eq(eventoTiposIngresso.id, input.id), eq(eventoTiposIngresso.eventId, eventId))).returning();
         if (updated) result.push(updated); kept.add(input.id);
       } else {
-        const [created] = await this.db.insert(eventoTiposIngresso).values({ eventId, name: input.name.trim(), description: input.description ?? null, priceCents: input.priceCents, eligibility: input.eligibility ?? null, salesLot: input.salesLot ?? null, rules: input.rules ?? null, maxPerOrder: input.maxPerOrder ?? null }).returning();
+        const [created] = await this.db.insert(eventoTiposIngresso).values({ eventId, lugaresPorPacote: input.lugaresPorPacote ?? 1, name: input.name.trim(), description: input.description ?? null, priceCents: input.priceCents, eligibility: input.eligibility ?? null, salesLot: input.salesLot ?? null, rules: input.rules ?? null, maxPerOrder: input.maxPerOrder ?? null }).returning();
         if (created) result.push(created);
       }
     }

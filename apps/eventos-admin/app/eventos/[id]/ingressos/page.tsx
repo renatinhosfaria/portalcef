@@ -117,7 +117,7 @@ export default function IngressosPage() {
       {error && <p role="alert" className="text-red-700">{error}</p>}
       <button type="button" className="rounded border px-3 py-2" onClick={() => {
         changeRevision.current += 1;
-        setItems((current) => [...current, { name: "", priceCents: 0 }]);
+        setItems((current) => [...current, { name: "", priceCents: 0, lugaresPorPacote: 1 }]);
         setDirty(true);
       }}>Adicionar ingresso</button>
       <div className="space-y-3">
@@ -137,10 +137,14 @@ export default function IngressosPage() {
             <div className="grid gap-2 md:grid-cols-2">
               <input aria-label="Nome do ingresso" value={item.name} onChange={(event) => update(index, { name: event.target.value })} placeholder="Nome" />
               <input aria-label="Preço em centavos" type="number" min="0" value={item.priceCents} onChange={(event) => update(index, { priceCents: Number(event.target.value) })} />
+              <input aria-label="Lugares por pacote" type="number" min="1" step="1" value={item.lugaresPorPacote ?? 1} onChange={(event) => update(index, { lugaresPorPacote: Number(event.target.value) })} />
+              {(item.lugaresPorPacote ?? 1) > 1 && <p className="text-sm text-slate-600">Preço total do pacote</p>}
+              {(!Number.isInteger(item.lugaresPorPacote ?? 1) || (item.lugaresPorPacote ?? 1) < 1) && <p role="alert" className="text-sm text-red-700">Informe uma quantidade inteira de lugares maior que zero.</p>}
+              {item.maxPerOrder != null && item.maxPerOrder < (item.lugaresPorPacote ?? 1) && <p role="status" className="text-sm text-amber-700">O limite configurado não permite comprar um pacote completo.</p>}
               <input aria-label="Elegibilidade" value={item.eligibility ?? ""} onChange={(event) => update(index, { eligibility: event.target.value })} placeholder="Elegibilidade" />
               <input aria-label="Lote de venda" value={item.salesLot ?? ""} onChange={(event) => update(index, { salesLot: event.target.value })} placeholder="Lote de venda" />
               <input aria-label="Regras" value={item.rules?.descricao ? String(item.rules.descricao) : ""} onChange={(event) => update(index, { rules: { ...(item.rules ?? {}), descricao: event.target.value } })} placeholder="Regras" />
-              <input aria-label="Limite por pedido" type="number" min="1" value={item.maxPerOrder ?? ""} onChange={(event) => update(index, { maxPerOrder: event.target.value ? Number(event.target.value) : null })} placeholder="Limite" />
+              <input aria-label="Limite de lugares deste tipo por pedido (opcional)" type="number" min="1" value={item.maxPerOrder ?? ""} onChange={(event) => update(index, { maxPerOrder: event.target.value ? Number(event.target.value) : null })} placeholder="Limite" />
             </div>
           </div>
         ))}

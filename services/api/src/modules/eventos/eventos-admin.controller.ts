@@ -5,7 +5,7 @@ import { ExactRoles, Roles } from "../../common/decorators/roles.decorator";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { AuthGuard } from "../../common/guards/auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
-import { atualizarLocalEventoSchema, atualizarLocalPadraoEventoSchema, atualizarCupomSchema, atualizarRascunhoSchema, criarEventoSchema, criarRascunhoSchema, criarSessaoSchema, eventoListQuerySchema, localEventoSchema, politicaSchema } from "@essencia/shared/schemas";
+import { tipoIngressoAdminSchema, atualizarLocalEventoSchema, atualizarLocalPadraoEventoSchema, atualizarCupomSchema, atualizarRascunhoSchema, criarEventoSchema, criarRascunhoSchema, criarSessaoSchema, eventoListQuerySchema, localEventoSchema, politicaSchema } from "@essencia/shared/schemas";
 import { EventosService } from "./eventos.service";
 import { EventosReadinessService } from "./eventos-readiness.service";
 import { EVENTOS_ADMIN_ROLES } from "./eventos.constants";
@@ -138,8 +138,9 @@ export class EventosAdminController {
   @Patch(":id/ingressos")
   async updateTickets(@Param("id") id: string, @Body() body: unknown, @CurrentUser() actor: any) {
     const values = Array.isArray(body) ? body : [body];
-    if (!values.every((value: any) => value && typeof value.name === "string" && Number.isInteger(value.priceCents) && value.priceCents >= 0)) return { success: false, error: { code: "VALIDATION_ERROR", message: "Ingresso inválido" } };
-    return { success: true, data: await this.service.atualizarIngressos(id, values as any, actor) };
+    const parsed = values.map((value) => tipoIngressoAdminSchema.safeParse(value));
+    if (parsed.some((value) => !value.success)) return { success: false, error: { code: "VALIDATION_ERROR", message: "Ingresso inválido" } };
+    return { success: true, data: await this.service.atualizarIngressos(id, parsed.flatMap((value) => value.success ? [value.data] : []), actor) };
   }
 
   @Delete(":id/ingressos/:ticketId")

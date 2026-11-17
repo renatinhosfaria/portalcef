@@ -64,3 +64,9 @@ describe("contratos das etapas do workspace", () => {
     expect(deveLimparDirtyAposUpload(false, 3, 4)).toBe(false);
   });
 });
+
+it("serializa quantidade, identidade e remoção do limite sem perder o ingresso", () => {
+  expect(construirPayloadIngresso({id:"ingresso",name:"Combo",priceCents:38000,lugaresPorPacote:10,maxPerOrder:null})).toMatchObject({id:"ingresso",lugaresPorPacote:10,maxPerOrder:null});
+  expect(ingressosProntosParaSalvar([{name:"Combo",priceCents:38000,lugaresPorPacote:0}])).toBe(false);
+  expect(ingressosProntosParaSalvar([{name:"Combo",priceCents:38000,lugaresPorPacote:30}])).toBe(true);
+});

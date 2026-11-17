@@ -1,6 +1,6 @@
 import { EVENTOS_ADMIN_ROLES, hasEventosAdminAccess } from "./eventos.constants";
 import { EventosRulesService } from "./eventos-rules.service";
-import { eventoMapas, eventoSessoes, eventoTiposIngresso, eventos } from "@essencia/db";
+import { eventoPoliticas, eventoInventarioAssentos, eventoMapas, eventoSessoes, eventoTiposIngresso, eventos } from "@essencia/db";
 import { avaliarPredicado } from "./avaliar-predicado.spec-helper";
 describe("EventosRulesService contracts", () => {
   it.each(["diretora_geral", "gerente_unidade", "auxiliar_administrativo", "master"])("allows %s", (role: string) => expect(hasEventosAdminAccess(role)).toBe(true));
@@ -42,4 +42,17 @@ describe("EventosRulesService contracts", () => {
 
     await expect(new EventosRulesService({ db } as any).validarPublicacao("e1")).rejects.toMatchObject({ response: { code: "TICKET_TYPE_REQUIRED" } });
   });
+});
+
+it.each([0, -1, 1.5])("recusa publicação com quantidade inválida de pacote %s", async (lugaresPorPacote) => {
+  const db = {select:()=>({from:(table:unknown)=>({where:async()=>{
+    if(table===eventos) return [{id:"e1",defaultMapId:"m1",title:"Evento",description:"Descrição",cancellationPolicy:"Política",contactEmail:"teste@example.com"}];
+    if(table===eventoMapas) return [{id:"m1",status:"CONFIRMADO"}];
+    if(table===eventoSessoes) return [{id:"s1",mapId:"m1",startsAt:new Date("2026-12-01"),endsAt:new Date("2026-12-02"),capacity:1}];
+    if(table===eventoTiposIngresso) return [{id:"t1",priceCents:38000,lugaresPorPacote}];
+    if(table===eventoPoliticas) return ["PRIVACIDADE","COMPRA","CANCELAMENTO_REEMBOLSO","ACESSIBILIDADE","CONTATO"].map(type=>({type}));
+    if(table===eventoInventarioAssentos) return [{id:"a1"}];
+    return [];
+  }})})};
+  await expect(new EventosRulesService({db} as any).validarPublicacao("e1")).rejects.toMatchObject({response:{code:"INVALID_TICKET_RULE"}});
 });

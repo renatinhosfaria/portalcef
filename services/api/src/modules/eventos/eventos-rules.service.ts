@@ -31,6 +31,7 @@ export class EventosRulesService {
     const requiredPolicies = ["PRIVACIDADE", "COMPRA", "CANCELAMENTO_REEMBOLSO", "ACESSIBILIDADE", "CONTATO"] as const;
     if (requiredPolicies.some((type) => !policies.some((policy: any) => policy.type === type))) this.fail("POLICY_REQUIRED", "Associe todas as políticas padrão ao evento");
     for (const ticket of ticketTypes) {
+      if (ticket.lugaresPorPacote !== undefined && (!Number.isInteger(ticket.lugaresPorPacote) || ticket.lugaresPorPacote <= 0)) this.fail("INVALID_TICKET_RULE", "Quantidade de lugares do pacote inválida");
       if (!Number.isInteger(ticket.priceCents) || ticket.priceCents < 0) this.fail("INVALID_PRICE", "Preço inválido");
       if (ticket.maxPerOrder !== null && ticket.maxPerOrder !== undefined && (!Number.isInteger(ticket.maxPerOrder) || ticket.maxPerOrder <= 0)) this.fail("INVALID_TICKET_RULE", "Limite de ingressos inválido");
     }

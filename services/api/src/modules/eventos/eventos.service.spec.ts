@@ -564,6 +564,34 @@ describe('EventosService contratos de workspace', () => {
       expect(lista.map((tipo: any) => tipo.id)).toEqual(['ticket-inteira']);
     });
 
+    it('persiste a quantidade do pacote e preserva PATCH legado', async () => {
+      const db = tiposDb({tipos:[{...inteira(),lugaresPorPacote:10}],event:event()});
+      const instancia = service(db);
+      await instancia.atualizarIngressos('e1',[{id:'ticket-inteira',name:'Combo',priceCents:38000,lugaresPorPacote:30} as any],actor);
+      expect(db.estado[0]).toMatchObject({lugaresPorPacote:30,priceCents:38000});
+      await instancia.atualizarIngressos('e1',[{id:'ticket-inteira',name:'Combo',priceCents:38000}],actor);
+      expect(db.estado[0].lugaresPorPacote).toBe(30);
+      jest.spyOn(instancia,'getPublicBySlug').mockResolvedValue({id:'e1'} as any);
+      expect((await instancia.listarSessoesPublicas('ballet'))[0]?.ticketTypes[0]?.lugaresPorPacote).toBe(30);
+    });
+    it.each([0,-1,1.5,null])('rejeita tamanho de pacote inválido %s no serviço', async (lugaresPorPacote) => {
+      const db = tiposDb({tipos:[inteira()],event:event()});
+      await expect(service(db).atualizarIngressos('e1',[{id:'ticket-inteira',name:'Combo',priceCents:38000,lugaresPorPacote} as any],actor)).rejects.toMatchObject({response:{code:'INVALID_TICKET'}});
+      expect(db.estado[0].priceCents).toBe(4500);
+    });
+    it('não deixa outra escola editar o pacote', async () => {
+      const db = tiposDb({tipos:[inteira()],event:event()});
+      await expect(service(db).atualizarIngressos('e1',[{id:'ticket-inteira',name:'Combo',priceCents:38000,lugaresPorPacote:10} as any],{...actor,schoolId:'outra'})).rejects.toThrow();
+      expect(db.estado[0].priceCents).toBe(4500);
+    });
+    it('grava quantidade também na criação inicial do evento', async () => {
+      const gravacoes: any[] = [];
+      const db = fakeDb();
+      db.insert = () => ({values:(valor:any)=>{gravacoes.push(valor);return Object.assign(Promise.resolve([]),{returning:async()=>[{...event(),...valor}]});}});
+      await service(db).criarEvento({schoolId:'s1',slug:'combo',title:'Evento',description:'Descrição',contactEmail:'teste@example.com',cancellationPolicy:'Política',sessions:[],policies:[],ticketTypes:[{name:'Combo',priceCents:38000,lugaresPorPacote:30}],publishImmediately:false} as any,actor);
+      expect(gravacoes.find(v=>v.name==='Combo')).toMatchObject({lugaresPorPacote:30});
+    });
+
     it('atualizarIngressos sem o tipo interno no payload o mantém ativo', async () => {
       const db = tiposDb({ tipos: [inteira(), cortesia()], event: event() });
 
