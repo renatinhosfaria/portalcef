@@ -5,7 +5,7 @@ import { ExactRoles, Roles } from "../../common/decorators/roles.decorator";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { AuthGuard } from "../../common/guards/auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
-import { tipoIngressoAdminSchema, atualizarLocalEventoSchema, atualizarLocalPadraoEventoSchema, atualizarCupomSchema, atualizarRascunhoSchema, criarEventoSchema, criarRascunhoSchema, criarSessaoSchema, eventoListQuerySchema, localEventoSchema, politicaSchema } from "@essencia/shared/schemas";
+import { tipoIngressoAdminSchema, atualizarClassificacaoEtariaSchema, atualizarLocalEventoSchema, atualizarLocalPadraoEventoSchema, atualizarCupomSchema, atualizarRascunhoSchema, criarEventoSchema, criarRascunhoSchema, criarSessaoSchema, eventoListQuerySchema, localEventoSchema, politicaSchema } from "@essencia/shared/schemas";
 import { EventosService } from "./eventos.service";
 import { EventosReadinessService } from "./eventos-readiness.service";
 import { EVENTOS_ADMIN_ROLES } from "./eventos.constants";
@@ -92,6 +92,13 @@ export class EventosAdminController {
     const parsed = atualizarLocalPadraoEventoSchema.safeParse(body);
     if (!parsed.success) return { success: false, error: { code: "VALIDATION_ERROR", details: parsed.error.flatten() } };
     return { success: true, data: await this.service.atualizarLocalPadrao(id, parsed.data.defaultLocationId, actor, parsed.data.expectedUpdatedAt) };
+  }
+
+  @Patch(":id/classificacao-etaria")
+  async updateAgeRating(@Param("id") id: string, @Body() body: unknown, @CurrentUser() actor: any) {
+    const parsed = atualizarClassificacaoEtariaSchema.safeParse(body);
+    if (!parsed.success) return { success: false, error: { code: "VALIDATION_ERROR", details: parsed.error.flatten() } };
+    return { success: true, data: await this.service.atualizarClassificacaoEtaria(id, parsed.data.classificacaoEtaria, actor, parsed.data.expectedUpdatedAt) };
   }
 
   @Get(":id/prontidao")

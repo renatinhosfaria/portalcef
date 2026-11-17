@@ -2,7 +2,7 @@ import { BadRequestException, ConflictException, Inject, Injectable, InternalSer
 import { and, asc, eq, eventoAuditorias, eventoCheckins, eventoIngressos, eventoInventarioAssentos, eventoLocais, eventoMapas, eventoOperacoesAdministrativas, eventoPedidos, eventoPoliticas, eventoSessoes, eventoTiposIngresso, eventos, inArray, ne, sql, type Database } from "@essencia/db";
 import { tipoIngressoAdminSchema } from "@essencia/shared/schemas";
 import type { TipoIngressoAdminInput, AtualizarEventoInput, AtualizarLocalEventoInput, CriarEventoInput, CriarSessaoInput, CriarRascunhoInput, EventoListQuery, LocalEventoInput } from "@essencia/shared/schemas";
-import type { EventoActor, EventoResumo, PublicEventCard, PublicEventDetail, PublicEventSession, PublicMap } from "@essencia/shared/types";
+import type { ClassificacaoEtaria, EventoActor, EventoResumo, PublicEventCard, PublicEventDetail, PublicEventSession, PublicMap } from "@essencia/shared/types";
 import { DatabaseService } from "../../common/database/database.service";
 import { RASTER_IMAGE_MIME_TYPES, StorageService } from "../../common/storage/storage.service";
 import { EventosRulesService } from "./eventos-rules.service";
@@ -451,6 +451,19 @@ export class EventosService {
       return updatedLocation;
     };
     return typeof transaction === "function" ? transaction.call(this.db, run) : run(this.db);
+  }
+
+  /** A classificação só informa o público: pode mudar com o evento publicado e com vendas, como a imagem. */
+  async atualizarClassificacaoEtaria(eventId: string, classificacaoEtaria: ClassificacaoEtaria | null, actor: EventoActor, expectedUpdatedAt?: Date) {
+    const [existing] = await this.db.select().from(eventos).where(eq(eventos.id, eventId));
+    if (!existing) throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Evento não encontrado" });
+    this.assertSchoolScope(actor, existing.schoolId);
+    if (expectedUpdatedAt && existing.updatedAt && existing.updatedAt.getTime() !== expectedUpdatedAt.getTime()) throw new ConflictException({ code: "VERSION_CONFLICT", message: "O evento foi alterado por outra pessoa", current: this.resumo(existing) });
+    const versionFilter = expectedUpdatedAt ? and(eq(eventos.id, eventId), eq(eventos.updatedAt, expectedUpdatedAt)) : eq(eventos.id, eventId);
+    const [updated] = await this.db.update(eventos).set({ classificacaoEtaria, updatedAt: new Date() }).where(versionFilter).returning();
+    if (!updated) throw new ConflictException({ code: expectedUpdatedAt ? "VERSION_CONFLICT" : "EVENT_NOT_FOUND", message: expectedUpdatedAt ? "O evento foi alterado por outra pessoa" : "Evento não encontrado", current: this.resumo(existing) });
+    await this.audit(eventId, actor, "ATUALIZADO", "classificacao_etaria", eventId, { etapa: "informacoes", previous: existing.classificacaoEtaria ?? null, next: classificacaoEtaria });
+    return { classificacaoEtaria: updated.classificacaoEtaria ?? null, updatedAt: updated.updatedAt };
   }
 
   async atualizarLocalPadrao(eventId: string, locationId: string | null, actor: EventoActor, expectedUpdatedAt?: Date) {

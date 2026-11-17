@@ -444,10 +444,17 @@ describe("EventosCortesiasService.obterVoucher", () => {
       appliedOffer: null,
       items: [{ seatId: "seat-1", ticketTypeId: tipoId, unitPriceCents: 0, totalPriceCents: 0, rowLabel: "A", seatNumber: "1", ticketTypeName: "Cortesia" }],
       buyerName: "Professores",
-      event: { title: "Espetáculo de Natal", slug: "espetaculo-de-natal", imageUrl: "https://exemplo/capa.png", locationName: "Teatro Municipal" },
+      event: { title: "Espetáculo de Natal", slug: "espetaculo-de-natal", imageUrl: "https://exemplo/capa.png", locationName: "Teatro Municipal", classificacaoEtaria: null },
     });
-    expect(voucher.tickets).toEqual([{ numero: db.state.ingressos[0]!.numero, qrPayload: db.state.ingressos[0]!.qrPayload, rowLabel: "A", seatNumber: "1", ticketTypeName: "Cortesia", participantName: "Maria Souza", status: "EMITIDO" }]);
+    expect(voucher.tickets).toEqual([{ numero: db.state.ingressos[0]!.numero, qrPayload: db.state.ingressos[0]!.qrPayload, rowLabel: "A", seatNumber: "1", ticketTypeName: "Cortesia", participantName: "Maria Souza", status: "EMITIDO", priceCents: 0 }]);
     expect(voucher.tickets[0]!.qrPayload).toEqual(expect.any(String));
+  });
+
+  it("voucher leva a classificação indicativa do evento", async () => {
+    const [c] = await service.emitir("event-1", lote(["inv-1"]), ator);
+    db.state.eventos[0]!.classificacaoEtaria = "12";
+
+    await expect(service.obterVoucher("event-1", c!.orderId, ator)).resolves.toMatchObject({ event: { classificacaoEtaria: "12" } });
   });
 
   it("voucher sem local na sessão devolve locationName nulo", async () => {

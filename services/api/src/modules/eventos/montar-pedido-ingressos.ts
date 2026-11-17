@@ -19,5 +19,6 @@ export async function montarIngressosDoPedido(db: any, orderId: string): Promise
     ticketTypeName: row.item?.pricingEvidence?.pacote?.nomeTipo ?? row.ticketType?.name ?? row.item?.ticketTypeName ?? "",
     participantName: row.participant?.fullName ?? "",
     status: row.ticket?.status,
+    priceCents: Number(row.item?.totalPriceCents ?? row.item?.unitPriceCents ?? 0),
   }));
 }

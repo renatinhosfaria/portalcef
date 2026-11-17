@@ -573,6 +573,7 @@ export class EventosPublicSalesService {
         slug: order.event?.slug ?? "",
         imageUrl: order.event?.imageUrl ?? null,
         locationName: order.location?.name ?? order.event?.locationName ?? order.session?.locationName ?? null,
+        classificacaoEtaria: order.event?.classificacaoEtaria ?? null,
       },
       tickets,
     };

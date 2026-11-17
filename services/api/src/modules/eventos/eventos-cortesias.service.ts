@@ -192,7 +192,7 @@ export class EventosCortesiasService {
         ticketTypeName: tipo.name,
       })),
       buyerName: pedido.buyerName ?? null,
-      event: { title: event.title ?? "", slug: event.slug ?? "", imageUrl: event.imageUrl ?? null, locationName: local?.name ?? null },
+      event: { title: event.title ?? "", slug: event.slug ?? "", imageUrl: event.imageUrl ?? null, locationName: local?.name ?? null, classificacaoEtaria: event.classificacaoEtaria ?? null },
       tickets: await montarIngressosDoPedido(this.db, orderId),
     };
   }

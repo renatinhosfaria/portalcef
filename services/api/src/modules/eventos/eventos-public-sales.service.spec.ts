@@ -413,8 +413,15 @@ describe("EventosPublicSalesService - contratos públicos", () => {
     const db = ingressosPublicosDb({ token: "acesso-valido", status: "CONFIRMADO", event: { locationName: undefined }, location: { name: "Auditório real" } });
     const result = await new EventosPublicSalesService({ db } as any).obterIngressos("ABC123DEF456", "acesso-valido");
 
-    expect(result).toMatchObject({ buyerName: "Ana", event: { title: "Festival", slug: "festival-escola", imageUrl: "https://cdn.test/festival.png", locationName: "Auditório real" }, tickets: [{ numero: "ABCD2345", qrPayload: "evento:ABCD2345", rowLabel: "A", seatNumber: "12", ticketTypeName: "Inteira", participantName: "Participante", status: "EMITIDO" }] });
+    expect(result).toMatchObject({ buyerName: "Ana", event: { title: "Festival", slug: "festival-escola", imageUrl: "https://cdn.test/festival.png", locationName: "Auditório real", classificacaoEtaria: null }, tickets: [{ numero: "ABCD2345", qrPayload: "evento:ABCD2345", rowLabel: "A", seatNumber: "12", ticketTypeName: "Inteira", participantName: "Participante", status: "EMITIDO", priceCents: 1250 }] });
     expect(db.tokenWhere).toBeDefined();
+  });
+
+  it("leva a classificação indicativa do evento para o ingresso", async () => {
+    const db = ingressosPublicosDb({ token: "acesso-valido", status: "CONFIRMADO", event: { classificacaoEtaria: "LIVRE" } });
+    const result = await new EventosPublicSalesService({ db } as any).obterIngressos("ABC123DEF456", "acesso-valido");
+
+    expect(result.event.classificacaoEtaria).toBe("LIVRE");
   });
 
   it.each([undefined, [], {}])("acesso ausente ou inválido não causa erro 500 (%p)", async (acesso) => {
@@ -1282,11 +1289,11 @@ function ingressosPublicosDb(config: { token: string; tokenRow?: any; status: st
         if (call === 0) return [{ order, event, session, location }];
         if (call === 1) { db.tokenWhere = condition; return tokenRow ? [tokenRow] : []; }
         if (call === 2) return [{ item: { ticketTypeId: "ticket-1", unitPriceCents: 1250, totalPriceCents: 1250 }, inventory: { seatId: "seat-1" }, seat: { rowLabel: "A", seatNumber: "12" }, ticket: { name: "Inteira" } }];
-        if (call === 3) return [{ ticket: { numero: "ABCD2345", qrPayload: "evento:ABCD2345", status: "EMITIDO" }, item: { ticketTypeId: "ticket-1", inventorySeatId: "inventory-1" }, seat: { rowLabel: "A", seatNumber: "12" }, ticketType: { name: "Inteira" }, participant: { fullName: "Participante" } }];
+        if (call === 3) return [{ ticket: { numero: "ABCD2345", qrPayload: "evento:ABCD2345", status: "EMITIDO" }, item: { ticketTypeId: "ticket-1", inventorySeatId: "inventory-1", unitPriceCents: 1250, totalPriceCents: 1250 }, seat: { rowLabel: "A", seatNumber: "12" }, ticketType: { name: "Inteira" }, participant: { fullName: "Participante" } }];
         if (chain.table === tokenTable || chain.table?.__eventoTokensConsulta) db.tokenWhere = condition;
         if (chain.table === tokenTable || chain.table?.__eventoTokensConsulta) return tokenRow ? [tokenRow] : [];
         if (chain.table === eventoPedidos) return [{ order, event, session, location }];
-        if (chain.table === eventoIngressos) return [{ ticket: { numero: "ABCD2345", qrPayload: "evento:ABCD2345", status: "EMITIDO" }, item: { ticketTypeId: "ticket-1", inventorySeatId: "inventory-1" }, seat: { rowLabel: "A", seatNumber: "12" }, ticketType: { name: "Inteira" }, participant: { fullName: "Participante" } }];
+        if (chain.table === eventoIngressos) return [{ ticket: { numero: "ABCD2345", qrPayload: "evento:ABCD2345", status: "EMITIDO" }, item: { ticketTypeId: "ticket-1", inventorySeatId: "inventory-1", unitPriceCents: 1250, totalPriceCents: 1250 }, seat: { rowLabel: "A", seatNumber: "12" }, ticketType: { name: "Inteira" }, participant: { fullName: "Participante" } }];
         if (chain.table === eventoItensPedido) return [{ item: { ticketTypeId: "ticket-1", unitPriceCents: 1250, totalPriceCents: 1250 }, inventory: { seatId: "seat-1" }, seat: { rowLabel: "A", seatNumber: "12" }, ticket: { name: "Inteira" } }];
         return [];
       },

@@ -2,7 +2,8 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { PedidoComIngressos } from "@essencia/shared/types";
-import { compartilharOuBaixar, gerarPdfIngressos, gerarPdfLoteIngressos, nomeArquivoIngresso } from "./pdf-ingresso";
+import { jsPDF } from "jspdf";
+import { compartilharOuBaixar, gerarPdfIngressos, gerarPdfLoteIngressos, medirCartao, nomeArquivoIngresso } from "./pdf-ingresso";
 
 const pedido: PedidoComIngressos = {
   orderNumber: "G21",
@@ -21,10 +22,10 @@ const pedido: PedidoComIngressos = {
   appliedCoupon: null,
   items: [],
   buyerName: "Ana Souza",
-  event: { title: "Festival da Família", slug: "festival-da-familia", imageUrl: "https://cdn.example/arte.jpg", locationName: "Teatro Essência" },
+  event: { title: "Festival da Família", slug: "festival-da-familia", imageUrl: "https://cdn.example/arte.jpg", locationName: "Teatro Essência", classificacaoEtaria: null },
   tickets: [
-    { numero: "K7Q482MX", qrPayload: "qr-1", rowLabel: "B", seatNumber: "12", ticketTypeName: "Inteira", participantName: "Beatriz Souza", status: "ATIVO" },
-    { numero: "2MN9PQRS", qrPayload: "qr-2", rowLabel: "B", seatNumber: "13", ticketTypeName: "Meia", participantName: "Caio Souza", status: "ATIVO" },
+    { numero: "K7Q482MX", qrPayload: "qr-1", rowLabel: "B", seatNumber: "12", ticketTypeName: "Inteira", participantName: "Beatriz Souza", status: "ATIVO", priceCents: 4500 },
+    { numero: "2MN9PQRS", qrPayload: "qr-2", rowLabel: "B", seatNumber: "13", ticketTypeName: "Meia", participantName: "Caio Souza", status: "ATIVO", priceCents: 2250 },
   ],
 };
 
@@ -72,6 +73,54 @@ describe("PDF dos ingressos", () => {
   it("marca a cortesia com um selo no topo", async () => {
     const blob = await gerarPdfIngressos(pedido, [pedido.tickets[0]!], { carregarArte: async () => null, variante: "CORTESIA" });
     expect(await lerTexto(blob)).toContain("(CORTESIA)");
+  });
+
+  it("traz o valor pago, os avisos de acesso e a classificação indicativa", async () => {
+    const comClassificacao: PedidoComIngressos = { ...pedido, event: { ...pedido.event, classificacaoEtaria: "LIVRE" } };
+    const texto = await lerTexto(await gerarPdfIngressos(comClassificacao, [pedido.tickets[0]!], { carregarArte: async () => null }));
+    expect(texto).toContain("(Valor do ingresso)");
+    expect(texto).toContain("(R$ 45,00)");
+    expect(texto).toContain("A abertura da plateia");
+    expect(texto).toContain("permitida a entrada");
+    expect(texto).toContain("(L)");
+    expect(texto).toContain("Livre para todos os p");
+  });
+
+  it("descreve a faixa etária a partir da classificação do evento", async () => {
+    const dozeAnos: PedidoComIngressos = { ...pedido, event: { ...pedido.event, classificacaoEtaria: "12" } };
+    const texto = await lerTexto(await gerarPdfIngressos(dozeAnos, [pedido.tickets[1]!], { carregarArte: async () => null }));
+    expect(texto).toContain("recomendado para menores de 12 anos");
+    expect(texto).toContain("(R$ 22,50)");
+  });
+
+  it("omite a classificação quando o evento ainda não a informou", async () => {
+    const texto = await lerTexto(await gerarPdfIngressos(pedido, [pedido.tickets[0]!], { carregarArte: async () => null }));
+    expect(texto).not.toContain("recomendado para menores");
+    expect(texto).not.toContain("Livre para todos");
+  });
+
+  it("identifica o valor da cortesia", async () => {
+    const cortesia: PedidoComIngressos = { ...pedido, tickets: [{ ...pedido.tickets[0]!, ticketTypeName: "Cortesia", priceCents: 0 }] };
+    const texto = await lerTexto(await gerarPdfIngressos(cortesia, cortesia.tickets, { carregarArte: async () => null, variante: "CORTESIA" }));
+    expect(texto).toContain("(R$ 0,00 \\(cortesia\\))");
+  });
+
+  it("mantém o QR no tamanho original no ingresso comum e cabe na folha A5", () => {
+    const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a5" });
+    const medidas = medirCartao(pdf, { pedido: { ...pedido, event: { ...pedido.event, classificacaoEtaria: "LIVRE" } }, ingresso: pedido.tickets[0]!, variante: "INGRESSO" });
+    expect(medidas.tamanhoQr).toBe(52);
+    expect(medidas.topo + medidas.alturaCartao).toBeLessThanOrEqual(200.01);
+  });
+
+  it("cabe na folha A5 no pior caso, reduzindo só o QR até um tamanho seguro", () => {
+    const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a5" });
+    const longo: PedidoComIngressos = {
+      ...pedido,
+      event: { ...pedido.event, title: "Espetáculo de Ballet 2026 — O Chamado do Oceano e as Sereias do Mar Profundo", locationName: "Teatro Municipal de Uberlândia — Av. Rondon Pacheco, 7070, Tibery, Uberlândia - MG", classificacaoEtaria: "12" },
+    };
+    const medidas = medirCartao(pdf, { pedido: longo, ingresso: { ...pedido.tickets[0]!, ticketTypeName: "Combo 10 ingressos", participantName: "Maria Eduarda de Oliveira Albuquerque Cavalcanti" }, variante: "CORTESIA" });
+    expect(medidas.topo + medidas.alturaCartao).toBeLessThanOrEqual(200.01);
+    expect(medidas.tamanhoQr).toBeGreaterThanOrEqual(40);
   });
 
   it("forma o nome de um ingresso ou do conjunto", () => {

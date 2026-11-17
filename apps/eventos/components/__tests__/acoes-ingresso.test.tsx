@@ -20,6 +20,7 @@ const ingresso: IngressoPublico = {
   ticketTypeName: "Inteira",
   participantName: "Beatriz Souza",
   status: "ATIVO",
+  priceCents: 4500,
 };
 
 const pedido: PedidoComIngressos = {
@@ -39,7 +40,7 @@ const pedido: PedidoComIngressos = {
   appliedCoupon: null,
   items: [],
   buyerName: "Ana Souza",
-  event: { title: "Festival da Família", slug: "festival-da-familia", imageUrl: null, locationName: "Teatro Essência" },
+  event: { title: "Festival da Família", slug: "festival-da-familia", imageUrl: null, locationName: "Teatro Essência", classificacaoEtaria: null },
   tickets: [ingresso],
 };
 
