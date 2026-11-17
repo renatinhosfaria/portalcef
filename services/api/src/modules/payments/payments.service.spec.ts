@@ -1,3 +1,4 @@
+import Stripe from "stripe";
 import { PaymentsService } from "./payments.service";
 
 describe("PaymentsService.encerrarCheckoutSessionSeAberta", () => {
@@ -140,6 +141,35 @@ describe("PaymentsService checkout sessions", () => {
       },
       { idempotencyKey: "checkout-123" },
     );
+  });
+
+  it("identifica rejeição explícita de expires_at sem tratá-la como timeout ambíguo", async () => {
+    const { service, create } = criarServicoCheckout();
+    create.mockRejectedValue(new Stripe.errors.StripeInvalidRequestError({ type: "invalid_request_error", message: "expires_at must be at least 30 minutes in the future", param: "expires_at" }));
+    await expect(service.createEmbeddedCheckoutSession({ ...inputBase, eventOrderId: "pedido-evento", returnUrl: "https://eventos.portalcef.com.br/pagamento/retorno" })).rejects.toMatchObject({ response: { code: "CHECKOUT_EXPIRATION_INVALID" } });
+  });
+
+  it("identifica a geração do checkout na metadata da sessão e do PaymentIntent", async () => {
+    const { service, create } = criarServicoCheckout();
+    create.mockResolvedValue({ id: "cs_evento", client_secret: "segredo_teste" });
+    const entrada = { ...inputBase, eventOrderId: "pedido-evento", eventCheckoutKey: "geracao-checkout", returnUrl: "https://eventos.portalcef.com.br/pagamento/retorno" };
+    await service.createEmbeddedCheckoutSession(entrada);
+    expect(create.mock.calls[0][0]).toMatchObject({ metadata: { eventCheckoutKey: "geracao-checkout" }, payment_intent_data: { metadata: { eventCheckoutKey: "geracao-checkout" } } });
+  });
+
+  it("mantém o corpo idempotente dos eventos mesmo quando uma repetição ocorre minutos depois", async () => {
+    const { service, create } = criarServicoCheckout();
+    create.mockResolvedValue({ id: "cs_evento", client_secret: "segredo_teste" });
+    const relogio = jest.spyOn(Date, "now");
+    try {
+      const agora = new Date("2029-01-01T12:00:00Z").getTime();
+      relogio.mockReturnValue(agora);
+      const entrada = { ...inputBase, eventOrderId: "pedido-evento", expiresAt: new Date(agora + 35 * 60000), returnUrl: "https://eventos.portalcef.com.br/pagamento/retorno", idempotencyKey: "chave-persistida" };
+      await service.createEmbeddedCheckoutSession(entrada);
+      relogio.mockReturnValue(agora + 10 * 60000);
+      await service.createEmbeddedCheckoutSession(entrada);
+      expect(create.mock.calls[1]).toEqual(create.mock.calls[0]);
+    } finally { relogio.mockRestore(); }
   });
 
   it("checkout embutido envia ui_mode e return_url, sem success/cancel, e devolve clientSecret", async () => {

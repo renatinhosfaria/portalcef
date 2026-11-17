@@ -48,7 +48,12 @@ export function FluxoCheckout({ pedido, evento, sessao, politicas, publishableKe
     router.push(acesso ? `/pedido/${encodeURIComponent(pedidoAtual.orderNumber)}?acesso=${encodeURIComponent(acesso)}` : `/pedido/consulta?pedido=${encodeURIComponent(pedidoAtual.orderNumber)}`);
   }, [acessoGuardado, pedidoAtual.orderNumber, router]);
   const liberarUmaVez = useCallback(() => {
-    if (!liberacaoPromiseRef.current) liberacaoPromiseRef.current = liberarPedido(pedidoAtual.orderNumber);
+    if (!liberacaoPromiseRef.current) {
+      liberacaoPromiseRef.current = liberarPedido(pedidoAtual.orderNumber).catch((cause: unknown) => {
+        liberacaoPromiseRef.current = null;
+        throw cause;
+      });
+    }
     return liberacaoPromiseRef.current;
   }, [pedidoAtual.orderNumber]);
 
@@ -108,7 +113,8 @@ export function FluxoCheckout({ pedido, evento, sessao, politicas, publishableKe
       setClientSecret(pagamento.clientSecret);
       setEtapa(3);
     } catch (cause) {
-      if (cause instanceof EventosApiError && cause.code === "ORDER_NOT_AVAILABLE") {
+      if (cause instanceof EventosApiError && cause.code === "PAYMENT_ALREADY_COMPLETED") irParaIngressos();
+      else if (cause instanceof EventosApiError && cause.code === "ORDER_NOT_AVAILABLE") {
         marcarEsgotado();
       }
       else setErro(cause instanceof Error ? cause.message : "Não foi possível iniciar o pagamento.");
@@ -132,11 +138,12 @@ export function FluxoCheckout({ pedido, evento, sessao, politicas, publishableKe
       })
       .catch((cause: unknown) => {
         if (!ativo) return;
-        if (cause instanceof EventosApiError && cause.code === "ORDER_NOT_AVAILABLE") marcarEsgotado();
+        if (cause instanceof EventosApiError && cause.code === "PAYMENT_ALREADY_COMPLETED") irParaIngressos();
+        else if (cause instanceof EventosApiError && cause.code === "ORDER_NOT_AVAILABLE") marcarEsgotado();
         else setErro(cause instanceof Error ? cause.message : "Não foi possível retomar o pagamento.");
       });
     return () => { ativo = false; };
-  }, [acessoGuardado, marcarEsgotado, pedidoAtual.orderNumber, pedidoAtual.status]);
+  }, [acessoGuardado, irParaIngressos, marcarEsgotado, pedidoAtual.orderNumber, pedidoAtual.status]);
 
   useEffect(() => {
     if (!ESTADOS_ATIVOS.has(pedidoAtual.status) || !expirado || expiracaoInicialTratadaRef.current === pedidoAtual.orderNumber) return;

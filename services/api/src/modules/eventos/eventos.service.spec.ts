@@ -14,17 +14,24 @@ const event = (extra: Record<string, unknown> = {}) => ({
 });
 
 describe('EventosService contratos de workspace', () => {
-  it('usa o ingresso padrão no preço público em vez da meia-entrada', async () => {
-    const db = fakeDb({
-      selects: [[
-        { event: event({ status: 'PUBLICADO', publishedAt: null, slug: 'ballet' }), session: { id: 's1', eventId: 'e1', status: 'PUBLICADA', startsAt: new Date('2026-12-07T19:00:00Z'), salesStartsAt: null, salesEndsAt: null }, location: { name: 'Teatro Municipal' }, ticket: { name: 'Ingresso', priceCents: 4500, active: true }, inventory: { status: 'DISPONIVEL' } },
-        { event: event({ status: 'PUBLICADO', publishedAt: null, slug: 'ballet' }), session: { id: 's1', eventId: 'e1', status: 'PUBLICADA', startsAt: new Date('2026-12-07T19:00:00Z'), salesStartsAt: null, salesEndsAt: null }, location: { name: 'Teatro Municipal' }, ticket: { name: 'Meia-entrada', priceCents: 2250, active: true }, inventory: { status: 'DISPONIVEL' } },
-      ]],
-    });
+  it('compartilha a leitura do mapa entre acessos simultâneos sem consultar o banco novamente', async () => {
+    const db = fakeDb({ selects: [
+      [{ id: 's1', eventId: 'e1', mapId: 'm1', status: 'PUBLICADA' }],
+      [event({ status: 'PUBLICADO' })],
+      [{ id: 'm1', status: 'CONFIRMADO', layout: null }],
+      [],
+    ] });
+    const instancia = service(db);
+    const resultados = await Promise.all(Array.from({ length: 20 }, () => instancia.getPublicMap('s1')));
+    expect(resultados).toEqual(Array(20).fill({ sessionId: 's1', mapId: 'm1', seats: [], layout: null }));
+  });
 
-    await expect(service(db).listarPublicados(new Date('2026-11-09T12:00:00Z'))).resolves.toEqual([
-      expect.objectContaining({ fromPriceCents: 4500 }),
-    ]);
+  it('usa o ingresso padrão no preço público em vez da meia-entrada', async () => {
+    const db = tiposDb({ tipos: [
+      { id: 'inteira', eventId: 'e1', name: 'Ingresso', priceCents: 4500, active: true, internal: false },
+      { id: 'meia', eventId: 'e1', name: 'Meia-entrada', priceCents: 2250, active: true, internal: false },
+    ], event: event({ status: 'PUBLICADO', slug: 'ballet' }) });
+    await expect(service(db).listarPublicados(new Date('2026-11-09T12:00:00Z'))).resolves.toEqual([expect.objectContaining({ fromPriceCents: 4500 })]);
   });
 
   it.each(['mapa-v2', null])('publicar recusa sessão legada com mapId %s mesmo se as regras já tiverem passado', async (mapId) => {
@@ -466,7 +473,7 @@ describe('EventosService contratos de workspace', () => {
   it("retorna sessões públicas sem ofertas", async () => {
     const db: any = publicSessionsDb([
       [{ id: "t1", eventId: "e1", name: "Inteira", description: null, priceCents: 4500, maxPerOrder: null, eligibility: null, active: true }],
-      [{ session: { id: "s1", startsAt: new Date("2026-11-01T10:00:00Z"), endsAt: new Date("2026-11-01T11:00:00Z"), status: "PUBLICADA", capacity: 20, mapId: null, salesStartsAt: null, salesEndsAt: null }, location: null, inventory: { status: "DISPONIVEL" } }],
+      [{ session: { id: "s1", startsAt: new Date("2026-11-01T10:00:00Z"), endsAt: new Date("2026-11-01T11:00:00Z"), status: "PUBLICADA", capacity: 20, mapId: null, salesStartsAt: null, salesEndsAt: null }, location: null, disponivel: true }],
     ]);
     const instance = new EventosService({ db } as any, { validarPublicacao: jest.fn() } as any, undefined, undefined);
     jest.spyOn(instance as any, "getPublicBySlug").mockResolvedValue({ id: "e1" });
@@ -723,7 +730,7 @@ function tiposDb(config: { tipos: any[]; event: any }) {
   const estado = config.tipos.map((tipo) => ({ ...tipo }));
   const db: any = { estado, tiposVistosNoJoin: [] as string[] };
   const resposta = (linhas: any[]) => Object.assign(Promise.resolve(linhas), { limit: async () => linhas, orderBy: async () => [...linhas].sort((a, b) => String(a.name).localeCompare(String(b.name))) });
-  db.select = () => {
+  db.select = (campos?: any) => {
     let tabela: unknown;
     let predicadoJoin: any;
     const builder: any = {};
@@ -731,13 +738,14 @@ function tiposDb(config: { tipos: any[]; event: any }) {
     builder.innerJoin = () => builder;
     builder.leftJoin = (alvo: unknown, predicado: any) => { if (alvo === eventoTiposIngresso) predicadoJoin = predicado; return builder; };
     builder.where = (predicado: any) => {
-      if (tabela === eventoTiposIngresso) return resposta(estado.filter((tipo: any) => avaliarPredicado(predicado, tipo)));
+      if (tabela === eventoTiposIngresso) { const visiveis = estado.filter((tipo: any) => avaliarPredicado(predicado, tipo)); db.tiposVistosNoJoin = visiveis.map((tipo: any) => tipo.id); return resposta(visiveis); }
       const sessao = { id: 's1', eventId: 'e1', status: 'PUBLICADA', startsAt: new Date('2026-12-07T19:00:00Z'), endsAt: new Date('2026-12-07T21:00:00Z'), capacity: 10, mapId: null, salesStartsAt: null, salesEndsAt: null };
-      if (tabela === eventoSessoes) return resposta([{ session: sessao, location: null, inventory: { status: 'DISPONIVEL' } }]);
+      if (tabela === eventoSessoes) return resposta([{ session: sessao, location: null, disponivel: true }]);
+      if (campos?.event) return resposta([{ event: config.event, session: sessao, location: { name: 'Teatro Municipal' }, disponivel: true }]);
       if (predicadoJoin === undefined) return resposta([config.event]);
       const visiveis = estado.filter((tipo: any) => avaliarPredicado(predicadoJoin, tipo));
       db.tiposVistosNoJoin = visiveis.map((tipo: any) => tipo.id);
-      const base = { event: config.event, session: sessao, location: { name: 'Teatro Municipal' }, inventory: { status: 'DISPONIVEL' } };
+      const base = { event: config.event, session: sessao, location: { name: 'Teatro Municipal' }, disponivel: true };
       return resposta(visiveis.length ? visiveis.map((ticket: any) => ({ ...base, ticket })) : [{ ...base, ticket: null }]);
     };
     return builder;

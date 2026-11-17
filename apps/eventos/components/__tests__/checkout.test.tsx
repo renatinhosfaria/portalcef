@@ -197,6 +197,23 @@ describe("FluxoCheckout", () => {
     await waitFor(() => expect(routerPush).toHaveBeenCalledWith(`/pedido/${pedido.orderNumber}?acesso=acesso-seguro`));
   });
 
+  it("permite tentar alterar lugares novamente após a criação do checkout terminar", async () => {
+    vi.mocked(eventosApi.liberarPedido).mockRejectedValueOnce(new EventosApiError("Pagamento sendo iniciado", 409, "CHECKOUT_IN_PROGRESS")).mockResolvedValueOnce(undefined);
+    render(<FluxoCheckout pedido={pedido} evento={evento} sessao={sessao} politicas={politicas} publishableKey={null} />);
+    fireEvent.click(screen.getByRole("link", { name: "Alterar lugares" }));
+    await screen.findByText("Pagamento sendo iniciado");
+    fireEvent.click(screen.getByRole("link", { name: "Alterar lugares" }));
+    await waitFor(() => expect(routerPush).toHaveBeenCalled());
+    expect(eventosApi.liberarPedido).toHaveBeenCalledTimes(2);
+  });
+
+  it("encaminha aos ingressos quando retomar o checkout informa pagamento já concluído", async () => {
+    sessionStorage.setItem(`eventos:acesso:${pedido.orderNumber}`, "acesso-seguro");
+    vi.mocked(eventosApi.iniciarPagamento).mockRejectedValueOnce(new EventosApiError("Pagamento concluído", 409, "PAYMENT_ALREADY_COMPLETED"));
+    render(<FluxoCheckout pedido={{ ...pedido, status: "AGUARDANDO_PAGAMENTO" }} evento={evento} sessao={sessao} politicas={politicas} publishableKey="pk_test" />);
+    await waitFor(() => expect(routerPush).toHaveBeenCalledWith(`/pedido/${pedido.orderNumber}?acesso=acesso-seguro`));
+  });
+
   it("tempo esgotado troca a tela, libera e não envia", async () => {
     const expirado = { ...pedido, expiresAt: new Date(Date.now() - 1000) };
     render(<FluxoCheckout pedido={expirado} evento={evento} sessao={sessao} politicas={politicas} publishableKey={null} />);

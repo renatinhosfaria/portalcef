@@ -22,6 +22,7 @@ type ConfirmarCheckoutInput = {
   amountCents: number;
   method?: "card" | "pix";
   eventOrderId?: string;
+  chaveCheckout?: string;
 };
 
 type FalharCheckoutInput = {
@@ -29,6 +30,7 @@ type FalharCheckoutInput = {
   paymentIntentId?: string;
   reason: string;
   eventOrderId?: string;
+  chaveCheckout?: string;
 };
 
 @Injectable()
@@ -105,6 +107,7 @@ export class EventosPagamentosService {
     checkoutSessionId?: string,
     paymentIntentId?: string,
     eventOrderId?: string,
+    chaveCheckout?: string,
   ): Promise<{ payment: any; order: any } | undefined> {
     if (typeof db?.select !== "function") return undefined;
     let row = await this.first<any>(
@@ -132,6 +135,12 @@ export class EventosPagamentosService {
     if (!row) return undefined;
     const payment = row.payment ?? row.eventoPagamentos ?? row;
     const order = row.order ?? row.eventoPedidos ?? row;
+    const referenciaPersistida = (checkoutSessionId && payment.stripeCheckoutSessionId === checkoutSessionId)
+      || (paymentIntentId && payment.stripePaymentIntentId === paymentIntentId);
+    const chaveAtual = payment.preparacaoCheckout?.chaveIdempotencia;
+    // Durante a criação, os IDs ainda não existem no banco. Só a metadata da
+    // geração atual permite o fallback; webhooks antigos não atingem a nova reserva.
+    if (chaveAtual && ((chaveCheckout && chaveCheckout !== chaveAtual) || (!referenciaPersistida && chaveCheckout !== chaveAtual))) return undefined;
     if (eventOrderId && order.id !== eventOrderId) throw new ConflictException({ code: "PAYMENT_REFERENCE_CONFLICT", message: "Referências do pagamento não correspondem ao pedido de Evento" });
     if (eventOrderId && checkoutSessionId && payment.stripeCheckoutSessionId && payment.stripeCheckoutSessionId !== checkoutSessionId) throw new ConflictException({ code: "PAYMENT_REFERENCE_CONFLICT", message: "Checkout Session não corresponde ao pedido de Evento" });
     if (eventOrderId && paymentIntentId && payment.stripePaymentIntentId && payment.stripePaymentIntentId !== paymentIntentId) throw new ConflictException({ code: "PAYMENT_REFERENCE_CONFLICT", message: "PaymentIntent não corresponde ao pedido de Evento" });
@@ -154,6 +163,7 @@ export class EventosPagamentosService {
       input.checkoutSessionId,
       input.paymentIntentId,
       input.eventOrderId,
+      input.chaveCheckout,
     );
     if (!reference) throw new NotFoundException({ code: "EVENT_ORDER_NOT_FOUND", message: "Pedido de Evento não encontrado" });
     this.assertAmount(reference.payment, reference.order, input.amountCents);
@@ -163,10 +173,9 @@ export class EventosPagamentosService {
         .select()
         .from(eventoPedidos)
         .where(eq(eventoPedidos.id, reference.order.id));
-      const lockedOrder = await this.first<any>(this.lockRows(orderQuery));
-      const current =
-        (await this.findPayment(tx, input.checkoutSessionId, input.paymentIntentId, input.eventOrderId)) ??
-        { ...reference, order: lockedOrder ?? reference.order };
+      await this.first<any>(this.lockRows(orderQuery));
+      const current = await this.findPayment(tx, input.checkoutSessionId, input.paymentIntentId, input.eventOrderId, input.chaveCheckout);
+      if (!current) return;
       const payment = current.payment;
       const order = current.order;
       this.assertAmount(payment, order, input.amountCents);
@@ -209,7 +218,7 @@ export class EventosPagamentosService {
         ? await tx.update(eventoPagamentos).set({ status: "PROCESSANDO", updatedAt: new Date() }).where(and(eq(eventoPagamentos.id, payment.id), or(eq(eventoPagamentos.status, "PENDENTE"), and(eq(eventoPagamentos.status, "PROCESSANDO"), lte(eventoPagamentos.updatedAt, staleAt))))).returning()
         : [];
       if (!this.changed(transition)) {
-        const latest = (await this.findPayment(tx, input.checkoutSessionId, input.paymentIntentId, input.eventOrderId)) ?? current;
+        const latest = (await this.findPayment(tx, input.checkoutSessionId, input.paymentIntentId, input.eventOrderId, input.chaveCheckout)) ?? current;
         if (["CONFIRMADO", "USADO"].includes(latest.order.status) && latest.payment.status === "APROVADO") return;
         throw new ConflictException({ code: "PAYMENT_IN_PROGRESS", message: "Pagamento de Evento em processamento" });
       }
@@ -235,15 +244,16 @@ export class EventosPagamentosService {
   }
 
   async falharCheckout(input: FalharCheckoutInput): Promise<void> {
-    const reference = await this.findPayment(this.db, input.checkoutSessionId, input.paymentIntentId, input.eventOrderId);
+    const reference = await this.findPayment(this.db, input.checkoutSessionId, input.paymentIntentId, input.eventOrderId, input.chaveCheckout);
     if (!reference) return;
 
     await this.db.transaction(async (tx: any) => {
-      const current = (await this.findPayment(tx, input.checkoutSessionId, input.paymentIntentId, input.eventOrderId)) ?? reference;
-      const payment = current.payment;
       const lockedOrder = typeof tx.select === "function"
-        ? await this.first(this.lockRows(tx.select().from(eventoPedidos).where(eq(eventoPedidos.id, current.order.id))))
+        ? await this.first(this.lockRows(tx.select().from(eventoPedidos).where(eq(eventoPedidos.id, reference.order.id))))
         : undefined;
+      const current = await this.findPayment(tx, input.checkoutSessionId, input.paymentIntentId, input.eventOrderId, input.chaveCheckout);
+      if (!current) return;
+      const payment = current.payment;
       const order = lockedOrder ?? current.order;
       if (["CONFIRMADO", "USADO"].includes(order.status) && payment.status === "APROVADO") return;
 

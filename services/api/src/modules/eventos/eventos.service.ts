@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, Inject, Injectable, InternalServerErrorException, NotFoundException, Optional } from "@nestjs/common";
-import { and, asc, eq, eventoAuditorias, eventoCheckins, eventoIngressos, eventoInventarioAssentos, eventoLocais, eventoMapas, eventoOperacoesAdministrativas, eventoPedidos, eventoPoliticas, eventoSessoes, eventoTiposIngresso, eventos, inArray, ne, type Database } from "@essencia/db";
+import { and, asc, eq, eventoAuditorias, eventoCheckins, eventoIngressos, eventoInventarioAssentos, eventoLocais, eventoMapas, eventoOperacoesAdministrativas, eventoPedidos, eventoPoliticas, eventoSessoes, eventoTiposIngresso, eventos, inArray, ne, sql, type Database } from "@essencia/db";
 import { tipoIngressoAdminSchema } from "@essencia/shared/schemas";
 import type { TipoIngressoAdminInput, AtualizarEventoInput, AtualizarLocalEventoInput, CriarEventoInput, CriarSessaoInput, CriarRascunhoInput, EventoListQuery, LocalEventoInput } from "@essencia/shared/schemas";
 import type { EventoActor, EventoResumo, PublicEventCard, PublicEventDetail, PublicEventSession, PublicMap } from "@essencia/shared/types";
@@ -7,7 +7,15 @@ import { DatabaseService } from "../../common/database/database.service";
 import { RASTER_IMAGE_MIME_TYPES, StorageService } from "../../common/storage/storage.service";
 import { EventosRulesService } from "./eventos-rules.service";
 import { MapasService } from "./mapas/mapas.service";
+import { CachePublicoEventos } from "./cache-publico-eventos";
 import { montarAssentosDaSessao, montarLayoutPublico } from "./montar-mapa-sessao";
+
+type LinhaSessaoPublica = {
+  session: typeof eventoSessoes.$inferSelect;
+  location: typeof eventoLocais.$inferSelect | null;
+  disponivel: boolean;
+};
+type LinhaEventoPublico = LinhaSessaoPublica & { event: typeof eventos.$inferSelect };
 
 type DbTransaction = Parameters<Database["transaction"]>[0] extends (tx: infer T) => unknown ? T : never;
 
@@ -22,6 +30,7 @@ export function assertSchoolScope(actor: EventoActor, schoolId: string) {
 
 @Injectable()
 export class EventosService {
+  private readonly mapasPublicos = new CachePublicoEventos<PublicMap>();
   constructor(private readonly database: DatabaseService, private readonly rules: EventosRulesService, @Optional() @Inject(StorageService) private readonly storage: StorageService | undefined, @Optional() @Inject(MapasService) private readonly mapas: MapasService | undefined) {}
   private get db(): Database { return this.database.db; }
   private normalizeSlug(slug: string) { return slug.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""); }
@@ -242,27 +251,49 @@ export class EventosService {
     }
   }
 
-  async listarPublicados(now: Date): Promise<PublicEventCard[]> {
-    const rows = await this.db.select({ event: eventos, session: eventoSessoes, location: eventoLocais, ticket: eventoTiposIngresso, inventory: eventoInventarioAssentos }).from(eventos).innerJoin(eventoSessoes, and(eq(eventoSessoes.eventId, eventos.id), eq(eventoSessoes.status, "PUBLICADA"))).leftJoin(eventoLocais, eq(eventoLocais.id, eventoSessoes.locationId)).leftJoin(eventoTiposIngresso, and(eq(eventoTiposIngresso.eventId, eventos.id), eq(eventoTiposIngresso.active, true), eq(eventoTiposIngresso.internal, false))).leftJoin(eventoInventarioAssentos, eq(eventoInventarioAssentos.sessionId, eventoSessoes.id)).where(eq(eventos.status, "PUBLICADO"));
-    const byId = new Map<string, PublicEventCard>();
+  private disponibilidadePublica() {
+    // EXISTS pode parar no primeiro lugar disponível e usa o índice da sessão.
+    return sql<boolean>`exists (select 1 from ${eventoInventarioAssentos}
+      where ${eventoInventarioAssentos.sessionId} = ${eventoSessoes.id}
+      and ${eventoInventarioAssentos.status} in ('DISPONIVEL', 'LIBERADO'))`;
+  }
+
+  async listarPublicados(now: Date, slug?: string): Promise<PublicEventCard[]> {
+    const rows: LinhaEventoPublico[] = await this.db.select({ event: eventos, session: eventoSessoes, location: eventoLocais, disponivel: this.disponibilidadePublica() })
+      .from(eventos)
+      .innerJoin(eventoSessoes, and(eq(eventoSessoes.eventId, eventos.id), eq(eventoSessoes.status, "PUBLICADA")))
+      .leftJoin(eventoLocais, eq(eventoLocais.id, eventoSessoes.locationId))
+      .where(and(eq(eventos.status, "PUBLICADO"), slug ? eq(eventos.slug, slug) : undefined))
+      .orderBy(asc(eventoSessoes.startsAt));
+    const publicados = rows.filter((row) => !row.event.publishedAt || row.event.publishedAt <= now);
+    if (!publicados.length) return [];
+    const tipos = await this.db.select().from(eventoTiposIngresso).where(and(
+      inArray(eventoTiposIngresso.eventId, [...new Set(publicados.map((row) => row.event.id))]),
+      eq(eventoTiposIngresso.active, true), eq(eventoTiposIngresso.internal, false),
+    ));
     const menorPrecoPadrao = new Map<string, number>();
     const menorPrecoQualquer = new Map<string, number>();
-    for (const row of rows) {
-      if (row.event.publishedAt && row.event.publishedAt > now) continue;
-      const prior = byId.get(row.event.id);
-      const available = this.salesAvailability(row.session, now) === "available" && (row.inventory?.status === "DISPONIVEL" || row.inventory?.status === "LIBERADO");
-      const price = row.ticket?.priceCents ?? null;
-      if (price != null && (row.ticket?.lugaresPorPacote ?? 1) === 1) {
-        menorPrecoQualquer.set(row.event.id, Math.min(menorPrecoQualquer.get(row.event.id) ?? price, price));
-        if (!ehMeiaEntrada(row.ticket?.name)) menorPrecoPadrao.set(row.event.id, Math.min(menorPrecoPadrao.get(row.event.id) ?? price, price));
-      }
-      byId.set(row.event.id, { id: row.event.id, slug: row.event.slug, title: row.event.title, summary: row.event.summary, imageUrl: row.event.imageUrl, category: row.event.category, startsAt: prior?.startsAt ?? row.session.startsAt, locationName: prior?.locationName ?? row.location?.name ?? null, fromPriceCents: null, availability: prior?.availability === "available" || available ? "available" : "sold_out" });
+    for (const tipo of tipos) {
+      if ((tipo.lugaresPorPacote ?? 1) !== 1) continue;
+      menorPrecoQualquer.set(tipo.eventId, Math.min(menorPrecoQualquer.get(tipo.eventId) ?? tipo.priceCents, tipo.priceCents));
+      if (!ehMeiaEntrada(tipo.name)) menorPrecoPadrao.set(tipo.eventId, Math.min(menorPrecoPadrao.get(tipo.eventId) ?? tipo.priceCents, tipo.priceCents));
     }
-    return [...byId.values()].map((item) => ({ ...item, fromPriceCents: menorPrecoPadrao.get(item.id) ?? menorPrecoQualquer.get(item.id) ?? null })).sort((a, b) => (a.startsAt?.getTime() ?? 0) - (b.startsAt?.getTime() ?? 0));
+    const byId = new Map<string, PublicEventCard>();
+    for (const row of publicados) {
+      const prior = byId.get(row.event.id);
+      const disponivel = row.disponivel && this.salesAvailability(row.session, now) === "available";
+      byId.set(row.event.id, {
+        id: row.event.id, slug: row.event.slug, title: row.event.title, summary: row.event.summary, imageUrl: row.event.imageUrl, category: row.event.category,
+        startsAt: prior?.startsAt ?? row.session.startsAt, locationName: prior?.locationName ?? row.location?.name ?? null,
+        fromPriceCents: menorPrecoPadrao.get(row.event.id) ?? menorPrecoQualquer.get(row.event.id) ?? null,
+        availability: prior?.availability === "available" || disponivel ? "available" : "sold_out",
+      });
+    }
+    return [...byId.values()].sort((a, b) => (a.startsAt?.getTime() ?? 0) - (b.startsAt?.getTime() ?? 0));
   }
 
   async getPublicBySlug(slug: string, now = new Date()): Promise<PublicEventDetail> {
-    const card = (await this.listarPublicados(now)).find((item) => item.slug === this.normalizeSlug(slug));
+    const card = (await this.listarPublicados(now, this.normalizeSlug(slug))).find((item) => item.slug === this.normalizeSlug(slug));
     if (!card) throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Evento não encontrado" });
     const [event] = await this.db.select().from(eventos).where(eq(eventos.id, card.id));
     if (!event) throw new NotFoundException({ code: "EVENT_NOT_FOUND", message: "Evento não encontrado" });
@@ -273,18 +304,23 @@ export class EventosService {
     const detail = await this.getPublicBySlug(slug, now);
     const ticketTypes = await this.db.select().from(eventoTiposIngresso).where(and(eq(eventoTiposIngresso.eventId, detail.id), eq(eventoTiposIngresso.active, true), eq(eventoTiposIngresso.internal, false))).orderBy(asc(eventoTiposIngresso.name));
     const publicTicketTypes = ticketTypes.map((ticket: typeof eventoTiposIngresso.$inferSelect) => ({ id: ticket.id, name: ticket.name, lugaresPorPacote: ticket.lugaresPorPacote ?? 1, description: ticket.description, priceCents: ticket.priceCents, maxPerOrder: ticket.maxPerOrder, eligibility: ticket.eligibility }));
-    const rows = await this.db.select({ session: eventoSessoes, location: eventoLocais, inventory: eventoInventarioAssentos }).from(eventoSessoes).leftJoin(eventoLocais, eq(eventoLocais.id, eventoSessoes.locationId)).leftJoin(eventoInventarioAssentos, eq(eventoInventarioAssentos.sessionId, eventoSessoes.id)).where(and(eq(eventoSessoes.eventId, detail.id), eq(eventoSessoes.status, "PUBLICADA"))).orderBy(asc(eventoSessoes.startsAt));
-    const result = new Map<string, PublicEventSession>();
-    for (const row of rows) {
-      const existing = result.get(row.session.id);
-      const available = this.salesAvailability(row.session) === "available" && (row.inventory?.status === "DISPONIVEL" || row.inventory?.status === "LIBERADO");
-      if (existing) { if (available) existing.availability = "available"; continue; }
-      result.set(row.session.id, { id: row.session.id, startsAt: row.session.startsAt, endsAt: row.session.endsAt, status: "PUBLICADA", capacity: row.session.capacity, mapId: row.session.mapId, salesStartsAt: row.session.salesStartsAt, salesEndsAt: row.session.salesEndsAt, location: row.location ? { name: row.location.name, address: row.location.address, room: row.location.room, instructions: row.location.instructions, accessibility: row.location.accessibility } : null, availability: available ? "available" : "sold_out", ticketTypes: publicTicketTypes, offers: [] });
-    }
-    return [...result.values()];
+    const rows: LinhaSessaoPublica[] = await this.db.select({ session: eventoSessoes, location: eventoLocais, disponivel: this.disponibilidadePublica() })
+      .from(eventoSessoes).leftJoin(eventoLocais, eq(eventoLocais.id, eventoSessoes.locationId))
+      .where(and(eq(eventoSessoes.eventId, detail.id), eq(eventoSessoes.status, "PUBLICADA"))).orderBy(asc(eventoSessoes.startsAt));
+    return rows.map((row) => ({
+      id: row.session.id, startsAt: row.session.startsAt, endsAt: row.session.endsAt, status: "PUBLICADA", capacity: row.session.capacity, mapId: row.session.mapId,
+      salesStartsAt: row.session.salesStartsAt, salesEndsAt: row.session.salesEndsAt,
+      location: row.location ? { name: row.location.name, address: row.location.address, room: row.location.room, instructions: row.location.instructions, accessibility: row.location.accessibility } : null,
+      availability: row.disponivel && this.salesAvailability(row.session, now) === "available" ? "available" : "sold_out",
+      ticketTypes: publicTicketTypes, offers: [],
+    }));
   }
 
   async getPublicMap(sessionId: string): Promise<PublicMap> {
+    return this.mapasPublicos.obter(sessionId, () => this.carregarMapaPublico(sessionId));
+  }
+
+  private async carregarMapaPublico(sessionId: string): Promise<PublicMap> {
     const [session] = await this.db.select().from(eventoSessoes).where(eq(eventoSessoes.id, sessionId));
     if (!session || session.status !== "PUBLICADA" || !session.mapId) throw new NotFoundException({ code: "SESSION_NOT_FOUND", message: "Sessão não encontrada" });
     const [parentEvent] = await this.db.select().from(eventos).where(eq(eventos.id, session.eventId));
