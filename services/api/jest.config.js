@@ -17,4 +17,7 @@ module.exports = {
   },
   passWithNoTests: true,
   testPathIgnorePatterns: ['/node_modules/', '/dist/'],
+  // Cada processo do jest chega a ~1,4 GB. O padrão (CPUs - 1 = 5 processos) estoura a
+  // memória do servidor de produção e o kernel mata os testes no meio do deploy.
+  maxWorkers: 2,
 };
