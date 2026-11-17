@@ -185,6 +185,10 @@ export const eventoAuditoriaAcaoEnum = [
 ] as const;
 export type EventoAuditoriaAcao = (typeof eventoAuditoriaAcaoEnum)[number];
 
+/** Faixas da classificação indicativa impressa no ingresso. */
+export const eventoClassificacaoEtariaEnum = ["LIVRE", "10", "12", "14", "16", "18"] as const;
+export type EventoClassificacaoEtaria = (typeof eventoClassificacaoEtariaEnum)[number];
+
 export const eventos = pgTable(
   "eventos",
   {
@@ -215,9 +219,14 @@ export const eventos = pgTable(
     cancellationPolicy: text("cancellation_policy"),
     contactEmail: varchar("contact_email", { length: 320 }),
     contactPhone: varchar("contact_phone", { length: 30 }),
+    classificacaoEtaria: text("classificacao_etaria", { enum: eventoClassificacaoEtariaEnum }),
     ...timestamps(),
   },
   (table) => ({
+    validClassificacaoEtaria: check(
+      "eventos_valid_classificacao_etaria",
+      sql`${table.classificacaoEtaria} IS NULL OR ${table.classificacaoEtaria} IN ('LIVRE', '10', '12', '14', '16', '18')`,
+    ),
     schoolSlugUnique: uniqueIndex("uq_eventos_school_slug").on(
       table.schoolId,
       table.slug,

@@ -1,3 +1,5 @@
+import type { ClassificacaoEtaria } from "../eventos/ingresso";
+
 export type EvidenciaPacote = { id: string; lugaresPorPacote: number; precoPacoteCentavos: number; versaoTipo: number; nomeTipo: string };
 export type EventoStatus = "RASCUNHO" | "REVISAO" | "PUBLICADO" | "PAUSADO" | "ENCERRADO" | "CANCELADO" | "ARQUIVADO";
 export interface EventoActor { userId: string; role: string; schoolId?: string | null; }
@@ -16,7 +18,7 @@ export type ConsultaPedidoPublica = PedidoPublicoResult;
 
 export interface PedidoComIngressos extends PedidoPublicoResult {
   buyerName: string | null;
-  event: { title: string; slug: string; imageUrl: string | null; locationName: string | null };
+  event: { title: string; slug: string; imageUrl: string | null; locationName: string | null; classificacaoEtaria: ClassificacaoEtaria | null };
   tickets: IngressoPublico[];
 }
 
@@ -53,6 +55,8 @@ export interface IngressoPublico {
   ticketTypeName: string;
   participantName: string;
   status: string;
+  /** Valor pago por este lugar, já com descontos e rateio de pacote. */
+  priceCents: number;
 }
 
 export interface PagamentoEmbutidoResult { clientSecret: string; expiresAt: Date; orderNumber: string; }

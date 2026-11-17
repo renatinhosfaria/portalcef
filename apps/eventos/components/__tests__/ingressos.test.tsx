@@ -35,8 +35,8 @@ const pedido: PedidoComIngressos = {
   appliedCoupon: null,
   items: [],
   buyerName: "Ana Souza",
-  event: { title: "Festival da Família", slug: "festival-da-familia", imageUrl: null, locationName: "Teatro Essência" },
-  tickets: [{ numero: "K7Q482MX", qrPayload: "qr-secreto", rowLabel: "B", seatNumber: "12", ticketTypeName: "Inteira", participantName: "Beatriz Souza", status: "ATIVO" }],
+  event: { title: "Festival da Família", slug: "festival-da-familia", imageUrl: null, locationName: "Teatro Essência", classificacaoEtaria: null },
+  tickets: [{ numero: "K7Q482MX", qrPayload: "qr-secreto", rowLabel: "B", seatNumber: "12", ticketTypeName: "Inteira", participantName: "Beatriz Souza", status: "ATIVO", priceCents: 4500 }],
 };
 
 afterEach(() => {
@@ -55,6 +55,21 @@ describe("cartões de ingressos", () => {
     expect(screen.getByText("Inteira")).toBeTruthy();
     expect(screen.getByText("Beatriz Souza")).toBeTruthy();
     expect(screen.getByText("Festival da Família")).toBeTruthy();
+  });
+
+  it("mostra o valor pago, a classificação indicativa e os avisos de acesso", () => {
+    const comClassificacao: PedidoComIngressos = { ...pedido, event: { ...pedido.event, classificacaoEtaria: "14" } };
+    render(<CartaoIngresso pedido={comClassificacao} ingresso={pedido.tickets[0]!} indice={0} total={1} />);
+    expect(screen.getByText("Valor do ingresso")).toBeTruthy();
+    expect(screen.getByText("R$ 45,00")).toBeTruthy();
+    expect(screen.getByText("Não recomendado para menores de 14 anos")).toBeTruthy();
+    expect(screen.getByText("A abertura da plateia será feita com 30 (trinta) minutos de antecedência do horário de início do espetáculo.")).toBeTruthy();
+    expect(screen.getByText("Não será permitida a entrada após o início do espetáculo.")).toBeTruthy();
+  });
+
+  it("não mostra classificação quando o evento não a informou", () => {
+    render(<CartaoIngresso pedido={pedido} ingresso={pedido.tickets[0]!} indice={0} total={1} />);
+    expect(screen.queryByText(/Livre para todos|Não recomendado/)).toBeNull();
   });
 
   it("renderiza o QR como SVG do conteúdo", async () => {

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { CLASSIFICACOES_ETARIAS } from "../eventos/ingresso";
 
 export const eventoStatusSchema = z.enum(["RASCUNHO","REVISAO","PUBLICADO","PAUSADO","ENCERRADO","CANCELADO","ARQUIVADO"]);
 export const eventoSessaoStatusSchema = z.enum(["RASCUNHO","PUBLICADA","ESGOTADA","ENCERRADA","CANCELADA"]);
@@ -64,6 +65,10 @@ export const localEventoSchema = z.object({
   accessibility: z.string().trim().nullable().optional(),
 }).strict();
 export const atualizarLocalEventoSchema = localEventoSchema.partial().extend({ expectedUpdatedAt: date.optional() }).strict();
+export const classificacaoEtariaSchema = z.enum(CLASSIFICACOES_ETARIAS);
+/** A classificação é informativa: pode mudar mesmo com o evento publicado e com vendas. */
+export const atualizarClassificacaoEtariaSchema = z.object({ classificacaoEtaria: classificacaoEtariaSchema.nullable(), expectedUpdatedAt: date.optional() }).strict();
+export type AtualizarClassificacaoEtariaInput = z.infer<typeof atualizarClassificacaoEtariaSchema>;
 export const atualizarLocalPadraoEventoSchema = z.object({ defaultLocationId: z.string().uuid().nullable(), expectedUpdatedAt: date.optional() }).strict();
 export const criarSessaoSchema = z.object({ startsAt: date, endsAt: date, capacity: z.number().int().positive(), locationId: z.string().uuid().optional().nullable(), salesStartsAt: date.optional().nullable(), salesEndsAt: date.optional().nullable(), status: eventoSessaoStatusSchema.optional() }).strict();
 export const politicaSchema = z.object({ type: z.enum(["PRIVACIDADE","COMPRA","CANCELAMENTO_REEMBOLSO","ACESSIBILIDADE","CONTATO"]), content: z.string().min(1), version: z.number().int().positive().optional() });

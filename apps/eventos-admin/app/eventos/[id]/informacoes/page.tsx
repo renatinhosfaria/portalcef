@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useEventoAutosave } from "@/features/eventos/use-evento-autosave";
+import { ClassificacaoEtariaCampo } from "@/features/eventos/classificacao-etaria-campo";
+import type { ClassificacaoEtaria } from "@essencia/shared/eventos/ingresso";
 import { assertRespostaApi, construirPayloadInformacoes, deveLimparDirtyAposUpload, slugSugerido, type InformacoesValue } from "@/features/eventos/etapas-contratos";
 
 const vazio: InformacoesValue = { title: "", slug: "", summary: "", description: "", imageUrl: "", category: "", contactEmail: "", contactPhone: "", cancellationPolicy: "" };
@@ -20,6 +22,7 @@ export default function InformacoesPage() {
   const [dirty, setDirty] = useState(false);
   const [manualSlug, setManualSlug] = useState(false);
   const [updatedAt, setUpdatedAt] = useState<string | undefined>();
+  const [classificacaoEtaria, setClassificacaoEtaria] = useState<ClassificacaoEtaria | null>(null);
   const [error, setError] = useState("");
   const [uploadState, setUploadState] = useState<"idle" | "uploading" | "success" | "error">("idle");
   const [uploadError, setUploadError] = useState("");
@@ -32,9 +35,10 @@ export default function InformacoesPage() {
         if (!response.ok) throw new Error("Falha ao carregar");
         return body;
       })
-      .then((event: Partial<InformacoesValue> & { updatedAt?: string }) => {
+      .then((event: Partial<InformacoesValue> & { updatedAt?: string; classificacaoEtaria?: ClassificacaoEtaria | null }) => {
         setValue((current) => ({ ...current, ...event }));
         setUpdatedAt(event.updatedAt);
+        setClassificacaoEtaria(event.classificacaoEtaria ?? null);
       })
       .catch(() => setError("Não foi possível carregar as informações."));
   }, [id]);
@@ -102,6 +106,7 @@ export default function InformacoesPage() {
         <label className="space-y-1 text-sm"><Rotulo obrigatorio>Título</Rotulo><input aria-required="true" value={value.title} onChange={(event) => titleChange(event.target.value)} className="w-full rounded border p-2" /></label>
         <label className="space-y-1 text-sm"><Rotulo obrigatorio>Slug público</Rotulo><input aria-required="true" value={value.slug} onChange={(event) => { setManualSlug(true); patch({ slug: event.target.value }); }} className="w-full rounded border p-2" /></label>
         {(["summary", "category", "contactEmail", "contactPhone"] as const).map((key) => <label key={key} className="space-y-1 text-sm"><Rotulo obrigatorio={!camposOpcionais.has(key)}>{key === "contactEmail" ? "E-mail de contato" : key === "contactPhone" ? "Telefone de contato" : key === "summary" ? "Resumo" : "Categoria"}</Rotulo><input aria-required={!camposOpcionais.has(key)} value={value[key] ?? ""} onChange={(event) => patch({ [key]: event.target.value } as Partial<InformacoesValue>)} className="w-full rounded border p-2" /></label>)}
+        <ClassificacaoEtariaCampo eventId={id} valor={classificacaoEtaria} updatedAt={updatedAt} aoSalvar={(salva, versao) => { setClassificacaoEtaria(salva); if (versao) setUpdatedAt(versao); }} />
         <label className="space-y-1 text-sm"><Rotulo>Imagem</Rotulo><input type="file" accept="image/jpeg,image/png,image/webp,image/gif" disabled={uploadState === "uploading"} onChange={(event) => { const file = event.target.files?.[0]; event.currentTarget.value = ""; if (file) void enviarImagem(file); }} className="w-full rounded border p-2" />{uploadState === "uploading" && <span className="text-slate-600">Enviando imagem…</span>}{uploadState === "success" && <span className="text-green-700">Imagem enviada com sucesso.</span>}{uploadError && <span role="alert" className="text-red-700">{uploadError}</span>}{value.imageUrl && <img src={value.imageUrl} alt={value.title ? `Capa de ${value.title}` : "Capa do evento"} className="mt-2 max-h-48 rounded object-cover" />}</label>
       </div>
       <label className="block space-y-1 text-sm"><Rotulo obrigatorio>Descrição</Rotulo><textarea aria-required="true" value={value.description} onChange={(event) => patch({ description: event.target.value })} className="min-h-32 w-full rounded border p-2" /></label>

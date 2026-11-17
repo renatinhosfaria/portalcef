@@ -197,6 +197,28 @@ describe('EventosService contratos de workspace', () => {
     await expect(service(db).atualizarLocalPadrao('e1', null, actor)).resolves.toMatchObject({ defaultLocationId: null });
   });
 
+  it('define a classificação indicativa mesmo com o evento publicado e audita a troca', async () => {
+    const salvo = new Date('2026-11-17T12:00:00Z');
+    const db = fakeDb({
+      selects: [[event({ status: 'PUBLICADO', classificacaoEtaria: null })]],
+      update: async () => [event({ status: 'PUBLICADO', classificacaoEtaria: 'LIVRE', updatedAt: salvo })],
+    });
+
+    await expect(service(db).atualizarClassificacaoEtaria('e1', 'LIVRE', actor)).resolves.toEqual({ classificacaoEtaria: 'LIVRE', updatedAt: salvo });
+    expect(db.setValues).toEqual({ classificacaoEtaria: 'LIVRE', updatedAt: expect.any(Date) });
+    expect(db.inserts).toEqual([expect.objectContaining({ eventId: 'e1', action: 'ATUALIZADO', resourceType: 'classificacao_etaria', metadata: { etapa: 'informacoes', previous: null, next: 'LIVRE' } })]);
+  });
+
+  it('recusa a classificação de evento de outra escola e versão desatualizada', async () => {
+    const outraEscola = fakeDb({ selects: [[event({ schoolId: 's2' })]] });
+    await expect(service(outraEscola).atualizarClassificacaoEtaria('e1', '12', actor)).rejects.toMatchObject({ response: { code: 'FORBIDDEN' } });
+    expect(outraEscola.updated).toBe(false);
+
+    const desatualizado = fakeDb({ selects: [[event({ updatedAt: new Date('2026-10-29T11:00:00Z') })]] });
+    await expect(service(desatualizado).atualizarClassificacaoEtaria('e1', '12', actor, new Date('2026-10-29T10:00:00Z'))).rejects.toMatchObject({ response: { code: 'VERSION_CONFLICT' } });
+    expect(desatualizado.updated).toBe(false);
+  });
+
   it('cria rascunho com slug normalizado e incrementa colisão por escola', async () => {
     const inserted: any[] = [];
     const db = fakeDb({ selects: [[{ id: 'ocupado' }], []], insert: async (values: any) => { inserted.push(values); return [event({ title: values.title, slug: values.slug })]; } });
@@ -701,8 +723,9 @@ function fakeDb(options: { selects?: unknown[][]; lockCalls?: string[]; insert?:
     builder.where = () => { const rows = selects[selectIndex++] ?? []; const promise: any = Promise.resolve(rows); promise.limit = async () => rows; promise.for = (mode: string) => { options.lockCalls?.push(mode); return promise; }; return promise; };
     return builder;
   };
-  db.insert = (table: any) => ({ values: (values: any) => ({ returning: async () => options.insert ? options.insert(values) : [] }) });
-  db.update = () => ({ set: () => ({ where: () => ({ returning: async () => { db.updated = true; return options.update ? options.update() : []; } }) }) });
+  db.inserts = [] as unknown[];
+  db.insert = (table: any) => ({ values: (values: any) => { db.inserts.push(values); return { returning: async () => options.insert ? options.insert(values) : [] }; } });
+  db.update = () => ({ set: (values: unknown) => { db.setValues = values; return { where: () => ({ returning: async () => { db.updated = true; return options.update ? options.update() : []; } }) }; } });
   db.delete = (table: unknown) => options.delete ? options.delete(table) : ({ where: async () => undefined });
   db.transaction = async (callback: (tx: any) => Promise<unknown>) => callback(db);
   return db;

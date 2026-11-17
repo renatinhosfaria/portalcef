@@ -95,3 +95,22 @@ describe('eventos workspace contracts', () => {
     expect(service.atualizarLocalPadrao).toHaveBeenCalledWith('e1', null, expect.anything(), new Date(expectedUpdatedAt));
   });
 });
+
+describe('classificação indicativa no painel', () => {
+  it('valida a faixa e encaminha a versão esperada ao serviço', async () => {
+    const service = { atualizarClassificacaoEtaria: jest.fn().mockResolvedValue({ classificacaoEtaria: 'LIVRE' }) };
+    const controller = new EventosAdminController(service as any, {} as any);
+    const expectedUpdatedAt = '2026-11-17T10:00:00.000Z';
+
+    await expect(controller.updateAgeRating('e1', { classificacaoEtaria: 'LIVRE', expectedUpdatedAt }, {} as any)).resolves.toEqual({ success: true, data: { classificacaoEtaria: 'LIVRE' } });
+    expect(service.atualizarClassificacaoEtaria).toHaveBeenCalledWith('e1', 'LIVRE', expect.anything(), new Date(expectedUpdatedAt));
+  });
+
+  it('recusa faixa inválida sem chamar o serviço', async () => {
+    const service = { atualizarClassificacaoEtaria: jest.fn() };
+    const controller = new EventosAdminController(service as any, {} as any);
+
+    await expect(controller.updateAgeRating('e1', { classificacaoEtaria: '13' }, {} as any)).resolves.toMatchObject({ success: false, error: { code: 'VALIDATION_ERROR' } });
+    expect(service.atualizarClassificacaoEtaria).not.toHaveBeenCalled();
+  });
+});

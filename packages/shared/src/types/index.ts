@@ -281,3 +281,4 @@ export * from "./workflows";
 export * from "./eventos";
 export * from "../eventos/precos";
 export * from "../eventos/cupons";
+export type { ClassificacaoEtaria } from "../eventos/ingresso";

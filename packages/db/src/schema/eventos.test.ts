@@ -251,3 +251,13 @@ test("tipos existentes são avulsos e pacotes exigem quantidade positiva", () =>
   assert.equal(eventoTiposIngresso.lugaresPorPacote?.notNull, true);
   assert.ok(getTableConfig(eventoTiposIngresso).checks.some(c => c.name === "evento_tipos_ingresso_positive_package_size"));
 });
+
+test("eventos guardam a classificação indicativa opcional com faixas válidas", () => {
+  assert.ok("classificacaoEtaria" in eventos);
+  assert.equal(eventos.classificacaoEtaria.notNull, false);
+  const checks = getTableConfig(eventos).checks.map((check) => check.name);
+  assert.ok(checks.includes("eventos_valid_classificacao_etaria"));
+  const migracao = readFileSync(join(__dirname, "../../drizzle/0061_eventos_classificacao_etaria.sql"), "utf8");
+  assert.match(migracao, /ADD COLUMN "classificacao_etaria" text/);
+  assert.match(migracao, /eventos_valid_classificacao_etaria/);
+});

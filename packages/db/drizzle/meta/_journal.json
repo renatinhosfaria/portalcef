@@ -428,6 +428,13 @@
       "when": 1794906000000,
       "tag": "0060_eventos_preparacao_checkout",
       "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1794942000000,
+      "tag": "0061_eventos_classificacao_etaria",
+      "breakpoints": true
     }
   ]
 }
