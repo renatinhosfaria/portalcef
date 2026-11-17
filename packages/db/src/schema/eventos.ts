@@ -424,6 +424,7 @@ export const eventoTiposIngresso = pgTable(
       .references(() => eventos.id, { onDelete: "cascade" }),
     name: varchar("name", { length: 160 }).notNull(),
     description: text("description"),
+    lugaresPorPacote: integer("lugares_por_pacote").notNull().default(1),
     priceCents: integer("price_cents").notNull(),
     eligibility: text("eligibility"),
     maxPerOrder: integer("max_per_order"),
@@ -440,6 +441,7 @@ export const eventoTiposIngresso = pgTable(
       "evento_tipos_ingresso_non_negative_price",
       sql`${table.priceCents} >= 0`,
     ),
+    positivePackageSize: check("evento_tipos_ingresso_positive_package_size", sql`${table.lugaresPorPacote} > 0`),
     positiveLimit: check(
       "evento_tipos_ingresso_positive_limit",
       sql`${table.maxPerOrder} IS NULL OR ${table.maxPerOrder} > 0`,

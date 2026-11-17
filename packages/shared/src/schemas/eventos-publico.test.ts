@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { finalizarPedidoSchema, meusIngressosSchema, pagamentoEmbutidoSchema, reservaPublicaSchema } from "./eventos";
+import { criarEventoSchema, tipoIngressoAdminSchema, finalizarPedidoSchema, meusIngressosSchema, pagamentoEmbutidoSchema, reservaPublicaSchema } from "./eventos";
 
 describe("schemas públicos de eventos", () => {
   it("aceita consulta de ingressos por pedido e e-mail", () => {
@@ -53,5 +53,24 @@ describe("schemas públicos de eventos", () => {
     expect(finalizarPedidoSchema.safeParse({ ...base, participants: [participante("   ")] }).success).toBe(false);
     expect(finalizarPedidoSchema.safeParse({ ...base, participants: [participante("B")] }).success).toBe(false);
     expect(finalizarPedidoSchema.safeParse({ ...base, participants: [participante("a".repeat(201))] }).success).toBe(false);
+  });
+});
+
+
+describe("pacotes e pedidos sem teto global", () => {
+  const uuid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+  it("aceita reserva e finalização com trinta assentos", () => {
+    expect(reservaPublicaSchema.safeParse({sessionId: uuid(1), seats: Array.from({length:30}, (_,i) => ({seatId: uuid(i+10), ticketTypeId: uuid(2), participantIndex:i, pacoteId:uuid(3)})), idempotencyKey:"reserva-grande-123"}).success).toBe(true);
+    expect(finalizarPedidoSchema.safeParse({buyer:{name:"Pessoa Teste",email:"teste@example.com",phone:"11999999999"},participants:Array.from({length:30},(_,i)=>({participantIndex:i,fullName:"Pessoa Teste",studentName:"Aluna Teste",type:"CONVIDADO"})),acceptances:["PRIVACIDADE","COMPRA","CANCELAMENTO_REEMBOLSO","ACESSIBILIDADE","CONTATO"].map(type=>({type,version:1})),idempotencyKey:"finalizacao-grande-123"}).success).toBe(true);
+  });
+  it("valida quantidade positiva sem teto de vinte e preserva PATCH omisso", () => {
+    expect(tipoIngressoAdminSchema.parse({name:"Combo",priceCents:10001,lugaresPorPacote:30}).lugaresPorPacote).toBe(30);
+    for(const lugaresPorPacote of [0,-1,1.5,null]) expect(tipoIngressoAdminSchema.safeParse({name:"Combo",priceCents:10001,lugaresPorPacote}).success).toBe(false);
+    expect(tipoIngressoAdminSchema.parse({name:"Inteira",priceCents:4500})).not.toHaveProperty("lugaresPorPacote");
+    const tipo = criarEventoSchema.shape.ticketTypes.parse([{name:"Inteira",priceCents:4500}])[0];
+    expect(tipo?.lugaresPorPacote).toBe(1);
+  });
+  it("recusa identificador de pacote inválido e campos extras por assento", () => {
+    for(const extra of [{pacoteId:"invalido"},{precoPacoteCentavos:1}]) expect(reservaPublicaSchema.safeParse({sessionId:uuid(1),seats:[{seatId:uuid(2),ticketTypeId:uuid(3),participantIndex:0,...extra}],idempotencyKey:"reserva-123456"}).success).toBe(false);
   });
 });

@@ -5,7 +5,7 @@ export const eventoSessaoStatusSchema = z.enum(["RASCUNHO","PUBLICADA","ESGOTADA
 export const eventoParticipanteTipoSchema = z.enum(["ALUNO","CONVIDADO"]);
 export const politicaPublicaTipoSchema = z.enum(["PRIVACIDADE","COMPRA","CANCELAMENTO_REEMBOLSO","ACESSIBILIDADE","CONTATO"]);
 export const compradorPublicoSchema = z.object({ name: z.string().trim().min(2).max(200), email: z.string().trim().email().max(320), phone: z.string().trim().min(8).max(30) }).strict();
-export const reservaPublicaSchema = z.object({ sessionId: z.string().uuid(), seats: z.array(z.object({ seatId: z.string().uuid(), ticketTypeId: z.string().uuid(), participantIndex: z.number().int().nonnegative() })).min(1).max(20), buyer: compradorPublicoSchema.optional(), idempotencyKey: z.string().trim().min(8).max(180) }).strict();
+export const reservaPublicaSchema = z.object({ sessionId: z.string().uuid(), seats: z.array(z.object({ seatId: z.string().uuid(), ticketTypeId: z.string().uuid(), participantIndex: z.number().int().nonnegative(), pacoteId: z.string().uuid().optional() }).strict()).min(1), buyer: compradorPublicoSchema.optional(), idempotencyKey: z.string().trim().min(8).max(180) }).strict();
 const vazioParaUndefined = (valor: unknown) => (typeof valor === "string" && valor.trim() === "" ? undefined : valor);
 export const emitirCortesiasSchema = z.object({
   sessionId: z.string().uuid(),
@@ -31,12 +31,15 @@ const nomeAlunaSchema = z.string().trim().min(1).max(200);
 export const juntarAlunasSchema = z.object({ destino: nomeAlunaSchema, origens: z.array(nomeAlunaSchema).min(1).max(50) }).strict();
 export const separarAlunaSchema = z.object({ chave: nomeAlunaSchema }).strict();
 export const cancelarCortesiaSchema = z.object({ motivo: z.string().trim().min(3).max(500) }).strict();
-export const finalizarPedidoSchema = z.object({ buyer: compradorPublicoSchema, participants: z.array(z.object({ participantIndex: z.number().int().nonnegative(), fullName: z.string().trim().min(2).max(200), type: eventoParticipanteTipoSchema, studentName: z.string().trim().min(2).max(200), email: z.string().email().optional(), phone: z.string().max(30).optional() })).min(1).max(20), acceptances: z.array(z.object({ type: politicaPublicaTipoSchema, version: z.number().int().positive() })).length(5), idempotencyKey: z.string().trim().min(8).max(180) }).strict();
+export const finalizarPedidoSchema = z.object({ buyer: compradorPublicoSchema, participants: z.array(z.object({ participantIndex: z.number().int().nonnegative(), fullName: z.string().trim().min(2).max(200), type: eventoParticipanteTipoSchema, studentName: z.string().trim().min(2).max(200), email: z.string().email().optional(), phone: z.string().max(30).optional() })).min(1), acceptances: z.array(z.object({ type: politicaPublicaTipoSchema, version: z.number().int().positive() })).length(5), idempotencyKey: z.string().trim().min(8).max(180) }).strict();
 export const pagamentoEmbutidoSchema = z.object({ returnUrl: z.string().url().refine((v) => v.startsWith("https://")), idempotencyKey: z.string().trim().min(8).max(180) }).strict();
 export const meusIngressosSchema = z.union([
   z.object({ orderNumber: z.string().trim().min(6).max(32), email: z.string().trim().email() }).strict(),
   z.object({ email: z.string().trim().email(), phone: z.string().trim().min(8).max(30) }).strict(),
 ]);
+
+export const tipoIngressoAdminSchema = z.object({ id: z.string().uuid().optional(), lugaresPorPacote: z.number().int().positive().optional(), name: z.string().min(1).max(160), description: z.string().optional().nullable(), priceCents: z.number().int().nonnegative(), eligibility: z.string().optional().nullable(), maxPerOrder: z.number().int().positive().optional().nullable(), salesLot: z.string().max(100).optional().nullable(), rules: z.record(z.string(), z.unknown()).optional().nullable() });
+export type TipoIngressoAdminInput = z.infer<typeof tipoIngressoAdminSchema>;
 
 const date = z.coerce.date();
 export const criarEventoSchema = z.object({
@@ -46,7 +49,7 @@ export const criarEventoSchema = z.object({
   plannedPublicationAt: date.optional().nullable(), publishImmediately: z.boolean().default(false),
   defaultLocationId: z.string().uuid().optional().nullable(),
   cancellationPolicy: z.string().min(1), contactEmail: z.string().email(), contactPhone: z.string().max(30).optional().nullable(),
-  ticketTypes: z.array(z.object({ name: z.string().min(1).max(160), description: z.string().optional().nullable(), priceCents: z.number().int().nonnegative(), eligibility: z.string().optional().nullable(), maxPerOrder: z.number().int().positive().optional().nullable(), salesLot: z.string().max(100).optional().nullable(), rules: z.record(z.string(), z.unknown()).optional().nullable() })).default([]),
+  ticketTypes: z.array(tipoIngressoAdminSchema.omit({ id: true }).extend({ lugaresPorPacote: z.number().int().positive().default(1) })).default([]),
   policies: z.array(z.object({ type: z.enum(["PRIVACIDADE","COMPRA","CANCELAMENTO_REEMBOLSO","ACESSIBILIDADE","CONTATO"]), content: z.string().min(1), version: z.number().int().positive().optional() })).default([]),
   sessions: z.array(z.object({ startsAt: date, endsAt: date, capacity: z.number().int().positive(), locationId: z.string().uuid().optional().nullable(), salesStartsAt: date.optional().nullable(), salesEndsAt: date.optional().nullable(), status: eventoSessaoStatusSchema.optional() }).strict()).default([]),
 });

@@ -216,7 +216,7 @@ test("migration 0058 arquiva ofertas ativas sem destruir dados", () => {
   assert.doesNotMatch(migration, /DROP TABLE/i);
   assert.doesNotMatch(migration, /INSERT INTO/i);
   const journal = JSON.parse(readFileSync(join(__dirname, "../../drizzle/meta/_journal.json"), "utf8"));
-  assert.equal(journal.entries.at(-1).tag, "0058_arquiva_ofertas_eventos");
+  assert.ok(journal.entries.some((entry: { tag: string }) => entry.tag === "0058_arquiva_ofertas_eventos"));
 });
 
 test("migration 0058 é idempotente para ofertas ativas e inativas", () => {
@@ -243,4 +243,11 @@ test("migration 0058 é idempotente para ofertas ativas e inativas", () => {
   const aposPrimeiraExecucao = structuredClone(ofertas);
   executarMigration();
   assert.deepEqual(ofertas, aposPrimeiraExecucao);
+});
+
+
+test("tipos existentes são avulsos e pacotes exigem quantidade positiva", () => {
+  assert.equal(eventoTiposIngresso.lugaresPorPacote?.default, 1);
+  assert.equal(eventoTiposIngresso.lugaresPorPacote?.notNull, true);
+  assert.ok(getTableConfig(eventoTiposIngresso).checks.some(c => c.name === "evento_tipos_ingresso_positive_package_size"));
 });

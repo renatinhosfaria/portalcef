@@ -1,15 +1,16 @@
+export type EvidenciaPacote = { id: string; lugaresPorPacote: number; precoPacoteCentavos: number; versaoTipo: number; nomeTipo: string };
 export type EventoStatus = "RASCUNHO" | "REVISAO" | "PUBLICADO" | "PAUSADO" | "ENCERRADO" | "CANCELADO" | "ARQUIVADO";
 export interface EventoActor { userId: string; role: string; schoolId?: string | null; }
 export interface EventoResumo { id: string; schoolId: string; slug: string; title: string; status: EventoStatus; publishedAt: Date | null; plannedPublicationAt: Date | null; slugSuggestion?: string; }
 export interface PublicEventCard { id: string; slug: string; title: string; summary: string | null; imageUrl: string | null; category: string | null; startsAt: Date | null; locationName: string | null; fromPriceCents: number | null; availability: "available" | "sold_out" | "unavailable"; }
 export interface PublicEventDetail extends PublicEventCard { description: string | null; contactEmail: string | null; contactPhone: string | null; cancellationPolicy: string | null; }
-export interface PublicEventTicketType { id: string; name: string; description: string | null; priceCents: number; maxPerOrder: number | null; eligibility: string | null; }
+export interface PublicEventTicketType { lugaresPorPacote?: number; id: string; name: string; description: string | null; priceCents: number; maxPerOrder: number | null; eligibility: string | null; }
 export interface PublicEventSession { id: string; startsAt: Date; endsAt: Date; status: "PUBLICADA"; capacity: number; location: { name: string; address: string; room: string | null; instructions: string | null; accessibility: string | null } | null; mapId: string | null; salesStartsAt: Date | null; salesEndsAt: Date | null; availability: "available" | "sold_out" | "unavailable"; ticketTypes: PublicEventTicketType[]; offers: OfertaPrecoPublica[]; }
 export interface OfertaPrecoPublica { id: string; version: number; name: string; minQuantity: number; maxQuantity: number | null; discountPercent: number | null; }
 export interface PublicSeat { id: string; sessionId: string; rowLabel: string; seatNumber: string; x: number; y: number; width: number; height: number; category: string | null; accessible: boolean; state: "available" | "reserved" | "sold" | "blocked"; rotacao?: number; }
 export interface PublicMap { sessionId: string; mapId: string; seats: PublicSeat[]; layout?: PublicMapLayout | null; }
 export interface PoliticaPublica { type: "PRIVACIDADE" | "COMPRA" | "CANCELAMENTO_REEMBOLSO" | "ACESSIBILIDADE" | "CONTATO"; version: number; content: string; }
-export interface ReservaPublicaResult { reservationId: string; orderNumber: string; expiresAt: Date; subtotalCents: number; offerDiscountCents: number; couponDiscountCents: number; discountCents: number; totalCents: number; appliedOffer: OfertaPrecoPublica | null; appliedCoupon: import("../eventos/cupons").CupomAplicado | null; items: Array<{ seatId: string; ticketTypeId: string; unitPriceCents: number; totalPriceCents: number }>; }
+export interface ReservaPublicaResult { reservationId: string; orderNumber: string; expiresAt: Date; subtotalCents: number; offerDiscountCents: number; couponDiscountCents: number; discountCents: number; totalCents: number; appliedOffer: OfertaPrecoPublica | null; appliedCoupon: import("../eventos/cupons").CupomAplicado | null; items: Array<{ pacote?: EvidenciaPacote | null; seatId: string; ticketTypeId: string; unitPriceCents: number; totalPriceCents: number }>; }
 export interface PedidoPublicoResult { orderNumber: string; status: string; eventTitle: string; eventSlug: string; sessionId: string; expiresAt: Date | null; session: { startsAt: Date; endsAt: Date }; subtotalCents: number; offerDiscountCents: number; couponDiscountCents: number; discountCents: number; totalCents: number; appliedOffer: OfertaPrecoPublica | null; appliedCoupon: import("../eventos/cupons").CupomAplicado | null; items: ItemPedidoPublico[]; }
 export type ConsultaPedidoPublica = PedidoPublicoResult;
 
@@ -33,6 +34,7 @@ export interface PublicMapLayout {
 }
 
 export interface ItemPedidoPublico {
+  pacote?: EvidenciaPacote | null;
   seatId: string;
   ticketTypeId: string;
   participantIndex?: number;
