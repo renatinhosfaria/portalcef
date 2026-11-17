@@ -1218,7 +1218,7 @@ function cupomAplicacaoDb(config: { order?: any; coupons?: any[]; offers?: any[]
     }, orderBy: async () => itemRows.map((item) => ({ item, inventory: inventoryRows.find((row) => row.id === item.inventorySeatId), ticket: ticketRows.find((row) => row.id === item.ticketTypeId) })), for: () => chain };
     return chain;
   };
-  db.update = (table: any) => ({ set: (values: any) => ({ where: async () => { db.mutations += 1; if (table === eventoPedidos) Object.assign(order, values); if (table === eventoItensPedido) itemRows.forEach((item) => Object.assign(item, values)); if (table === eventoInventarioAssentos) inventoryRows.forEach((row) => Object.assign(row, values)); return [{ ...order }]; }, returning: async () => { db.mutations += 1; if (table === eventoPedidos) Object.assign(order, values); if (table === eventoItensPedido) itemRows.forEach((item) => Object.assign(item, values)); return [{ ...order }]; } }) });
+  db.update = (table: any) => ({ set: (values: any) => ({ where: async (predicate: any) => { db.mutations += 1; if (table === eventoPedidos) Object.assign(order, values); if (table === eventoItensPedido) itemRows.filter((item) => avaliarPredicado(predicate, item)).forEach((item) => Object.assign(item, values)); if (table === eventoInventarioAssentos) inventoryRows.forEach((row) => Object.assign(row, values)); return [{ ...order }]; }, returning: async () => { db.mutations += 1; if (table === eventoPedidos) Object.assign(order, values); if (table === eventoItensPedido) itemRows.forEach((item) => Object.assign(item, values)); return [{ ...order }]; } }) });
   return db;
 }
 
@@ -1421,5 +1421,43 @@ describe("reserva de pacotes completos", () => {
     const trocado={...input,seats:input.seats.map((s,i)=>({...s,pacoteId:i===0?uuid(801):i===10?uuid(800):s.pacoteId}))};
     await expect(instancia.reservarAssentos(trocado)).rejects.toMatchObject({response:{code:"IDEMPOTENCY_CONFLICT"}});
     expect(db.itemRows).toHaveLength(20);
+  });
+});
+
+
+describe("cupons sobre bases históricas de pacotes", () => {
+  function bancoPacote(quantidade=10, preco=38000) {
+    const cupons=[{code:"DEZ",discountPercent:10},{code:"VINTE",discountPercent:20},{code:"GRATIS",discountPercent:100}].map((c,i)=>({id:`cupom-${i}`,eventId:"event-1",name:c.code,version:1,pricingType:"PERCENTUAL",discountCents:null,active:true,startsAt:null,endsAt:null,usageLimit:null,...c}));
+    const db=cupomAplicacaoDb({order:{subtotalCents:preco+4500,totalCents:preco+4500,offerDiscountCents:0,discountCents:0},coupons:cupons});
+    const pacote={id:uuid(800),lugaresPorPacote:quantidade,precoPacoteCentavos:preco,versaoTipo:1,nomeTipo:"Combo"};
+    db.itemRows.splice(0,db.itemRows.length,...Array.from({length:quantidade+1},(_,i)=>{
+      const base=i===quantidade?4500:Math.floor(preco/quantidade)+(i<preco%quantidade?1:0);
+      return {id:`item-${i}`,orderId:db.order.id,inventorySeatId:`inventory-${i}`,ticketTypeId:"ticket-1",quantity:1,unitPriceCents:base,totalPriceCents:base,pricingEvidence:{participantIndex:i,baseUnitPriceCents:base,allocatedOfferDiscountCents:0,allocatedDiscountCents:0,...(i<quantidade?{pacote}:{})}};
+    }));
+    db.inventories.splice(0,db.inventories.length,...Array.from({length:quantidade+1},(_,i)=>({id:`inventory-${i}`,orderId:db.order.id,sessionId:db.order.sessionId,seatId:`assento-${i}`,status:"RESERVADO",reservedByOrderId:db.order.id,reservationExpiresAt:db.order.expiresAt})));
+    return {db,pacote};
+  }
+  it("aplica, troca e remove cupom preservando todos os grupos e bases",async()=>{
+    const {db,pacote}=bancoPacote();
+    const instancia=new EventosPublicSalesService({db} as any);
+    const comDez=await instancia.aplicarCupom(db.order.orderNumber,{code:"DEZ"});
+    expect(comDez).toMatchObject({subtotalCents:42500,couponDiscountCents:4250,totalCents:38250});
+    expect(comDez.items[0]?.pacote).toEqual(pacote);
+    expect(comDez.items.reduce((s,i)=>s+i.totalPriceCents,0)).toBe(38250);
+    const comVinte=await instancia.aplicarCupom(db.order.orderNumber,{code:"VINTE"});
+    expect(comVinte.totalCents).toBe(34000);
+    const sem=await instancia.aplicarCupom(db.order.orderNumber,{code:""});
+    expect(sem.totalCents).toBe(42500);
+    expect(db.itemRows.slice(0,10).map((i:any)=>i.pricingEvidence.baseUnitPriceCents)).toEqual(Array(10).fill(3800));
+    expect(db.itemRows.slice(0,10).every((i:any)=>JSON.stringify(i.pricingEvidence.pacote)===JSON.stringify(pacote))).toBe(true);
+    expect((await instancia.aplicarCupom(db.order.orderNumber,{code:"GRATIS"})).totalCents).toBe(0);
+  });
+  it("conserva o resto de centavos após cupom e ignora o preço atual do cadastro",async()=>{
+    const {db,pacote}=bancoPacote(3,10001);
+    const resultado=await new EventosPublicSalesService({db} as any).aplicarCupom(db.order.orderNumber,{code:"DEZ"});
+    expect(resultado).toMatchObject({subtotalCents:14501,totalCents:13051});
+    expect(resultado.items.reduce((s,i)=>s+i.totalPriceCents,0)).toBe(13051);
+    expect(db.itemRows.slice(0,3).map((i:any)=>i.pricingEvidence.baseUnitPriceCents)).toEqual([3334,3334,3333]);
+    expect(resultado.items[0]?.pacote).toEqual(pacote);
   });
 });
