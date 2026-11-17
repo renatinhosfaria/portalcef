@@ -32,7 +32,6 @@ export function TopoEvento({ event, sessions }: { event: PublicEventDetail; sess
           {meia && <span className="rounded-full border border-white/25 bg-white/10 px-3 py-1.5">Meia-entrada</span>}
           {oferta && <span className="rounded-full border border-white/25 bg-white/10 px-3 py-1.5">{oferta.discountPercent != null ? `${oferta.discountPercent}% off a partir de ${oferta.minQuantity} lugares` : `${oferta.name} a partir de ${oferta.minQuantity} lugares`}</span>}
         </div>
-        <p className="mt-6 text-sm text-white/70">Realização: Colégio Essência Feliz</p>
         {vendaveis.length > 0 && <a className="mt-7 hidden min-h-11 w-fit items-center justify-center rounded-lg bg-[var(--acao)] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[var(--acao-hover)] md:inline-flex" href={destino}>Escolher assentos</a>}
       </div>
     </div>

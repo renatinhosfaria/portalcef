@@ -38,7 +38,7 @@ describe("caminho público de ingresso", () => {
 
   it("renderiza sessões com datas ISO vindas do JSON da API", () => {
     const sessaoWire = criarSessao({ startsAt: "2026-01-02T22:00:00.000Z" as unknown as Date, endsAt: "2026-01-03T01:00:00.000Z" as unknown as Date });
-    const html = renderToStaticMarkup(<DetalheEvento event={evento} sessions={[sessaoWire]} />);
+    const html = renderToStaticMarkup(<DetalheEvento event={evento} sessions={[sessaoWire, criarSessao({ id: "outra" })]} />);
     expect(html).toContain("19:00");
     expect(html).not.toContain("22:00");
   });
@@ -135,6 +135,28 @@ describe("caminho público de ingresso", () => {
     expect(html).toContain("Sala 2");
     expect(html).toContain("Chegue 15 min antes");
     expect(html).toContain("Rampas disponíveis");
+  });
+
+  it("com uma única sessão à venda, não repete data, local e preços numa lista de sessões", () => {
+    const html = renderToStaticMarkup(<DetalheEvento event={evento} sessions={[criarSessao({ ticketTypes: [
+      { id: "inteira", name: "Inteira", description: null, priceCents: 1000, maxPerOrder: null, eligibility: "Publico Geral" },
+      { id: "meia", name: "Meia-entrada", description: null, priceCents: 500, maxPerOrder: null, eligibility: "Estudantes" },
+    ] })]} />);
+    expect(html).not.toContain('id="sessoes"');
+    expect(html).not.toContain("Elegibilidade:");
+    expect(html.match(/Rua A/g)).toHaveLength(1);
+    expect(html.match(/R\$ 5,00/g)).toHaveLength(1);
+    expect(html.match(/Estudantes/g)).toHaveLength(1);
+    expect(html).toContain("Chegue 15 min antes");
+    expect(html).toContain("Rampas disponíveis");
+  });
+
+  it("não repete informações já mostradas no topo e em quem organiza", () => {
+    const html = renderToStaticMarkup(<DetalheEvento event={evento} sessions={[criarSessao()]} />);
+    expect(html).not.toContain("Realização:");
+    expect(html).not.toContain("Lugares numerados");
+    expect(html).toContain("Assentos numerados");
+    expect(html.match(/Colégio Essência Feliz/g)).toHaveLength(2);
   });
 
   it("não exibe ação explícita em sessão esgotada ou não vendável", () => {
