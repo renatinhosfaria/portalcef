@@ -15,7 +15,7 @@ describe("PaymentsWebhookController - Eventos", () => {
 
     await (controller as any).handleCheckoutSessionCompleted({
       id: "cs_evento_1",
-      metadata: { eventOrderId: "pedido-evento-1", orderNumber: "EVT123456789" },
+      metadata: { eventOrderId: "pedido-evento-1", orderNumber: "EVT123456789", eventCheckoutKey: "geracao-checkout" },
       payment_status: "paid",
       amount_total: 1_000,
       payment_intent: "pi_evento_1",
@@ -26,6 +26,7 @@ describe("PaymentsWebhookController - Eventos", () => {
       paymentIntentId: "pi_evento_1",
       amountCents: 1_000,
       eventOrderId: "pedido-evento-1",
+      chaveCheckout: "geracao-checkout",
     });
     expect(loja.confirmStripePayment).not.toHaveBeenCalled();
   });

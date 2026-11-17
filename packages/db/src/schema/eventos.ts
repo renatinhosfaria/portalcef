@@ -853,6 +853,18 @@ export type EventoOperacaoAdministrativa =
 export type NewEventoOperacaoAdministrativa =
   typeof eventoOperacoesAdministrativas.$inferInsert;
 
+/** Parâmetros imutáveis para retomar a criação de checkout após timeout ou reinício. */
+export type PreparacaoCheckoutEvento = {
+  chaveIdempotencia: string;
+  urlRetorno: string;
+  expiraEm: string;
+  valorCentavos: number;
+  nomeComprador: string;
+  emailComprador: string;
+  telefoneComprador: string | null;
+  itens: Array<{ nome: string; valorUnitarioCentavos: number; quantidade: number }>;
+};
+
 export const eventoPagamentos = pgTable(
   "evento_pagamentos",
   {
@@ -873,6 +885,7 @@ export const eventoPagamentos = pgTable(
     status: text("status", { enum: eventoPagamentoStatusEnum })
       .notNull()
       .default("PENDENTE"),
+    preparacaoCheckout: jsonb("preparacao_checkout").$type<PreparacaoCheckoutEvento>(),
     lastWebhookEventId: varchar("last_webhook_event_id", { length: 255 }),
     processedAt: timestamp("processed_at", { withTimezone: true }),
     ...timestamps(),

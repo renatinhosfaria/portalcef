@@ -219,6 +219,7 @@ export class PaymentsWebhookController {
         paymentIntentId: this.getPaymentIntentId(session.payment_intent),
         amountCents: session.amount_total ?? 0,
         eventOrderId,
+        ...(session.metadata?.eventCheckoutKey ? { chaveCheckout: session.metadata.eventCheckoutKey } : {}),
       });
       return;
     }
@@ -259,6 +260,7 @@ export class PaymentsWebhookController {
         paymentIntentId: this.getPaymentIntentId(session.payment_intent),
         amountCents: session.amount_total ?? 0,
         eventOrderId: session.metadata.eventOrderId,
+        ...(session.metadata.eventCheckoutKey ? { chaveCheckout: session.metadata.eventCheckoutKey } : {}),
       });
       return;
     }
@@ -349,6 +351,7 @@ export class PaymentsWebhookController {
         paymentIntentId: paymentIntent.id,
         amountCents: paymentIntent.amount,
         eventOrderId: paymentIntent.metadata.eventOrderId,
+        ...(paymentIntent.metadata.eventCheckoutKey ? { chaveCheckout: paymentIntent.metadata.eventCheckoutKey } : {}),
       });
       return;
     }
@@ -437,6 +440,7 @@ export class PaymentsWebhookController {
         paymentIntentId: paymentIntent.id,
         reason: "PaymentIntent cancelado no Stripe",
         eventOrderId: paymentIntent.metadata.eventOrderId,
+        ...(paymentIntent.metadata.eventCheckoutKey ? { chaveCheckout: paymentIntent.metadata.eventCheckoutKey } : {}),
       });
       return;
     }

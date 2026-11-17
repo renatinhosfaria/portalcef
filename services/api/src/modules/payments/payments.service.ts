@@ -26,6 +26,7 @@ type CreateCheckoutSessionInput = {
   cancelUrl?: string;
   idempotencyKey?: string;
   eventOrderId?: string;
+  eventCheckoutKey?: string;
 };
 
 /**
@@ -327,6 +328,9 @@ export class PaymentsService {
         throw error;
       }
 
+      if (stripeError?.type === "StripeInvalidRequestError" && stripeError.param === "expires_at") {
+        throw new BadRequestException({ code: "CHECKOUT_EXPIRATION_INVALID", message: "O prazo do pagamento precisa ser renovado." });
+      }
       if (stripeError?.type === "StripeInvalidRequestError") {
         throw new BadRequestException({
           code: "CHECKOUT_ERROR",
@@ -355,14 +359,16 @@ export class PaymentsService {
     const requestedExpiresAtSeconds = Math.ceil(
       input.expiresAt.getTime() / 1000,
     );
-    const expiresAtSeconds = Math.max(
-      requestedExpiresAtSeconds,
-      minimumExpiresAtSeconds,
-    );
+    // Eventos persistem o prazo com a chave idempotente. Recalcular pelo relógio
+    // mudaria o corpo de uma repetição após timeout e a Stripe a rejeitaria.
+    const expiresAtSeconds = input.eventOrderId
+      ? requestedExpiresAtSeconds
+      : Math.max(requestedExpiresAtSeconds, minimumExpiresAtSeconds);
     const metadata: Stripe.MetadataParam = input.eventOrderId
       ? {
           eventOrderId: input.eventOrderId,
           orderNumber: input.orderNumber,
+          ...(input.eventCheckoutKey ? { eventCheckoutKey: input.eventCheckoutKey } : {}),
         }
       : {
           orderId: input.orderId,

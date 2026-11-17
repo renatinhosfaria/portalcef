@@ -164,6 +164,15 @@ describe("EventosPublicSalesService - contratos públicos", () => {
     expect(createEmbeddedCheckoutSession).not.toHaveBeenCalled();
   });
 
+  it("não cria novo checkout quando a sessão anterior foi paga e o webhook ainda não chegou", async () => {
+    const order = { id: "order-webhook-atrasado", orderNumber: "ABC123DEF456", status: "AGUARDANDO_PAGAMENTO", totalCents: 1250, buyerName: "Ana", buyerEmail: "a@b.com", buyerPhone: "11999999999", expiresAt: new Date(Date.now() + 60_000), eventId: "event-1", sessionId: "session-1" };
+    const db = checkoutDb(order, [{ item: { unitPriceCents: 1250, quantity: 1 }, ticket: { name: "Inteira" } }], { id: "pagamento", orderId: order.id, status: "PENDENTE", stripeCheckoutSessionId: "cs_concluida" });
+    const pagamentos = { obterClientSecretSeAberta: jest.fn().mockResolvedValue(null), encerrarCheckoutSessionSeAberta: jest.fn().mockResolvedValue("concluida"), createEmbeddedCheckoutSession: jest.fn().mockResolvedValue({ checkoutSessionId: "cs_duplicada", clientSecret: "segredo_duplicado" }) };
+    await expect(new EventosPublicSalesService({ db } as any, pagamentos as any).iniciarCheckout(order.orderNumber, { returnUrl: "https://eventos.portalcef.com.br/pagamento/retorno", idempotencyKey: "webhook-atrasado-123456" })).rejects.toMatchObject({ response: { code: "PAYMENT_ALREADY_COMPLETED" } });
+    expect(pagamentos.createEmbeddedCheckoutSession).not.toHaveBeenCalled();
+    expect(db.payments[0].stripeCheckoutSessionId).toBe("cs_concluida");
+  });
+
   it("serializa duas abas de checkout e cria uma única sessão Stripe", async () => {
     const createEmbeddedCheckoutSession = jest.fn().mockImplementation(async () => {
       await new Promise((resolve) => setTimeout(resolve, 10));
@@ -1128,30 +1137,7 @@ function pedidoFinalizacaoConcorrenteDb() {
 }
 
 function checkoutConcorrenteDb(order: any) {
-  const rows = [{ item: { id: "item-1", orderId: order.id, ticketTypeId: "ticket-1", unitPriceCents: 1250, totalPriceCents: 1250, quantity: 1 }, ticket: { name: "Adulto" } }];
-  const reservations = [{ id: "reservation-1", orderId: order.id, inventorySeatId: "inventory-1", status: "ATIVA", expiresAt: order.expiresAt }];
-  const inventories = [{ id: "inventory-1", reservedByOrderId: order.id, status: "RESERVADO", reservationExpiresAt: order.expiresAt }];
-  const db: any = { order, payments: [], selectCalls: 0 };
-  db.transaction = async (fn: any) => fn(db);
-  db.select = () => {
-    const chain: any = {
-      from: (table: any) => { chain.table = table; return chain; },
-      innerJoin: () => chain,
-      where: async () => {
-        if (chain.table === eventoPedidos) return [{ order, event: { id: order.eventId, status: "PUBLICADO", title: "Evento" }, session: { id: order.sessionId, status: "PUBLICADA" } }];
-        if (chain.table === eventoItensPedido) return rows;
-        if (chain.table === eventoReservas) return reservations;
-        if (chain.table === eventoInventarioAssentos) return inventories;
-        if (chain.table === eventoPagamentos) return db.payments;
-        return [];
-      },
-      for: () => chain,
-    };
-    return chain;
-  };
-  db.insert = (table: any) => ({ values: (payload: any) => { if (table === eventoPagamentos) db.payments.push({ id: "payment-1", ...payload }); return Promise.resolve([]); } });
-  db.update = () => ({ set: (payload: any) => ({ where: async () => { Object.assign(order, payload); return []; } }) });
-  return db;
+  return checkoutDb(order, [{ item: { id: "item-1", orderId: order.id, inventorySeatId: "inventory-1", ticketTypeId: "ticket-1", unitPriceCents: 1250, totalPriceCents: 1250, quantity: 1 }, ticket: { name: "Adulto" } }]);
 }
 
 function pedidoConsultaDb() {
@@ -1248,26 +1234,33 @@ function vendaDbComIngressos(data: any) {
 }
 
 function checkoutDb(order: any, rows: any[], payment: any = null) {
-  const reservations = rows.map((row: any, index: number) => ({ id: `reservation-${index}`, orderId: order.id, inventorySeatId: row.item?.inventorySeatId ?? `inventory-${index}`, status: "ATIVA", expiresAt: order.expiresAt }));
-  const inventories = rows.map((row: any, index: number) => ({ id: row.item?.inventorySeatId ?? `inventory-${index}`, reservedByOrderId: order.id, status: "RESERVADO", reservationExpiresAt: order.expiresAt }));
   const db: any = {
-    paymentPayload: null,
-    reservations,
-    inventories,
-    select: () => {
-      const chain: any = { table: undefined, from: (table: any) => { chain.table = table; return chain; }, innerJoin: () => chain, where: async () => {
-        if (chain.table === eventoPedidos) return [{ order, event: { id: order.eventId, status: "PUBLICADO", title: "Evento" }, session: { id: order.sessionId, status: "PUBLICADA" } }];
-        if (chain.table === eventoItensPedido) return rows;
-        if (chain.table === eventoReservas) return db.reservations;
-        if (chain.table === eventoInventarioAssentos) return db.inventories;
-        if (chain.table === eventoPagamentos) return payment ? [payment] : [];
-        return [];
-      }, for: () => chain };
-      return chain;
-    },
-    insert: (_table: any) => ({ values: (payload: any) => { db.paymentPayload = payload; return Promise.resolve([]); } }),
-    update: () => ({ set: (payload: any) => ({ where: async () => { if (payload.expectedAmountCents !== undefined) db.paymentPayload = payload; return []; } }) }),
+    order, paymentPayload: null, payments: payment ? [payment] : [],
+    reservations: rows.map((row: any, index: number) => ({ id: `reservation-${index}`, orderId: order.id, inventorySeatId: row.item?.inventorySeatId ?? `inventory-${index}`, status: "ATIVA", expiresAt: order.expiresAt })),
+    inventories: rows.map((row: any, index: number) => ({ id: row.item?.inventorySeatId ?? `inventory-${index}`, reservedByOrderId: order.id, status: "RESERVADO", reservationExpiresAt: order.expiresAt })),
   };
+  db.transaction = async (executar: any) => executar(db);
+  db.select = () => {
+    const chain: any = { from: (table: any) => { chain.table = table; return chain; }, innerJoin: () => chain, where: async () => {
+      if (chain.table === eventoPedidos) return [{ order, event: { id: order.eventId, status: "PUBLICADO", title: "Evento" }, session: { id: order.sessionId, status: "PUBLICADA" } }];
+      if (chain.table === eventoItensPedido) return rows;
+      if (chain.table === eventoReservas) return db.reservations;
+      if (chain.table === eventoInventarioAssentos) return db.inventories;
+      if (chain.table === eventoPagamentos) return db.payments;
+      return [];
+    }, for: () => chain };
+    return chain;
+  };
+  db.insert = (table: any) => ({ values: async (payload: any) => {
+    if (table === eventoPagamentos) { db.payments.push({ ...payload }); db.paymentPayload = db.payments[0]; }
+    return [];
+  } });
+  db.update = (table: any) => ({ set: (payload: any) => ({ where: async (predicado: any) => {
+    const alvos = table === eventoPedidos ? [order] : table === eventoPagamentos ? db.payments : table === eventoReservas ? db.reservations : table === eventoInventarioAssentos ? db.inventories : [];
+    for (const alvo of alvos) if (avaliarPredicado(predicado, alvo)) Object.assign(alvo, payload);
+    if (table === eventoPagamentos) db.paymentPayload = db.payments[0];
+    return [];
+  } }) });
   return db;
 }
 
