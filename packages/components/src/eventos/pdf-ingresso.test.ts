@@ -28,6 +28,10 @@ const pedido: PedidoComIngressos = {
   ],
 };
 
+function lerTexto(blob: Blob): Promise<string> {
+  return new Promise<string>((resolve) => { const leitor = new FileReader(); leitor.onload = () => resolve(String(leitor.result)); leitor.readAsText(blob); });
+}
+
 describe("PDF dos ingressos", () => {
   it("gera duas páginas e um Blob application/pdf", async () => {
     const blob = await gerarPdfIngressos(pedido, pedido.tickets, { carregarArte: async () => null });
@@ -52,6 +56,22 @@ describe("PDF dos ingressos", () => {
     expect(texto).toContain("G21");
     expect(texto).toContain("G22");
     expect(carregarArte).toHaveBeenCalledTimes(1);
+  });
+
+  it("segue o visual do cartão da tela: quadros de fileira/assento/tipo e instrução uma única vez", async () => {
+    const blob = await gerarPdfIngressos(pedido, [pedido.tickets[0]!], { carregarArte: async () => null });
+    const texto = await lerTexto(blob);
+    expect(texto).toContain("(FILEIRA)");
+    expect(texto).toContain("(ASSENTO)");
+    expect(texto).toContain("(INGRESSO)");
+    expect(texto.match(/Na entrada, mostre o QR code/g)?.length).toBe(1);
+    expect(texto.match(/K7Q4-82MX/g)?.length).toBe(1);
+    expect(texto).not.toContain("CORTESIA");
+  });
+
+  it("marca a cortesia com um selo no topo", async () => {
+    const blob = await gerarPdfIngressos(pedido, [pedido.tickets[0]!], { carregarArte: async () => null, variante: "CORTESIA" });
+    expect(await lerTexto(blob)).toContain("(CORTESIA)");
   });
 
   it("forma o nome de um ingresso ou do conjunto", () => {
