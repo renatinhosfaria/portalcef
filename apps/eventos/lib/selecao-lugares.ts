@@ -1,3 +1,4 @@
+import { montarItensPrecoPacotes, type AssentoPacote } from "@essencia/shared/eventos/pacotes";
 import { calcularPrecoPedido, type OfertaPreco, type ResultadoPrecoPedido } from "@essencia/shared/eventos/precos";
 import type { OfertaPrecoPublica, PublicEventTicketType, PublicMap } from "@essencia/shared/types";
 import type { AssentoSelecionado } from "../components/assentos-types";
@@ -41,9 +42,16 @@ function ofertasParaCalculo(offers: OfertaPrecoPublica[]): OfertaPreco[] {
 }
 
 export function calcularPrecoSelecao(selection: AssentoSelecionado[], ticketTypes: PublicEventTicketType[], offers: OfertaPrecoPublica[] = []): ResultadoPrecoPedido {
-  const precos = new Map(ticketTypes.map((type) => [type.id, type.priceCents]));
+  const grupos = new Map<string, AssentoPacote[]>();
+  selection.forEach((seat, participantIndex) => {
+    const chave = seat.pacoteId ? `pacote:${seat.pacoteId}` : `avulso:${seat.seatId}`;
+    grupos.set(chave, [...(grupos.get(chave) ?? []), { ...seat, participantIndex }]);
+  });
+  const itens = [...grupos.values()].flatMap(grupo => {
+    try { return montarItensPrecoPacotes(grupo, ticketTypes); } catch { return []; }
+  }).sort((a, b) => a.participantIndex - b.participantIndex);
   return calcularPrecoPedido({
-    items: selection.map((seat, participantIndex) => ({ seatId: seat.seatId, ticketTypeId: seat.ticketTypeId, participantIndex, basePriceCents: precos.get(seat.ticketTypeId) ?? 0 })),
+    items: itens,
     offers: ofertasParaCalculo(offers),
   });
 }

@@ -22,7 +22,7 @@ const ofertaVolume = { id: "oferta", version: 1, name: "Grupo", minQuantity: 10,
 afterEach(cleanup);
 
 describe("EscolhaLugares", () => {
-  it("seleciona lugares, exige tipo quando há dois e impede o 21º", () => {
+  it("seleciona lugares, exige tipo quando há dois e permite o 21º", () => {
     render(<EscolhaLugares evento={evento} sessao={sessao} map={mapa} />);
     fireEvent.click(screen.getByRole("button", { name: /Fileira G, assento 19/ }));
     expect(screen.getByText("Escolha Inteira ou Meia-entrada em cada lugar")).toBeTruthy();
@@ -32,7 +32,7 @@ describe("EscolhaLugares", () => {
       const button = screen.queryByRole("button", { name: new RegExp(`assento ${index}`) });
       if (button) fireEvent.click(button);
     }
-    expect(screen.getByText(/máximo 20 lugares/i)).toBeTruthy();
+    expect(screen.getAllByRole("radiogroup")).toHaveLength(21);
   }, 15000);
 
   it("alterna para lista e vibra ao marcar", () => {
@@ -123,4 +123,57 @@ describe("EscolhaLugares", () => {
     fireEvent.click(within(resumo).getByRole("radio", { name: /Meia-entrada/ }));
     expect(screen.queryByRole("button", { name: /Escolha Inteira ou Meia/ })).toBeNull();
   });
+});
+
+
+describe("pacotes na escolha de lugares",()=>{
+  afterEach(()=>{cleanup();vi.clearAllMocks();});
+
+it("restaura trinta lugares sem truncar a seleção",()=>{
+  const mapa30={...mapa,seats:Array.from({length:30},(_,i)=>({...mapa.seats[0]!,id:`s-${i+1}`,seatNumber:String(i+1),x:i*10}))};
+  render(<EscolhaLugares evento={evento} sessao={{...sessao,ticketTypes:[sessao.ticketTypes[0]!]}} map={mapa30} initialSelection={mapa30.seats.map(s=>({seatId:s.id,ticketTypeId:"inteira"}))}/>);
+  expect(screen.getAllByRole("radiogroup")).toHaveLength(30);
+});
+it("oferece pacote por grupo e envia um participante por assento",async()=>{
+  vi.mocked(eventosApi.reservarAssentos).mockResolvedValue({reservationId:"reserva",orderNumber:"PED-COMBO",expiresAt:new Date(),subtotalCents:42500,totalCents:42500,offerDiscountCents:0,couponDiscountCents:0,discountCents:0,appliedOffer:null,appliedCoupon:null,items:[]});
+  const combo={...sessao.ticketTypes[0]!,id:"combo",name:"Combo 10",lugaresPorPacote:10,priceCents:38000};
+  render(<EscolhaLugares evento={evento} sessao={{...sessao,ticketTypes:[sessao.ticketTypes[0]!,combo]}} map={mapa} initialSelection={mapa.seats.slice(0,11).map(s=>({seatId:s.id,ticketTypeId:"inteira"}))}/>);
+  fireEvent.click(screen.getByRole("button",{name:"Adicionar pacote Combo 10"}));
+  expect(screen.getAllByRole("radiogroup")).toHaveLength(1);
+  expect(screen.getAllByText("R$ 425,00").length).toBeGreaterThan(0);
+  fireEvent.click(screen.getAllByRole("button",{name:"Continuar"})[0]!);
+  await waitFor(()=>expect(eventosApi.reservarAssentos).toHaveBeenCalled());
+  const input=vi.mocked(eventosApi.reservarAssentos).mock.calls.at(-1)![0];
+  expect(input.seats.filter(s=>s.pacoteId)).toHaveLength(10);
+  expect(input.seats.map(s=>s.participantIndex)).toEqual([0,1,2,3,4,5,6,7,8,9,10]);
+  expect(input.seats[10]?.ticketTypeId).toBe("inteira");
+});
+it("desfazer pacote exige nova classificação e não cobra avulsos automaticamente",()=>{
+  const combo={...sessao.ticketTypes[0]!,id:"combo",name:"Combo 10",lugaresPorPacote:10,priceCents:38000};
+  render(<EscolhaLugares evento={evento} sessao={{...sessao,ticketTypes:[sessao.ticketTypes[0]!,combo]}} map={mapa} initialSelection={mapa.seats.slice(0,10).map(s=>({seatId:s.id,ticketTypeId:"inteira"}))}/>);
+  fireEvent.click(screen.getByRole("button",{name:"Adicionar pacote Combo 10"}));
+  fireEvent.click(screen.getByRole("button",{name:"Desfazer pacote Combo 10"}));
+  expect(screen.getAllByRole("button",{name:"Continuar"}).every(b=>(b as HTMLButtonElement).disabled)).toBe(true);
+  expect(screen.getAllByRole("radio").every(b=>!(b as HTMLInputElement).checked)).toBe(true);
+});
+it("sessão só com combos não os atribui automaticamente a um assento",()=>{
+  const combo={...sessao.ticketTypes[0]!,id:"combo",name:"Combo 10",lugaresPorPacote:10,priceCents:38000};
+  render(<EscolhaLugares evento={evento} sessao={{...sessao,ticketTypes:[combo]}} map={mapa}/>);
+  fireEvent.click(screen.getByRole("button",{name:/Fileira G, assento 19/}));
+  expect(screen.getAllByRole("button",{name:"Continuar"}).every(b=>(b as HTMLButtonElement).disabled)).toBe(true);
+  expect(screen.queryByRole("radio")).toBeNull();
+});
+
+  it("perda de lugar na atualização desfaz só seu pacote e mantém o outro",async()=>{
+    const combo={...sessao.ticketTypes[0]!,id:"combo",name:"Combo 10",lugaresPorPacote:10,priceCents:38000};
+    vi.mocked(eventosApi.reservarAssentos).mockRejectedValue(new eventosApi.EventosApiError("indisponível",409,"SEAT_UNAVAILABLE"));
+    vi.mocked(eventosApi.obterMapaSessao).mockResolvedValue({...mapa,seats:mapa.seats.map(s=>s.id==="s-1"?{...s,state:"sold" as const}:s)});
+    render(<EscolhaLugares evento={evento} sessao={{...sessao,ticketTypes:[sessao.ticketTypes[0]!,combo]}} map={mapa} initialSelection={mapa.seats.slice(0,20).map((s,i)=>({seatId:s.id,ticketTypeId:"combo",pacoteId:i<10?"p1":"p2"}))}/>);
+    fireEvent.click(screen.getAllByRole("button",{name:"Continuar"})[0]!);
+    await waitFor(()=>expect(screen.getAllByRole("radiogroup")).toHaveLength(9));
+    expect(screen.getAllByRole("button",{name:"Desfazer pacote Combo 10"})).toHaveLength(1);
+    expect(screen.getAllByRole("radio").every(r=>!(r as HTMLInputElement).checked)).toBe(true);
+    expect(screen.getAllByRole("button",{name:"Continuar"}).every(b=>(b as HTMLButtonElement).disabled)).toBe(true);
+  });
+
 });
