@@ -22,24 +22,17 @@ export function normalizarTiposPorAssento(seatIds: string[], ticketTypeIds: stri
   throw new Error(`A quantidade de tipos de ingresso (${ticketTypeIds.length}) não corresponde aos assentos selecionados (${seatIds.length}).`);
 }
 
-export function montarHrefRetornoMapa({
-  slug,
-  sessionId,
-  seatIds,
-  ticketTypeIds,
-  motivo,
-}: {
-  slug: string;
-  sessionId: string;
-  seatIds: string[];
-  ticketTypeIds: string[];
-  motivo?: "disponibilidade";
-}): string {
+type RetornoMapa = { slug: string; sessionId: string; motivo?: "disponibilidade" } & ({ seatIds: string[]; ticketTypeIds: string[]; rascunhoId?: never } | { rascunhoId: string; seatIds?: never; ticketTypeIds?: never });
+
+export function montarHrefRetornoMapa(entrada: RetornoMapa): string {
   const params = new URLSearchParams();
-  params.set("assentos", seatIds.join(","));
-  params.set("ticketTypeIds", ticketTypeIds.join(","));
-  if (motivo) params.set("conflito", motivo);
-  return `/evento/${encodeURIComponent(slug)}/sessao/${encodeURIComponent(sessionId)}?${params.toString()}`;
+  if (entrada.rascunhoId !== undefined) params.set("selecao", entrada.rascunhoId);
+  else {
+    params.set("assentos", entrada.seatIds.join(","));
+    params.set("ticketTypeIds", entrada.ticketTypeIds.join(","));
+  }
+  if (entrada.motivo) params.set("conflito", entrada.motivo);
+  return `/evento/${encodeURIComponent(entrada.slug)}/sessao/${encodeURIComponent(entrada.sessionId)}?${params.toString()}`;
 }
 
 export function montarUrlRetornoPagamento(orderNumber: string, acesso: string): string {

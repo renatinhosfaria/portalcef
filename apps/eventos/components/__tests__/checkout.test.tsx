@@ -7,6 +7,7 @@ import type { PedidoPublicoResult, PoliticaPublica, PublicEventDetail, PublicEve
 import { EventosApiError } from "../../lib/eventos-api";
 import * as eventosApi from "../../lib/eventos-api";
 import { FluxoCheckout } from "../checkout/fluxo-checkout";
+import { lerRascunhoSelecao } from "../../lib/rascunho-selecao";
 import { formatarTempoRestante, RelogioReserva } from "../checkout/relogio-reserva";
 
 const routerPush = vi.hoisted(() => vi.fn());
@@ -177,9 +178,23 @@ describe("FluxoCheckout", () => {
     render(<FluxoCheckout pedido={pedido} evento={evento} sessao={sessao} politicas={politicas} publishableKey={null} />);
     fireEvent.click(screen.getByRole("link", { name: "Alterar lugares" }));
     await waitFor(() => expect(eventosApi.liberarPedido).toHaveBeenCalledWith(pedido.orderNumber));
-    expect(routerPush).toHaveBeenCalledWith(expect.stringContaining("assentos=seat-19%2Cseat-20"));
+    await waitFor(()=>expect(routerPush).toHaveBeenCalledWith(expect.stringContaining("selecao=")));
+    const href=String(routerPush.mock.calls.at(-1)?.[0]);
+    const id=new URL(href,"https://example.com").searchParams.get("selecao")!;
+    expect(lerRascunhoSelecao(id,pedido.sessionId)?.assentos.map(s=>s.seatId)).toEqual(["seat-19","seat-20"]);
   });
 
+
+  it("não libera nem navega quando não consegue guardar a seleção",async()=>{
+    const gravar=vi.spyOn(Storage.prototype,"setItem").mockImplementation(()=>{throw new Error("sem espaço");});
+    try {
+      render(<FluxoCheckout pedido={pedido} evento={evento} sessao={sessao} politicas={politicas} publishableKey={null}/>);
+      fireEvent.click(screen.getByRole("link",{name:"Alterar lugares"}));
+      await waitFor(()=>expect(screen.getByRole("alert").textContent).toContain("Não foi possível guardar a seleção"));
+      expect(eventosApi.liberarPedido).not.toHaveBeenCalled();
+      expect(routerPush).not.toHaveBeenCalled();
+    } finally {gravar.mockRestore();}
+  });
   it("pagamento já concluído leva aos ingressos", async () => {
     vi.mocked(eventosApi.liberarPedido).mockRejectedValue(new EventosApiError("Pagamento já concluído", 409, "PAYMENT_ALREADY_COMPLETED"));
     sessionStorage.setItem(`eventos:acesso:${pedido.orderNumber}`, "acesso-seguro");

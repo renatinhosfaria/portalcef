@@ -186,4 +186,18 @@ describe("API pública de eventos", () => {
     }
     vi.restoreAllMocks();
   });
+  it("reutiliza chave para grupos equivalentes e renova ao liberar pedido",async()=>{
+    vi.stubGlobal("window",{});
+    const resposta={reservationId:"reserva-grupos",orderNumber:"GRUPOS123456",expiresAt:new Date().toISOString(),totalCents:1000,items:[]};
+    const fetchMock=vi.spyOn(globalThis,"fetch").mockImplementation(async()=>new Response(JSON.stringify(resposta),{status:200}));
+    const seats=Array.from({length:4},(_,i)=>({seatId:`assento-${i}`,ticketTypeId:"combo",participantIndex:i,pacoteId:i<2?"grupo-a":"grupo-b"}));
+    await reservarAssentos({sessionId:"grupos",seats});
+    await reservarAssentos({sessionId:"grupos",seats:seats.map(s=>({...s,pacoteId:s.pacoteId==="grupo-a"?"novo-a":"novo-b"})).reverse()});
+    const chave=(i:number)=>(fetchMock.mock.calls[i]?.[1]?.headers as Record<string,string>)["Idempotency-Key"];
+    expect(chave(0)).toBe(chave(1));
+    await liberarPedido(resposta.orderNumber);
+    await reservarAssentos({sessionId:"grupos",seats});
+    expect(chave(3)).not.toBe(chave(0));
+  });
+
 });

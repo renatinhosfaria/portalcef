@@ -1,10 +1,11 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import type { PedidoPublicoResult, PoliticaPublica, PublicEventDetail, PublicEventSession } from "@essencia/shared/types";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { EventosApiError, finalizarPedido, gerarChaveIdempotenciaPublica, iniciarPagamento, liberarPedido } from "../../lib/eventos-api";
+import { salvarRascunhoSelecao } from "../../lib/rascunho-selecao";
 import { montarHrefRetornoMapa, montarUrlRetornoPagamento } from "../../lib/checkout-utils";
 import { EtapasCompra } from "../base/etapas-compra";
 import { PagamentoEmbutido } from "./pagamento-embutido";
@@ -20,10 +21,15 @@ type Props = { pedido: PedidoPublicoResult; evento: PublicEventDetail; sessao: P
 export function FluxoCheckout({ pedido, evento, sessao, politicas, publishableKey }: Props): React.JSX.Element {
   const router = useRouter();
   const [pedidoAtual, setPedidoAtual] = useState(pedido);
-  const seatIds = useMemo(() => pedidoAtual.items.map((item) => item.seatId), [pedidoAtual.items]);
-  const ticketTypeIds = useMemo(() => pedidoAtual.items.map((item) => item.ticketTypeId), [pedidoAtual.items]);
-  const retornoMapa = useMemo(() => montarHrefRetornoMapa({ slug: evento.slug, sessionId: pedidoAtual.sessionId, seatIds, ticketTypeIds }), [evento.slug, pedidoAtual.sessionId, seatIds, ticketTypeIds]);
-  const retornoMapaDisponibilidade = useMemo(() => montarHrefRetornoMapa({ slug: evento.slug, sessionId: pedidoAtual.sessionId, seatIds, ticketTypeIds, motivo: "disponibilidade" }), [evento.slug, pedidoAtual.sessionId, seatIds, ticketTypeIds]);
+  const retornoMapa = `/evento/${encodeURIComponent(evento.slug)}/sessao/${encodeURIComponent(pedidoAtual.sessionId)}`;
+  const retornoRascunhoIdRef = useRef<string | undefined>(undefined);
+  const [retornoPreparado, setRetornoPreparado] = useState(`${retornoMapa}?conflito=disponibilidade`);
+  const prepararRetornoMapa = useCallback((motivo?: "disponibilidade") => {
+    const assentos = pedidoAtual.items.map((item) => ({ seatId: item.seatId, ticketTypeId: item.ticketTypeId, label: `${item.rowLabel}${item.seatNumber}`, ...(item.pacote ? { pacoteId: item.pacote.id } : {}) }));
+    const id = salvarRascunhoSelecao({ versao: 1, sessionId: pedidoAtual.sessionId, assentos }, retornoRascunhoIdRef.current);
+    retornoRascunhoIdRef.current = id;
+    return montarHrefRetornoMapa({ slug: evento.slug, sessionId: pedidoAtual.sessionId, rascunhoId: id, motivo });
+  }, [evento.slug, pedidoAtual.items, pedidoAtual.sessionId]);
   const [etapa, setEtapa] = useState<2 | 3>(2);
   const [expiraEm, setExpiraEm] = useState<Date | string | null>(pedidoAtual.expiresAt);
   const [expirado, setExpirado] = useState(() => !pedidoAtual.expiresAt || new Date(pedidoAtual.expiresAt).getTime() <= Date.now());
@@ -46,15 +52,19 @@ export function FluxoCheckout({ pedido, evento, sessao, politicas, publishableKe
     return liberacaoPromiseRef.current;
   }, [pedidoAtual.orderNumber]);
 
-  const tratarExpiracao = useCallback(async () => {
+  const tratarExpiracao = useCallback(async (navegar = false) => {
+    let destino: string | undefined;
     try {
+      destino = prepararRetornoMapa("disponibilidade");
+      setRetornoPreparado(destino);
       await liberarUmaVez();
+      if (navegar) router.push(destino);
     } catch (cause) {
       if (cause instanceof EventosApiError && cause.code === "PAYMENT_ALREADY_COMPLETED") irParaIngressos();
-      else if (cause instanceof EventosApiError && ["ORDER_NOT_AVAILABLE", "RESERVATION_EXPIRED", "RESERVATION_CANCELLED"].includes(cause.code ?? "")) router.push(retornoMapaDisponibilidade);
+      else if (destino && cause instanceof EventosApiError && ["ORDER_NOT_AVAILABLE", "RESERVATION_EXPIRED", "RESERVATION_CANCELLED"].includes(cause.code ?? "")) router.push(destino);
       else setErro(cause instanceof Error ? cause.message : "Não foi possível liberar os lugares.");
     }
-  }, [irParaIngressos, liberarUmaVez, retornoMapaDisponibilidade, router]);
+  }, [irParaIngressos, liberarUmaVez, prepararRetornoMapa, router]);
 
   const marcarEsgotado = useCallback(() => {
     expiradoRef.current = true;
@@ -64,15 +74,17 @@ export function FluxoCheckout({ pedido, evento, sessao, politicas, publishableKe
   const alterarLugares = useCallback(async () => {
     setErro(null);
     setAlterando(true);
+    let destino: string | undefined;
     try {
+      destino = prepararRetornoMapa();
       await liberarUmaVez();
-      router.push(retornoMapa);
+      router.push(destino);
     } catch (cause) {
       if (cause instanceof EventosApiError && cause.code === "PAYMENT_ALREADY_COMPLETED") irParaIngressos();
-      else if (cause instanceof EventosApiError && ["ORDER_NOT_AVAILABLE", "RESERVATION_EXPIRED", "RESERVATION_CANCELLED"].includes(cause.code ?? "")) router.push(retornoMapaDisponibilidade);
+      else if (destino && cause instanceof EventosApiError && ["ORDER_NOT_AVAILABLE", "RESERVATION_EXPIRED", "RESERVATION_CANCELLED"].includes(cause.code ?? "")) router.push(`${destino}&conflito=disponibilidade`);
       else setErro(cause instanceof Error ? cause.message : "Não foi possível alterar os lugares.");
     } finally { setAlterando(false); }
-  }, [irParaIngressos, liberarUmaVez, retornoMapa, retornoMapaDisponibilidade, router]);
+  }, [irParaIngressos, liberarUmaVez, prepararRetornoMapa, router]);
 
   async function enviar(dados: DadosCheckout) {
     setErro(null);
@@ -134,7 +146,7 @@ export function FluxoCheckout({ pedido, evento, sessao, politicas, publishableKe
   }, [acessoGuardado, expirado, pedidoAtual.orderNumber, pedidoAtual.status, tratarExpiracao]);
 
   if (!ESTADOS_ATIVOS.has(pedidoAtual.status)) return <section role="alert" className="rounded-2xl border border-[#e6e9e1] bg-white p-6"><p>Este pedido não está mais disponível para pagamento.</p><Link className="mt-4 inline-flex font-semibold text-[#3f6f12] underline" href="/pedido/consulta">Meus ingressos</Link></section>;
-  if (expirado || !expiraEm) return <TempoEsgotado href={retornoMapaDisponibilidade} />;
+  if (expirado || !expiraEm) return <><TempoEsgotado href={retornoPreparado} onRetomar={() => void tratarExpiracao(true)} />{erro && <p role="alert" className="mt-3 text-sm text-red-700">{erro}</p>}</>;
 
   return <div className="space-y-5"><RelogioReserva expiraEm={expiraEm} onEsgotar={marcarEsgotado} /><div className="content-width py-5 pt-16"><EtapasCompra atual={etapa} /><div className="mt-5 grid gap-6 lg:grid-cols-[minmax(0,1fr)_21rem]"><ResumoPedido pedido={pedidoAtual} evento={evento} sessao={sessao} mapHref={retornoMapa} onAlterar={alterarLugares} onAtualizar={setPedidoAtual} alterando={alterando} permitirCupom={etapa === 2} /><main className="min-w-0 space-y-5 lg:col-start-1 lg:row-start-1">{etapa === 2 ? <FormularioDados items={pedidoAtual.items} politicas={politicas} onEnviar={enviar} bloqueado={expirado} /> : <section className="rounded-2xl border border-[#e6e9e1] bg-white p-5"><PagamentoEmbutido publishableKey={publishableKey} clientSecret={clientSecret ?? ""} /></section>}{erro && <p role="alert" className="rounded-lg border border-[#efb4b4] bg-[#fff1f1] p-3 text-sm text-[#8b1e1e]">{erro}</p>}</main></div></div></div>;
 }

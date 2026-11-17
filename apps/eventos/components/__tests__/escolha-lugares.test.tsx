@@ -176,4 +176,19 @@ it("sessão só com combos não os atribui automaticamente a um assento",()=>{
     expect(screen.getAllByRole("button",{name:"Continuar"}).every(b=>(b as HTMLButtonElement).disabled)).toBe(true);
   });
 
+  it("restaura o rascunho com grupos após hidratação",async()=>{
+    const id="00000000-0000-4000-8000-000000000007";
+    const combo={...sessao.ticketTypes[0]!,id:"combo",name:"Combo 10",lugaresPorPacote:10,priceCents:38000};
+    sessionStorage.setItem(`eventos:selecao:${id}`,JSON.stringify({versao:1,sessionId:sessao.id,assentos:mapa.seats.slice(0,10).map(s=>({seatId:s.id,ticketTypeId:"combo",pacoteId:"pacote"}))}));
+    render(<EscolhaLugares evento={evento} sessao={{...sessao,ticketTypes:[combo]}} map={mapa} rascunhoId={id}/>);
+    await waitFor(()=>expect(screen.getByRole("button",{name:"Desfazer pacote Combo 10"})).toBeTruthy());
+    expect(screen.getAllByRole("button",{name:"Continuar"}).every(b=>!(b as HTMLButtonElement).disabled)).toBe(true);
+  });
+
+  it("permite reclassificar lugares quando o tipo deixou de ser pacote",()=>{
+    render(<EscolhaLugares evento={evento} sessao={{...sessao,ticketTypes:[sessao.ticketTypes[0]!]}} map={mapa} initialSelection={mapa.seats.slice(0,10).map(s=>({seatId:s.id,ticketTypeId:"inteira",pacoteId:"grupo-antigo"}))}/>);
+    expect(screen.getAllByRole("radiogroup")).toHaveLength(10);
+    expect(screen.getAllByRole("radio").every(r=>!(r as HTMLInputElement).checked)).toBe(true);
+  });
+
 });

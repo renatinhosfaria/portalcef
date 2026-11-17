@@ -1,3 +1,4 @@
+import { assinaturaComposicaoPacotes } from "@essencia/shared/eventos/pacotes";
 import type { FinalizarPedidoInput, MeusIngressosInput, PagamentoEmbutidoInput, ReservaPublicaInput } from "@essencia/shared/schemas";
 import { normalizarCodigoCupom } from "@essencia/shared/types";
 import type {
@@ -35,6 +36,7 @@ export class EventosApiError extends Error {
 }
 
 const publicOrderState: { reservationId?: string; orderNumber?: string } = {};
+const identidadesReservaPorPedido = new Map<string, string>();
 const stableIdempotencyKeys = new Map<string, string>();
 
 function chaveStorage(prefixo: string, identity: string): string {
@@ -95,11 +97,7 @@ function chavePersistida(input: string | undefined, prefixo: string, identity: s
 }
 
 function identidadeReserva(input: Omit<ReservaAssentosInput, "idempotencyKey">): string {
-  const assentos = input.seats
-    .map((seat) => `${seat.seatId}:${seat.ticketTypeId}:${seat.participantIndex}`)
-    .sort()
-    .join(",");
-  return `${input.sessionId}|${assentos}`;
+  return assinaturaComposicaoPacotes(input.sessionId, input.seats);
 }
 
 function persistirPedidoNaUrl(result: { orderNumber: string; reservationId?: string }) {
@@ -154,6 +152,8 @@ export async function reservarAssentos(input: ReservaAssentosInput): Promise<Res
   const body = buyer === undefined ? { ...inputSemBuyer, idempotencyKey } : { ...inputSemBuyer, buyer, idempotencyKey };
   try {
     const result = await enviarJson<ReservaPublicaResult>("/eventos/public/reservas", body, idempotencyKey);
+    identidadesReservaPorPedido.set(result.orderNumber, identity);
+    try { if (typeof window !== "undefined") window.sessionStorage.setItem(`eventos:reserva:identidade:${result.orderNumber}`, identity); } catch { /* A identidade continua disponível em memória. */ }
     publicOrderState.reservationId = result.reservationId;
     publicOrderState.orderNumber = result.orderNumber;
     persistirPedidoNaUrl(result);
@@ -185,6 +185,15 @@ export async function iniciarPagamento(orderNumber: string, input: PagamentoEmbu
 
 export async function liberarPedido(orderNumber: string): Promise<void> {
   await buscarApiPublica(`/eventos/public/pedidos/${encodeURIComponent(orderNumber)}/liberar`, { method: "POST" });
+  let identidade = identidadesReservaPorPedido.get(orderNumber);
+  try {
+    if (typeof window !== "undefined") {
+      identidade ??= window.sessionStorage.getItem(`eventos:reserva:identidade:${orderNumber}`) ?? undefined;
+      window.sessionStorage.removeItem(`eventos:reserva:identidade:${orderNumber}`);
+    }
+  } catch { /* Sem armazenamento, usar a identidade desta execução. */ }
+  if (identidade) removerChavePersistida("reserva", identidade);
+  identidadesReservaPorPedido.delete(orderNumber);
 }
 
 export async function aplicarCupom(orderNumber: string, code: string): Promise<PedidoPublicoResult> {

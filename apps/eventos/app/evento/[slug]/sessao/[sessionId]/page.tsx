@@ -7,7 +7,7 @@ import { reidratarSelecaoAssentos } from "../../../../../lib/selecao-lugares";
 import { listarSessoesPublicasServidor, obterEventoPublicoServidor, obterMapaSessaoServidor } from "../../../../../lib/eventos-api-servidor";
 
 type ParametroBusca = string | string[] | undefined;
-type ParametrosSessao = { assentos?: ParametroBusca; ticketTypeIds?: ParametroBusca; conflito?: ParametroBusca; ticketTypeId?: ParametroBusca };
+type ParametrosSessao = { selecao?: ParametroBusca; assentos?: ParametroBusca; ticketTypeIds?: ParametroBusca; conflito?: ParametroBusca; ticketTypeId?: ParametroBusca };
 function primeiroParametro(value: ParametroBusca): string | undefined { return Array.isArray(value) ? value[0] : value; }
 function separarIds(value: ParametroBusca): string[] { const texto = primeiroParametro(value); if (!texto) return []; try { return decodeURIComponent(texto).split(",").map((item) => item.trim()).filter(Boolean); } catch { return []; } }
 
@@ -28,5 +28,5 @@ export default async function Page({ params, searchParams }: { params: Promise<{
   const conflitoDisponibilidade = primeiroParametro(query.conflito) === "disponibilidade";
   const rehidratacaoBase = seatIdsFromUrl.length > 0 || conflitoDisponibilidade ? reidratarSelecaoAssentos(map, seatIdsFromUrl, ticketTypeIds) : { selection: [], unavailableSeatIds: [], invalid: false };
   const rehidratacao = conflitoDisponibilidade && rehidratacaoBase.unavailableSeatIds.length > 0 ? { ...rehidratacaoBase, invalid: true } : rehidratacaoBase;
-  return <EscolhaLugares evento={evento} sessao={session} map={map} initialSelection={rehidratacao.selection} unavailableSeatIds={rehidratacao.unavailableSeatIds} initialSelectionInvalid={rehidratacao.invalid} />;
+  return <EscolhaLugares evento={evento} sessao={session} map={map} initialSelection={rehidratacao.selection} unavailableSeatIds={rehidratacao.unavailableSeatIds} initialSelectionInvalid={rehidratacao.invalid} rascunhoId={primeiroParametro(query.selecao)} />;
 }
